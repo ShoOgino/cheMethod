@@ -1,0 +1,51 @@
+    public void testHierarchyLock() throws Throwable {
+        final AtomicInteger acquired = new AtomicInteger(0);
+        final Path parent = path.getParent();
+        final CountDownLatch starter = new CountDownLatch(1);
+        final CountDownLatch waiter = new CountDownLatch(2);
+        Runnable parentTask = new Runnable() {
+            @Override
+            public void run() {
+                PathLockFactory.PathLock lock = pathLockFactory.getLock(parent, true);
+                lock.acquire();
+                acquired.incrementAndGet();
+                starter.countDown();
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                } finally {
+                    acquired.getAndDecrement();
+                    lock.release();
+                    waiter.countDown();
+                }
+            }
+        };
+        final List<Throwable> errors = new ArrayList<>(1);
+        Runnable childTask = new Runnable() {
+            @Override
+            public void run() {
+                PathLockFactory.PathLock lock = pathLockFactory.getLock(path, false);
+                try {
+                    lock.acquire();
+                    // This thread must be blocked while another thread keeps lock.
+                    assertEquals(0, acquired.getAndIncrement());
+                } catch (Throwable e) {
+                    errors.add(e);
+                } finally {
+                    lock.release();
+                    acquired.getAndDecrement();
+                    waiter.countDown();
+                }
+            }
+        };
+        new Thread(parentTask).start();
+        starter.await();
+        new Thread(childTask).start();
+        waiter.await();
+        assertEquals(0, acquired.get()); // all locks must be released
+
+        if (!errors.isEmpty()) {
+            throw errors.get(0);
+        }
+    }
+

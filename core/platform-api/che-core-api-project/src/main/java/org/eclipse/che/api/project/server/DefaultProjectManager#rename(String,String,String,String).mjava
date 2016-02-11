@@ -1,0 +1,54 @@
+    @Override
+    public VirtualFileEntry rename(String workspace, String path, String newName, String newMediaType) throws ForbiddenException,
+                                                                                                              ServerException,
+                                                                                                              ConflictException,
+                                                                                                              NotFoundException {
+        final FolderEntry root = getProjectsRoot(workspace);
+        final VirtualFileEntry entry = root.getChild(path);
+
+        if (entry == null) {
+            return null;
+        }
+
+        if (entry.isFile()) {
+            // Use the same rules as in method createFile to make client side simpler.
+            ((FileEntry)entry).rename(newName, newMediaType);
+        } else if (entry.isFolder() && !isProjectFolder((FolderEntry)entry)) {
+            entry.rename(newName);
+        } else if (isProjectFolder((FolderEntry)entry)) {
+            UsersWorkspaceDto usersWorkspace = getWorkspace(workspace);
+
+            String oldProjectPath = path.startsWith("/") ? path : "/" + path;
+            String newProjectPath = '/' + newName;
+
+            List<ProjectConfigDto> projects = usersWorkspace.getProjects();
+
+            if (projects.isEmpty()) {
+                renameProjectOnFileSystem(workspace, oldProjectPath, newName);
+            }
+
+            for (ProjectConfigDto projectConfig : projects) {
+                String projectPath = projectConfig.getPath();
+
+                if (projectPath == null) {
+                    projectPath = '/' + projectConfig.getName();
+                }
+
+                if (projectPath.equals(oldProjectPath)) {
+                    entry.rename(newName);
+
+                    deleteProjectFromWorkspace(projectConfig, workspace);
+
+                    projectConfig.setPath(newProjectPath);
+                    projectConfig.setName(newName);
+
+                    replaceModulesPaths(projectConfig, newProjectPath);
+
+                    updateProjectInWorkspace(workspace, projectConfig);
+                }
+            }
+        }
+
+        return entry;
+    }
+

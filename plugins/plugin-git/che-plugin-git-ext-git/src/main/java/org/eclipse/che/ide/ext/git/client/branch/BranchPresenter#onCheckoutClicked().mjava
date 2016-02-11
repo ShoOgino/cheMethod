@@ -1,0 +1,54 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onCheckoutClicked() {
+        String name = selectedBranch.getDisplayName();
+
+        if (name == null) {
+            return;
+        }
+
+        final CheckoutRequest checkoutRequest = dtoFactory.createDto(CheckoutRequest.class);
+        if (selectedBranch.isRemote()) {
+            checkoutRequest.setTrackBranch(selectedBranch.getDisplayName());
+        } else {
+            checkoutRequest.setName(selectedBranch.getDisplayName());
+        }
+
+        final String path = project.getRootProject().getPath();
+
+        service.checkout(workspaceId, project.getRootProject(), checkoutRequest, new AsyncRequestCallback<String>() {
+            @Override
+            protected void onSuccess(String result) {
+                getBranches();
+                //In this case we can have unconfigured state of the project,
+                //so we must repeat the logic which is performed when we open a project
+                projectExplorer.reloadChildren();
+
+                updateOpenedFiles();
+
+                //refresh project
+                projectService.getProject(workspaceId, path,
+                                          new AsyncRequestCallback<ProjectConfigDto>(
+                                                  dtoUnmarshallerFactory.newUnmarshaller(ProjectConfigDto.class)) {
+                                              @Override
+                                              protected void onSuccess(ProjectConfigDto result) {
+                                                  eventBus.fireEvent(new ProjectUpdatedEvent(path, result));
+                                              }
+
+                                              @Override
+                                              protected void onFailure(Throwable exception) {
+                                                  notificationManager
+                                                          .notify(exception.getLocalizedMessage(), FAIL, true, project.getProjectConfig());
+                                              }
+                                          });
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                final GitOutputConsole console = gitOutputConsoleFactory.create(BRANCH_CHECKOUT_COMMAND_NAME);
+                printGitMessage(exception.getMessage(), console);
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+            }
+        });
+    }
+

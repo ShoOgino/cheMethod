@@ -1,0 +1,48 @@
+    private void askAddToIndex(final String path, final String fileName) {
+        final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
+        Map<String, List<String>> attributes = project.getAttributes();
+        if (!(attributes.containsKey("vcs.provider.name") && attributes.get("vcs.provider.name").contains("git"))) {
+            return;
+        }
+
+        ConfirmCallback confirmCallback = new ConfirmCallback() {
+            @Override
+            public void accepted() {
+                String filePath = path.substring(project.getName().length() + 2);
+                try {
+                    gitServiceClient
+                            .add(appContext.getWorkspaceId(), project, false, Collections.singletonList(filePath),
+                                 new RequestCallback<Void>() {
+                                     @Override
+                                     protected void onSuccess(Void result) {
+                                         notificationManager.notify(localizationConstant.actionGitIndexUpdated(),
+                                                                    localizationConstant.actionNewFileAddToIndexNotification(fileName));
+                                     }
+
+                                     @Override
+                                     protected void onFailure(Throwable exception) {
+                                         notificationManager.notify(localizationConstant.actionGitIndexUpdateFailed(),
+                                                                    exception.getMessage());
+                                     }
+                                 });
+                } catch (WebSocketException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        CancelCallback cancelCallback = new CancelCallback() {
+            @Override
+            public void cancelled() {
+                //Do nothing
+            }
+        };
+
+        dialogFactory.createConfirmDialog(localizationConstant.actionNewFileAddToIndexTitle(),
+                                          localizationConstant.actionNewFileAddToIndexText(fileName),
+                                          "Yes",
+                                          "No",
+                                          confirmCallback,
+                                          cancelCallback).show();
+    }
+

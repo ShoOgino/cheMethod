@@ -1,0 +1,33 @@
+    @Test
+    public void onAuthenticatedWhenGenerateKeysIsFailure() throws Exception {
+        String userId = "userId";
+        OAuthStatus authStatus = mock(OAuthStatus.class);
+
+        SshKeyUploader keyProvider = mock(SshKeyUploader.class);
+
+        CurrentUser user = mock(CurrentUser.class);
+        ProfileDescriptor profile = mock(ProfileDescriptor.class);
+        MessageDialog messageDialog = mock(MessageDialog.class);
+        when(view.isGenerateKeysSelected()).thenReturn(true);
+        when(registry.getUploader(GITHUB_HOST)).thenReturn(keyProvider);
+
+        when(appContext.getCurrentUser()).thenReturn(user);
+        when(user.getProfile()).thenReturn(profile);
+        when(profile.getId()).thenReturn(userId);
+        when(dialogFactory.createMessageDialog(anyString(), anyString(), Matchers.<ConfirmCallback>anyObject())).thenReturn(messageDialog);
+
+        gitHubAuthenticator.authorize(getCallBack());
+        gitHubAuthenticator.onAuthenticated(authStatus);
+
+        verify(keyProvider).uploadKey(eq(userId), generateKeyCallbackCaptor.capture());
+        AsyncCallback<Void> generateKeyCallback = generateKeyCallbackCaptor.getValue();
+        generateKeyCallback.onFailure(new Exception(""));
+
+        verify(view).isGenerateKeysSelected();
+        verify(registry).getUploader(eq(GITHUB_HOST));
+        verify(appContext).getCurrentUser();
+        verify(dialogFactory).createMessageDialog(anyString(), anyString(), Matchers.<ConfirmCallback>anyObject());
+        verify(messageDialog).show();
+        verify(sshServiceClient).getPairs(eq(SshKeyManagerPresenter.GIT_SSH_SERVICE));
+    }
+

@@ -1,0 +1,103 @@
+    /**
+     * Displays assist popup relative to the current cursor position.
+     *
+     * @param proposals proposals to display
+     */
+    public void show(final List<CompletionProposal> proposals) {
+        OrionTextViewOverlay textView = textEditor.getTextView();
+        OrionPixelPositionOverlay caretLocation = textView.getLocationAtOffset(textView.getCaretOffset());
+        caretLocation.setY(caretLocation.getY() + textView.getLineHeight());
+        caretLocation = textView.convert(caretLocation, "document", "page");
+
+        /** The fastest way to remove element children. Clear and add items. */
+        listElement.setInnerHTML("");
+
+        /* Display an empty popup when it is nothing to show. */
+        if (proposals == null || proposals.isEmpty()) {
+            final Element emptyElement = Elements.createLiElement(popupResources.popupStyle().item());
+            emptyElement.setTextContent("No proposals");
+            listElement.appendChild(emptyElement);
+            return;
+        }
+
+        /* Add new popup items. */
+        for (CompletionProposal proposal : proposals) {
+            addProposalPopupItem(proposal);
+        }
+
+        /* Reset popup dimensions and show. */
+        popupElement.getStyle().setLeft(caretLocation.getX(), PX);
+        popupElement.getStyle().setTop(caretLocation.getY(), PX);
+        popupElement.getStyle().setWidth("400px");
+        popupElement.getStyle().setHeight("200px");
+        popupElement.getStyle().setOpacity(0);
+        Elements.getDocument().getBody().appendChild(this.popupElement);
+
+        Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
+            @Override
+            public void execute() {
+                popupElement.getStyle().setOpacity(1);
+            }
+        });
+
+        /* Correct popup position (wants to be refactored) */
+        final Window window = Elements.getWindow();
+        final int viewportWidth = window.getInnerWidth();
+        final int viewportHeight = window.getInnerHeight();
+
+        int spaceBelow = viewportHeight - caretLocation.getY();
+        if (this.popupElement.getOffsetHeight() > spaceBelow) {
+            // Check if div is too large to fit above
+            int spaceAbove = caretLocation.getY() - textView.getLineHeight();
+            if (this.popupElement.getOffsetHeight() > spaceAbove) {
+                // Squeeze the div into the larger area
+                if (spaceBelow > spaceAbove) {
+                    this.popupElement.getStyle().setProperty("maxHeight", spaceBelow + "px");
+                } else {
+                    this.popupElement.getStyle().setProperty("maxHeight", spaceAbove + "px");
+                    this.popupElement.getStyle().setTop("0");
+                }
+            } else {
+                // Put the div above the line
+                this.popupElement.getStyle()
+                                 .setTop((caretLocation.getY() - this.popupElement.getOffsetHeight() - textView.getLineHeight()) + "px");
+                this.popupElement.getStyle().setProperty("maxHeight", spaceAbove + "px");
+            }
+        } else {
+            this.popupElement.getStyle().setProperty("maxHeight", spaceBelow + "px");
+        }
+
+        if (caretLocation.getX() + this.popupElement.getOffsetWidth() > viewportWidth) {
+            int leftSide = viewportWidth - this.popupElement.getOffsetWidth();
+            if (leftSide < 0) {
+                leftSide = 0;
+            }
+            this.popupElement.getStyle().setLeft(leftSide + "px");
+            this.popupElement.getStyle().setProperty("maxWidth", (viewportWidth - leftSide) + "px");
+        } else {
+            this.popupElement.getStyle().setProperty("maxWidth", viewportWidth + caretLocation.getX() + "px");
+        }
+
+        /* Don't attach handlers twice. Visible popup must already their attached. */
+        if (!visible) {
+            addPopupEventListeners();
+        }
+
+        /* Indicates the codeassist is visible. */
+        visible = true;
+
+        if (docPopup.isAttached()) {
+            docPopup.getElement().getStyle().setOpacity(0);
+            new Timer() {
+                @Override
+                public void run() {
+                    docPopup.removeFromParent();
+                    showDocTimer.schedule(1500);
+                }
+            }.schedule(250);
+        }
+
+        /* Select first row. */
+        selectElement(listElement.getFirstElementChild());
+    }
+

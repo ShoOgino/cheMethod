@@ -1,0 +1,27 @@
+    @Test
+    @Ignore
+    public void parentNodeShouldBeRefreshed() throws Exception {
+        when(appContext.getCurrentProject()).thenReturn(currentProject);
+
+        when(watcherService.registerRecursiveWatcher(SOME_TEXT)).thenReturn(registerPromise);
+
+        systemFileWatcher.onExtServerStarted(extServerStateEvent);
+
+        verify(watcherService).registerRecursiveWatcher(SOME_TEXT);
+
+        verify(registerPromise).then(operationCaptor.capture());
+        operationCaptor.getValue().apply(null);
+
+        verify(messageBus).subscribe(eq(WATCHER_WS_CHANEL), subscriptionCaptor.capture());
+        SubscriptionHandler<String> handler = subscriptionCaptor.getValue();
+
+        //noinspection NonJREEmulationClassesInClientCode
+        Method method = handler.getClass().getDeclaredMethod("onMessageReceived", Object.class);
+
+        method.setAccessible(true);
+
+        method.invoke(handler, PATH_TO_PARENT);
+
+        verify(projectExplorer).reloadChildren();
+    }
+

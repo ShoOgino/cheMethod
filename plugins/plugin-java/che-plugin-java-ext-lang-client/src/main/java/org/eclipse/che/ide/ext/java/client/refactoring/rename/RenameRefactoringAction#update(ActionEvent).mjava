@@ -1,0 +1,69 @@
+    @Override
+    public void update(ActionEvent event) {
+        Selection<?> selections = selectionAgent.getSelection();
+        if (selections != null & !isEditorPartActive) {
+            List<?> selectedItems = selections.getAllElements();
+            this.selectedItems = selectedItems;
+
+            if (selectedItems.size() != 1) {
+                event.getPresentation().setEnabled(false);
+                return;
+            }
+
+            Object selectedItem = selectedItems.get(0);
+
+            if (!(selectedItem instanceof HasStorablePath)) {
+                event.getPresentation().setEnabled(false);
+                return;
+            }
+
+            HasStorablePath item = (HasStorablePath)selectedItem;
+
+            boolean isSourceFileNode = item instanceof JavaFileNode;
+            boolean isPackageNode = item instanceof PackageNode;
+
+            if (isSourceFileNode) {
+                renamedItemType = COMPILATION_UNIT;
+                event.getPresentation().setEnabled(true);
+                return;
+            }
+
+            if (isPackageNode) {
+                renamedItemType = PACKAGE;
+                event.getPresentation().setEnabled(true);
+                return;
+            }
+        }
+
+        selectedItems = null;
+
+        CurrentProject currentProject = appContext.getCurrentProject();
+        if (currentProject == null) {
+            event.getPresentation().setEnabled(false);
+            return;
+        }
+
+        //todo Warning:we need improve this code for multi-module projects
+        final List<String> language = currentProject.getRootProject().getAttributes().get("language");
+        if (language == null || !language.contains("java")) {
+            event.getPresentation().setEnabled(false);
+            return;
+        }
+
+        EditorPartPresenter editorPart = editorAgent.getActiveEditor();
+        if (editorPart != null && editorPart instanceof TextEditor) {
+            VirtualFile virtualFile = editorPart.getEditorInput().getFile();
+            String mediaType = virtualFile.getMediaType();
+
+            if (mediaType != null && ((mediaType.equals(MimeType.TEXT_X_JAVA) ||
+                                       mediaType.equals(MimeType.TEXT_X_JAVA_SOURCE) ||
+                                       mediaType.equals(MimeType.APPLICATION_JAVA_CLASS)))) {
+                event.getPresentation().setEnabled(true);
+            } else {
+                event.getPresentation().setEnabled(false);
+            }
+        } else {
+            event.getPresentation().setEnabled(false);
+        }
+    }
+

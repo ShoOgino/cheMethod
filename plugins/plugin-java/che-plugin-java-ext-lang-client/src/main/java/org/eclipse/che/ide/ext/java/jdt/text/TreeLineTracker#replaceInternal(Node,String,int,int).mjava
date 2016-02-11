@@ -1,0 +1,49 @@
+    /**
+     * Replace happening inside a single line.
+     *
+     * @param node
+     *         the affected node
+     * @param text
+     *         the added text
+     * @param length
+     *         the replace length, &lt; <code>firstLineDelta</code>
+     * @param firstLineDelta
+     *         the number of characters from the replacement offset to the end of <code>node</code> &gt;
+     *         <code>length</code>
+     */
+    private void replaceInternal(Node node, String text, int length, int firstLineDelta) {
+        // 1) modification on a single line
+
+        DelimiterInfo info = text == null ? null : nextDelimiterInfo(text, 0);
+
+        if (info == null || info.delimiter == null) {
+            // a) trivial case: insert into a single node, no line mangling
+            int added = text == null ? 0 : text.length();
+            updateLength(node, added - length);
+        } else {
+            // b) more lines to add between two chunks of the first node
+            // remember what we split off the first line
+            int remainder = firstLineDelta - length;
+            String remDelim = node.delimiter;
+
+            // join the first line with the first added
+            int consumed = info.delimiterIndex + info.delimiterLength;
+            int delta = consumed - firstLineDelta;
+            updateLength(node, delta);
+            node.delimiter = info.delimiter;
+
+            // Inline addlines start
+            info = nextDelimiterInfo(text, consumed);
+            while (info != null) {
+                int lineLen = info.delimiterIndex - consumed + info.delimiterLength;
+                node = insertAfter(node, lineLen, info.delimiter);
+                consumed += lineLen;
+                info = nextDelimiterInfo(text, consumed);
+            }
+            // Inline addlines end
+
+            // add remaining chunk merged with last (incomplete) additional line
+            insertAfter(node, remainder + text.length() - consumed, remDelim);
+        }
+    }
+

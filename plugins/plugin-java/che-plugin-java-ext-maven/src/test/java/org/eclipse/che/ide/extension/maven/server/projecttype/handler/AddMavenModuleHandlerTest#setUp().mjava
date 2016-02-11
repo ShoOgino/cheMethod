@@ -1,0 +1,49 @@
+    @Before
+    public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
+        when(filterProvider.get()).thenReturn(filter);
+        addMavenModuleHandler = new AddMavenModuleHandler();
+        ProjectTypeDef mavenProjectType = Mockito.mock(ProjectTypeDef.class);
+        Mockito.when(mavenProjectType.getId()).thenReturn(MavenAttributes.MAVEN_ID);
+        Mockito.when(mavenProjectType.getDisplayName()).thenReturn(MavenAttributes.MAVEN_ID);
+        Mockito.when(mavenProjectType.isPrimaryable()).thenReturn(true);
+        final String vfsUser = "dev";
+        final Set<String> vfsUserGroups = new LinkedHashSet<>(Collections.singletonList("WORKSPACE/developer"));
+        final EventService eventService = new EventService();
+        VirtualFileSystemRegistry vfsRegistry = new VirtualFileSystemRegistry();
+        final MemoryFileSystemProvider memoryFileSystemProvider =
+                new MemoryFileSystemProvider(WORKSPACE,
+                                             eventService,
+                                             new VirtualFileSystemUserContext() {
+                    @Override
+                    public VirtualFileSystemUser getVirtualFileSystemUser() {
+                        return new VirtualFileSystemUser(vfsUser, vfsUserGroups);
+                    }
+                },
+                                             vfsRegistry,
+                                             SystemPathsFilter.ANY);
+        vfsRegistry.registerProvider(WORKSPACE, memoryFileSystemProvider);
+
+        Set<ProjectTypeDef> projTypes = new HashSet<>();
+        projTypes.add(mavenProjectType);
+
+        projectTypeRegistry = new ProjectTypeRegistry(projTypes);
+
+        Set<ProjectHandler> handlers = new HashSet<>();
+        ProjectHandlerRegistry handlerRegistry = new ProjectHandlerRegistry(handlers);
+
+        projectManager = new DefaultProjectManager(vfsRegistry,
+                                                   eventService,
+                                                   projectTypeRegistry,
+                                                   handlerRegistry,
+                                                   filterProvider,
+                                                   API_ENDPOINT,
+                                                   httpJsonRequestFactory);
+
+        HttpJsonRequest httpJsonRequest = mock(HttpJsonRequest.class, new SelfReturningAnswer());
+        when(httpJsonRequestFactory.fromLink(eq(DtoFactory.newDto(Link.class)
+                                                          .withMethod("PUT")
+                                                          .withHref(API_ENDPOINT + "/workspace/" + WORKSPACE + "/project"))))
+                .thenReturn(httpJsonRequest);
+    }
+

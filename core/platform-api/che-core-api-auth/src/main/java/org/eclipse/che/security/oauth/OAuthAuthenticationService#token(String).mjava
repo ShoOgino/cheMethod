@@ -1,0 +1,30 @@
+    /**
+     * Gets OAuth token for user.
+     *
+     * @param oauthProvider
+     *         OAuth provider name
+     * @return OAuthToken
+     * @throws ServerException
+     */
+    @GET
+    @Path("token")
+    @Produces(MediaType.APPLICATION_JSON)
+    @RolesAllowed({"user", "temp_user"})
+    public OAuthToken token(@Required @QueryParam("oauth_provider") String oauthProvider)
+            throws ServerException, BadRequestException, NotFoundException, ForbiddenException {
+        OAuthAuthenticator provider = getAuthenticator(oauthProvider);
+        final User user = EnvironmentContext.getCurrent().getUser();
+        try {
+            OAuthToken token = provider.getToken(user.getId());
+            if (token == null) {
+                token = provider.getToken(user.getName());
+            }
+            if (token != null) {
+                return token;
+            }
+            throw new NotFoundException("OAuth token for user " + user.getId() + " was not found");
+        } catch (IOException e) {
+            throw new ServerException(e.getLocalizedMessage(), e);
+        }
+    }
+

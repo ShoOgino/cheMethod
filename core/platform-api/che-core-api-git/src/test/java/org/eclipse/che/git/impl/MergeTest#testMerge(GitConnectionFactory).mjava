@@ -1,0 +1,19 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void testMerge(GitConnectionFactory connectionFactory) throws Exception {
+        //given
+        GitConnection connection = connectToGitRepositoryWithContent(connectionFactory, repository);
+        connection.checkout(newDto(CheckoutRequest.class).withName(branchName).withCreateNew(true));
+        File file = addFile(connection, "t-merge", "aaa\n");
+
+        connection.add(newDto(AddRequest.class).withFilepattern(new ArrayList<>(Arrays.asList("."))));
+        connection.commit(newDto(CommitRequest.class).withMessage("add file in new branch"));
+        connection.checkout(newDto(CheckoutRequest.class).withName("master"));
+        //when
+        MergeResult mergeResult = connection.merge(newDto(MergeRequest.class).withCommit(branchName));
+        //then
+        assertEquals(mergeResult.getMergeStatus(), MergeResult.MergeStatus.FAST_FORWARD);
+        assertTrue(file.exists());
+        assertEquals(Files.toString(file, Charsets.UTF_8), "aaa\n");
+        assertEquals(connection.log(newDto(LogRequest.class)).getCommits().get(0).getMessage(), "add file in new branch");
+    }
+

@@ -1,0 +1,29 @@
+    @Test
+    public void testOnCheckoutClickedWhenCheckoutRequestAndRefreshProjectIsSuccessfulButOpenFileIsNotExistInBranch()
+            throws Exception {
+        when(dtoFactory.createDto(CheckoutRequest.class)).thenReturn(checkoutRequest);
+
+        VirtualFile virtualFile = mock(VirtualFile.class);
+
+        when(editorInput.getFile()).thenReturn(virtualFile);
+        when(virtualFile.getPath()).thenReturn("/foo");
+
+        selectBranch();
+        presenter.onCheckoutClicked();
+
+        verify(checkoutRequest).setTrackBranch(eq(BRANCH_NAME));
+        verifyNoMoreInteractions(checkoutRequest);
+        verify(service).checkout(anyString(), eq(rootProjectConfig),
+                                       eq(checkoutRequest),
+                                       asyncRequestCallbackCaptor.capture());
+        AsyncRequestCallback<String> checkoutBranchCallback = asyncRequestCallbackCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(checkoutBranchCallback, PROJECT_PATH);
+
+        verify(editorAgent).getOpenedEditors();
+        verify(selectedBranch, times(2)).getDisplayName();
+        verify(selectedBranch).isRemote();
+        verify(service, times(2)).branchList(anyString(), eq(rootProjectConfig), eq(LIST_ALL), anyObject());
+        verify(eventBus).fireEvent(Matchers.<FileContentUpdateEvent>anyObject());
+        verify(appContext).getCurrentProject();
+    }
+

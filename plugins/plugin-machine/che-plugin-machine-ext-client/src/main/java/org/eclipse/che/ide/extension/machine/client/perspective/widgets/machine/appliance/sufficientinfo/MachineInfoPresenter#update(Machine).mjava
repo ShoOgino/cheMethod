@@ -1,0 +1,49 @@
+    /**
+     * Updates additional information about current machine.
+     *
+     * @param machine
+     *         machine for which need update panel
+     */
+    public void update(@NotNull Machine machine) {
+
+        Unmarshallable<ProfileDescriptor> profileUnMarshaller = unmarshallerFactory.newUnmarshaller(ProfileDescriptor.class);
+
+        userProfile.getCurrentProfile(new AsyncRequestCallback<ProfileDescriptor>(profileUnMarshaller) {
+            @Override
+            protected void onSuccess(ProfileDescriptor result) {
+                Map<String, String> attributes = result.getAttributes();
+
+                String firstName = attributes.get(FIRST_NAME_KEY);
+                String lastName = attributes.get(LAST_NAME_KEY);
+
+                String fullName = firstName + ' ' + lastName;
+
+                String email = attributes.get(EMAIL_KEY);
+
+                boolean isNameExist = !firstName.equals("undefined") && !lastName.equals("<none>");
+
+                view.setOwner(isNameExist ? fullName : email);
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                Log.error(getClass(), exception);
+            }
+        });
+
+        wsService.getUsersWorkspace(machine.getWorkspaceId())
+                 .then(new Operation<UsersWorkspaceDto>() {
+                     @Override
+                     public void apply(UsersWorkspaceDto ws) throws OperationException {
+                         view.setWorkspaceName(ws.getName());
+                     }
+                 }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError err) throws OperationException {
+                Log.error(getClass(), err.getCause());
+            }
+        });
+
+        view.updateInfo(machine);
+    }
+

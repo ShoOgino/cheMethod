@@ -1,0 +1,42 @@
+    /**
+     * Converts a String representing a local file system path to a {@link URI}.
+     * For example, this method can be used to create a URI from the output
+     * of {@link File#getAbsolutePath()}.
+     * <p>
+     * The <code>forceAbsolute</code> flag controls how this method handles
+     * relative paths.  If the value is <code>true</code>, then the input path
+     * is always treated as an absolute path, and the returned URI will be an
+     * absolute URI.  If the value is <code>false</code>, then a relative path
+     * provided as input will result in a relative URI being returned.
+     *
+     * @param pathString The path string to convert
+     * @param forceAbsolute if <code>true</code> the path is treated as an
+     * absolute path
+     * @return The URI representing the provided path string
+     * @since org.eclipse.core.filesystem 1.2
+     */
+    public static URI toURI(String pathString, boolean forceAbsolute) {
+        if (File.separatorChar != '/')
+            pathString = pathString.replace(File.separatorChar, '/');
+        final int length = pathString.length();
+        StringBuffer pathBuf = new StringBuffer(length + 1);
+        //mark if path is relative
+        if (length > 0 && (pathString.charAt(0) != '/') && forceAbsolute) {
+            pathBuf.append('/');
+        }
+        //additional double-slash for UNC paths to distinguish from host separator
+        if (pathString.startsWith("//")) //$NON-NLS-1$
+            pathBuf.append('/').append('/');
+        pathBuf.append(pathString);
+        try {
+            String scheme = null;
+            if (length > 0 && (pathBuf.charAt(0) == '/')) {
+                scheme = EFS.SCHEME_FILE;
+            }
+            return new URI(scheme, null, pathBuf.toString(), null);
+        } catch (URISyntaxException e) {
+            //try java.io implementation
+            return new File(pathString).toURI();
+        }
+    }
+

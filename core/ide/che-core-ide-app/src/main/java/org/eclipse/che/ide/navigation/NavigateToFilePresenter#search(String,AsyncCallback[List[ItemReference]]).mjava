@@ -1,0 +1,22 @@
+    private void search(String fileName, final AsyncCallback<List<ItemReference>> callback) {
+        final String url = SEARCH_URL + "/?name=" + URL.encodePathSegment(fileName);
+        final Message message = new MessageBuilder(GET, url).header(ACCEPT, APPLICATION_JSON).build();
+        final Unmarshallable<List<ItemReference>> unmarshaller = dtoUnmarshallerFactory.newWSListUnmarshaller(ItemReference.class);
+        try {
+            wsMessageBus.send(message, new RequestCallback<List<ItemReference>>(unmarshaller) {
+                @Override
+                protected void onSuccess(List<ItemReference> result) {
+                    callback.onSuccess(result);
+                }
+
+                @Override
+                protected void onFailure(Throwable exception) {
+                    final String message = dtoFactory.createDtoFromJson(exception.getMessage(), ServiceError.class).getMessage();
+                    callback.onFailure(new Exception(message));
+                }
+            });
+        } catch (WebSocketException e) {
+            callback.onFailure(e);
+        }
+    }
+

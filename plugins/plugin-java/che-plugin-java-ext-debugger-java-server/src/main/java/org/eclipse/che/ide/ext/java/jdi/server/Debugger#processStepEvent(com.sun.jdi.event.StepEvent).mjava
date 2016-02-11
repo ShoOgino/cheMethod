@@ -1,0 +1,21 @@
+    private boolean processStepEvent(com.sun.jdi.event.StepEvent event) throws DebuggerException {
+        setCurrentThread(event.thread());
+        com.sun.jdi.Location location = event.location();
+        StepEvent stepEvent;
+        synchronized (events) {
+            stepEvent = (StepEvent)DtoFactory.getInstance().createDto(StepEvent.class)
+                                             .withLocation(DtoFactory.getInstance().createDto(Location.class)
+                                                                     .withClassName(location.declaringType().name())
+                                                                     .withLineNumber(location.lineNumber()))
+                                             .withType(DebuggerEvent.STEP);
+            events.add(stepEvent);
+        }
+
+        List<DebuggerEvent> eventsList = new ArrayList<>();
+        eventsList.add(stepEvent);
+        publishWebSocketMessage(DtoFactory.getInstance().createDto(DebuggerEventList.class).withEvents(eventsList),
+                                EVENTS_CHANNEL + id);
+        // Lets target JVM to be in suspend state.
+        return false;
+    }
+

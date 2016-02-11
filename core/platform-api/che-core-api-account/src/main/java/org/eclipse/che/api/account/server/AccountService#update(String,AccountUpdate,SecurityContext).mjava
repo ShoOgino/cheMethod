@@ -1,0 +1,59 @@
+    /**
+     * <p>Updates account.</p>
+     * <strong>Note:</strong> existed account attributes with same names as
+     * update attributes will be replaced with update attributes.
+     *
+     * @param accountId
+     *         account identifier
+     * @param update
+     *         account update
+     * @return descriptor of updated account
+     * @throws NotFoundException
+     *         when account with given identifier doesn't exist
+     * @throws ConflictException
+     *         when account update is {@code null}
+     *         or when account with given name already exists
+     * @throws ServerException
+     *         when some error occurred while retrieving/persisting account
+     * @see AccountDescriptor
+     */
+    @ApiOperation(value = "Update account",
+                  notes = "Update account. This API call requires account/owner role.",
+                  response = AccountDescriptor.class,
+                  position = 9)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 404, message = "Account ID not found"),
+            @ApiResponse(code = 409, message = "Invalid account ID or account name already exists"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @POST
+    @Path("/{id}")
+    @RolesAllowed({"account/owner"})
+    @Produces(APPLICATION_JSON)
+    @Consumes(APPLICATION_JSON)
+    public AccountDescriptor update(@ApiParam(value = "Account ID", required = true)
+                                    @PathParam("id") String accountId,
+                                    AccountUpdate update,
+                                    @Context SecurityContext securityContext) throws NotFoundException,
+                                                                                     ConflictException,
+                                                                                     ServerException {
+        requiredNotNull(update, "Account update");
+        final Account account = accountDao.getById(accountId);
+        //current user should be account owner to update it
+        if (update.getName() != null) {
+            if (!account.getName().equals(update.getName()) && accountDao.getByName(update.getName()) != null) {
+                throw new ConflictException(format("Account with name %s already exists", update.getName()));
+            } else {
+                account.setName(update.getName());
+            }
+        }
+        if (update.getAttributes() != null) {
+            for (String attributeName : update.getAttributes().keySet()) {
+                validateAttributeName(attributeName);
+            }
+            account.getAttributes().putAll(update.getAttributes());
+        }
+        accountDao.update(account);
+        return toDescriptor(account);
+    }
+

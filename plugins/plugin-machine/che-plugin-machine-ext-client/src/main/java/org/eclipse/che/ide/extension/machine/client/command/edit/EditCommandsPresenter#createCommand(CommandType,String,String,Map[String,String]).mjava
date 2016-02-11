@@ -1,0 +1,23 @@
+    private void createCommand(CommandType type, String customCommand, String customName, Map<String, String> attributes) {
+        Map<String, String> attributesToUpdate = (attributes != null) ? attributes : new HashMap<String, String>();
+
+        attributesToUpdate.put(PREVIEW_URL_ATTR, type.getPreviewUrlTemplate());
+
+        final CommandDto commandDto = dtoFactory.createDto(CommandDto.class)
+                                                .withName(getUniqueCommandName(type, customName))
+                                                .withCommandLine(customCommand != null ? customCommand : type.getCommandTemplate())
+                                                .withAttributes(attributesToUpdate)
+                                                .withType(type.getId());
+        workspaceServiceClient.addCommand(workspaceId, commandDto).then(new Operation<UsersWorkspaceDto>() {
+            @Override
+            public void apply(UsersWorkspaceDto arg) throws OperationException {
+                fetchCommands();
+
+                final CommandType type = commandTypeRegistry.getCommandTypeById(commandDto.getType());
+                final CommandConfiguration command = type.getConfigurationFactory().createFromDto(commandDto);
+                fireConfigurationAdded(command);
+                view.setSelectedConfiguration(command);
+            }
+        });
+    }
+

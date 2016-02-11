@@ -1,0 +1,44 @@
+    /**
+     * Provides the URI that will be used to connect on docker.
+     * It may use extra environment to help to build this URI
+     *
+     * @param isLinux
+     *         if System is running on Linux
+     * @param env
+     *         should contain System environment
+     * @return URI to connect to docker
+     */
+    protected static URI dockerDaemonUri(final boolean isLinux, @NotNull final Map<String, String> env) {
+        // check if have docker variables
+        String host = env.get(DOCKER_HOST_PROPERTY);
+        if (host != null) {
+            // user has defined some properties, use them
+            URI userURI;
+            try {
+                userURI = new URI(host);
+            } catch (URISyntaxException e) {
+                LOG.error(String.format("Unable to parse %s property with value %s", DOCKER_HOST_PROPERTY, host), e);
+                // unable to use given property, fallback to default URL
+                return DEFAULT_DOCKER_MACHINE_URI;
+            }
+
+            // Secure connection ?
+            String tls = env.get(DOCKER_TLS_VERIFY_PROPERTY);
+            String protocol = "1".equals(tls) ? "https" : "http";
+
+            // build URI
+            try {
+                return new URI(protocol, null, userURI.getHost(), userURI.getPort(), null, null, null);
+            } catch (URISyntaxException e) {
+                LOG.error(String.format("Unable to create URI %s property with value %s and TLS %s", DOCKER_HOST_PROPERTY, host,
+                                        DOCKER_TLS_VERIFY_PROPERTY), e);
+                // unable to use given property, fallback to default URL
+                return DEFAULT_DOCKER_MACHINE_URI;
+            }
+        } else if (isLinux) {
+            return UNIX_SOCKET_URI;
+        } else {
+            return DEFAULT_DOCKER_MACHINE_URI;
+        }
+    }
+

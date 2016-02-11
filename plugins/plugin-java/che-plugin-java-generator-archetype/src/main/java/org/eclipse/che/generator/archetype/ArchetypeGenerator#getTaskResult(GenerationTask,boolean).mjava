@@ -1,0 +1,61 @@
+    /**
+     * Gets result of GenerationTask.
+     *
+     * @param task
+     *         task
+     * @param successful
+     *         reports whether generate process terminated normally or not.
+     *         Note: {@code true} is not indicated successful generating but only normal process termination.
+     * @return GenerationResult
+     * @throws ServerException
+     *         if an error occurs when try to get result
+     */
+    private GenerationResult getTaskResult(GenerationTask task, boolean successful) throws ServerException {
+        if (!successful) {
+            return new GenerationResult(false, null, getLogFile(task));
+        }
+
+        boolean mavenSuccess = false;
+        BufferedReader logReader = null;
+        try {
+            logReader = new BufferedReader(task.getLogger().getReader());
+            String line;
+            while ((line = logReader.readLine()) != null) {
+                line = MavenUtils.removeLoggerPrefix(line);
+                if ("BUILD SUCCESS".equals(line)) {
+                    mavenSuccess = true;
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            throw new ServerException(e);
+        } finally {
+            if (logReader != null) {
+                try {
+                    logReader.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+
+        if (!mavenSuccess) {
+            return new GenerationResult(false, null, getLogFile(task));
+        }
+
+        final File workDir = task.getWorkDir();
+        final GenerationResult result = new GenerationResult(true, null, getLogFile(task));
+
+        final File projectFolder = new File(workDir, task.getArtifactId());
+        if (projectFolder.isDirectory() && projectFolder.list().length > 0) {
+            final File zip = new File(workDir, "project.zip");
+            try {
+                ZipUtils.zipDir(projectFolder.getAbsolutePath(), projectFolder, zip, IoUtil.ANY_FILTER);
+            } catch (IOException e) {
+                throw new ServerException(e);
+            }
+            result.setGeneratedProject(zip);
+        }
+
+        return result;
+    }
+

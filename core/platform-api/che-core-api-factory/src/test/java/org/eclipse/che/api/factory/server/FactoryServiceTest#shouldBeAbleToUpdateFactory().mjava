@@ -1,0 +1,32 @@
+    /**
+     * Checks that the user can update an existing factory
+     */
+    @Test
+    public void shouldBeAbleToUpdateFactory() throws Exception {
+
+        // given
+        Factory beforeFactory = prepareFactoryWithGivenStorage("git", "http://github.com/codenvy/platform-api.git")
+                .withCreator(dto.createDto(Author.class).withCreated(System.currentTimeMillis()));
+        beforeFactory.setId(CORRECT_FACTORY_ID);
+        Factory afterFactory = prepareFactoryWithGivenStorage("git", "http://github.com/codenvy/platform-api2.git");
+
+        when(factoryStore.getFactory(CORRECT_FACTORY_ID)).thenReturn(beforeFactory);
+
+        // when, then
+        Response response = given().auth()
+                                   .basic(JettyHttpServer.ADMIN_USER_NAME, JettyHttpServer.ADMIN_USER_PASSWORD)
+                                   .contentType(MediaType.APPLICATION_JSON)
+                                   .body(JsonHelper.toJson(afterFactory))
+                                   .when()
+                                   .put("/private" + SERVICE_PATH + "/" + CORRECT_FACTORY_ID);
+
+        assertEquals(response.getStatusCode(), 200);
+
+        Factory responseFactory = dto.createDtoFromJson(response.getBody().asInputStream(), Factory.class);
+        assertEquals(responseFactory.getWorkspace(), afterFactory.getWorkspace());
+
+
+        // check there was a call on the update operation with expected ID
+        verify(factoryStore).updateFactory(eq(CORRECT_FACTORY_ID), any(Factory.class));
+    }
+

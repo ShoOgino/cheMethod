@@ -1,0 +1,54 @@
+    @Override
+    public void uploadKey(String publicKey) throws IOException, UnauthorizedException {
+        final OAuthToken token = tokenProvider.getToken("github", EnvironmentContext.getCurrent().getUser().getId());
+
+        if (token == null || token.getToken() == null) {
+            LOG.debug("Token not found, user need to authorize to upload key.");
+            throw new UnauthorizedException("To upload SSH key you need to authorize.");
+        }
+
+        StringBuilder answer = new StringBuilder();
+        final String url = String.format("https://api.github.com/user/keys?access_token=%s", token.getToken());
+
+        final List<GitHubKey> gitHubUserPublicKeys = getUserPublicKeys(url, answer);
+        for (GitHubKey gitHubUserPublicKey : gitHubUserPublicKeys) {
+            if (publicKey.startsWith(gitHubUserPublicKey.getKey())) {
+                return;
+            }
+        }
+
+        final Map<String, String> postParams = new HashMap<>(2);
+        postParams.put("title", GitUrl.getCodenvyTimeStampKeyLabel());
+        postParams.put("key", new String(publicKey.getBytes()));
+
+        final String postBody = JsonHelper.toJson(postParams);
+
+        LOG.debug("Upload public key: {}", postBody);
+
+        int responseCode;
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection)new URL(url).openConnection();
+            conn.setInstanceFollowRedirects(false);
+            conn.setRequestMethod(HTTPMethod.POST);
+            conn.setRequestProperty(HTTPHeader.ACCEPT, MimeType.APPLICATION_JSON);
+            conn.setRequestProperty(HTTPHeader.CONTENT_TYPE, MimeType.APPLICATION_JSON);
+            conn.setRequestProperty(HTTPHeader.CONTENT_LENGTH, String.valueOf(postBody.length()));
+            conn.setDoOutput(true);
+            try (OutputStream out = conn.getOutputStream()) {
+                out.write(postBody.getBytes());
+            }
+            responseCode = conn.getResponseCode();
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+
+        LOG.debug("Upload key response code: {}", responseCode);
+
+        if (responseCode != HTTPStatus.CREATED) {
+            throw new IOException(String.format("%d: Failed to upload public key to http://github.com/", responseCode));
+        }
+    }
+

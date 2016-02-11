@@ -1,0 +1,22 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void testAmendCommit(GitConnectionFactory connectionFactory) throws GitException, IOException {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        addFile(connection, "README.txt", CONTENT);
+        connection.add(newDto(AddRequest.class).withFilepattern(ImmutableList.of("README.txt")));
+        connection.commit(newDto(CommitRequest.class).withMessage("Initial addd"));
+        int beforeCount = connection.log(newDto(LogRequest.class)).getCommits().size();
+
+        //when
+        //change existing README
+        addFile(connection, "README.txt", "some new content");
+        CommitRequest commitRequest = newDto(CommitRequest.class)
+                .withMessage("Amend commit").withAmend(true).withAll(true);
+
+        //then
+        Revision revision = connection.commit(commitRequest);
+        int afterCount = connection.log(newDto(LogRequest.class)).getCommits().size();
+        assertEquals(revision.getMessage(), commitRequest.getMessage());
+        assertEquals(beforeCount, afterCount);
+    }
+

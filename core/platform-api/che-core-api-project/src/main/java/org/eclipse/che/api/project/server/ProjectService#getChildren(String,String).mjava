@@ -1,0 +1,33 @@
+    @ApiOperation(value = "Get project children items",
+                  notes = "Request all children items for a project, such as files and folders",
+                  response = ItemReference.class,
+                  responseContainer = "List",
+                  position = 21)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+            @ApiResponse(code = 404, message = "Not found"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @GET
+    @Path("/children/{parent:.*}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<ItemReference> getChildren(@ApiParam(value = "Workspace ID", required = true)
+                                           @PathParam("ws-id") String workspace,
+                                           @ApiParam(value = "Path to a project", required = true)
+                                           @PathParam("parent") String path)
+            throws NotFoundException, ForbiddenException, ServerException {
+        final FolderEntry folder = asFolder(workspace, path);
+        final List<VirtualFileEntry> children = folder.getChildren();
+        final ArrayList<ItemReference> result = new ArrayList<>(children.size());
+        final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
+        for (VirtualFileEntry child : children) {
+            if (child.isFile()) {
+                result.add(DtoConverter.toItemReference((FileEntry)child, uriBuilder.clone()));
+            } else {
+                result.add(DtoConverter.toItemReference((FolderEntry)child, uriBuilder.clone(), projectManager));
+            }
+        }
+
+        return result;
+    }
+

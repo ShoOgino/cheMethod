@@ -1,0 +1,38 @@
+    /**
+     * Perform diff between pointed revision and index or working tree.
+     *
+     * @param filePatterns
+     *         patterns for which to show diff
+     * @param revision
+     *         revision to compare with
+     * @param isCached
+     *         if <code>true</code> compare with index, else - with working tree
+     */
+    private void doDiffWithNotCommitted(@NotNull List<String> filePatterns, @Nullable final Revision revision, final boolean isCached) {
+        if (revision == null) {
+            return;
+        }
+
+        final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
+        service.diff(workspaceId, project, filePatterns, RAW, false, 0, revision.getId(), isCached,
+                     new AsyncRequestCallback<String>(new StringUnmarshaller()) {
+                         @Override
+                         protected void onSuccess(String result) {
+                             view.setDiffContext(result);
+                             String text = isCached ? constant.historyDiffIndexState() : constant.historyDiffTreeState();
+                             displayCommitA(revision);
+                             view.setCompareType(text);
+                         }
+
+                         @Override
+                         protected void onFailure(Throwable exception) {
+                             nothingToDisplay(revision);
+                             String errorMessage = exception.getMessage() != null ? exception.getMessage() : constant.diffFailed();
+                             GitOutputConsole console = gitOutputConsoleFactory.create(DIFF_COMMAND_NAME);
+                             console.printError(errorMessage);
+                             consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                             notificationManager.notify(constant.diffFailed(), FAIL, true, project);
+                         }
+                     });
+    }
+

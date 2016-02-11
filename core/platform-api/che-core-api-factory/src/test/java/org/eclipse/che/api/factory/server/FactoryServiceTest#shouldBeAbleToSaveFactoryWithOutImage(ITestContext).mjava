@@ -1,0 +1,113 @@
+    @Test
+    public void shouldBeAbleToSaveFactoryWithOutImage(ITestContext context) throws Exception {
+        // given
+        Factory factory = prepareFactoryWithGivenStorage("git", "http://github.com/codenvy/platform-api.git");
+
+        Link expectedCreateProject =
+                dto.createDto(Link.class).withMethod(HttpMethod.GET).withProduces("text/html").withRel("accept")
+                   .withHref(getServerUrl(context) + "/f?id=" + CORRECT_FACTORY_ID);
+
+        FactorySaveAnswer factorySaveAnswer = new FactorySaveAnswer();
+        when(factoryStore.saveFactory(any(Factory.class), anySetOf(FactoryImage.class))).then(factorySaveAnswer);
+        when(factoryStore.getFactory(CORRECT_FACTORY_ID)).then(factorySaveAnswer);
+
+        // when, then
+        Response response =
+                given().auth().basic(JettyHttpServer.ADMIN_USER_NAME, JettyHttpServer.ADMIN_USER_PASSWORD)//
+                       .multiPart("factory", JsonHelper.toJson(factory), MediaType.APPLICATION_JSON).when()
+                       .post("/private" + SERVICE_PATH);
+
+        // then
+        assertEquals(response.getStatusCode(), 200);
+        Factory responseFactory = dto.createDtoFromJson(response.getBody().asString(), Factory.class);
+        assertTrue(responseFactory.getLinks().contains(
+                dto.createDto(Link.class).withMethod(HttpMethod.GET).withProduces(MediaType.APPLICATION_JSON)
+                   .withHref(getServerUrl(context) + "/rest/private/factory/" +
+                             CORRECT_FACTORY_ID).withRel("self")
+                                                      ));
+        assertTrue(responseFactory.getLinks().contains(expectedCreateProject));
+        assertTrue(responseFactory.getLinks()
+                                  .contains(dto.createDto(Link.class).withMethod(HttpMethod.GET).withProduces(MediaType.TEXT_PLAIN)
+                                               .withHref(getServerUrl(context) +
+                                                         "/rest/private/analytics/public-metric/factory_used?factory=" +
+                                                         encode(expectedCreateProject.getHref(), "UTF-8"))
+                                               .withRel("accepted")));
+        assertTrue(responseFactory.getLinks()
+                                  .contains(dto.createDto(Link.class).withMethod(HttpMethod.GET).withProduces(MediaType.TEXT_PLAIN)
+                                               .withHref(getServerUrl(context) + "/rest/private/factory/" +
+                                                         CORRECT_FACTORY_ID + "/snippet?type=url")
+                                               .withRel("snippet/url")));
+        assertTrue(responseFactory.getLinks()
+                                  .contains(dto.createDto(Link.class).withMethod(HttpMethod.GET).withProduces(MediaType.TEXT_PLAIN)
+                                               .withHref(getServerUrl(context) + "/rest/private/factory/" +
+                                                         CORRECT_FACTORY_ID + "/snippet?type=html")
+                                               .withRel("snippet/html")));
+        assertTrue(responseFactory.getLinks()
+                                  .contains(dto.createDto(Link.class).withMethod(HttpMethod.GET).withProduces(MediaType.TEXT_PLAIN)
+                                               .withHref(getServerUrl(context) + "/rest/private/factory/" +
+                                                         CORRECT_FACTORY_ID + "/snippet?type=markdown")
+                                               .withRel("snippet/markdown")));
+
+
+        List<Link> expectedLinks = new ArrayList<>(8);
+        expectedLinks.add(expectedCreateProject);
+
+        Link self = dto.createDto(Link.class);
+        self.setMethod(HttpMethod.GET);
+        self.setProduces(MediaType.APPLICATION_JSON);
+        self.setHref(getServerUrl(context) + "/rest/private/factory/" + CORRECT_FACTORY_ID);
+        self.setRel("self");
+        expectedLinks.add(self);
+
+        Link accepted = dto.createDto(Link.class);
+        accepted.setMethod(HttpMethod.GET);
+        accepted.setProduces(MediaType.TEXT_PLAIN);
+        accepted.setHref(getServerUrl(context) + "/rest/private/analytics/public-metric/factory_used?factory=" +
+                         encode(expectedCreateProject.getHref(), "UTF-8"));
+        accepted.setRel("accepted");
+        expectedLinks.add(accepted);
+
+        Link snippetUrl = dto.createDto(Link.class);
+        snippetUrl.setProduces(MediaType.TEXT_PLAIN);
+        snippetUrl.setHref(getServerUrl(context) + "/rest/private/factory/" + CORRECT_FACTORY_ID + "/snippet?type=url");
+        snippetUrl.setRel("snippet/url");
+        snippetUrl.setMethod(HttpMethod.GET);
+        expectedLinks.add(snippetUrl);
+
+        Link snippetHtml = dto.createDto(Link.class);
+        snippetHtml.setProduces(MediaType.TEXT_PLAIN);
+        snippetHtml.setHref(getServerUrl(context) + "/rest/private/factory/" + CORRECT_FACTORY_ID +
+                            "/snippet?type=html");
+        snippetHtml.setMethod(HttpMethod.GET);
+        snippetHtml.setRel("snippet/html");
+        expectedLinks.add(snippetHtml);
+
+        Link snippetMarkdown = dto.createDto(Link.class);
+        snippetMarkdown.setProduces(MediaType.TEXT_PLAIN);
+        snippetMarkdown.setHref(getServerUrl(context) + "/rest/private/factory/" + CORRECT_FACTORY_ID +
+                                "/snippet?type=markdown");
+        snippetMarkdown.setRel("snippet/markdown");
+        snippetMarkdown.setMethod(HttpMethod.GET);
+        expectedLinks.add(snippetMarkdown);
+
+        Link snippetiFrame = dto.createDto(Link.class);
+        snippetiFrame.setProduces(MediaType.TEXT_PLAIN);
+        snippetiFrame.setHref(getServerUrl(context) + "/rest/private/factory/" + CORRECT_FACTORY_ID +
+                              "/snippet?type=iframe");
+        snippetiFrame.setRel("snippet/iframe");
+        snippetiFrame.setMethod(HttpMethod.GET);
+        expectedLinks.add(snippetiFrame);
+
+        for (Link link : responseFactory.getLinks()) {
+            //This transposition need because proxy objects doesn't contains equals method.
+            Link testLink = dto.createDto(Link.class);
+            testLink.setProduces(link.getProduces());
+            testLink.setHref(link.getHref());
+            testLink.setRel(link.getRel());
+            testLink.setMethod(HttpMethod.GET);
+            assertTrue(expectedLinks.contains(testLink));
+        }
+
+        verify(factoryStore).saveFactory(Matchers.<Factory>any(), eq(Collections.<FactoryImage>emptySet()));
+    }
+

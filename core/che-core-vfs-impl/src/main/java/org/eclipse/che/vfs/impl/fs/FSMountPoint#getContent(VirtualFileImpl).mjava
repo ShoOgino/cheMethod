@@ -1,0 +1,43 @@
+    ContentStream getContent(VirtualFileImpl virtualFile) throws ForbiddenException, ServerException {
+        if (!virtualFile.isFile()) {
+            throw new ForbiddenException(String.format("Unable get content. Item '%s' is not a file. ", virtualFile.getPath()));
+        }
+
+        final PathLockFactory.PathLock lock = pathLockFactory.getLock(virtualFile.getVirtualFilePath(), false).acquire(LOCK_FILE_TIMEOUT);
+        try {
+            final java.io.File ioFile = virtualFile.getIoFile();
+            FileInputStream fIn = null;
+            try {
+                final long fLength = ioFile.length();
+                if (fLength <= MAX_BUFFER_SIZE) {
+                    // If file small enough save its content in memory.
+                    fIn = new FileInputStream(ioFile);
+                    final byte[] buff = new byte[(int)fLength];
+                    int offset = 0;
+                    int len = buff.length;
+                    int r;
+                    while ((r = fIn.read(buff, offset, len)) > 0) {
+                        offset += r;
+                        len -= r;
+                    }
+                    return new ContentStream(virtualFile.getName(), new ByteArrayInputStream(buff),
+                                             virtualFile.getMediaType(), buff.length, new Date(ioFile.lastModified()));
+                }
+
+                // Otherwise copy this file to be able release the file lock before leave this method.
+                final java.io.File f = java.io.File.createTempFile("spool_file", null);
+                nioCopy(ioFile, f, null);
+                return new ContentStream(virtualFile.getName(), new DeleteOnCloseFileInputStream(f),
+                                         virtualFile.getMediaType(), fLength, new Date(ioFile.lastModified()));
+            } catch (IOException e) {
+                String msg = String.format("Unable get content of '%s'. ", virtualFile.getPath());
+                LOG.error(msg + e.getMessage(), e); // More details in log but do not show internal error to caller.
+                throw new ServerException(msg);
+            } finally {
+                closeQuietly(fIn);
+            }
+        } finally {
+            lock.release();
+        }
+    }
+

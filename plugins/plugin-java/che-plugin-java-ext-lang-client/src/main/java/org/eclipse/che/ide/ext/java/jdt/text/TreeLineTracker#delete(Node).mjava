@@ -1,0 +1,91 @@
+    /**
+     * Deletes a node from the tree, re-balancing it if necessary. The differential indices in the node's parent chain have to be
+     * updated in advance to calling this method. Generally, don't call <code>delete</code> directly, but call
+     * <code>update_length(node, -node.length)</code> to properly remove a node.
+     *
+     * @param node
+     *         the node to delete.
+     */
+    private void delete(Node node) {
+        if (ASSERT)
+            Assert.isTrue(node != null);
+        if (ASSERT)
+            Assert.isTrue(node.length == 0);
+
+        Node parent = node.parent;
+        Node toUpdate; // the parent of the node that lost a child
+        boolean lostLeftChild;
+        boolean isLeftChild = parent == null || node == parent.left;
+
+        if (node.left == null || node.right == null) {
+            // 1) node has one child at max - replace parent's pointer with the only child
+            // also handles the trivial case of no children
+            Node replacement = node.left == null ? node.right : node.left;
+            setChild(parent, replacement, isLeftChild);
+            toUpdate = parent;
+            lostLeftChild = isLeftChild;
+            // no updates to do - subtrees stay as they are
+        } else if (node.right.left == null) {
+            // 2a) node's right child has no left child - replace node with right child, giving node's
+            // left subtree to the right child
+            Node replacement = node.right;
+            setChild(parent, replacement, isLeftChild);
+            setChild(replacement, node.left, true);
+            replacement.line = node.line;
+            replacement.offset = node.offset;
+            replacement.balance = node.balance;
+            toUpdate = replacement;
+            lostLeftChild = false;
+            // } else if (node.left.right == null) {
+            // // 2b) symmetric case
+            // Node replacement= node.left;
+            // set_child(parent, replacement, isLeftChild);
+            // set_child(replacement, node.right, false);
+            // replacement.balance= node.balance;
+            // toUpdate= replacement;
+            // lostLeftChild= true;
+        } else {
+            // 3) hard case - replace node with its successor
+            Node successor = successor(node);
+
+            // successor exists (otherwise node would not have right child, case 1)
+            if (ASSERT)
+                Assert.isNotNull(successor);
+            // successor has no left child (a left child would be the real successor of node)
+            if (ASSERT)
+                Assert.isTrue(successor.left == null);
+            if (ASSERT)
+                Assert.isTrue(successor.line == 0);
+            // successor is the left child of its parent (otherwise parent would be smaller and
+            // hence the real successor)
+            if (ASSERT)
+                Assert.isTrue(successor == successor.parent.left);
+            // successor is not a child of node (would have been covered by 2a)
+            if (ASSERT)
+                Assert.isTrue(successor.parent != node);
+
+            toUpdate = successor.parent;
+            lostLeftChild = true;
+
+            // update relative indices
+            updateParentChain(successor, node, -successor.length, -1);
+
+            // delete successor from its current place - like 1)
+            setChild(toUpdate, successor.right, true);
+
+            // move node's subtrees to its successor
+            setChild(successor, node.right, false);
+            setChild(successor, node.left, true);
+
+            // replace node by successor in its parent
+            setChild(parent, successor, isLeftChild);
+
+            // update the successor
+            successor.line = node.line;
+            successor.offset = node.offset;
+            successor.balance = node.balance;
+        }
+
+        updateParentBalanceAfterDeletion(toUpdate, lostLeftChild);
+    }
+

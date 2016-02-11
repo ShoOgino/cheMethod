@@ -1,0 +1,68 @@
+    /** @see GitCommand#execute() */
+    @Override
+    public Void execute() throws GitException {
+        if (message == null) {
+            throw new GitException("Message wasn't set.");
+        }
+        reset();
+        commandLine.add("commit");
+        if (amend) {
+            commandLine.add("--amend");
+        }
+        if (all) {
+            commandLine.add("-a");
+        }
+        Path commitMsgFile = null;
+        if (message.contains("\n")) {
+            try {
+                commitMsgFile = Files.createTempFile("git-commit-message-", null);
+                Files.write(commitMsgFile, message.getBytes());
+                commandLine.add("-F", commitMsgFile.toString());
+            } catch (IOException e) {
+                // allow to commit but message will be in 'one-line' format
+                commandLine.add("-m", message);
+            }
+        } else if (SystemInfo.isWindows()) {
+            commandLine.add(String.format("-m \"%s\"", message));
+        } else {
+            commandLine.add("-m", message);
+        }
+
+        if (committer != null) {
+            setCommandEnvironment("GIT_COMMITTER_NAME", committer.getName());
+            setCommandEnvironment("GIT_COMMITTER_EMAIL", committer.getEmail());
+        } else {
+            throw new GitException("Committer can't be null");
+        }
+
+        String name;
+        String email;
+        if (author != null) {
+            name = author.getName();
+            email = author.getEmail();
+        } else {
+            name = committer.getName();
+            email = committer.getEmail();
+        }
+
+        if (SystemInfo.isWindows()) {
+            commandLine.add(String.format("--author=\"%s <%s>\"", name, email));
+        } else {
+            commandLine.add(String.format("--author=%s \\<%s>", name, email));
+        }
+
+        if (files != null) {
+            commandLine.add(files);
+        }
+
+        start();
+        if (commitMsgFile != null) {
+            try {
+                Files.deleteIfExists(commitMsgFile);
+            } catch (IOException e) {
+                LOG.error("Can not delete temporary file with commit message", e);
+            }
+        }
+        return null;
+    }
+

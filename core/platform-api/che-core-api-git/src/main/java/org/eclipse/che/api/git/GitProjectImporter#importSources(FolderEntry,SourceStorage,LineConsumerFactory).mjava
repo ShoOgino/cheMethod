@@ -1,0 +1,116 @@
+    @Override
+    public void importSources(FolderEntry baseFolder,
+                              SourceStorage storage,
+                              LineConsumerFactory consumerFactory) throws ForbiddenException,
+                                                                          ConflictException,
+                                                                          UnauthorizedException,
+                                                                          IOException,
+                                                                          ServerException {
+        GitConnection git = null;
+        try {
+            // For factory: checkout particular commit after clone
+            String commitId = null;
+            // For factory: github pull request feature
+            String remoteOriginFetch = null;
+            String branch = null;
+            String startPoint = null;
+            // For factory or probably for our projects templates:
+            // If git repository contains more than one project need clone all repository but after cloning keep just
+            // sub-project that is specified in parameter "keepDirectory".
+            String keepDirectory = null;
+            // For factory and for our projects templates:
+            // Keep all info related to the vcs. In case of Git: ".git" directory and ".gitignore" file.
+            // Delete vcs info if false.
+            String branchMerge = null;
+            boolean keepVcs = true;
+
+            Map<String, String> parameters = storage.getParameters();
+            if (parameters != null) {
+                commitId = parameters.get("commitId");
+                branch = parameters.get("branch");
+                startPoint = parameters.get("startPoint");
+                remoteOriginFetch = parameters.get("remoteOriginFetch");
+                keepDirectory = parameters.get("keepDirectory");
+                if (parameters.containsKey("keepVcs")) {
+                    keepVcs = Boolean.parseBoolean(parameters.get("keepVcs"));
+                }
+                branchMerge = parameters.get("branchMerge");
+            }
+            // Get path to local file. Git works with local filesystem only.
+            final String localPath = localPathResolver.resolve((VirtualFileImpl)baseFolder.getVirtualFile());
+            final DtoFactory dtoFactory = DtoFactory.getInstance();
+            final String location = storage.getLocation();
+            // it's needed for extract repository name from repository url e.g https://github.com/codenvy/che-core.git
+            // lastIndexOf('/') + 1 for not to capture slash and length - 4 for trim .git
+            final String repositoryName = location.substring(location.lastIndexOf('/') + 1, location.length() - 4);
+            if (keepDirectory != null) {
+                final File temp = Files.createTempDirectory(null).toFile();
+                try {
+                    git = gitConnectionFactory.getConnection(temp, consumerFactory);
+                    sparsecheckout(git, location, branch == null ? "master" : branch, startPoint, repositoryName, keepDirectory, dtoFactory);
+                    // Copy content of directory to the project folder.
+                    final File projectDir = new File(localPath);
+                    IoUtil.copy(temp, projectDir, IoUtil.ANY_FILTER);
+                } finally {
+                    FileCleaner.addFile(temp);
+                }
+            } else {
+                git = gitConnectionFactory.getConnection(localPath, consumerFactory);
+                if (baseFolder.getChildren().size() == 0) {
+                    cloneRepository(git, "origin", location, dtoFactory);
+                    if (commitId != null) {
+                        checkoutCommit(git, commitId, dtoFactory);
+                    } else if (remoteOriginFetch != null) {
+                        git.getConfig().add("remote.origin.fetch", remoteOriginFetch);
+                        fetch(git, "origin", dtoFactory);
+                        if (branch != null) {
+                            checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+                        }
+                    } else if (branch != null) {
+                        checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+                    }
+                } else {
+                    initRepository(git, dtoFactory);
+                    addRemote(git, "origin", location, dtoFactory);
+                    if (commitId != null) {
+                        fetchBranch(git, "origin", branch == null ? "*" : branch, dtoFactory);
+                        checkoutCommit(git, commitId, dtoFactory);
+                    } else if (remoteOriginFetch != null) {
+                        git.getConfig().add("remote.origin.fetch", remoteOriginFetch);
+                        fetch(git, "origin", dtoFactory);
+                        if (branch != null) {
+                            checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+                        }
+                    } else {
+                        fetchBranch(git, "origin", branch == null ? "*" : branch, dtoFactory);
+
+                        List<Branch> branchList = git.branchList(dtoFactory.createDto(BranchListRequest.class).withListMode("r"));
+                        if (!branchList.isEmpty()) {
+                            checkoutBranch(git, branch == null ? "master" : branch, startPoint, repositoryName, dtoFactory);
+                        }
+                    }
+                }
+                if (branchMerge != null) {
+                    git.getConfig().set("branch." + (branch == null ? "master" : branch) + ".merge", branchMerge);
+                }
+                if (!keepVcs) {
+                    cleanGit(git.getWorkingDir());
+                }
+            }
+        } catch (UnauthorizedException e) {
+            throw new UnauthorizedException(
+                    "You are not authorized to perform the remote import. You may need to provide accurate keys to the " +
+                    "external system. You can create a new SSH key pair in Window->Preferences->Keys And " +
+                    "Certificates->SSH Keystore.");
+        } catch (URISyntaxException e) {
+            throw new ServerException(
+                    "Your project cannot be imported. The issue is either from git configuration, a malformed URL, " +
+                    "or file system corruption. Please contact support for assistance.",
+                    e);
+        } finally {
+            if (git != null) {
+                git.close();
+            }
+        }
+    }
+

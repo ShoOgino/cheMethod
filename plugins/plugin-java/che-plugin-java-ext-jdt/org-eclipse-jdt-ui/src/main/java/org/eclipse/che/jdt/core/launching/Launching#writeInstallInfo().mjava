@@ -1,0 +1,49 @@
+    /**
+     * Writes out the mappings of SDK install time stamps to disk. See
+     * https://bugs.eclipse.org/bugs/show_bug.cgi?id=266651 for more information.
+     */
+    private static void writeInstallInfo() {
+        if(fgInstallTimeMap != null) {
+            OutputStream stream= null;
+            try {
+                Document doc = newDocument();
+                Element root = doc.createElement("dirs");    //$NON-NLS-1$
+                doc.appendChild(root);
+                Map.Entry<String, Long> entry = null;
+                Element e = null;
+                String key = null;
+                for(Iterator<Map.Entry<String, Long>> i = fgInstallTimeMap.entrySet().iterator(); i.hasNext();) {
+                    entry = i.next();
+                    key = entry.getKey();
+                    if(fgLibraryInfoMap == null || fgLibraryInfoMap.containsKey(key)) {
+                        //only persist the info if the library map also has info OR is null - prevent persisting deleted JRE information
+                        e = doc.createElement("entry"); //$NON-NLS-1$
+                        root.appendChild(e);
+                        e.setAttribute("loc", key); //$NON-NLS-1$
+                        e.setAttribute("stamp", entry.getValue().toString()); //$NON-NLS-1$
+                    }
+                }
+                String xml = serializeDocument(doc);
+                IPath libPath = getDefault().getStateLocation();
+                libPath = libPath.append(".install.xml"); //$NON-NLS-1$
+                File file = libPath.toFile();
+                if (!file.exists()) {
+                    file.createNewFile();
+                }
+                stream = new BufferedOutputStream(new FileOutputStream(file));
+                stream.write(xml.getBytes("UTF8")); //$NON-NLS-1$
+            } catch (IOException e) {
+                log(e);
+            }  catch (CoreException e) {
+                log(e);
+            } finally {
+                if (stream != null) {
+                    try {
+                        stream.close();
+                    } catch (IOException e1) {
+                    }
+                }
+            }
+        }
+    }
+

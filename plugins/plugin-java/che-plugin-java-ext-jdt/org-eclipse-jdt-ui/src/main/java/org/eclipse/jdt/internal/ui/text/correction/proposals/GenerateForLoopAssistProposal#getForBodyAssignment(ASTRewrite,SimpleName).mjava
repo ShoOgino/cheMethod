@@ -1,0 +1,37 @@
+	/**
+	 * Creates an {@link Assignment} as first expression appearing in a <code>for</code> loop's
+	 * body. This Assignment declares a local variable and initializes it using the array's current
+	 * element identified by the loop index.
+	 * 
+	 * @param rewrite the current {@link ASTRewrite} instance
+	 * @param loopVariableName the name of the index variable in String representation
+	 * @return a completed {@link Assignment} containing the mentioned declaration and
+	 *         initialization
+	 */
+	private Assignment getForBodyAssignment(ASTRewrite rewrite, SimpleName loopVariableName) {
+		AST ast= rewrite.getAST();
+		ITypeBinding loopOverType= extractElementType(ast);
+
+		Assignment assignResolvedVariable= ast.newAssignment();
+
+		// left hand side
+		SimpleName resolvedVariableName= resolveLinkedVariableNameWithProposals(rewrite, loopOverType.getName(), loopVariableName.getIdentifier(), false);
+		VariableDeclarationFragment resolvedVariableDeclarationFragment= ast.newVariableDeclarationFragment();
+		resolvedVariableDeclarationFragment.setName(resolvedVariableName);
+		VariableDeclarationExpression resolvedVariableDeclaration= ast.newVariableDeclarationExpression(resolvedVariableDeclarationFragment);
+		resolvedVariableDeclaration.setType(getImportRewrite().addImport(loopOverType, ast, new ContextSensitiveImportRewriteContext(fCurrentNode, getImportRewrite())));
+		assignResolvedVariable.setLeftHandSide(resolvedVariableDeclaration);
+
+		// right hand side
+		ArrayAccess access= ast.newArrayAccess();
+		access.setArray((Expression) rewrite.createCopyTarget(fCurrentExpression));
+		SimpleName indexName= ast.newSimpleName(loopVariableName.getIdentifier());
+		addLinkedPosition(rewrite.track(indexName), LinkedPositionGroup.NO_STOP, indexName.getIdentifier());
+		access.setIndex(indexName);
+		assignResolvedVariable.setRightHandSide(access);
+
+		assignResolvedVariable.setOperator(Assignment.Operator.ASSIGN);
+
+		return assignResolvedVariable;
+	}
+

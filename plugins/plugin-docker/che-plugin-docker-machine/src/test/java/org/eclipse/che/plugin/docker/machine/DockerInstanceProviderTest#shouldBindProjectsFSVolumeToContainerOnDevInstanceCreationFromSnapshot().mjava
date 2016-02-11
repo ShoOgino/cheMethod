@@ -1,0 +1,35 @@
+    @Test
+    public void shouldBindProjectsFSVolumeToContainerOnDevInstanceCreationFromSnapshot() throws Exception {
+        final String expectedHostPathOfProjects = "/tmp/projects";
+        final String[] expectedVolumes = new String[]{expectedHostPathOfProjects + ":/projects"};
+
+        dockerInstanceProvider = new DockerInstanceProvider(dockerConnector,
+                                                            dockerConnectorConfiguration,
+                                                            dockerMachineFactory,
+                                                            dockerInstanceStopDetector,
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            null,
+                                                            workspaceFolderPathProvider,
+                                                            PROJECT_FOLDER_PATH,
+                                                            false,
+                                                            Collections.<String>emptySet(),
+                                                            Collections.<String>emptySet());
+
+        when(workspaceFolderPathProvider.getPath(anyString())).thenReturn(expectedHostPathOfProjects);
+
+        final boolean isDev = true;
+
+
+        createInstanceFromSnapshot(isDev);
+
+
+        ArgumentCaptor<ContainerConfig> argumentCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture(), anyString());
+        verify(dockerConnector).startContainer(anyString(), eq(null));
+
+        assertEquals(argumentCaptor.getValue().getHostConfig().getBinds(), expectedVolumes);
+    }
+

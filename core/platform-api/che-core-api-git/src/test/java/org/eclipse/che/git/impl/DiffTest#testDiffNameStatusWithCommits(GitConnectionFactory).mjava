@@ -1,0 +1,25 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void testDiffNameStatusWithCommits(GitConnectionFactory connectionFactory) throws GitException, IOException {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        makeCommitInMaster(connection);
+        //change README.txt
+        connection.add(newDto(AddRequest.class).withFilepattern(AddRequest.DEFAULT_PATTERN));
+        connection.rm(newDto(RmRequest.class).withItems(Arrays.asList("README.txt")));
+        connection.commit(newDto(CommitRequest.class).withMessage("testDiffNameStatusWithCommits"));
+
+        //when
+        List<String> diff = readDiff(newDto(DiffRequest.class)
+                                             .withFileFilter(null)
+                                             .withType(DiffType.NAME_STATUS)
+                                             .withRenameLimit(0)
+                                             .withCommitA("HEAD^")
+                                             .withCommitB("HEAD"),
+                                     connection);
+
+        //then
+        assertEquals(diff.size(), 2);
+        assertTrue(diff.contains("D\tREADME.txt"));
+        assertTrue(diff.contains("A\taaa"));
+    }
+

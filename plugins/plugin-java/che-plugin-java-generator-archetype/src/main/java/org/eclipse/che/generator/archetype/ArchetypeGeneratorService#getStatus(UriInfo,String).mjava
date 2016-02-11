@@ -1,0 +1,25 @@
+    @GET
+    @Path("/status/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public GenerationTaskDescriptor getStatus(@Context UriInfo uriInfo, @PathParam("id") String id) throws ServerException {
+        ArchetypeGenerator.GenerationTask task = archetypeGenerator.getTaskById(Long.valueOf(id));
+        final GenerationTaskDescriptor status = DtoFactory.getInstance().createDto(GenerationTaskDescriptor.class);
+        if (!task.isDone()) {
+            status.setStatus(GenerationTaskDescriptor.Status.IN_PROGRESS);
+        } else if (task.getResult().isSuccessful()) {
+            status.setStatus(GenerationTaskDescriptor.Status.SUCCESSFUL);
+            final String downloadURL = uriInfo.getBaseUriBuilder()
+                                              .path(getClass()).path(getClass(), "downloadGeneratedProject")
+                                              .build(task.getId()).toString();
+            status.setDownloadUrl(downloadURL);
+        } else {
+            status.setStatus(GenerationTaskDescriptor.Status.FAILED);
+            try {
+                status.setReport(new String(Files.readAllBytes(task.getResult().getGenerationReport().toPath())));
+            } catch (IOException e) {
+                LOG.error(e.getMessage(), e);
+            }
+        }
+        return status;
+    }
+

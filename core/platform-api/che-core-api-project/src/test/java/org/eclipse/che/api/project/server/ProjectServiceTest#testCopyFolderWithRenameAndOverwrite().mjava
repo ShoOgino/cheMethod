@@ -1,0 +1,42 @@
+    @Test
+    public void testCopyFolderWithRenameAndOverwrite() throws Exception {
+        Project myProject = pm.getProject(workspace, "my_project");
+        myProject.getBaseFolder().createFolder("a/b/c");
+
+        // File names
+        String originFileName = "test.txt";
+        String destinationFileName = "overwriteMe.txt";
+
+        // File contents
+        String originContent = "to be or not no be";
+        String overwrittenContent = "that is the question";
+
+        // new name for folder
+        final String renamedFolder = "renamedFolder";
+
+        ((FolderEntry)myProject.getBaseFolder().getChild("a/b")).createFile(originFileName, originContent.getBytes());
+        ((FolderEntry)myProject.getBaseFolder().getChild("a/b/c")).createFile(destinationFileName, overwrittenContent.getBytes());
+
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
+
+        CopyOptions descriptor = DtoFactory.getInstance().createDto(CopyOptions.class);
+        descriptor.setName(renamedFolder);
+        descriptor.setOverWrite(true);
+
+        ContainerResponse response = launcher.service(POST,
+                                                      String.format(
+                                                              "http://localhost:8080/api/project/%s/copy/my_project/a/b?to=/my_project/a/b/c",
+                                                              workspace),
+                                                      "http://localhost:8080/api", headers,
+                                                      DtoFactory.getInstance().toJson(descriptor).getBytes(), null);
+        assertEquals(response.getStatus(), 201, "Error: " + response.getEntity());
+        assertEquals(response.getHttpHeaders().getFirst("Location"),
+                     URI.create(
+                             String.format("http://localhost:8080/api/project/%s/children/my_project/a/b/c/%s", workspace, renamedFolder)));
+        assertNotNull(myProject.getBaseFolder().getChild("a/b/test.txt"));
+        assertNotNull(myProject.getBaseFolder().getChild(String.format("a/b/c/%s/test.txt", renamedFolder)));
+        assertEquals(myProject.getBaseFolder().getChild("a/b/test.txt").getName(),
+                     myProject.getBaseFolder().getChild(String.format("a/b/c/%s/%s", renamedFolder, originFileName)).getName());
+    }
+

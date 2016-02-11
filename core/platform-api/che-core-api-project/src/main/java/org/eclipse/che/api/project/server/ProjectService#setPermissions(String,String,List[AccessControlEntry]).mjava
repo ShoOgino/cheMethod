@@ -1,0 +1,30 @@
+    @ApiOperation(value = "Set permissions for a user in a project",
+                  notes = "Set permissions for a user in a specified project, such as read, write, build, " +
+                          "run etc. ID of a user is set in a query parameter of a request URL.",
+                  response = AccessControlEntry.class,
+                  responseContainer = "List",
+                  position = 26)
+    @ApiResponses(value = {
+            @ApiResponse(code = 204, message = "OK"),
+            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+            @ApiResponse(code = 404, message = "Not found"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @POST
+    @Path("/permissions/{path:.*}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed("workspace/admin")
+    public List<AccessControlEntry> setPermissions(@ApiParam(value = "Workspace ID", required = true)
+                                                   @PathParam("ws-id") String wsId,
+                                                   @ApiParam(value = "Path to a project", required = true)
+                                                   @PathParam("path") String path,
+                                                   @ApiParam(value = "Permissions", required = true)
+                                                   List<AccessControlEntry> acl)
+            throws ForbiddenException, ServerException, NotFoundException {
+        final Project project = projectManager.getProject(wsId, path);
+        if (project == null) {
+            throw new ServerException(String.format("Project '%s' doesn't exist in workspace '%s'. ", path, wsId));
+        }
+        project.setPermissions(acl);
+        return project.getPermissions();
+    }
+

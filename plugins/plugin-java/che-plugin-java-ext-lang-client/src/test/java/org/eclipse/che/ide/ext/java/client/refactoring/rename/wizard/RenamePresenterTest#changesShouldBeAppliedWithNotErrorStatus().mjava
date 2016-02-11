@@ -1,0 +1,38 @@
+    @Test
+    public void changesShouldBeAppliedWithNotErrorStatus() throws Exception {
+        when(changeCreationResult.isCanShowPreviewPage()).thenReturn(true);
+        when(refactoringStatus.getSeverity()).thenReturn(0);
+        EditorPartPresenter openEditor = mock(EditorPartPresenter.class);
+        NavigableMap<String, EditorPartPresenter> openEditors = new TreeMap<>();
+        EditorInput editorInput = mock(EditorInput.class);
+        VirtualFile virtualFile = mock(VirtualFile.class);
+        openEditors.put(TEXT, openEditor);
+        when(editorAgent.getOpenedEditors()).thenReturn(openEditors);
+        when(openEditor.getEditorInput()).thenReturn(editorInput);
+        when(editorInput.getFile()).thenReturn(virtualFile);
+        when(virtualFile.getPath()).thenReturn(TEXT);
+
+        renamePresenter.show(refactorInfo);
+
+        verify(refactorService).createRenameRefactoring(createRenameRefactoringDto);
+        verify(renameRefactoringSessionPromise).then(renameRefactoringSessionCaptor.capture());
+        renameRefactoringSessionCaptor.getValue().apply(session);
+
+        renamePresenter.onAcceptButtonClicked();
+
+        verify(refactoringSession).setSessionId(SESSION_ID);
+
+        verifyPreparingRenameSettingsDto();
+        verifyPreparingRenameChanges();
+
+        verify(changeCreationResultPromise).then(changeCreationResultCaptor.capture());
+        changeCreationResultCaptor.getValue().apply(changeCreationResult);
+
+        verify(refactorService).applyRefactoring(refactoringSession);
+        verify(refactoringStatusPromise).then(refactoringStatusCaptor.capture());
+        refactoringStatusCaptor.getValue().apply(refactoringStatus);
+
+        verify(view).hide();
+        verify(refactoringUpdater).updateAfterRefactoring(eq(refactorInfo), Matchers.<List<ChangeInfo>>anyObject());
+    }
+

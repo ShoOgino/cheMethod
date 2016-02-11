@@ -1,0 +1,36 @@
+    /**
+     * Validates that creator of factory is really owner of account specified in it.
+     *
+     * @param factory
+     *         factory to validate
+     * @throws ServerException
+     *         when any server errors occurs
+     * @throws ForbiddenException
+     *         when user does not have required rights
+     */
+    protected void validateAccountId(Factory factory) throws ServerException, ForbiddenException {
+        // TODO do we need check if user is temporary?
+        final String accountId = factory.getCreator() != null ? emptyToNull(factory.getCreator().getAccountId()) : null;
+        final String userId = factory.getCreator() != null ? factory.getCreator().getUserId() : null;
+
+        if (accountId == null || userId == null) {
+            return;
+        }
+
+        final Map<String, String> preferences = preferenceDao.getPreferences(userId);
+        if (parseBoolean(preferences.get("temporary"))) {
+            throw new ForbiddenException("Current user is not allowed to use this method.");
+        }
+
+        final List<Member> members = accountDao.getMembers(accountId);
+        if (members.isEmpty()) {
+            throw new ForbiddenException(format(FactoryConstants.PARAMETRIZED_ILLEGAL_ACCOUNTID_PARAMETER_MESSAGE, accountId));
+        }
+
+        if (members.stream().noneMatch(member -> member.getUserId()
+                                                       .equals(userId) && member.getRoles()
+                                                                                .contains("account/owner"))) {
+            throw new ForbiddenException("You are not authorized to use this accountId.");
+        }
+    }
+

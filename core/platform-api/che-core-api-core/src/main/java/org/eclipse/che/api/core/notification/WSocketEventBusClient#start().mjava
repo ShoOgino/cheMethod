@@ -1,0 +1,38 @@
+    @PostConstruct
+    void start() {
+        if (start.compareAndSet(false, true)) {
+            if (policy != null) {
+                eventService.subscribe(new EventSubscriber<Object>() {
+                    @Override
+                    public void onEvent(Object event) {
+                        propagate(event);
+                    }
+                });
+            }
+            if (eventSubscriptions != null) {
+                final Map<URI, Set<String>> cfg = new HashMap<>();
+                for (Pair<String, String> service : eventSubscriptions) {
+                    try {
+                        final URI key = new URI(service.first);
+                        Set<String> values = cfg.get(key);
+                        if (values == null) {
+                            cfg.put(key, values = new LinkedHashSet<>());
+                        }
+                        if (service.second != null) {
+                            values.add(service.second);
+                        }
+                    } catch (URISyntaxException e) {
+                        LOG.error(e.getMessage(), e);
+                    }
+                }
+                if (!cfg.isEmpty()) {
+                    executor = Executors.newCachedThreadPool(new ThreadFactoryBuilder().setNameFormat("WSocketEventBusClient-%d")
+                                                                                       .setDaemon(true).build());
+                    for (Map.Entry<URI, Set<String>> entry : cfg.entrySet()) {
+                        executor.execute(new ConnectTask(entry.getKey(), entry.getValue()));
+                    }
+                }
+            }
+        }
+    }
+

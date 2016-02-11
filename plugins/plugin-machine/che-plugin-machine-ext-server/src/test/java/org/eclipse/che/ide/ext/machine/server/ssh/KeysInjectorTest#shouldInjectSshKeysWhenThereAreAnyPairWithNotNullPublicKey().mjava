@@ -1,0 +1,19 @@
+    @Test
+    public void shouldInjectSshKeysWhenThereAreAnyPairWithNotNullPublicKey() throws Exception {
+        when(sshManager.getPairs(anyString(), anyString()))
+                .thenReturn(Arrays.asList(new SshPairImpl("machine", "myPair", "publicKey1", null),
+                                          new SshPairImpl("machine", "myPair", "publicKey2", null)));
+
+        subscriber.onEvent(newDto(MachineStatusEvent.class).withEventType(MachineStatusEvent.EventType.RUNNING)
+                                                           .withMachineId(MACHINE_ID));
+
+        verify(machineManager).getMachine(eq(MACHINE_ID));
+        verify(sshManager).getPairs(eq(OWNER_ID), eq("machine"));
+
+        verify(docker).createExec(anyString(), anyBoolean(), eq("/bin/bash"), eq("-c"), eq("mkdir ~/.ssh/ -p" +
+                                                                                           "&& echo 'publicKey1' >> ~/.ssh/authorized_keys" +
+                                                                                           "&& echo 'publicKey2' >> ~/.ssh/authorized_keys"));
+        verify(docker).startExec(eq(EXEC_ID), anyObject());
+        verifyZeroInteractions(docker, machineManager, sshManager);
+    }
+

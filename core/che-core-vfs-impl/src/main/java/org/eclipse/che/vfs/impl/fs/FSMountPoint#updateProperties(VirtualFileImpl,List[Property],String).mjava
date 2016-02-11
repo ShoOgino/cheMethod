@@ -1,0 +1,37 @@
+    void updateProperties(VirtualFileImpl virtualFile, List<Property> properties, String lockToken)
+            throws ForbiddenException, ServerException {
+        final int index = virtualFile.getVirtualFilePath().hashCode() & MASK;
+        if (!hasPermission(virtualFile, BasicPermissions.WRITE.value(), true)) {
+            throw new ForbiddenException(
+                    String.format("Unable update properties for '%s'. Operation not permitted. ", virtualFile.getPath()));
+        }
+
+        if (virtualFile.isFile() && !validateLockTokenIfLocked(virtualFile, lockToken)) {
+            throw new ForbiddenException(
+                    String.format("Unable update properties of item '%s'. Item is locked. ", virtualFile.getPath()));
+        }
+
+        // 1. make copy of properties
+        final Map<String, String[]> metadata = copyMetadataMap(metadataCache[index].get(virtualFile.getVirtualFilePath()));
+        // 2. update
+        for (Property property : properties) {
+            final String name = property.getName();
+            final List<String> value = property.getValue();
+            if (value != null) {
+                metadata.put(name, value.toArray(new String[value.size()]));
+            } else {
+                metadata.remove(name);
+            }
+        }
+
+        // 3. save in file
+        saveFileMetadata(virtualFile, metadata);
+        // 4. update cache
+        metadataCache[index].put(virtualFile.getVirtualFilePath(), metadata);
+        // 5. update last modification time
+        if (!virtualFile.getIoFile().setLastModified(System.currentTimeMillis())) {
+            LOG.warn("Unable to set timestamp to '{}'. ", virtualFile.getIoFile());
+        }
+        eventService.publish(new UpdatePropertiesEvent(workspaceId, virtualFile.getPath(), virtualFile.isFolder()));
+    }
+

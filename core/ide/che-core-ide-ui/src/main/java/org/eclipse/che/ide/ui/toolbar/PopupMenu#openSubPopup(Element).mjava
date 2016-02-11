@@ -1,0 +1,76 @@
+    private void openSubPopup(final Element tableRowElement) {
+        if (tableRowElement == null) {
+            return;
+        }
+
+        if (openedSubPopup != null) {
+            if (tableRowElement == subPopupAnchor) {
+                return;
+            }
+
+            openedSubPopup.closePopup();
+        }
+
+        if (subPopupAnchor != null) {
+            Element e = subPopupAnchor;
+            subPopupAnchor = null;
+            setStyleNormal(e);
+        }
+
+        subPopupAnchor = tableRowElement;
+        setStyleHovered(subPopupAnchor);
+
+        int itemIndex = Integer.parseInt(tableRowElement.getAttribute("item-index"));
+        Action menuItem = list.get(itemIndex);
+
+        String idPrefix = itemIdPrefix;
+        if (idPrefix != null) {
+            idPrefix += "/" + presentationFactory.getPresentation(menuItem).getText();
+        }
+
+        openedSubPopup = new PopupMenu((ActionGroup)menuItem,
+                                       actionManager,
+                                       managerProvider,
+                                       presentationFactory,
+                                       lockLayer,
+                                       actionSelectedHandler,
+                                       keyBindingAgent,
+                                       idPrefix);
+
+        final int HORIZONTAL_OFFSET = 3;
+        final int VERTICAL_OFFSET = 1;
+
+        openedSubPopup.getElement().getStyle().setVisibility(Visibility.HIDDEN);
+        lockLayer.add(openedSubPopup, 0, 0);
+
+        Scheduler.get().scheduleDeferred(new ScheduledCommand() {
+            @Override
+            public void execute() {
+                int left = getAbsoluteLeft() + getOffsetWidth() - HORIZONTAL_OFFSET;
+                int top = tableRowElement.getAbsoluteTop() - lockLayer.getTopOffset() - VERTICAL_OFFSET;
+
+                if (left + openedSubPopup.getOffsetWidth() > Window.getClientWidth()) {
+                    if (left > openedSubPopup.getOffsetWidth()) {
+                        left = getAbsoluteLeft() - openedSubPopup.getOffsetWidth() + HORIZONTAL_OFFSET;
+                    } else {
+                        int diff = left + openedSubPopup.getOffsetWidth() - Window.getClientWidth();
+                        left -= diff;
+                    }
+                }
+
+                if (top + openedSubPopup.getOffsetHeight() > Window.getClientHeight()) {
+                    if (top > openedSubPopup.getOffsetHeight()) {
+                        top = tableRowElement.getAbsoluteTop() - openedSubPopup.getOffsetHeight() + VERTICAL_OFFSET;
+                    } else {
+                        int diff = top + openedSubPopup.getOffsetHeight() - Window.getClientHeight();
+                        top -= diff;
+                    }
+                }
+
+                openedSubPopup.getElement().getStyle().setLeft(left, Unit.PX);
+                openedSubPopup.getElement().getStyle().setTop(top, Unit.PX);
+                openedSubPopup.getElement().getStyle().setVisibility(Visibility.VISIBLE);
+            }
+        });
+    }
+

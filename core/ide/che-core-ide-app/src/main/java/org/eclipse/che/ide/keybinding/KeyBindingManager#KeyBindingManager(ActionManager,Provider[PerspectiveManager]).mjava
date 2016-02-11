@@ -1,0 +1,46 @@
+    @Inject
+    public KeyBindingManager(ActionManager actionManager, Provider<PerspectiveManager> perspectiveManager) {
+        this.actionManager = actionManager;
+        this.perspectiveManager = perspectiveManager;
+        globalScheme = new SchemeImpl("ide.ui.keyBinding.global", "Global");
+        eclipseScheme = new SchemeImpl("ide.ui.keyBinding.eclipse", "Eclipse Scheme");
+        //TODO check user settings
+        activeScheme = eclipseScheme;
+
+        presentationFactory = new PresentationFactory();
+
+        // Attach the listeners.
+        final Element documentElement = Elements.getDocument().getDocumentElement();
+        EventListener downListener = new EventListener() {
+            @Override
+            public void handleEvent(Event event) {
+                SignalEvent signalEvent = SignalEventUtils.create(event, false);
+                if (signalEvent == null) {
+                    return;
+                }
+
+                //handle event in active scheme
+                int digest = CharCodeWithModifiers.computeKeyDigest(signalEvent);
+
+                List<String> actionIds = activeScheme.getActionIds(digest);
+
+                if (!actionIds.isEmpty()) {
+                    runActions(actionIds, event);
+                }
+                //else handle event in global scheme
+                else if (!(actionIds = globalScheme.getActionIds(digest)).isEmpty()) {
+                    runActions(actionIds, event);
+                }
+
+                //default, lets this event handle other part of the IDE
+            }
+        };
+        if (UserAgent.isFirefox()) {
+            // firefox fires keypress events
+            documentElement.addEventListener(Event.KEYPRESS, downListener, true);
+        } else {
+            //webkit fires keydown events
+            documentElement.addEventListener(Event.KEYDOWN, downListener, true);
+        }
+    }
+

@@ -1,0 +1,120 @@
+    /**
+     * Determines whether pasting can be performed.
+     *
+     * @return <b>true</b> if pasting can be performed, otherwise returns <b>false</b>
+     */
+    private boolean canPaste() {
+        /** List of items must not be empty */
+        if (items == null || items.isEmpty()) {
+            return false;
+        }
+
+        /** Test current selection */
+        Selection<?> selection = projectExplorer.getSelection();
+
+        /** Only one resource must be selected */
+        if (selection == null || !selection.isSingleSelection()) {
+            return false;
+        }
+
+        Object headElement = selection.getHeadElement();
+
+        /** Selected resource must be storable */
+        if (!(headElement instanceof HasStorablePath
+              && headElement instanceof ResourceBasedNode<?>
+              && !((ResourceBasedNode)headElement).isLeaf())) {
+            return false;
+        }
+
+        /** Test selected node */
+        HasStorablePath selectedNode = (HasStorablePath)headElement;
+        if (selectedNode.getStorablePath().equals(checkedPath)) {
+            return checkResult;
+        }
+        checkedPath = selectedNode.getStorablePath();
+
+        for (ResourceBasedNode<?> item : items) {
+
+            if (item.isLeaf()) {
+                // item is folder
+
+                /** Unable to copy or move folder itself */
+                if (((HasStorablePath)item).getStorablePath().equals(selectedNode.getStorablePath())) {
+                    checkResult = false;
+                    return false;
+                }
+
+                /** Unable to copy or move folder to its children */
+                if (selectedNode.getStorablePath().startsWith(((HasStorablePath)item).getStorablePath())) {
+                    checkResult = false;
+                    return false;
+                }
+
+                /** Unable to move folder to its parent */
+                if (moveItems) {
+                    String folderDirectory = ((HasStorablePath)item).getStorablePath().substring(0,
+                                                                                                 ((HasStorablePath)item).getStorablePath()
+                                                                                                                        .lastIndexOf("/"));
+                    if (!((ResourceBasedNode<?>)selectedNode).isLeaf()) {
+                        // when selected a folder
+
+                        if (selectedNode.getStorablePath().equals(folderDirectory)) {
+                            checkResult = false;
+                            return false;
+                        }
+                    } else {
+                        // when selected a file
+
+                        String fileDirectory = selectedNode.getStorablePath().substring(0, selectedNode.getStorablePath().lastIndexOf("/"));
+                        if (fileDirectory.equals(fileDirectory)) {
+                            checkResult = false;
+                            return false;
+                        }
+                    }
+                }
+
+            } else {
+                // item is file
+
+                if (!((ResourceBasedNode<?>)selectedNode).isLeaf()) {
+                    // when selected a folder
+
+                    /** Unable to move file in the same directory */
+                    if (moveItems) {
+                        String folderPath = selectedNode.getStorablePath();
+                        String fileDirectory = ((HasStorablePath)item).getStorablePath().substring(0,
+                                                                                                   ((HasStorablePath)item).getStorablePath()
+                                                                                                                          .lastIndexOf(
+                                                                                                                                  "/"));
+
+                        if (moveItems && folderPath.equals(fileDirectory)) {
+                            checkResult = false;
+                            return false;
+                        }
+                    }
+                } else {
+                    // when selected a file
+
+                    /** Unable to move file in the same directory */
+                    if (moveItems) {
+                        String selectedFileDirectory =
+                                selectedNode.getStorablePath().substring(0, selectedNode.getStorablePath().lastIndexOf("/"));
+                        String fileDirectory = ((HasStorablePath)item).getStorablePath().substring(0,
+                                                                                                   ((HasStorablePath)item).getStorablePath()
+                                                                                                                          .lastIndexOf(
+                                                                                                                                  "/"));
+
+                        if (selectedFileDirectory.equals(fileDirectory)) {
+                            checkResult = false;
+                            return false;
+                        }
+                    }
+                }
+
+            }
+        }
+
+        checkResult = true;
+        return true;
+    }
+

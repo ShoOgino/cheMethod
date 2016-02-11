@@ -1,0 +1,37 @@
+    /**
+     * Checks to see if the time stamp of the file describe by the given location string
+     * has been modified since the last recorded time stamp. If there is no last recorded
+     * time stamp we assume it has changed. See https://bugs.eclipse.org/bugs/show_bug.cgi?id=266651 for more information
+     *
+     * @param location the location of the SDK we want to check the time stamp for
+     * @return <code>true</code> if the time stamp has changed compared to the cached one or if there is
+     * no recorded time stamp, <code>false</code> otherwise.
+     */
+    public static boolean timeStampChanged(String location) {
+        synchronized (installLock) {
+            if(fgHasChanged.contains(location)) {
+                return true;
+            }
+            File file = new File(location);
+            if(file.exists()) {
+                if(fgInstallTimeMap == null) {
+                    readInstallInfo();
+                }
+                Long stamp = fgInstallTimeMap.get(location);
+                long fstamp = file.lastModified();
+                if(stamp != null) {
+                    if(stamp.longValue() == fstamp) {
+                        return false;
+                    }
+                }
+                //if there is no recorded stamp we have to assume it is new
+                stamp = new Long(fstamp);
+                fgInstallTimeMap.put(location, stamp);
+                writeInstallInfo();
+                fgHasChanged.add(location);
+                return true;
+            }
+        }
+        return false;
+    }
+

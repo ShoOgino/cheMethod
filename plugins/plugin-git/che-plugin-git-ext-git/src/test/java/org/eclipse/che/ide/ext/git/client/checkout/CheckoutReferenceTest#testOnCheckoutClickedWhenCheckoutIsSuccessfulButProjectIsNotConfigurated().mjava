@@ -1,0 +1,29 @@
+    @Test
+    public void testOnCheckoutClickedWhenCheckoutIsSuccessfulButProjectIsNotConfigurated() throws Exception {
+        List<ProjectProblemDto> problemList = Collections.singletonList(mock(ProjectProblemDto.class));
+        when(projectConfig.getProblems()).thenReturn(problemList);
+
+        when(dtoFactory.createDto(CheckoutRequest.class)).thenReturn(checkoutRequest);
+        when(checkoutRequest.withName(anyString())).thenReturn(checkoutRequest);
+        when(checkoutRequest.withCreateNew(anyBoolean())).thenReturn(checkoutRequest);
+        reset(service);
+        when(view.getReference()).thenReturn(CORRECT_REFERENCE);
+        when(rootProjectConfig.getPath()).thenReturn(PROJECT_PATH);
+
+        presenter.onEnterClicked();
+
+        verify(service).checkout(anyString(), anyObject(), anyObject(), asyncCallbackCaptor.capture());
+        AsyncRequestCallback<String> callback = asyncCallbackCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(callback, "");
+
+        verify(checkoutRequest).withName(CORRECT_REFERENCE);
+        verify(checkoutRequest).withCreateNew(false);
+        verifyNoMoreInteractions(checkoutRequest);
+        verify(view).close();
+        verify(projectServiceClient).getProject(anyString(), eq(PROJECT_PATH), projectDescriptorCaptor.capture());
+        AsyncRequestCallback<ProjectConfigDto> asyncRequestCallback = projectDescriptorCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(asyncRequestCallback, projectConfig);
+        verify(projectConfig).getProblems();
+        verify(eventBus).fireEvent(Matchers.<OpenProjectEvent>anyObject());
+    }
+

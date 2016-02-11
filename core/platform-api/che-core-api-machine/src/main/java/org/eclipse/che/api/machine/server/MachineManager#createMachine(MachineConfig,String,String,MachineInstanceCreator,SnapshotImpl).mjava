@@ -1,0 +1,72 @@
+    private MachineStateImpl createMachine(MachineConfig machineConfig,
+                                           String workspaceId,
+                                           String environmentName,
+                                           MachineInstanceCreator instanceCreator,
+                                           SnapshotImpl snapshot)
+            throws NotFoundException,
+                   SnapshotException,
+                   ConflictException,
+                   BadRequestException,
+                   MachineException {
+        final InstanceProvider instanceProvider = machineInstanceProviders.getProvider(machineConfig.getType());
+        final String sourceType = machineConfig.getSource().getType();
+
+        Recipe recipe;
+        InstanceKey instanceKey = null;
+        if (snapshot != null) {
+            instanceKey = snapshot.getInstanceKey();
+        }
+        if ("Recipe".equalsIgnoreCase(sourceType)) {
+            // TODO should we check that it is dockerfile?
+            recipe = getRecipeByLocation(machineConfig);
+        } else {
+            throw new BadRequestException("Source type is unsupported " + sourceType);
+        }
+
+        if (!MACHINE_DISPLAY_NAME_PATTERN.matcher(machineConfig.getName()).matches()) {
+            throw new BadRequestException("Invalid machine name " + machineConfig.getName());
+        }
+
+        for (MachineStateImpl machine : machineRegistry.getStates()) {
+            if (machine.getWorkspaceId().equals(workspaceId) && machine.getName().equals(machineConfig.getName())) {
+                throw new ConflictException("Machine with name " + machineConfig.getName() + " already exists");
+            }
+        }
+
+        final String machineId = generateMachineId();
+        final String creator = EnvironmentContext.getCurrent().getUser().getId();
+
+        if (machineConfig.getLimits().getRam() == 0) {
+            MachineConfigImpl machineConfigWithLimits = new MachineConfigImpl(machineConfig);
+            machineConfigWithLimits.setLimits(new LimitsImpl(defaultMachineMemorySizeMB));
+            machineConfig = machineConfigWithLimits;
+        }
+
+        final MachineStateImpl machineState = new MachineStateImpl(machineConfig.isDev(),
+                                                                   machineConfig.getType(),
+                                                                   machineConfig.getName(),
+                                                                   machineConfig.getSource(),
+                                                                   machineConfig.getLimits(),
+                                                                   machineId,
+                                                                   createMachineChannels(machineConfig.getName(),
+                                                                                         workspaceId,
+                                                                                         environmentName),
+                                                                   workspaceId,
+                                                                   creator,
+                                                                   environmentName,
+                                                                   MachineStatus.CREATING);
+
+        createMachineLogsDir(machineId);
+        final LineConsumer machineLogger = getMachineLogger(machineId, machineState.getChannels().getOutput());
+
+        try {
+            machineRegistry.add(machineState);
+
+            instanceCreator.createInstance(instanceProvider, recipe, instanceKey, machineState, machineLogger);
+
+            return machineState;
+        } catch (ConflictException e) {
+            throw new MachineException(e.getLocalizedMessage(), e);
+        }
+    }
+

@@ -1,0 +1,64 @@
+    @SuppressWarnings("unchecked")
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+        System.setProperty("java.io.tmpdir", root.getParent());
+
+        searchTestPath = createDirectory(testRootPath, SEARCH_FOLDER_PATH);
+
+        file1 = createFile(searchTestPath, "SearcherTest_File01.xml", "to be or not to be".getBytes());
+        writeProperties(file1, Collections
+                .singletonMap("vfs:mimeType", new String[]{"text/xml"})); // text/xml just for test, it is not xml content
+
+        file2 = createFile(searchTestPath, "SearcherTest_File02.txt", "to be or not to be".getBytes());
+        writeProperties(file2, Collections.singletonMap("vfs:mimeType", new String[]{MediaType.TEXT_PLAIN}));
+
+        String folder1 = createDirectory(searchTestPath, "folder01");
+        file3 = createFile(folder1, "SearcherTest_File03.txt", "to be or not to be".getBytes());
+        writeProperties(file3, Collections.singletonMap("vfs:mimeType", new String[]{MediaType.TEXT_PLAIN}));
+
+        file4 = createFile(searchTestPath, FILE_NAME, "maybe you should think twice".getBytes());
+
+        queryToResult = new Pair[10];
+        // text
+        queryToResult[0] = new Pair<>(new String[]{file1, file2, file3}, "text=to%20be%20or%20not%20to%20be");
+        queryToResult[1] = new Pair<>(new String[]{file1, file2, file3}, "text=to%20be%20or");
+        // text + media type
+        queryToResult[2] = new Pair<>(new String[]{file2, file3}, "text=to%20be%20or&mediaType=text/plain");
+        queryToResult[3] = new Pair<>(new String[]{file1}, "text=to%20be%20or&mediaType=text/xml");
+        // text + name
+        queryToResult[4] = new Pair<>(new String[]{file2}, "text=to%20be%20or&name=*File02.txt");
+        queryToResult[5] = new Pair<>(new String[]{file1, file2, file3}, "text=to%20be%20or&name=SearcherTest*");
+        // text + path
+        queryToResult[6] = new Pair<>(new String[]{file3}, "text=to%20be%20or&path=" + folder1);
+        queryToResult[7] = new Pair<>(new String[]{file1, file2, file3}, "text=to%20be%20or&path=" + searchTestPath);
+        // name + media type
+        queryToResult[8] = new Pair<>(new String[]{file2, file3}, "name=SearcherTest*&mediaType=text/plain");
+        queryToResult[9] = new Pair<>(new String[]{file1}, "name=SearcherTest*&mediaType=text/xml");
+
+        CleanableSearcherProvider searcherProvider = new CleanableSearcherProvider(root.getParentFile(), Collections.<VirtualFileFilter>emptySet());
+        // Re-register virtual file system with searching enabled.
+        // remove old one first
+        provider.close();
+        assertFalse(provider.isMounted());
+        virtualFileSystemRegistry.unregisterProvider(MY_WORKSPACE_ID);
+        // create new one
+        provider = new LocalFileSystemProvider(MY_WORKSPACE_ID, new WorkspaceHashLocalFSMountStrategy(root, root), new EventService(),
+                                               searcherProvider, SystemPathsFilter.ANY, virtualFileSystemRegistry);
+        provider.mount(testFsIoRoot);
+        mountPoint = provider.getMountPoint(true);
+        virtualFileSystemRegistry.registerProvider(MY_WORKSPACE_ID, provider);
+
+        // Touch Searcher to initialize it.
+        searcher = (CleanableSearcher)searcherProvider.getSearcher(mountPoint, true);
+        searcherManager = new SearcherManager(searcher.getIndexWriter(), true, new SearcherFactory());
+
+        Throwable error;
+        while ((error = searcher.initializationError()) == null && !searcher.initialized()) {
+            Thread.sleep(100);
+        }
+        if (error != null) {
+            fail(error.getMessage());
+        }
+    }
+

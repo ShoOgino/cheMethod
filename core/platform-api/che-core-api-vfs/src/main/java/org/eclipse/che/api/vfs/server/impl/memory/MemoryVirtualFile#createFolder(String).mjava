@@ -1,0 +1,39 @@
+    @Override
+    public VirtualFile createFolder(String name) throws ForbiddenException, ConflictException, ServerException {
+        checkExist();
+        checkName(name);
+        if (!isFolder()) {
+            throw new ForbiddenException("Unable create new folder. Item specified as parent is not a folder. ");
+        }
+        if (!hasPermission(BasicPermissions.WRITE.value(), true)) {
+            throw new ForbiddenException(String.format("We were unable to create a new folder in '%s' as part of the import. " +
+                                                       "You do not have the correct permissions to complete this operation. ", getPath()));
+        }
+        MemoryVirtualFile newFolder = null;
+        MemoryVirtualFile current = this;
+        if (name.indexOf('/') > 0) {
+            final Path internPath = Path.fromString(name);
+            for (String element : internPath.elements()) {
+                MemoryVirtualFile folder = newFolder(current, element);
+                if (current.addChild(folder)) {
+                    newFolder = folder;
+                    current = folder;
+                } else {
+                    current = (MemoryVirtualFile)current.getChild(element);
+                }
+            }
+            if (newFolder == null) {
+                // Folder or folder hierarchy already exists.
+                throw new ConflictException(String.format("Item with the name '%s' already exists. ", name));
+            }
+        } else {
+            newFolder = newFolder(this, name);
+            if (!addChild(newFolder)) {
+                throw new ConflictException(String.format("Item with the name '%s' already exists. ", name));
+            }
+        }
+        mountPoint.putItem(newFolder);
+        mountPoint.getEventService().publish(new CreateEvent(mountPoint.getWorkspaceId(), newFolder.getPath(), true));
+        return newFolder;
+    }
+

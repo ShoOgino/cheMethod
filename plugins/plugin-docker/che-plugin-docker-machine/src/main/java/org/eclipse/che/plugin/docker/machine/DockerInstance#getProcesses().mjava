@@ -1,0 +1,24 @@
+    @Override
+    public List<InstanceProcess> getProcesses() throws MachineException {
+        List<InstanceProcess> processes = new LinkedList<>();
+        try {
+            final Exec exec = docker.createExec(container, false, "/bin/bash", "-c", GET_ALIVE_PROCESSES_COMMAND);
+            docker.startExec(exec.getId(), logMessage -> {
+                final String pidFilePath = logMessage.getContent().trim();
+                final Matcher matcher = PID_FILE_PATH_PATTERN.matcher(pidFilePath);
+                if (matcher.matches()) {
+                    final int virtualPid = Integer.parseInt(matcher.group(1));
+                    final InstanceProcess dockerProcess = machineProcesses.get(virtualPid);
+                    if (dockerProcess != null) {
+                        processes.add(dockerProcess);
+                    } else {
+                        LOG.warn("Machine process {} exists in container but missing in processes map", virtualPid);
+                    }
+                }
+            });
+            return processes;
+        } catch (IOException e) {
+            throw new MachineException(e);
+        }
+    }
+

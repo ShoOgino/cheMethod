@@ -1,0 +1,46 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onProjectUpdated(ProjectUpdatedEvent event) {
+        ProjectNode node = null;
+
+        for (Node seekNode : view.getAllNodes()) {
+            if (seekNode instanceof ProjectNode &&
+                ((ProjectNode)seekNode).getData().getPath().equals(event.getPath())) {
+                node = (ProjectNode)seekNode;
+                break;
+            }
+        }
+
+        if (node == null) {
+            return;
+        }
+
+        final String oldNodeId = view.getNodeIdProvider().getKey(node);
+
+        Map<String, Node> oldIdToNode = new HashMap<>();
+        for (Node n : view.getAllNodes(node)) {
+            oldIdToNode.put(view.getNodeIdProvider().getKey(n), n);
+        }
+
+        final ProjectConfigDto updatedDescriptor = event.getUpdatedProjectDescriptor();
+
+        node.setData(updatedDescriptor);
+        node.setProjectConfig(updatedDescriptor);
+
+        if (!view.reIndex(oldNodeId, node)) {
+            Log.info(getClass(), "Node wasn't re-indexed");
+        }
+
+        for (Map.Entry<String, Node> entry : oldIdToNode.entrySet()) {
+            if (!view.reIndex(entry.getKey(), entry.getValue())) {
+                Log.info(getClass(), "Node wasn't re-indexed");
+            }
+        }
+
+        view.refresh(node);
+
+        if (view.isExpanded(node) && view.isLoaded(node)) {
+            view.reloadChildren(node, true);
+        }
+    }
+

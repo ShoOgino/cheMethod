@@ -1,0 +1,29 @@
+    private void handleDescriptor(final OpenDeclarationDescriptor descriptor) {
+        Map<String, EditorPartPresenter> openedEditors = editorAgent.getOpenedEditors();
+        for (String s : openedEditors.keySet()) {
+            if (descriptor.getPath().equals(s)) {
+                EditorPartPresenter editorPartPresenter = openedEditors.get(s);
+                editorAgent.activateEditor(editorPartPresenter);
+                fileOpened(editorPartPresenter, descriptor.getOffset());
+                return;
+            }
+        }
+
+
+        if (descriptor.isBinary()) {
+            javaNodeManager.getClassNode(context.getCurrentProject().getProjectConfig(), descriptor.getLibId(), descriptor.getPath())
+                           .then(new Operation<Node>() {
+                               @Override
+                               public void apply(Node node) throws OperationException {
+                                   if (node instanceof VirtualFile) {
+                                       openFile((VirtualFile)node, descriptor);
+                                   }
+                               }
+                           });
+        } else {
+            projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(descriptor.getPath()))
+                           .then(selectNode())
+                           .then(openNode(descriptor));
+        }
+    }
+

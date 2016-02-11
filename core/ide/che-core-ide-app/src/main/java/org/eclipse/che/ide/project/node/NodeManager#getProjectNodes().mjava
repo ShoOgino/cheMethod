@@ -1,0 +1,32 @@
+    /**
+     * Get project list and construct project nodes for the tree.
+     *
+     * @return list of the {@link ProjectNode} nodes.
+     */
+    @NotNull
+    public Promise<List<Node>> getProjectNodes() {
+        return newPromise(new RequestCall<List<ProjectConfigDto>>() {
+            @Override
+            public void makeCall(AsyncCallback<List<ProjectConfigDto>> callback) {
+                projectService.getProjects(workspaceId, true, newCallback(callback, dtoUnmarshaller.newListUnmarshaller(ProjectConfigDto.class)));
+            }
+        }).then(new Function<List<ProjectConfigDto>, List<Node>>() {
+            @Override
+            public List<Node> apply(List<ProjectConfigDto> projects) throws FunctionException {
+                if (projects == null) {
+                    return Collections.emptyList();
+                }
+
+                final NodeSettings settings = nodeSettingsProvider.getSettings();
+
+                return Lists.transform(projects, new com.google.common.base.Function<ProjectConfigDto, Node>() {
+                    @org.eclipse.che.commons.annotation.Nullable
+                    @Override
+                    public Node apply(@Nullable ProjectConfigDto project) {
+                        return nodeFactory.newProjectNode(project, settings == null ? NodeSettings.DEFAULT_SETTINGS : settings);
+                    }
+                });
+            }
+        });
+    }
+

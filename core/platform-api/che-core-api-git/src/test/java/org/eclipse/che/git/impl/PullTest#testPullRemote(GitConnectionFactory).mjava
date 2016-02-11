@@ -1,0 +1,25 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = GitConnectionFactoryProvider.class)
+    public void testPullRemote(GitConnectionFactory connectionFactory)
+            throws GitException, IOException, URISyntaxException, UnauthorizedException {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        String branchName = "remoteBranch";
+        connection.checkout(newDto(CheckoutRequest.class).withCreateNew(true).withName(branchName));
+        addFile(connection, "remoteFile", "");
+        connection.add(newDto(AddRequest.class).withFilepattern(Arrays.asList(".")));
+        connection.commit(newDto(CommitRequest.class).withMessage("remote test"));
+
+        GitConnection connection2 = connectToInitializedGitRepository(connectionFactory, remoteRepo);
+        addFile(connection2, "EMPTY", "");
+        connection2.add(newDto(AddRequest.class).withFilepattern(Arrays.asList(".")));
+        connection2.commit(newDto(CommitRequest.class).withMessage("init"));
+
+        //when
+        PullRequest request = newDto(PullRequest.class);
+        request.setRemote(connection.getWorkingDir().getAbsolutePath());
+        request.setRefSpec(branchName);
+        connection2.pull(request);
+        //then
+        assertTrue(new File(remoteRepo.getAbsolutePath(), "remoteFile").exists());
+    }
+

@@ -1,0 +1,61 @@
+    public ProjectTypes(Project project, ProjectConfig projectConfig, ProjectManager manager) throws ProjectTypeConstraintException,
+                                                                                                     NotFoundException {
+        this.project = project;
+        this.manager = manager;
+
+        String projectType = projectConfig.getType();
+
+        if (projectType == null) {
+            throw new ProjectTypeConstraintException("No primary type defined for " + project.getWorkspace() + " : " + project.getPath());
+        }
+
+        primary = manager.getProjectTypeRegistry().getProjectType(projectType);
+
+        if (!primary.isPrimaryable()) {
+            throw new ProjectTypeConstraintException("Project type " + primary.getId() + " is not allowable to be primary type");
+        }
+
+        all.put(primary.getId(), primary);
+
+        List<String> mixinsFromConfig = projectConfig.getMixins();
+
+        if (mixinsFromConfig == null) {
+            mixinsFromConfig = new ArrayList<>();
+        }
+
+        // temporary storage to detect duplicated attributes
+        HashMap<String, Attribute> tmpAttrs = new HashMap<>();
+        for (Attribute attr : primary.getAttributes()) {
+            tmpAttrs.put(attr.getName(), attr);
+        }
+
+        for (String mixinFromConfig : mixinsFromConfig) {
+            if (!mixinFromConfig.equals(primary.getId())) {
+                ProjectTypeDef mixin = manager.getProjectTypeRegistry().getProjectType(mixinFromConfig);
+                if (mixin == null) {
+                    throw new ProjectTypeConstraintException("No project type registered for " + mixinFromConfig);
+                }
+                if (!mixin.isMixable()) {
+                    throw new ProjectTypeConstraintException("Project type " + mixin + " is not allowable to be mixin");
+                }
+
+                // detect duplicated attributes
+                for (Attribute attr : mixin.getAttributes()) {
+                    if (tmpAttrs.containsKey(attr.getName())) {
+                        throw new ProjectTypeConstraintException(
+                                "Attribute name conflict. Duplicated attributes detected " + project.getPath() +
+                                " Attribute " + attr.getName() + " declared in " + mixin.getId() + " already declared in " +
+                                tmpAttrs.get(attr.getName()).getProjectType()
+                        );
+                    }
+
+                    tmpAttrs.put(attr.getName(), attr);
+                }
+
+                // Silently remove repeated items from mixins if any
+                mixins.put(mixinFromConfig, mixin);
+                all.put(mixinFromConfig, mixin);
+            }
+        }
+    }
+

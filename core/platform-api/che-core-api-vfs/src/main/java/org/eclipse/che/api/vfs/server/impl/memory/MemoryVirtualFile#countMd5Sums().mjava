@@ -1,0 +1,42 @@
+    @Override
+    public LazyIterator<Pair<String, String>> countMd5Sums() throws ServerException {
+        checkExist();
+        if (isFile()) {
+            return LazyIterator.emptyIterator();
+        }
+
+        final List<Pair<String, String>> hashes = new ArrayList<>();
+        final int trimPathLength = getPath().length() + 1;
+        final HashFunction hashFunction = Hashing.md5();
+        final ValueHolder<ServerException> errorHolder = new ValueHolder<>();
+        accept(new VirtualFileVisitor() {
+            @Override
+            public void visit(final VirtualFile virtualFile) {
+                try {
+                    if (virtualFile.isFile()) {
+                        try (InputStream stream = virtualFile.getContent().getStream()) {
+                            final String hexHash = ByteSource.wrap(ByteStreams.toByteArray(stream)).hash(hashFunction).toString();
+                            hashes.add(Pair.of(hexHash, virtualFile.getPath().substring(trimPathLength)));
+                        } catch (ForbiddenException e) {
+                            throw new ServerException(e.getServiceError());
+                        } catch (IOException e) {
+                            throw new ServerException(e);
+                        }
+                    } else {
+                        final LazyIterator<VirtualFile> children = virtualFile.getChildren(VirtualFileFilter.ALL);
+                        while (children.hasNext()) {
+                            children.next().accept(this);
+                        }
+                    }
+                } catch (ServerException e) {
+                    errorHolder.set(e);
+                }
+            }
+        });
+        final ServerException error = errorHolder.get();
+        if (error != null) {
+            throw error;
+        }
+        return LazyIterator.fromList(hashes);
+    }
+

@@ -1,0 +1,31 @@
+    private Promise<Void> getNonEmptyChildren(Promise<Void> promise,
+                                              ListIterator<ItemReference> iterator,
+                                              final List<ItemReference> collector) {
+        if (!iterator.hasNext()) {
+            return promise;
+        }
+
+        final ItemReference itemReference = iterator.next();
+
+        if (itemReference.getType().equals("file")) {
+            collector.add(itemReference);
+            return getNonEmptyChildren(promise, iterator, collector);
+        }
+
+        final Promise<Void> derivedPromise = promise.thenPromise(new Function<Void, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(Void arg) throws FunctionException {
+                return foundFirstNonEmpty(itemReference).thenPromise(new Function<List<ItemReference>, Promise<Void>>() {
+                    @Override
+                    public Promise<Void> apply(List<ItemReference> arg) throws FunctionException {
+                        collector.addAll(arg);
+
+                        return Promises.resolve(null);
+                    }
+                });
+            }
+        });
+
+        return getNonEmptyChildren(derivedPromise, iterator, collector);
+    }
+

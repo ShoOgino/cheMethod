@@ -1,0 +1,22 @@
+    @Path("clone")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public RepoInfo clone(final CloneRequest request) throws URISyntaxException, ApiException {
+        long start = System.currentTimeMillis();
+        // On-the-fly resolving of repository's working directory.
+        request.setWorkingDir(resolveLocalPathByPath(request.getWorkingDir()));
+        LOG.info("Repository clone from '" + request.getRemoteUri() + "' to '" + request.getWorkingDir() + "' started");
+        GitConnection gitConnection = getGitConnection();
+        try {
+            gitConnection.clone(request);
+            return DtoFactory.getInstance().createDto(RepoInfo.class).withRemoteUri(request.getRemoteUri());
+        } finally {
+            long end = System.currentTimeMillis();
+            long seconds = (end - start) / 1000;
+            LOG.info("Repository clone from '" + request.getRemoteUri() + "' to '" + request.getWorkingDir()
+                     + "' finished. Process took " + seconds + " seconds (" + seconds / 60 + " minutes)");
+            gitConnection.close();
+        }
+    }
+

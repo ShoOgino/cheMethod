@@ -1,0 +1,41 @@
+    /**
+     * Subscribes to web socket via special channel to get logs.
+     *
+     * @param channel
+     *         channel id which will be used to subscribe to output
+     * @param tabName
+     *         name of tab in which output will be printed
+     */
+    public void subscribeToOutput(final String channel, String tabName) {
+        DefaultOutputConsole console = (DefaultOutputConsole)consoleFactory.create(tabName);
+        outputsContainerPresenter.addConsole(console);
+
+        channelParameters.put(channel, ChannelParameters.of(console, new LinkedList<String>()));
+
+        try {
+            messageBus.subscribe(channel, new SubscriptionHandler<String>(new StringUnmarshallerWS()) {
+                @Override
+                protected void onMessageReceived(String logs) {
+                    List<String> lines = StringUtils.split(logs, "\n");
+
+                    channelParameters.get(channel).addAllLines(lines);
+
+                    if (channelParameters.get(channel).isOutputEnded()) {
+                        flushBuffer(channel);
+
+                        return;
+                    }
+
+                    printOutput(channel);
+                }
+
+                @Override
+                protected void onErrorReceived(Throwable exception) {
+                    Log.error(getClass(), exception);
+                }
+            });
+        } catch (WebSocketException e) {
+            e.printStackTrace();
+        }
+    }
+

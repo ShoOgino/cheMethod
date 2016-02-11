@@ -1,0 +1,29 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void shouldDeleteNotFullyMergedBranchWithForce(GitConnectionFactory connectionFactory)
+            throws GitException, IOException, UnauthorizedException {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        addFile(connection, "README.txt", org.eclipse.che.git.impl.GitTestUtil.CONTENT);
+        connection.add(newDto(AddRequest.class).withFilepattern(ImmutableList.of("README.txt")));
+        connection.commit(newDto(CommitRequest.class).withMessage("Initial addd"));
+        //create new branch and make a commit
+        connection.checkout(newDto(CheckoutRequest.class).withName("newbranch").withCreateNew(true));
+        addFile(connection, "newfile", "new file content");
+        connection.add(newDto(AddRequest.class).withFilepattern(Arrays.asList(".")));
+        connection.commit(newDto(CommitRequest.class).withMessage("second commit"));
+        connection.checkout(newDto(CheckoutRequest.class).withName("master"));
+
+        //when
+        connection.branchDelete(newDto(BranchDeleteRequest.class).withName("newbranch").withForce(true));
+
+        //then
+        assertTrue(Sets.symmetricDifference(
+                Sets.newHashSet(
+                        connection.branchList(newDto(BranchListRequest.class).withListMode(LIST_LOCAL))),
+                Sets.newHashSet(
+                                newDto(Branch.class).withName("refs/heads/master")
+                                        .withDisplayName("master").withActive(true).withRemote(false)
+                )
+        ).isEmpty());
+    }
+

@@ -1,0 +1,70 @@
+    private static UsersWorkspaceImpl createWorkspace() {
+        // environments
+        final RecipeImpl recipe = new RecipeImpl();
+        recipe.setType("dockerfile");
+        recipe.setScript("FROM codenvy/jdk7\nCMD tail -f /dev/null");
+
+        final MachineSourceImpl machineSource = new MachineSourceImpl("recipe", "recipe-url");
+        final MachineConfigImpl machineCfg1 = new MachineConfigImpl(true,
+                                                                    "dev-machine",
+                                                                    "machine-type",
+                                                                    machineSource,
+                                                                    new LimitsImpl(512));
+        final MachineConfigImpl machineCfg2 = new MachineConfigImpl(false,
+                                                                    "non-dev-machine",
+                                                                    "machine-type-2",
+                                                                    machineSource,
+                                                                    new LimitsImpl(2048));
+
+        final EnvironmentImpl env1 = new EnvironmentImpl("my-environment", recipe, asList(machineCfg1, machineCfg2));
+        final EnvironmentImpl env2 = new EnvironmentImpl("my-environment-2", recipe, singletonList(machineCfg1));
+
+        final List<EnvironmentImpl> environments = new ArrayList<>();
+        environments.add(env1);
+        environments.add(env2);
+
+        // projects
+        final ProjectConfigImpl project1 = new ProjectConfigImpl();
+        project1.setName("test-project-name");
+        project1.setDescription("This is test project");
+        project1.setPath("/path/to/project");
+        project1.setType("maven");
+        project1.setMixins(singletonList("git"));
+
+        final Map<String, List<String>> projectAttrs = new HashMap<>(4);
+        projectAttrs.put("project.attribute1", singletonList("value1"));
+        projectAttrs.put("project.attribute2", asList("value2", "value3"));
+        project1.setAttributes(projectAttrs);
+
+        final Map<String, String> sourceParameters = new HashMap<>(4);
+        sourceParameters.put("source-parameter-1", "value1");
+        sourceParameters.put("source-parameter-2", "value2");
+        project1.setSource(new SourceStorageImpl("sources-type", "sources-location", sourceParameters));
+
+        final List<ProjectConfigImpl> projects = singletonList(project1);
+
+        // commands
+        final List<CommandImpl> commands = new ArrayList<>(3);
+        commands.add(new CommandImpl("MCI", "mvn clean install", "maven"));
+        commands.add(new CommandImpl("bower install", "bower install", "bower"));
+        commands.add(new CommandImpl("build without tests", "mvn clean install -Dmaven.test.skip", "maven"));
+
+        // attributes
+        final Map<String, String> attributes = new HashMap<>(8);
+        attributes.put("test.attribute1", "test-value1");
+        attributes.put("test.attribute2", "test-value2");
+        attributes.put("test.attribute3", "test-value3");
+
+        return UsersWorkspaceImpl.builder()
+                                 .setId(generate("workspace", 16))
+                                 .setName("test-workspace-name")
+                                 .setDescription("This is test workspace")
+                                 .setOwner("user123")
+                                 .setAttributes(attributes)
+                                 .setCommands(commands)
+                                 .setProjects(projects)
+                                 .setEnvironments(environments)
+                                 .setDefaultEnv(env1.getName())
+                                 .build();
+    }
+

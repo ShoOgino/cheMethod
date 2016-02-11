@@ -1,0 +1,20 @@
+    @Test
+    public void shouldBeAbleToCreateAccount() throws Exception {
+        when(userDao.getByAlias(USER_EMAIL)).thenReturn(user);
+        when(accountDao.getByName(account.getName())).thenThrow(new NotFoundException("Account not found"));
+        when(accountDao.getByOwner(USER_ID)).thenReturn(Collections.<Account>emptyList());
+        String role = "user";
+        prepareSecurityContext(role);
+
+        ContainerResponse response = makeRequest(POST, SERVICE_PATH, MediaType.APPLICATION_JSON, account);
+
+        assertEquals(response.getStatus(), Response.Status.CREATED.getStatusCode());
+        AccountDescriptor created = (AccountDescriptor)response.getEntity();
+        verifyLinksRel(created.getLinks(), generateRels(role));
+        verify(accountDao).create(any(Account.class));
+        Member expected = new Member().withAccountId(created.getId())
+                                      .withUserId(USER_ID)
+                                      .withRoles(Arrays.asList("account/owner"));
+        verify(accountDao).addMember(expected);
+    }
+

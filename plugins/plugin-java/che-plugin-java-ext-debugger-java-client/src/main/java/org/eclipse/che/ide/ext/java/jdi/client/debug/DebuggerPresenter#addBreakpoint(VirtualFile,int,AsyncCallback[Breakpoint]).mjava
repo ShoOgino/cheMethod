@@ -1,0 +1,39 @@
+    /** {@inheritDoc} */
+    @Override
+    public void addBreakpoint(@NotNull final VirtualFile file, final int lineNumber, final AsyncCallback<Breakpoint> callback) {
+        if (isDebuggerConnected()) {
+            Location location = dtoFactory.createDto(Location.class);
+            location.setLineNumber(lineNumber + 1);
+            final FqnResolver resolver = resolverFactory.getResolver(file.getMediaType());
+            if (resolver != null) {
+                location.setClassName(resolver.resolveFqn(file));
+            } else {
+                Log.warn(DebuggerPresenter.class, "FqnResolver is not found");
+            }
+
+            BreakPoint breakPoint = dtoFactory.createDto(BreakPoint.class);
+            breakPoint.setLocation(location);
+            breakPoint.setEnabled(true);
+            service.addBreakpoint(debuggerInfo.getId(), breakPoint, new AsyncRequestCallback<Void>() {
+                @Override
+                protected void onSuccess(Void result) {
+                    if (resolver != null) {
+                        Breakpoint breakpoint = new Breakpoint(Breakpoint.Type.BREAKPOINT, lineNumber, file.getPath(), file, true);
+                        callback.onSuccess(breakpoint);
+                        updateBreakPoints();
+                    }
+                }
+
+                @Override
+                protected void onFailure(Throwable exception) {
+                    callback.onFailure(exception);
+                    updateBreakPoints();
+
+                }
+            });
+        } else {
+            callback.onFailure(new IllegalStateException("Debugger not attached"));
+            updateBreakPoints();
+        }
+    }
+

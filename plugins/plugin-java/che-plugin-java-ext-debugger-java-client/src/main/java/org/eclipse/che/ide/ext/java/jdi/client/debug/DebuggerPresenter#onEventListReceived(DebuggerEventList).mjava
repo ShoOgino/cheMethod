@@ -1,0 +1,54 @@
+    private void onEventListReceived(@NotNull DebuggerEventList eventList) {
+        if (eventList.getEvents().size() == 0) {
+            return;
+        }
+
+        VirtualFile activeFile = null;
+        EditorPartPresenter activeEditor = editorAgent.getActiveEditor();
+        if (activeEditor != null) {
+            activeFile = activeEditor.getEditorInput().getFile();
+        }
+        Location location;
+        List<DebuggerEvent> events = eventList.getEvents();
+        for (DebuggerEvent event : events) {
+            switch (event.getType()) {
+                case STEP:
+                    location = ((StepEvent)event).getLocation();
+                    break;
+                case BREAKPOINT_ACTIVATED:
+                    BreakPoint breakPoint = ((BreakpointActivatedEvent)event).getBreakPoint();
+                    activateBreakpoint(breakPoint);
+                    return;
+                case BREAKPOINT:
+                    location = ((BreakPointEvent)event).getBreakPoint().getLocation();
+                    partStack.setActivePart(this);
+                    break;
+                default:
+                    Log.error(DebuggerPresenter.class, "Unknown type of debugger event: " + event.getType());
+                    return;
+            }
+            this.executionPoint = location;
+
+            List<String> filePaths = resolveFilePathByLocation(location);
+
+            if (activeFile == null || !filePaths.contains(activeFile.getPath())) {
+                final Location finalLocation = location;
+                openFile(location, filePaths, 0, new AsyncCallback<VirtualFile>() {
+                    @Override
+                    public void onSuccess(VirtualFile result) {
+                        breakpointManager.setCurrentBreakpoint(finalLocation.getLineNumber() - 1);
+                    }
+
+                    @Override
+                    public void onFailure(Throwable caught) {
+                        notificationManager.notify(caught.getMessage(), StatusNotification.Status.FAIL, false);
+                    }
+                });
+            } else {
+                breakpointManager.setCurrentBreakpoint(location.getLineNumber() - 1);
+            }
+            getStackFrameDump();
+            changeButtonsEnableState(true);
+        }
+    }
+

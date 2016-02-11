@@ -1,0 +1,33 @@
+	/**
+	 * Helper to generate a <code>foreach</code> loop to iterate over an {@link Iterable}.
+	 *
+	 * @param ast the {@link AST} instance to rewrite the loop to
+	 * @return the complete {@link ASTRewrite} object
+	 */
+	private ASTRewrite generateForEachRewrite(AST ast) {
+
+		EnhancedForStatement loopStatement = ast.newEnhancedForStatement();
+
+		ASTRewrite rewrite = ASTRewrite.create(ast);
+		ITypeBinding loopOverType = extractElementType(ast);
+
+		// generate name proposals and add them to the variable declaration
+		SimpleName forDeclarationName = resolveLinkedVariableNameWithProposals(rewrite, loopOverType.getName(), null, true);
+
+		SingleVariableDeclaration forLoopInitializer= ast.newSingleVariableDeclaration();
+		forLoopInitializer.setType(getImportRewrite().addImport(loopOverType, ast, new ContextSensitiveImportRewriteContext(fCurrentNode, getImportRewrite())));
+		forLoopInitializer.setName(forDeclarationName);
+
+		loopStatement.setParameter(forLoopInitializer);
+		loopStatement.setExpression((Expression) rewrite.createCopyTarget(fCurrentExpression));
+
+		Block forLoopBody= ast.newBlock();
+		forLoopBody.statements().add(createBlankLineStatementWithCursorPosition(rewrite));
+
+		loopStatement.setBody(forLoopBody);
+
+		rewrite.replace(fCurrentNode, loopStatement, null);
+
+		return rewrite;
+	}
+

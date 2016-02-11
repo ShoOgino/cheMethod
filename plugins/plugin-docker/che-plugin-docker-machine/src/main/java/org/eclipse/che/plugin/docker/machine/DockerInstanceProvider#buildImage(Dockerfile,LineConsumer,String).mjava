@@ -1,0 +1,32 @@
+    private void buildImage(Dockerfile dockerfile, final LineConsumer creationLogsOutput, String imageName) throws MachineException {
+        File workDir = null;
+        try {
+            // build docker image
+            workDir = Files.createTempDirectory(null).toFile();
+            final File dockerfileFile = new File(workDir, "Dockerfile");
+            dockerfile.writeDockerfile(dockerfileFile);
+            final List<File> files = new LinkedList<>();
+            //noinspection ConstantConditions
+            Collections.addAll(files, workDir.listFiles());
+            final ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
+            final ProgressMonitor progressMonitor = currentProgressStatus -> {
+                try {
+                    creationLogsOutput.writeLine(progressLineFormatter.format(currentProgressStatus));
+                } catch (IOException e) {
+                    LOG.error(e.getLocalizedMessage(), e);
+                }
+            };
+            docker.buildImage(imageName,
+                              progressMonitor,
+                              null,
+                              doForcePullOnBuild,
+                              files.toArray(new File[files.size()]));
+        } catch (IOException | InterruptedException e) {
+            throw new MachineException(e.getMessage(), e);
+        } finally {
+            if (workDir != null) {
+                FileCleaner.addFile(workDir);
+            }
+        }
+    }
+

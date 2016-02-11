@@ -1,0 +1,30 @@
+    void putItem(MemoryVirtualFile item) throws ServerException {
+        if (item.isFolder()) {
+            final Map<String, VirtualFile> flatten = new HashMap<>();
+            final ValueHolder<ServerException> errorHolder = new ValueHolder<>();
+            item.accept(new VirtualFileVisitor() {
+                @Override
+                public void visit(VirtualFile virtualFile) {
+                    try {
+                        if (virtualFile.isFolder()) {
+                            final LazyIterator<VirtualFile> children = virtualFile.getChildren(VirtualFileFilter.ALL);
+                            while (children.hasNext()) {
+                                children.next().accept(this);
+                            }
+                        }
+                        flatten.put(virtualFile.getId(), virtualFile);
+                    } catch (ServerException e) {
+                        errorHolder.set(e);
+                    }
+                }
+            });
+            final ServerException error = errorHolder.get();
+            if (error != null) {
+                throw error;
+            }
+            entries.putAll(flatten);
+        } else {
+            entries.put(item.getId(), item);
+        }
+    }
+

@@ -1,0 +1,23 @@
+    @Test
+    public void testGetLinkUrlButNotInitRepository() throws Exception {
+        final HashMap<String, List<String>> attributes = new HashMap<>();
+        attributes.put("vcs.provider.name", new ArrayList<>(Arrays.asList("git")));
+        doReturn(attributes).when(rootProjectConfig).getAttributes();
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<String> callback = (AsyncRequestCallback<String>)arguments[1];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, REMOTE_URI);
+                return callback;
+            }
+        }).when(service).getGitReadOnlyUrl(anyString(), anyObject(), (AsyncRequestCallback<String>)anyObject());
+
+        gitRepositoryInitializer.getGitUrlWithAutoInit(rootProjectConfig, stringCallback);
+
+        verify(service, never()).init(anyString(), anyObject(), anyBoolean(), (RequestCallback<Void>)anyObject());
+        verify(stringCallback).onSuccess(eq(REMOTE_URI));
+    }
+

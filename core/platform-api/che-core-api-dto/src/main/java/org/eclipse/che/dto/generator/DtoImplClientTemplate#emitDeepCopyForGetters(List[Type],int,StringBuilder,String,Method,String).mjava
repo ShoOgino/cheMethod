@@ -1,0 +1,33 @@
+    private void emitDeepCopyForGetters(List<Type> expandedTypes, int depth, StringBuilder builder, String origin, Method getter,
+                                        String i) {
+        String getterName = getter.getName();
+        String fieldName = getJavaFieldName(getterName);
+        String fieldNameIn = fieldName + "In";
+        String fieldNameOut = fieldName + "Out";
+        Type type = expandedTypes.get(depth);
+        Class<?> rawClass = getRawClass(type);
+        String rawTypeName = getImplName(type, false);
+        if (isList(rawClass) || isMap(rawClass)) {
+            builder.append(i).append(rawTypeName).append(" ").append(fieldNameIn).append(" = ").append(origin).append(".")
+                   .append(getterName).append("();\n");
+            builder.append(i).append("if (").append(fieldNameIn).append(" != null) {\n");
+            builder.append(i).append("  ").append(rawTypeName).append(" ").append(fieldNameOut)
+                   .append(" = new ").append(getImplName(type, true)).append("();\n");
+            emitDeepCopyCollections(expandedTypes, depth, builder, fieldNameIn, fieldNameOut, i);
+            builder.append(i).append("  ").append("this.").append(fieldName).append(" = ").append(fieldNameOut).append(";\n");
+            builder.append(i).append("}\n");
+        } else if (getEnclosingTemplate().isDtoInterface(rawClass)) {
+            builder.append(i).append(rawTypeName).append(" ").append(fieldNameIn).append(" = ").append(origin).append(".")
+                   .append(getterName).append("();\n");
+            builder.append(i).append("this.").append(fieldName).append(" = ");
+            emitCheckNullAndCopyDto(rawClass, fieldNameIn, builder);
+            builder.append(";\n");
+        } else if (isAny(rawClass)) {
+            builder.append(i).append("this.").append(fieldName).append(" = ");
+            appendNaiveCopyJsonExpression(origin + "." + getterName + "()", builder).append(";\n");
+        } else {
+            builder.append(i).append("this.").append(fieldName).append(" = ")
+                   .append(origin).append(".").append(getterName).append("();\n");
+        }
+    }
+

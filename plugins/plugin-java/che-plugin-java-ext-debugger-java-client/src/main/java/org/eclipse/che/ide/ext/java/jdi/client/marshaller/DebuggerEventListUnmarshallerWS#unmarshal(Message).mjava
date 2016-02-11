@@ -1,0 +1,32 @@
+    /** {@inheritDoc} */
+    @Override
+    public void unmarshal(Message response) throws UnmarshallerException {
+        this.events.setEvents(new ArrayList<DebuggerEvent>());
+
+        JSONObject jsonObject = JSONParser.parseStrict(response.getBody()).isObject();
+        if (jsonObject == null) {
+            return;
+        }
+
+        if (jsonObject.containsKey("events")) {
+            JSONArray events = jsonObject.get("events").isArray();
+            for (int i = 0; i < events.size(); i++) {
+                JSONObject event = events.get(i).isObject();
+                if (event.containsKey("type")) {
+                    final int type = (int)event.get("type").isNumber().doubleValue();
+                    if (DebuggerEvent.BREAKPOINT == type) {
+                        BreakPointEvent breakPointEvent = dtoFactory.createDtoFromJson(event.toString(), BreakPointEvent.class);
+                        this.events.getEvents().add(breakPointEvent);
+                    } else if (DebuggerEvent.STEP == type) {
+                        StepEvent stepEvent = dtoFactory.createDtoFromJson(event.toString(), StepEvent.class);
+                        this.events.getEvents().add(stepEvent);
+                    } else if (DebuggerEvent.BREAKPOINT_ACTIVATED == type) {
+                        BreakpointActivatedEvent breakpointActivatedEvent =
+                                dtoFactory.createDtoFromJson(event.toString(), BreakpointActivatedEvent.class);
+                        this.events.getEvents().add(breakpointActivatedEvent);
+                    }
+                }
+            }
+        }
+    }
+

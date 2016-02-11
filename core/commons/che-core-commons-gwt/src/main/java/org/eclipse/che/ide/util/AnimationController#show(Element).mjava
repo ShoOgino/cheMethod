@@ -1,0 +1,99 @@
+    /**
+     * Animates the element into view. Do not enable transitions in the CSS for this element, or the
+     * animations may not work correctly. AnimationController will enable animations automatically.
+     */
+    public void show(final Element element) {
+        // Early exit if the element is shown or showing.
+        if (isAnyState(element, State.SHOWN, State.SHOWING)) {
+            return;
+        }
+
+        if (!isAnimated) {
+            showWithoutAnimating(element);
+            return;
+        }
+
+        // Cancel pending transition event listeners.
+        hideEndHandler.unhandleEndFor(element);
+
+    /*
+     * Make this "visible" again so we can measure its eventual height (required
+     * for CSS transitions). We will set its initial state in this event loop,
+     * so the element will not be fully visible.
+     */
+        final CSSStyleDeclaration style = element.getStyle();
+        element.getStyle().removeProperty("display");
+        final int measuredHeight = getCurrentHeight(element);
+
+    /*
+     * Set the initial state, but not if the element is in the process of
+     * hiding.
+     */
+        if (!isAnyState(element, State.HIDING)) {
+            if (options.collapse) {
+                // Start the animation at a height of zero.
+                style.setHeight("0");
+
+                // We want to animate from total height of 0
+                style.setMarginTop("0");
+                style.setMarginBottom("0");
+                style.setPaddingTop("0");
+                style.setPaddingBottom("0");
+                CssUtils.setBoxShadow(element, "0 0");
+
+        /*
+         * Hide overflow if expanding the element, or the entire element will be
+         * instantly visible. Do not do this by default, because it could hide
+         * absolutely positioned elements outside of the root element, such as
+         * the arrow on a tooltip.
+         */
+                AnimationUtils.backupOverflow(style);
+            }
+
+            if (options.fade) {
+                style.setOpacity(0);
+            }
+        }
+
+        // Give the browser a chance to accept the properties set above
+        setState(element, State.SHOWING);
+        schedule(element, new ScheduledCommand() {
+            @Override
+            public void execute() {
+                // The user changed the state before this command executed.
+                if (!clearLastCommand(element, this) || !isAnyState(element, State.SHOWING)) {
+                    return;
+                }
+
+                // Enable animations before setting the end state.
+                AnimationUtils.enableTransitions(style);
+
+                // Set the end state.
+                if (options.collapse) {
+                    if (options.fixedHeight) {
+                        // The element's styles have a fixed height set, so we just want to
+                        // clear our override
+                        style.setHeight("");
+                    } else {
+                        // Give it an explicit height to animate to, because the element's
+                        // height is auto otherwise
+                        style.setHeight(measuredHeight + CSSStyleDeclaration.Unit.PX);
+                    }
+
+                    style.removeProperty("margin-top");
+                    style.removeProperty("margin-bottom");
+                    style.removeProperty("padding-top");
+                    style.removeProperty("padding-bottom");
+                    CssUtils.removeBoxShadow(element);
+                }
+
+                if (options.fade) {
+                    style.setOpacity(1);
+                }
+            }
+        });
+
+        // For webkit based browsers.
+        showEndHandler.handleEndFor(element);
+    }
+

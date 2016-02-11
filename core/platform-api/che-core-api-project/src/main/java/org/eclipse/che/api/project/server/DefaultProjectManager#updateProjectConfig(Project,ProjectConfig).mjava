@@ -1,0 +1,30 @@
+    @Override
+    public void updateProjectConfig(Project project, ProjectConfig projectConfig) throws ServerException,
+                                                                                         ValueStorageException,
+                                                                                         ProjectTypeConstraintException,
+                                                                                         ForbiddenException, NotFoundException {
+        List<ProjectConfigDto> modules = new ArrayList<>();
+
+        for (ProjectConfig config : projectConfig.getModules()) {
+            getModulesRecursive(config, modules);
+        }
+
+        final ProjectConfigDto projectConfigDto = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                                            .withPath(projectConfig.getPath())
+                                                            .withName(projectConfig.getName())
+                                                            .withType(projectConfig.getType())
+                                                            .withMixins(projectConfig.getMixins())
+                                                            .withAttributes(projectConfig.getAttributes())
+                                                            .withDescription(projectConfig.getDescription())
+                                                            .withModules(modules)
+                                                            .withSource(getSourceStorageDto(projectConfig));
+
+        createCodenvyFolder(project);
+
+        filterProvider.get().addPersistedAttributesToProject(projectConfigDto, project.getBaseFolder());
+
+        storeCalculatedAttributes(project, projectConfig);
+
+        updateProjectInWorkspace(project.getWorkspace(), projectConfigDto);
+    }
+

@@ -1,0 +1,35 @@
+    @Test
+    public void testEstimation() throws Exception {
+        Map<String, List<String>> attributes = new HashMap<>();
+        attributes.put(MavenAttributes.ARTIFACT_ID, Collections.singletonList("myartifact"));
+        attributes.put(MavenAttributes.GROUP_ID, Collections.singletonList("mygroup"));
+        attributes.put(MavenAttributes.VERSION, Collections.singletonList("1.0"));
+        attributes.put(MavenAttributes.PACKAGING, Collections.singletonList("jar"));
+
+        when(httpJsonRequestFactory.fromLink(eq(DtoFactory.newDto(Link.class)
+                                                          .withMethod("PUT")
+                                                          .withHref(API_ENDPOINT + "/workspace/" + workspace + "/project"))))
+                .thenReturn(httpJsonRequest);
+
+        pm.createProject(workspace, "testEstimate",
+                         DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                   .withType("maven").withAttributes(attributes),
+                         null);
+
+        pm.createProject(workspace, "testEstimateBad",
+                         DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                   .withType("blank"),
+                         null);
+
+        Map<String, AttributeValue> out = pm.estimateProject(workspace, "testEstimate", "maven");
+
+        Assert.assertEquals(out.get(MavenAttributes.ARTIFACT_ID).getString(), "myartifact");
+        Assert.assertEquals(out.get(MavenAttributes.VERSION).getString(), "1.0");
+
+        try {
+            pm.estimateProject(workspace, "testEstimateBad", "maven");
+            Assert.fail("ValueStorageException expected");
+        } catch (ValueStorageException ignored) {
+        }
+    }
+

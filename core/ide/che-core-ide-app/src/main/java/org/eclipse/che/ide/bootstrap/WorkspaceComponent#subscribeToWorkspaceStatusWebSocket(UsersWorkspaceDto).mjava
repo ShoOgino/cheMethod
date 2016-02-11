@@ -1,0 +1,53 @@
+    private void subscribeToWorkspaceStatusWebSocket(final UsersWorkspaceDto workspace) {
+        Unmarshallable<WorkspaceStatusEvent> unmarshaller = dtoUnmarshallerFactory.newWSUnmarshaller(WorkspaceStatusEvent.class);
+
+        try {
+            messageBus.subscribe("workspace:" + workspace.getId(), new SubscriptionHandler<WorkspaceStatusEvent>(unmarshaller) {
+                @Override
+                protected void onMessageReceived(WorkspaceStatusEvent statusEvent) {
+                    String workspaceName = workspace.getName();
+
+                    switch (statusEvent.getEventType()) {
+                        case RUNNING:
+                            setCurrentWorkspace(workspace);
+                            notificationManager.notify(locale.startedWs(), StatusNotification.Status.SUCCESS, true);
+                            eventBus.fireEvent(new StartWorkspaceEvent(workspace));
+                            break;
+                        case ERROR:
+                            notificationManager.notify(locale.workspaceStartFailed(), FAIL, true);
+                            initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), ERROR);
+                            showErrorDialog(workspaceName, statusEvent.getError());
+                            break;
+                        case STOPPED:
+                            unSubscribeWorkspace(statusEvent.getWorkspaceId());
+                            eventBus.fireEvent(new StopWorkspaceEvent(workspace));
+                            workspaceServiceClient.getWorkspaces(SKIP_COUNT, MAX_COUNT).then(new Operation<List<UsersWorkspaceDto>>() {
+                                @Override
+                                public void apply(List<UsersWorkspaceDto> workspaces) throws OperationException {
+                                    startWorkspacePresenter.show(workspaces, callback);
+                                }
+                            });
+
+                            break;
+                        case SNAPSHOT_CREATED:
+                            snapshotCreator.successfullyCreated();
+                            break;
+                        case SNAPSHOT_CREATION_ERROR:
+                            snapshotCreator.creationError("Snapshot creation error: " + statusEvent.getError());
+                            break;
+                        default:
+                            // do nothing
+                            break;
+                    }
+                }
+
+                @Override
+                protected void onErrorReceived(Throwable exception) {
+                    notificationManager.notify(exception.getMessage(), FAIL, false);
+                }
+            });
+        } catch (WebSocketException exception) {
+            Log.error(getClass(), exception);
+        }
+    }
+

@@ -1,0 +1,30 @@
+    @Test
+    public void testShowDialogWhenLocalBranchListRequestIsFailed() throws Exception {
+        final List<Remote> remotes = new ArrayList<>();
+        remotes.add(mock(Remote.class));
+
+        presenter.showDialog();
+
+        verify(service).remoteList(anyString(), anyObject(), anyString(), anyBoolean(),
+                                   asyncRequestCallbackArrayRemoteCaptor.capture());
+        AsyncRequestCallback<List<Remote>> remoteCallback = asyncRequestCallbackArrayRemoteCaptor.getValue();
+        Method onSuccessRemotes = GwtReflectionUtils.getMethod(remoteCallback.getClass(), "OnSuccess");
+        onSuccessRemotes.invoke(remoteCallback, remotes);
+
+        verify(service).branchList(anyString(), anyObject(), anyString(), asyncRequestCallbackArrayBranchCaptor.capture());
+        AsyncRequestCallback<List<Branch>> branchesCallback = asyncRequestCallbackArrayBranchCaptor.getValue();
+        Method onFailureBranches = GwtReflectionUtils.getMethod(branchesCallback.getClass(), "onFailure");
+        onFailureBranches.invoke(branchesCallback, mock(Throwable.class));
+
+        verify(appContext).getCurrentProject();
+        verify(service).remoteList(anyString(), eq(rootProjectConfig), anyString(), eq(SHOW_ALL_INFORMATION),
+                                   (AsyncRequestCallback<List<Remote>>)anyObject());
+
+        verify(constant, times(2)).localBranchesListFailed();
+        verify(gitOutputConsoleFactory).create(anyString());
+        verify(console).printError(anyString());
+        verify(consolesPanelPresenter).addCommandOutput(anyString(), eq(console));
+        verify(notificationManager).notify(anyString(), rootProjectConfig);
+        verify(view).setEnablePushButton(eq(DISABLE_BUTTON));
+    }
+

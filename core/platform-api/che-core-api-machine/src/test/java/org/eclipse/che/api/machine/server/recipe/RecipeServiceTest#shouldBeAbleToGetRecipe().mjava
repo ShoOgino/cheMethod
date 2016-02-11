@@ -1,0 +1,29 @@
+    @Test
+    public void shouldBeAbleToGetRecipe() throws Exception {
+        final Map<String, List<String>> users = Collections.singletonMap(USER_ID, asList("read", "write"));
+        final ManagedRecipe recipe = new RecipeImpl().withCreator("someone2")
+                                                     .withId("recipe123")
+                                                     .withName("name")
+                                                     .withType("docker")
+                                                     .withScript("FROM ubuntu\n")
+                                                     .withTags(asList("java", "mognodb"))
+                                                     .withPermissions(new PermissionsImpl(users, null));
+        when(recipeDao.getById(recipe.getId())).thenReturn(recipe);
+        when(permissionsChecker.hasAccess(recipe, USER_ID, "read")).thenReturn(true);
+
+        final Response response = given().auth()
+                                         .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                         .when()
+                                         .get(SECURE_PATH + "/recipe/" + recipe.getId());
+
+        assertEquals(response.getStatusCode(), 200);
+        final RecipeDescriptor descriptor = unwrapDto(response, RecipeDescriptor.class);
+        assertEquals(descriptor.getId(), recipe.getId());
+        assertEquals(descriptor.getName(), recipe.getName());
+        assertEquals(descriptor.getType(), recipe.getType());
+        assertEquals(descriptor.getScript(), recipe.getScript());
+        assertEquals(descriptor.getTags(), recipe.getTags());
+        assertEquals(descriptor.getCreator(), recipe.getCreator());
+        assertEquals(PermissionsImpl.fromDescriptor(descriptor.getPermissions()), recipe.getPermissions());
+    }
+

@@ -1,0 +1,53 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onCompareClicked() {
+        ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
+        String pattern;
+        String path;
+
+        Selection<ResourceBasedNode<?>> selection = getExplorerSelection();
+
+        if (selection == null || selection.getHeadElement() == null) {
+            path = project.getPath();
+        } else {
+            path = ((HasStorablePath)selection.getHeadElement()).getStorablePath();
+        }
+
+        pattern = path.replaceFirst(project.getPath(), "");
+        pattern = (pattern.startsWith("/")) ? pattern.replaceFirst("/", "") : pattern;
+
+        gitService.diff(workspaceId, project, Collections.singletonList(pattern), NAME_STATUS, false, 0, selectedBranch.getName(), false,
+                        new AsyncRequestCallback<String>(new StringUnmarshaller()) {
+                            @Override
+                            protected void onSuccess(String result) {
+                                if (result.isEmpty()) {
+                                    dialogFactory.createMessageDialog(locale.compareMessageIdenticalContentTitle(),
+                                                                      locale.compareMessageIdenticalContentText(), new ConfirmCallback() {
+                                                @Override
+                                                public void accepted() {
+                                                    //Do nothing
+                                                }
+                                            }).show();
+                                } else {
+                                    String[] changedFiles = result.split("\n");
+                                    if (changedFiles.length == 1) {
+                                        comparePresenter.show(changedFiles[0].substring(2), changedFiles[0].substring(0, 1),
+                                                              selectedBranch.getName());
+                                    } else {
+                                        Map<String, String> items = new HashMap<>();
+                                        for (String item : changedFiles) {
+                                            items.put(item.substring(2, item.length()), item.substring(0, 1));
+                                        }
+                                        changedListPresenter.show(items, selectedBranch.getName());
+                                    }
+                                }
+                            }
+
+                            @Override
+                            protected void onFailure(Throwable exception) {
+                                notificationManager.notify(locale.diffFailed(), FAIL, false);
+                            }
+                        });
+        view.close();
+    }
+

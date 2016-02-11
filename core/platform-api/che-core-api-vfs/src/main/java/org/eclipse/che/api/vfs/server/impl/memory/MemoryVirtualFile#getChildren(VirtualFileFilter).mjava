@@ -1,0 +1,26 @@
+    @Override
+    public LazyIterator<VirtualFile> getChildren(VirtualFileFilter filter) {
+        checkExist();
+        if (isFile()) {
+            return LazyIterator.emptyIterator();
+        }
+
+        if (isRoot()) {
+            // NOTE: We do not check read permissions when access to ROOT folder.
+            if (!hasPermission(BasicPermissions.READ.value(), false)) {
+                // User has not access to ROOT folder.
+                return LazyIterator.emptyIterator();
+            }
+        }
+
+        List<VirtualFile> children = doGetChildren(this);
+        for (Iterator<VirtualFile> i = children.iterator(); i.hasNext(); ) {
+            VirtualFile virtualFile = i.next();
+            if (!((MemoryVirtualFile)virtualFile).hasPermission(BasicPermissions.READ.value(), false) || !filter.accept(virtualFile)) {
+                i.remove();
+            }
+        }
+        Collections.sort(children);
+        return LazyIterator.fromList(children);
+    }
+

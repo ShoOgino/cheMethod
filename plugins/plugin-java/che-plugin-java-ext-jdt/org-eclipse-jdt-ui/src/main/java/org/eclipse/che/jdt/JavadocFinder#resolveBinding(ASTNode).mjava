@@ -1,0 +1,27 @@
+    private static IBinding resolveBinding(ASTNode node) {
+        if (node instanceof SimpleName) {
+            SimpleName simpleName = (SimpleName)node;
+            // workaround for https://bugs.eclipse.org/62605 (constructor name resolves to type, not method)
+            ASTNode normalized = ASTNodes.getNormalizedNode(simpleName);
+            if (normalized.getLocationInParent() == ClassInstanceCreation.TYPE_PROPERTY) {
+                ClassInstanceCreation cic = (ClassInstanceCreation)normalized.getParent();
+                IMethodBinding constructorBinding = cic.resolveConstructorBinding();
+                if (constructorBinding == null)
+                    return null;
+                ITypeBinding declaringClass = constructorBinding.getDeclaringClass();
+                if (!declaringClass.isAnonymous())
+                    return constructorBinding;
+                ITypeBinding superTypeDeclaration = declaringClass.getSuperclass().getTypeDeclaration();
+                return resolveSuperclassConstructor(superTypeDeclaration, constructorBinding);
+            }
+            return simpleName.resolveBinding();
+
+        } else if (node instanceof SuperConstructorInvocation) {
+            return ((SuperConstructorInvocation)node).resolveConstructorBinding();
+        } else if (node instanceof ConstructorInvocation) {
+            return ((ConstructorInvocation)node).resolveConstructorBinding();
+        } else {
+            return null;
+        }
+    }
+

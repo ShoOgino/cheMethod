@@ -1,0 +1,30 @@
+    private void sparsecheckout(GitConnection git,
+                                String url,
+                                String branch,
+                                String startPoint,
+                                String directory,
+                                String repositoryName,
+                                DtoFactory dtoFactory)
+            throws GitException, UnauthorizedException {
+        /*
+        Does following sequence of Git commands:
+        $ git init
+        $ git remote add origin <URL>
+        $ git config core.sparsecheckout true
+        $ echo keepDirectory >> .git/info/sparse-checkout
+        $ git pull origin master
+        */
+        initRepository(git, dtoFactory);
+        addRemote(git, "origin", url, dtoFactory);
+        git.getConfig().add("core.sparsecheckout", "true");
+        final File workingDir = git.getWorkingDir();
+        final File sparseCheckout = new File(workingDir, ".git" + File.separator + "info" + File.separator + "sparse-checkout");
+        try (BufferedWriter writer = Files.newBufferedWriter(sparseCheckout.toPath(), Charset.forName("UTF-8"))) {
+            writer.write(directory.startsWith(File.separator) ? directory : File.separator + directory);
+        } catch (IOException e) {
+            throw new GitException(e);
+        }
+        fetchBranch(git, "origin", branch, dtoFactory);
+        checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+    }
+

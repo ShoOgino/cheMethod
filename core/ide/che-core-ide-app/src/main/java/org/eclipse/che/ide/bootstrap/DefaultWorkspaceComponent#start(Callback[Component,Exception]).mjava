@@ -1,0 +1,38 @@
+    /** {@inheritDoc} */
+    @Override
+    public void start(final Callback<Component, Exception> callback) {
+        this.callback = callback;
+
+        workspaceServiceClient.getWorkspaces(SKIP_COUNT, MAX_COUNT).then(new Operation<List<UsersWorkspaceDto>>() {
+            @Override
+            public void apply(List<UsersWorkspaceDto> workspaces) throws OperationException {
+                if (workspaces.isEmpty()) {
+                    createWorkspacePresenter.show(workspaces, callback);
+                } else {
+                    String wsNameFromBrowser = browserQueryFieldRenderer.getWorkspaceName();
+                    if (wsNameFromBrowser.isEmpty()) {
+                        tryStartRecentWorkspaceIfExist(workspaces);
+                    } else {
+                        for (UsersWorkspaceDto workspace : workspaces) {
+                            if (wsNameFromBrowser.equals(workspace.getName())) {
+                                Log.info(getClass(), workspace.getName());
+                                startWorkspaceById(workspace);
+                                return;
+                            }
+                        }
+                    }
+                    createWorkspacePresenter.show(workspaces, callback);
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                needToReloadComponents = true;
+
+                dialogFactory.createMessageDialog(locale.getWsErrorDialogTitle(),
+                                                  locale.getWsErrorDialogContent(error.getMessage()),
+                                                  null).show();
+            }
+        });
+    }
+

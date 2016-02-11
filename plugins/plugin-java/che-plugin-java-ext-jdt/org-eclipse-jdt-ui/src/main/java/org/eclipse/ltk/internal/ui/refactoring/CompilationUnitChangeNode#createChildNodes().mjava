@@ -1,0 +1,33 @@
+	@Override
+	protected ChildNode[] createChildNodes() {
+		TextEditBasedChange change = getTextEditBasedChange();
+		if (change instanceof MultiStateTextFileChange) {
+			return new ChildNode[0]; // no edit preview & edit disabling possible in the MultiStateTextFileChange (edits must be applied
+			// in sequence)
+		}
+
+		ICompilationUnit cunit = (ICompilationUnit)change.getAdapter(ICompilationUnit.class);
+		if (cunit != null) {
+			List<ChildNode> children = new ArrayList<ChildNode>(5);
+			Map<IJavaElement, JavaLanguageNode> map = new HashMap<IJavaElement, JavaLanguageNode>(20);
+			TextEditBasedChangeGroup[] changes = getSortedChangeGroups(change);
+			for (int i = 0; i < changes.length; i++) {
+				TextEditBasedChangeGroup tec = changes[i];
+				try {
+					IJavaElement element = getModifiedJavaElement(tec, cunit);
+					if (element.equals(cunit)) {
+						children.add(createTextEditGroupNode(this, tec));
+					} else {
+						JavaLanguageNode pjce = getChangeElement(map, element, children, this);
+						pjce.addChild(createTextEditGroupNode(pjce, tec));
+					}
+				} catch (JavaModelException e) {
+					children.add(createTextEditGroupNode(this, tec));
+				}
+			}
+			return children.toArray(new ChildNode[children.size()]);
+		} else {
+			return EMPTY_CHILDREN;
+		}
+	}
+

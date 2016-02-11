@@ -1,0 +1,65 @@
+    /**
+     * Process callback request.
+     *
+     * @param requestUrl
+     *         request URI. URI should contain OAuth token and OAuth verifier.
+     * @return id of authenticated user
+     * @throws OAuthAuthenticationException
+     *         if authentication failed or {@code requestUrl} does not contain required parameters.
+     */
+    public String callback(final URL requestUrl) throws OAuthAuthenticationException {
+        try {
+            final GenericUrl callbackUrl = new GenericUrl(requestUrl.toString());
+
+            if (callbackUrl.getFirst(OAUTH_TOKEN_PARAM_KEY) == null) {
+                throw new OAuthAuthenticationException("Missing oauth_token parameter");
+            }
+
+            if (callbackUrl.getFirst(OAUTH_VERIFIER_PARAM_KEY) == null) {
+                throw new OAuthAuthenticationException("Missing oauth_verifier parameter");
+            }
+
+            final String oauthTemporaryToken = (String)callbackUrl.getFirst(OAUTH_TOKEN_PARAM_KEY);
+
+            final OAuthHmacSigner signer = new OAuthHmacSigner();
+            signer.clientSharedSecret = clientSecret;
+            signer.tokenSharedSecret = sharedTokenSecrets.remove(oauthTemporaryToken);
+
+            final OAuthGetAccessToken getAccessToken = new OAuthGetAccessToken(requestAccessTokenUri);
+            getAccessToken.consumerKey = clientId;
+            getAccessToken.temporaryToken = oauthTemporaryToken;
+            getAccessToken.verifier = (String)callbackUrl.getFirst(OAUTH_VERIFIER_PARAM_KEY);
+            getAccessToken.transport = httpTransport;
+            getAccessToken.signer = signer;
+
+            final OAuthCredentialsResponse credentials = getAccessToken.execute();
+            final String state = (String)callbackUrl.getFirst(STATE_PARAM_KEY);
+
+            String userId = getUserFromStateParameter(state);
+            if (userId == null) {
+                userId = getUser(credentials.token, credentials.tokenSecret).getId();
+            }
+
+            credentialsStoreLock.lock();
+            try {
+
+                final OAuthCredentialsResponse currentCredentials = credentialsStore.get(userId);
+                if (currentCredentials == null) {
+                    credentialsStore.put(userId, credentials);
+
+                } else {
+                    currentCredentials.token = credentials.token;
+                    currentCredentials.tokenSecret = credentials.tokenSecret;
+                }
+
+            } finally {
+                credentialsStoreLock.unlock();
+            }
+
+            return userId;
+
+        } catch (final IOException e) {
+            throw new OAuthAuthenticationException(e);
+        }
+    }
+

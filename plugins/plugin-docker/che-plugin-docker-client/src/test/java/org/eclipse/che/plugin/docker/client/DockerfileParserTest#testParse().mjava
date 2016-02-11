@@ -1,0 +1,49 @@
+    @Test
+    public void testParse() throws Exception {
+        String dockerfileContent = "FROM base_image\n" +
+                                   "# Comment 1\n" +
+                                   "MAINTAINER Codenvy Corp\n" +
+                                   "# Comment 2\n" +
+                                   "RUN echo 1 > /dev/null\n" +
+                                   "RUN echo 2 > /dev/null\n" +
+                                   "RUN echo 3 > /dev/null\n" +
+                                   "ADD file1 /tmp/file1\n" +
+                                   "ADD http://example.com/folder/some_file.txt /tmp/file.txt  \n" +
+                                   "EXPOSE 6000 7000\n" +
+                                   "EXPOSE 8000   9000\n" +
+                                   "# Comment 3\n" +
+                                   "ENV ENV_VAR1 hello world\n" +
+                                   "ENV ENV_VAR2\t to be or not to be\n" +
+                                   "VOLUME [\"/data1\", \t\"/data2\"]\n" +
+                                   "USER andrew\n" +
+                                   "WORKDIR /tmp\n" +
+                                   "ENTRYPOINT echo hello > /dev/null\n" +
+                                   "CMD echo hello > /tmp/test";
+        File targetDir = new File(Thread.currentThread().getContextClassLoader().getResource(".").toURI()).getParentFile();
+        File file = new File(targetDir, "testParse");
+        FileWriter w = new FileWriter(file);
+        w.write(dockerfileContent);
+        w.flush();
+        w.close();
+        List<DockerImage> dockerImages = DockerfileParser.parse(file).getImages();
+        assertEquals( dockerImages.size(), 1);
+        DockerImage dockerImage = dockerImages.get(0);
+        assertEquals(dockerImage.getFrom(), "base_image");
+        assertEquals(dockerImage.getMaintainer(), Arrays.asList("Codenvy Corp"));
+        assertEquals(dockerImage.getRun(), Arrays.asList("echo 1 > /dev/null", "echo 2 > /dev/null", "echo 3 > /dev/null"));
+        assertEquals(dockerImage.getCmd(), "echo hello > /tmp/test");
+        assertEquals(dockerImage.getExpose(), Arrays.asList("6000", "7000", "8000", "9000"));
+        Map<String, String> env = new LinkedHashMap<>();
+        env.put("ENV_VAR1", "hello world");
+        env.put("ENV_VAR2", "to be or not to be");
+        assertEquals(env, dockerImage.getEnv());
+        assertEquals(
+                dockerImage.getAdd(),
+                Arrays.asList(Pair.of("file1", "/tmp/file1"), Pair.of("http://example.com/folder/some_file.txt", "/tmp/file.txt")));
+        assertEquals(dockerImage.getEntrypoint(), "echo hello > /dev/null");
+        assertEquals(dockerImage.getVolume(), Arrays.asList("/data1", "/data2"));
+        assertEquals(dockerImage.getUser(), "andrew");
+        assertEquals(dockerImage.getWorkdir(), "/tmp");
+        assertEquals(dockerImage.getComments(), Arrays.asList("Comment 1", "Comment 2", "Comment 3"));
+    }
+

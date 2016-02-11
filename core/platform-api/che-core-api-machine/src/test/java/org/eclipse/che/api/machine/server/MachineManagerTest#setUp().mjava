@@ -1,0 +1,41 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        final SnapshotDao snapshotDao = mock(SnapshotDao.class);
+        final EventService eventService = mock(EventService.class);
+        final String machineLogsDir = targetDir().resolve("logs-dir").toString();
+        manager = spy(new MachineManager(snapshotDao,
+                                         machineRegistry,
+                                         machineInstanceProviders,
+                                         machineLogsDir,
+                                         eventService,
+                                         DEFAULT_MACHINE_MEMORY_SIZE_MB,
+                                         "apiEndpoint",
+                                         wsAgentLauncher));
+
+        EnvironmentContext envCont = new EnvironmentContext();
+        envCont.setUser(new UserImpl("user", null, null, null, false));
+        EnvironmentContext.setCurrent(envCont);
+
+        RecipeImpl recipe = new RecipeImpl().withScript("script").withType("Dockerfile");
+        when(machineConfig.isDev()).thenReturn(false);
+        when(machineConfig.getName()).thenReturn("MachineName");
+        when(machineConfig.getType()).thenReturn("docker");
+        when(machineConfig.getSource()).thenReturn(new MachineSourceImpl("Recipe", "location"));
+        when(machineConfig.getLimits()).thenReturn(new LimitsImpl(1024));
+        when(instance.getId()).thenReturn("machineId");
+        when(instance.getChannels()).thenReturn(new ChannelsImpl("chan1", "chan2"));
+        when(instance.getEnvName()).thenReturn("env1");
+        when(instance.getLimits()).thenAnswer(invocation -> machineConfig.getLimits());
+        when(instance.isDev()).thenAnswer(invocation -> machineConfig.isDev());
+        when(instance.getName()).thenAnswer(invocation -> machineConfig.getName());
+        when(instance.getOwner()).thenReturn("owner");
+        when(instance.getSource()).thenAnswer(invocation -> machineConfig.getSource());
+        when(instance.getStatus()).thenReturn(MachineStatus.CREATING);
+        when(instance.getType()).thenAnswer(invocation -> machineConfig.getType());
+        when(instance.getWorkspaceId()).thenReturn(WS_ID);
+        doReturn(recipe).when(manager).getRecipeByLocation(any(MachineConfig.class));
+        when(machineInstanceProviders.getProvider(anyString())).thenReturn(instanceProvider);
+        when(instanceProvider.createInstance(eq(recipe), any(MachineState.class), any(LineConsumer.class))).thenReturn(instance);
+        when(machineRegistry.get(anyString())).thenReturn(instance);
+    }
+

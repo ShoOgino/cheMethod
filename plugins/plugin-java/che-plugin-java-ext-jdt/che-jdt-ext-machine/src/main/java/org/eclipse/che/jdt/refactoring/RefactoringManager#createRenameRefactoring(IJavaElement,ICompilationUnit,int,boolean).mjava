@@ -1,0 +1,47 @@
+    /**
+     * Create rename refactoring. It can create two rename refactoring types.
+     * First is linked mode rename refactoring, second is classic rename refactoring with wizard.
+     * @param element element to rename
+     * @param cu compilation unit which element belongs. null if element is IPackageFragment.
+     * @param offset cursor position inside editor, used only for linked mode
+     * @param lightweight if true try to create linked mode refactoring
+     * @return rename refactoring session
+     * @throws CoreException when impossible to create RenameSupport
+     * @throws RefactoringException when we don't support renaming provided element
+     */
+    public RenameRefactoringSession createRenameRefactoring(IJavaElement element, ICompilationUnit cu, int offset, boolean lightweight)
+            throws CoreException, RefactoringException {
+
+        //package fragments are always renamed with wizard
+        RenameRefactoringSession session = DtoFactory.newDto(RenameRefactoringSession.class);
+        String uuid = UUID.uuid();
+        session.setSessionId(uuid);
+        session.setOldName(element.getElementName());
+        session.setWizardType(getWizardType(element));
+        if (lightweight && !(element instanceof IPackageFragment)) {
+            RenameLinkedModeRefactoringSession refactoringSession =
+                    new RenameLinkedModeRefactoringSession(element, cu, offset);
+            LinkedModeModel model = refactoringSession.getModel();
+            if (model == null) {
+                //we don't find edits for this element, so show wizard
+                session.setMastShowWizard(true);
+            } else {
+                session.setMastShowWizard(false);
+                session.setLinkedModeModel(model);
+            }
+            sessions.put(uuid, refactoringSession);
+            return session;
+        } else {
+            RenameSupport renameSupport = createRenameSupport(element, null, RenameSupport.UPDATE_REFERENCES);
+            if (renameSupport != null && renameSupport.preCheck().isOK()) {
+                RenameRefactoring refactoring = renameSupport.getfRefactoring();
+                RenameSession renameSession = new RenameSession(refactoring);
+                session.setMastShowWizard(true);
+                sessions.put(uuid, renameSession);
+                return session;
+
+            }
+            throw new RefactoringException("Can't create refactoring session for element: " + element.getElementName());
+        }
+    }
+

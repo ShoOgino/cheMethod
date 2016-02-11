@@ -1,0 +1,39 @@
+    /**
+     * Synchronously recovers machine from snapshot.
+     *
+     * @param machineConfig
+     *         machine meta information which is needed for {@link Machine machine} instance creation
+     * @param workspaceId
+     *         workspace id
+     * @param envName
+     *         name of environment
+     * @return machine instance
+     * @throws NotFoundException
+     *         when snapshot doesn't exist
+     * @throws SnapshotException
+     *         when any error occurs during snapshot fetching
+     * @throws MachineException
+     *         when any error occurs during machine start
+     * @throws ConflictException
+     *         when any conflict occurs during machine creation (e.g Machine with given name already registered for certain workspace)
+     * @throws BadRequestException
+     *         when either machineConfig or workspace id, or environment name is not valid
+     */
+    public MachineImpl recoverMachine(MachineConfig machineConfig, String workspaceId, String envName) throws NotFoundException,
+                                                                                                              SnapshotException,
+                                                                                                              MachineException,
+                                                                                                              ConflictException,
+                                                                                                              BadRequestException {
+        final SnapshotImpl snapshot = snapshotDao.getSnapshot(workspaceId, envName, machineConfig.getName());
+
+        LOG.info("Recovering machine [ws = {}: env = {}: machine = {}] from snapshot", workspaceId, envName, machineConfig.getName());
+        final MachineStateImpl machine = createMachine(machineConfig, workspaceId, envName, this::createInstance, snapshot);
+        LOG.info("Machine [ws = {}: env = {}: machine = {}] was successfully recovered, its id '{}'",
+                 workspaceId,
+                 envName,
+                 machineConfig.getName(),
+                 machine.getId());
+
+        return instanceToMachineImpl(machineRegistry.get(machine.getId()));
+    }
+

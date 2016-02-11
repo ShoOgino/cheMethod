@@ -1,0 +1,77 @@
+    private void doCopy(VirtualFileImpl source, VirtualFileImpl destination) throws ServerException {
+        try {
+            // First copy metadata (properties) for source.
+            // If we do in this way and fail cause to any i/o or
+            // other error client will see error and may try to copy again.
+            // But if we successfully copy tree (or single file) and then
+            // fail to copy metadata client may not try to copy again
+            // because copy destination already exists.
+
+            // NOTE: Don't copy lock and permissions, just files itself and metadata files.
+
+            // Check recursively permissions of sources in case of folder
+            // and add all item current user cannot read in skip list.
+            java.io.FilenameFilter filter = null;
+            if (source.isFolder()) {
+                final LinkedList<VirtualFileImpl> skipList = new LinkedList<>();
+                final LinkedList<VirtualFile> q = new LinkedList<>();
+                q.add(source);
+                while (!q.isEmpty()) {
+                    for (VirtualFile current : doGetChildren((VirtualFileImpl)q.pop(), SERVICE_GIT_DIR_FILTER)) {
+                        // Check permission directly for current file only.
+                        // We already know parent accessible for current user otherwise we should not be here.
+                        // Ignore item if don't have permission to read it.
+                        if (!hasPermission((VirtualFileImpl)current, BasicPermissions.READ.value(), false)) {
+                            skipList.add((VirtualFileImpl)current);
+                        } else {
+                            if (current.isFolder()) {
+                                q.add(current);
+                            }
+                        }
+                    }
+                }
+                if (!skipList.isEmpty()) {
+                    filter = new java.io.FilenameFilter() {
+                        @Override
+                        public boolean accept(java.io.File dir, String name) {
+                            final String testPath = dir.getAbsolutePath() + java.io.File.separatorChar + name;
+                            for (VirtualFileImpl skipFile : skipList) {
+                                if (testPath.startsWith(skipFile.getIoFile().getAbsolutePath())) {
+                                    return false;
+                                }
+                                final java.io.File metadataFile =
+                                        new java.io.File(ioRoot, toIoPath(getMetadataFilePath(skipFile.getVirtualFilePath())));
+                                if (metadataFile.exists() && testPath.startsWith(metadataFile.getAbsolutePath())) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        }
+                    };
+                }
+            }
+
+            final java.io.File sourceMetadataFile = new java.io.File(ioRoot, toIoPath(getMetadataFilePath(source.getVirtualFilePath())));
+            final java.io.File destinationMetadataFile =
+                    new java.io.File(ioRoot, toIoPath(getMetadataFilePath(destination.getVirtualFilePath())));
+            if (sourceMetadataFile.exists()) {
+                nioCopy(sourceMetadataFile, destinationMetadataFile, filter);
+            }
+            nioCopy(source.getIoFile(), destination.getIoFile(), filter);
+
+            if (searcherProvider != null) {
+                try {
+                    searcherProvider.getSearcher(this, true).add(destination);
+                } catch (ServerException e) {
+                    LOG.error(e.getMessage(), e); // just log about i/o error in index
+                }
+            }
+        } catch (IOException e) {
+            // Do nothing for file tree. Let client side decide what to do.
+            // User may delete copied files (if any) and try copy again.
+            String msg = String.format("Unable copy '%s' to '%s'. ", source, destination);
+            LOG.error(msg + e.getMessage(), e); // More details in log but do not show internal error to caller.
+            throw new ServerException(msg);
+        }
+    }
+

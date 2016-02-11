@@ -1,0 +1,58 @@
+    /**
+     * Starts all machines from specified workspace environment, creates runtime workspace for it.
+     *
+     * <p>Dev-machine always starts before the other machines. If dev-machine start failed
+     * method throws appropriate {@link ServerException} and removes runtime workspace instance from the registry.
+     * During the start the runtime workspace is visible with {@link WorkspaceStatus#STARTING} status.
+     *
+     * <p>Note that it doesn't provide any events for machines start, Machine API is responsible for it.
+     *
+     * @param usersWorkspace
+     *         workspace which should be started
+     * @param envName
+     *         name of environment
+     * @param recover
+     *         if true - registry tries to recover workspace from snapshot, otherwise starts workspace from recipes
+     * @return runtime view of {@code usersWorkspace} with status {@link WorkspaceStatus#RUNNING}
+     * @throws ConflictException
+     *         when workspace is already running or any other conflict error occurs during environment start
+     * @throws BadRequestException
+     *         when active environment is in inconsistent state or {@code envName/usersWorkspace} is null
+     * @throws NotFoundException
+     *         whe any not found exception occurs during environment start
+     * @throws ServerException
+     *         when registry {@link #isStopped is stopped} other error occurs during environment start
+     * @see MachineManager#createMachineSync(MachineConfig, String, String)
+     * @see WorkspaceStatus#STARTING
+     */
+    public RuntimeWorkspaceImpl start(UsersWorkspace usersWorkspace, String envName, boolean recover) throws ConflictException,
+                                                                                                             ServerException,
+                                                                                                             BadRequestException,
+                                                                                                             NotFoundException {
+        checkRegistryIsNotStopped();
+        checkWorkspaceIsValidForStart(usersWorkspace, envName);
+        // Prepare runtime workspace for start
+        final RuntimeWorkspaceImpl newRuntime = RuntimeWorkspaceImpl.builder()
+                                                                    .fromWorkspace(usersWorkspace)
+                                                                    .setActiveEnvName(envName)
+                                                                    .setStatus(STARTING)
+                                                                    .build();
+        // Save workspace with 'STARTING' status
+        lock.writeLock().lock();
+        try {
+            checkRegistryIsNotStopped();
+            final RuntimeWorkspace running = idToWorkspaces.get(newRuntime.getId());
+            if (running != null) {
+                throw new ConflictException(format("Could not start workspace '%s' because its status is '%s'",
+                                                   running.getName(),
+                                                   running.getStatus()));
+            }
+            idToWorkspaces.put(newRuntime.getId(), newRuntime);
+            ownerToWorkspaces.get(newRuntime.getOwner()).add(newRuntime);
+        } finally {
+            lock.writeLock().unlock();
+        }
+        startEnvironment(newRuntime.getActiveEnvironment(), newRuntime.getId(), recover);
+        return get(newRuntime.getId());
+    }
+

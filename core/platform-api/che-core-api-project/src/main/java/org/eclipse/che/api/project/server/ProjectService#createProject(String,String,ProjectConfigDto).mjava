@@ -1,0 +1,40 @@
+    @ApiOperation(value = "Creates new project",
+                  response = ProjectConfigDto.class,
+                  position = 3)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 403, message = "Operation is forbidden"),
+            @ApiResponse(code = 409, message = "Project with specified name already exist in workspace"),
+            @ApiResponse(code = 500, message = "Server error")})
+
+    @POST
+    @GenerateLink(rel = Constants.LINK_REL_CREATE_PROJECT)
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public ProjectConfigDto createProject(@ApiParam(value = "ID of workspace to create project", required = true)
+                                          @PathParam("ws-id") String workspace,
+                                          @ApiParam(value = "Name for new project", required = true)
+                                          @Required
+                                          @Description("project name")
+                                          @QueryParam("name") String name,
+                                          @Description("descriptor of project") ProjectConfigDto projectConfigDto)
+            throws ConflictException, ForbiddenException, ServerException, NotFoundException {
+
+        Map<String, String> options = Collections.emptyMap();
+
+        projectConfigDto.setPath('/' + name);
+
+        Project project = projectManager.createProject(workspace,
+                                                       name,
+                                                       projectConfigDto,
+                                                       options);
+
+        ProjectConfigDto configDto = toProjectConfig(project, getServiceContext().getServiceUriBuilder());
+
+        eventService.publish(new ProjectCreatedEvent(workspace, project.getPath()));
+
+        logProjectCreatedEvent(configDto.getName(), configDto.getType());
+
+        return configDto;
+    }
+

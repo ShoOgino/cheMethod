@@ -1,0 +1,52 @@
+    private void validateConfig(WorkspaceConfig cfg) throws BadRequestException {
+        //attributes
+        for (String attributeName : cfg.getAttributes().keySet()) {
+            //attribute name should not be empty and should not start with codenvy
+            if (attributeName.trim().isEmpty() || attributeName.toLowerCase().startsWith("codenvy")) {
+                throw new BadRequestException(format("Attribute name '%s' is not valid", attributeName));
+            }
+        }
+
+        //environments
+        requiredNotNull(cfg.getDefaultEnv(), "Workspace default environment name required");
+        if (!cfg.getEnvironments().stream().anyMatch(env -> env.getName().equals(cfg.getDefaultEnv()))) {
+            throw new BadRequestException("Workspace default environment configuration required");
+        }
+        for (Environment environment : cfg.getEnvironments()) {
+            final String envName = environment.getName();
+            requiredNotNull(envName, "Environment name should not be null");
+
+            //machine configs
+            if (environment.getMachineConfigs().isEmpty()) {
+                throw new BadRequestException("Environment '" + envName + "' should contain at least 1 machine");
+            }
+            final long devCount = environment.getMachineConfigs()
+                                             .stream()
+                                             .filter(MachineConfig::isDev)
+                                             .count();
+            if (devCount != 1) {
+                throw new BadRequestException(format("Environment should contain exactly 1 dev machine, but '%s' contains '%d'",
+                                                     envName,
+                                                     devCount));
+            }
+            for (MachineConfig machineCfg : environment.getMachineConfigs()) {
+                if (isNullOrEmpty(machineCfg.getName())) {
+                    throw new BadRequestException("Environment " + envName + " contains machine without of name");
+                }
+                requiredNotNull(machineCfg.getSource(), "Environment " + envName + " contains machine without of source");
+                //TODO require type?
+            }
+        }
+
+        //commands
+        for (Command command : cfg.getCommands()) {
+            requiredNotNull(command.getName(), "Workspace " + cfg.getName() + " contains command without of name");
+            requiredNotNull(command.getCommandLine(), format("Command line required for command '%s' in workspace '%s'",
+                                                             command.getName(),
+                                                             cfg.getName()));
+        }
+
+        //projects
+        //TODO
+    }
+

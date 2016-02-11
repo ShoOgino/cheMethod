@@ -1,0 +1,36 @@
+    private void setResponse(HttpServletResponse resp, HttpURLConnection conn) throws ServerException {
+        try {
+            final int responseCode = conn.getResponseCode();
+
+            resp.setStatus(responseCode);
+
+            InputStream responseStream;
+            if (responseCode / 100 == 2 && responseCode != 204) {
+                responseStream = conn.getInputStream();
+            } else {
+                responseStream = conn.getErrorStream();
+            }
+
+            // copy headers from proxy response to origin response
+            for (Map.Entry<String, List<String>> header : conn.getHeaderFields().entrySet()) {
+                if (!skipHeader(header.getKey())) {
+                    for (String headerValue : header.getValue()) {
+                        resp.addHeader(header.getKey(), headerValue);
+                    }
+                }
+            }
+
+            if (responseStream != null) {
+                // copy content of input or error stream from destination response to output stream of origin response
+                try (OutputStream os = resp.getOutputStream();
+                     InputStream is = responseStream) {
+                    ByteStreams.copy(is, os);
+                    os.flush();
+                }
+            }
+        } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+            throw new ServerException(e.getLocalizedMessage());
+        }
+    }
+

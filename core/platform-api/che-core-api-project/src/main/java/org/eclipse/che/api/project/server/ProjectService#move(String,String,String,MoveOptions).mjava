@@ -1,0 +1,53 @@
+    @ApiOperation(value = "Move resource",
+                  notes = "Move resource to a new location which is specified in a query parameter",
+                  position = 15)
+    @ApiResponses({@ApiResponse(code = 201, message = ""),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 409, message = "Resource already exists"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    @POST
+    @Path("/move/{path:.*}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response move(@ApiParam("Workspace ID") @PathParam("ws-id") String workspace,
+                         @ApiParam("Path to a resource to be moved") @PathParam("path") String path,
+                         @ApiParam("Path to a new location") @QueryParam("to") String newParent,
+                         MoveOptions moveOptions)
+            throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+        final VirtualFileEntry entry = getVirtualFileEntry(workspace, path);
+        filesBuffer.addToBuffer(newParent + '/' + entry.getName(), path);
+
+        // used to indicate over write of destination
+        boolean isOverWrite = false;
+        // used to hold new name set in request body
+        String newName = entry.getName();
+        if (moveOptions != null) {
+            if (moveOptions.getOverWrite() != null) {
+                isOverWrite = moveOptions.getOverWrite();
+            }
+            if (moveOptions.getName() != null) {
+                newName = moveOptions.getName();
+            }
+        }
+
+        entry.moveTo(newParent, newName, isOverWrite);
+        final URI location = getServiceContext().getServiceUriBuilder()
+                                                .path(getClass(), entry.isFile() ? "getFile" : "getChildren")
+                                                .build(workspace, entry.getPath().substring(1));
+        if (entry.isFolder()) {
+            final Project project = projectManager.getProject(entry.getWorkspace(), entry.getPath());
+            if (project != null) {
+                final String name = project.getName();
+                final String projectType = project.getConfig().getType();
+                LOG.info("EVENT#project-destroyed# PROJECT#{}# TYPE#{}# WS#{}# USER#{}#", name, projectType,
+                         EnvironmentContext.getCurrent().getWorkspaceName(), EnvironmentContext.getCurrent().getUser().getName());
+
+                logProjectCreatedEvent(name, projectType);
+            }
+        }
+        eventService.publish(new ProjectItemModifiedEvent(ProjectItemModifiedEvent.EventType.MOVED,
+                                                          workspace, projectPath(entry.getPath()), entry.getPath(), entry.isFolder(),
+                                                          path));
+        return Response.created(location).build();
+    }
+

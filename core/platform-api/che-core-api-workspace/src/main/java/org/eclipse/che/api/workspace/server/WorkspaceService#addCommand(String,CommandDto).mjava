@@ -1,0 +1,29 @@
+    @POST
+    @Path("/{id}/command")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed("user")
+    @ApiOperation(value = "Update the workspace by adding a new command to it",
+                  notes = "This operation can be performed only by the workspace owner")
+    @ApiResponses({@ApiResponse(code = 200, message = "The workspace successfully updated"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "The user does not have access to update the workspace"),
+                   @ApiResponse(code = 404, message = "The workspace not found"),
+                   @ApiResponse(code = 409, message = "The command with such name already exists"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public UsersWorkspaceDto addCommand(@ApiParam("The workspace id")
+                                        @PathParam("id")
+                                        String id,
+                                        @ApiParam(value = "The new workspace command", required = true)
+                                        CommandDto newCommand) throws ServerException,
+                                                                      BadRequestException,
+                                                                      NotFoundException,
+                                                                      ConflictException,
+                                                                      ForbiddenException {
+        requiredNotNull(newCommand, "Command");
+        final UsersWorkspaceImpl workspace = workspaceManager.getWorkspace(id);
+        ensureUserIsWorkspaceOwner(workspace);
+        workspace.getCommands().add(new CommandImpl(newCommand));
+        return injectLinks(asDto(workspaceManager.updateWorkspace(workspace.getId(), workspace)));
+    }
+

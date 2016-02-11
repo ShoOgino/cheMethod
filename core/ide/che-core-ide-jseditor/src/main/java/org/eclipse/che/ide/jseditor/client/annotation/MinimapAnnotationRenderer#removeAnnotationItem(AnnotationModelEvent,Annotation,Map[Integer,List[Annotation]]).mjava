@@ -1,0 +1,33 @@
+    private void removeAnnotationItem(final AnnotationModelEvent event, final Annotation annotation,
+                                      final Map<Integer, List<Annotation>> toRestore) {
+        final Position position = event.getPositionOfRemovedAnnotation(annotation);
+        final TextPosition textPosition = this.document.getPositionFromIndex(position.getOffset());
+        final int line = textPosition.getLine();
+        // remove all marks on the line
+        this.minimap.removeMarks(line, line);
+        // restore marks that are not removed
+        final LinearRange rangeForLine = this.document.getLinearRangeForLine(line);
+        
+        final AnnotationModel model = event.getAnnotationModel();
+        final Iterator<Annotation> it = model.getAnnotationIterator(rangeForLine.getStartOffset(),
+                                                                    rangeForLine.getLength(), false, true);
+        while (it.hasNext()) {
+            final Annotation current = it.next();
+            List<Annotation> lineAnnotations = toRestore.get(line);
+            if (!current.equals(annotation)) {
+                if (lineAnnotations == null) {
+                    lineAnnotations = new ArrayList<>();
+                    toRestore.put(line, lineAnnotations);
+                }
+                lineAnnotations.add(current);
+            } else {
+                if (lineAnnotations != null) {
+                    lineAnnotations.removeAll(Collections.singletonList(current));
+                    if (lineAnnotations.isEmpty()) {
+                        toRestore.remove(line);
+                    }
+                }
+            }
+        }
+    }
+

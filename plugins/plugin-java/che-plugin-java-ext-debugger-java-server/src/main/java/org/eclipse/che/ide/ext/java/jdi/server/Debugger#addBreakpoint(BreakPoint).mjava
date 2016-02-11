@@ -1,0 +1,62 @@
+    /**
+     * Add new breakpoint.
+     *
+     * @param breakpoint
+     *         break point description
+     * @throws InvalidBreakPointException
+     *         if description of break point is invalid (specified line number or class name is invalid)
+     * @throws DebuggerException
+     *         when other JDI error occurs
+     */
+    public void addBreakpoint(BreakPoint breakpoint) throws InvalidBreakPointException, DebuggerException {
+        final String className = breakpoint.getLocation().getClassName();
+        final int lineNumber = breakpoint.getLocation().getLineNumber();
+        List<ReferenceType> classes = vm.classesByName(className);
+        // it may mean that class doesn't loaded by a target JVM yet
+        if (classes.isEmpty()) {
+            deferBreakpoint(breakpoint);
+            throw new DebuggerException("Class not loaded");
+        }
+
+        ReferenceType clazz = classes.get(0);
+        List<com.sun.jdi.Location> locations;
+        try {
+            locations = clazz.locationsOfLine(lineNumber);
+        } catch (AbsentInformationException | ClassNotPreparedException e) {
+            throw new DebuggerException(e.getMessage(), e);
+        }
+
+        if (locations.isEmpty()) {
+            throw new InvalidBreakPointException("Line " + lineNumber + " not found in class " + className);
+        }
+
+        com.sun.jdi.Location location = locations.get(0);
+        if (location.method() == null) {
+            // Line is out of method.
+            throw new InvalidBreakPointException("Invalid line " + lineNumber + " in class " + className);
+        }
+
+        // Ignore new breakpoint if already have breakpoint at the same location.
+        EventRequestManager requestManager = getEventManager();
+        for (BreakpointRequest breakpointRequest : requestManager.breakpointRequests()) {
+            if (location.equals(breakpointRequest.location())) {
+                LOG.debug("Breakpoint at {} already set", location);
+                return;
+            }
+        }
+
+        try {
+            EventRequest breakPointRequest = requestManager.createBreakpointRequest(location);
+            breakPointRequest.setSuspendPolicy(EventRequest.SUSPEND_ALL);
+            String expression = breakpoint.getCondition();
+            if (!(expression == null || expression.isEmpty())) {
+                ExpressionParser parser = ExpressionParser.newInstance(expression);
+                breakPointRequest.putProperty("org.eclipse.che.ide.java.debug.condition.expression.parser", parser);
+            }
+            breakPointRequest.setEnabled(true);
+        } catch (NativeMethodException | IllegalThreadStateException | InvalidRequestStateException e) {
+            throw new DebuggerException(e.getMessage(), e);
+        }
+        LOG.debug("Add breakpoint: {}", location);
+    }
+

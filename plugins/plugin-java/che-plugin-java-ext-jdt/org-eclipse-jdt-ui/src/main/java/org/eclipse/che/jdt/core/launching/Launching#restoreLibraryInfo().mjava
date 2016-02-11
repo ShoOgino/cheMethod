@@ -1,0 +1,45 @@
+    /**
+     * Restores library information for VMs
+     */
+    private static void restoreLibraryInfo() {
+        fgLibraryInfoMap = new HashMap<String, LibraryInfo>(10);
+        IPath libPath = getDefault().getStateLocation();
+        libPath = libPath.append("libraryInfos.xml"); //$NON-NLS-1$
+        File file = libPath.toFile();
+        if (file.exists()) {
+            try {
+                InputStream stream = new BufferedInputStream(new FileInputStream(file));
+                DocumentBuilder parser = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+                parser.setErrorHandler(new DefaultHandler());
+                Element root = parser.parse(new InputSource(stream)).getDocumentElement();
+                if (!root.getNodeName().equals("libraryInfos")) { //$NON-NLS-1$
+                    return;
+                }
+
+                NodeList list = root.getChildNodes();
+                int length = list.getLength();
+                for (int i = 0; i < length; ++i) {
+                    Node node = list.item(i);
+                    short type = node.getNodeType();
+                    if (type == Node.ELEMENT_NODE) {
+                        Element element = (Element) node;
+                        String nodeName = element.getNodeName();
+                        if (nodeName.equalsIgnoreCase("libraryInfo")) { //$NON-NLS-1$
+                            String version = element.getAttribute("version"); //$NON-NLS-1$
+                            String location = element.getAttribute("home"); //$NON-NLS-1$
+                            String[] bootpath = getPathsFromXML(element, "bootpath"); //$NON-NLS-1$
+                            String[] extDirs = getPathsFromXML(element, "extensionDirs"); //$NON-NLS-1$
+                            String[] endDirs = getPathsFromXML(element, "endorsedDirs"); //$NON-NLS-1$
+                            if (location != null) {
+                                LibraryInfo info = new LibraryInfo(version, bootpath, extDirs, endDirs);
+                                fgLibraryInfoMap.put(location, info);
+                            }
+                        }
+                    }
+                }
+            } catch (IOException | SAXException | ParserConfigurationException e) {
+                log(e);
+            }
+        }
+    }
+

@@ -1,0 +1,33 @@
+    public ContainerProcesses top(String container, String... psArgs) throws IOException {
+        final List<Pair<String, ?>> headers = new ArrayList<>(2);
+        headers.add(Pair.of("Content-Type", MediaType.TEXT_PLAIN));
+        headers.add(Pair.of("Content-Length", 0));
+        final DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                             .method("GET")
+                                                             .path("/containers/" + container + "/top")
+                                                             .headers(headers);
+        if (psArgs != null && psArgs.length != 0) {
+            StringBuilder psArgsQueryBuilder = new StringBuilder();
+            for (int i = 0, l = psArgs.length; i < l; i++) {
+                if (i > 0) {
+                    psArgsQueryBuilder.append('+');
+                }
+                psArgsQueryBuilder.append(URLEncoder.encode(psArgs[i], "UTF-8"));
+            }
+            connection.query("ps_args", psArgsQueryBuilder.toString());
+        }
+
+        try {
+            final DockerResponse response = connection.request();
+            final int status = response.getStatus();
+            if (OK.getStatusCode() != status) {
+                throw new DockerException(getDockerExceptionMessage(response), status);
+            }
+            return parseResponseStreamAndClose(response.getInputStream(), ContainerProcesses.class);
+        } catch (JsonParseException e) {
+            throw new IOException(e.getLocalizedMessage(), e);
+        } finally {
+            connection.close();
+        }
+    }
+

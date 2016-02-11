@@ -1,0 +1,36 @@
+    /** @see GitCommand#execute() */
+    @Override
+    public List<Revision> execute() throws GitException {
+        reset();
+        commandLine.add("log")
+                   .add("--format=%an#%ae#%cn#%ce#%cd#%H#%s")
+                   .add("--date=raw");
+        if (branch != null) {
+            commandLine.add(branch);
+        }
+        if (count > 0) {
+            commandLine.add("-" + count);
+        }
+        commandLine.add(fileFilter);
+        start();
+        List<Revision> list = new LinkedList<>();
+        final DtoFactory dtoFactory = DtoFactory.getInstance();
+        for (String oneRev : lines) {
+            String[] elements = oneRev.split("#");
+            GitUser committer = dtoFactory.createDto(GitUser.class).withName(elements[2]).withEmail(elements[3]);
+            long commitTime = Long.parseLong(elements[4].substring(0, elements[4].indexOf(" "))) * 1000L;
+            String commitId = elements[5];
+            StringBuilder commitMessage = new StringBuilder();
+            for (int i = 6; i < elements.length; i++) {
+                commitMessage.append(elements[i]);
+            }
+            Revision revision = dtoFactory.createDto(Revision.class)
+                                          .withId(commitId)
+                                          .withMessage(commitMessage.toString())
+                                          .withCommitTime(commitTime)
+                                          .withCommitter(committer);
+            list.add(revision);
+        }
+        return list;
+    }
+

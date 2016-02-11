@@ -1,0 +1,55 @@
+    public ReconcileResult reconcile(IJavaProject javaProject, String fqn) throws JavaModelException {
+        final ProblemRequestor requestor = new ProblemRequestor();
+        WorkingCopyOwner wcOwner = new WorkingCopyOwner() {
+            public IProblemRequestor getProblemRequestor(ICompilationUnit unit) {
+                return requestor;
+            }
+
+            @Override
+            public IBuffer createBuffer(ICompilationUnit workingCopy) {
+//                return BufferManager.createBuffer(workingCopy);
+//                ?????
+                return new org.eclipse.jdt.internal.ui.javaeditor.DocumentAdapter(workingCopy, (IFile)workingCopy.getResource());
+            }
+        };
+        List<HighlightedPosition> positions = null;
+        ICompilationUnit compilationUnit = null;
+        try {
+            IType type = javaProject.findType(fqn);
+            if (type == null) {
+                return null;
+            }
+            if (type.isBinary()) {
+                throw new IllegalArgumentException("Can't reconcile binary type: " + fqn);
+            } else {
+                compilationUnit = type.getCompilationUnit().getWorkingCopy(wcOwner, null);
+            }
+            requestor.reset();
+            CompilationUnit unit = compilationUnit.reconcile(AST.JLS8, true, wcOwner, null);
+            positions = semanticHighlighting.reconcileSemanticHighlight(unit);
+            if (compilationUnit instanceof ClassFileWorkingCopy) {
+                //we don't wont to show any errors from ".class" files
+                requestor.reset();
+            }
+
+        } catch (JavaModelException e) {
+            LOG.error("Can't reconcile class: " + fqn + " in project:" + javaProject.getPath().toOSString(), e);
+            throw e;
+        } finally {
+            if(compilationUnit!= null && compilationUnit.isWorkingCopy()){
+                try {
+                    //todo close buffer
+                    compilationUnit.getBuffer().close();
+                    compilationUnit.discardWorkingCopy();
+                } catch (JavaModelException e) {
+                    //ignore
+                }
+            }
+        }
+
+        ReconcileResult result = DtoFactory.getInstance().createDto(ReconcileResult.class);
+        result.setProblems(convertProblems(requestor.problems));
+        result.setHighlightedPositions(positions);
+        return result;
+    }
+

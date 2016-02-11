@@ -1,0 +1,43 @@
+    /**
+     * Perform diff between selected commit and previous one.
+     *
+     * @param filePatterns
+     *         patterns for which to show diff
+     * @param revisionB
+     *         selected commit
+     */
+    private void doDiffWithPrevVersion(@NotNull List<String> filePatterns, @Nullable final Revision revisionB) {
+        if (revisionB == null) {
+            return;
+        }
+
+        int index = revisions.indexOf(revisionB);
+        if (index + 1 < revisions.size()) {
+            final Revision revisionA = revisions.get(index + 1);
+            final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
+            service.diff(workspaceId, project, filePatterns, RAW, false, 0, revisionA.getId(),
+                         revisionB.getId(),
+                         new AsyncRequestCallback<String>(new StringUnmarshaller()) {
+                             @Override
+                             protected void onSuccess(String result) {
+                                 view.setDiffContext(result);
+                                 view.setCompareType("");
+                                 displayCommitA(revisionA);
+                                 displayCommitB(revisionB);
+                             }
+
+                             @Override
+                             protected void onFailure(Throwable exception) {
+                                 nothingToDisplay(revisionB);
+                                 String errorMessage = exception.getMessage() != null ? exception.getMessage() : constant.diffFailed();
+                                 GitOutputConsole console = gitOutputConsoleFactory.create(DIFF_COMMAND_NAME);
+                                 console.printError(errorMessage);
+                                 consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                 notificationManager.notify(constant.diffFailed(), FAIL, true, project);
+                             }
+                         });
+        } else {
+            nothingToDisplay(revisionB);
+        }
+    }
+

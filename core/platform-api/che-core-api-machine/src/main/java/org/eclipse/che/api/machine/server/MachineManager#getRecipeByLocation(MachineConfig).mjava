@@ -1,0 +1,25 @@
+    Recipe getRecipeByLocation(MachineConfig machineConfig) throws MachineException {
+        String recipeContent;
+        File file = null;
+        try {
+            UriBuilder targetUriBuilder = UriBuilder.fromUri(machineConfig.getSource().getLocation());
+            // add user token to be able to download user's private recipe
+            if (machineConfig.getSource().getLocation().startsWith(apiEndpoint)) {
+                if (EnvironmentContext.getCurrent().getUser() != null
+                    && EnvironmentContext.getCurrent().getUser().getToken() != null) {
+                    targetUriBuilder.queryParam("token", EnvironmentContext.getCurrent().getUser().getToken());
+                }
+            }
+            file = IoUtil.downloadFile(null, "recipe", null, targetUriBuilder.build().toURL());
+            recipeContent = IoUtil.readAndCloseQuietly(new FileInputStream(file));
+        } catch (IOException | IllegalArgumentException e) {
+            throw new MachineException("Can't start machine " + machineConfig.getName() + ". " + e.getLocalizedMessage());
+        } finally {
+            if (file != null) {
+                FileCleaner.addFile(file);
+            }
+        }
+
+        return new RecipeImpl().withType("Dockerfile").withScript(recipeContent);
+    }
+

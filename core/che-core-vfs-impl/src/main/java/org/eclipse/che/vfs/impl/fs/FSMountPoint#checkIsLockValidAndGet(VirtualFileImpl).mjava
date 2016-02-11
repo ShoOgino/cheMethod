@@ -1,0 +1,21 @@
+    private FileLock checkIsLockValidAndGet(VirtualFileImpl virtualFile) {
+        final int index = virtualFile.getVirtualFilePath().hashCode() & MASK;
+        // causes read from file if need
+        final FileLock lock = lockTokensCache[index].get(virtualFile.getVirtualFilePath());
+        if (NO_LOCK == lock) {
+            return NO_LOCK;
+        }
+        if (lock.getExpired() < System.currentTimeMillis()) {
+            final java.io.File lockIoFile = new java.io.File(ioRoot, toIoPath(getLockFilePath(virtualFile.getVirtualFilePath())));
+            if (!lockIoFile.delete()) {
+                if (lockIoFile.exists()) {
+                    // just warn here
+                    LOG.warn("Unable delete lock file %s. ", lockIoFile);
+                }
+            }
+            lockTokensCache[index].put(virtualFile.getVirtualFilePath(), NO_LOCK);
+            return NO_LOCK;
+        }
+        return lock;
+    }
+

@@ -1,0 +1,57 @@
+    /**
+     * Create PopupMenu
+     *
+     * @param lockLayer
+     *         - lock layer, uses as rot for attaching this popup menu.
+     * @param actionSelectedHandler
+     *         - callback, uses for notifying parent menu when menu item is selected.
+     */
+    public PopupMenu(ActionGroup actionGroup,
+                     ActionManager actionManager,
+                     Provider<PerspectiveManager> managerProvider,
+                     PresentationFactory presentationFactory,
+                     MenuLockLayer lockLayer,
+                     ActionSelectedHandler actionSelectedHandler,
+                     KeyBindingAgent keyBindingAgent,
+                     String itemIdPrefix) {
+        this.actionManager = actionManager;
+        this.managerProvider = managerProvider;
+        this.presentationFactory = presentationFactory;
+        this.keyBindingAgent = keyBindingAgent;
+        this.itemIdPrefix = itemIdPrefix;
+        this.lockLayer = lockLayer;
+        this.actionSelectedHandler = actionSelectedHandler;
+
+        List<Utils.VisibleActionGroup> visibleActionGroupList =
+                Utils.renderActionGroup(actionGroup, presentationFactory, actionManager, managerProvider.get());
+
+        list = new ArrayList<>();
+        for (Utils.VisibleActionGroup groupActions : visibleActionGroupList) {
+            list.addAll(groupActions.getActionList());
+        }
+
+        popupMenuPanel = new SimplePanel();
+        disableTextSelection(popupMenuPanel.getElement(), true);
+        initWidget(popupMenuPanel);
+
+        popupMenuPanel.addDomHandler(new MouseOutHandler() {
+            @Override
+            public void onMouseOut(MouseOutEvent event) {
+                closeSubPopupTimer.cancel();
+
+                PopupMenu.this.setStyleNormal(hoveredTR);
+                hoveredTR = null;
+
+                if (subPopupAnchor != null) {
+                    setStyleHovered(subPopupAnchor);
+                }
+            }
+        }, MouseOutEvent.getType());
+
+        popupMenuPanel.setStyleName(POPUP_RESOURCES.popup().popupMenuMain());
+
+        hasCheckedItems = hasCheckedItems();
+
+        redraw();
+    }
+

@@ -1,0 +1,29 @@
+    private void checkoutBranch(GitConnection git,
+                                String branchName,
+                                String startPoint,
+                                String repositoryName,
+                                DtoFactory dtoFactory) throws GitException {
+        final CheckoutRequest request = dtoFactory.createDto(CheckoutRequest.class).withName(branchName);
+        final boolean branchExist = git.branchList(dtoFactory.createDto(BranchListRequest.class).withListMode(LIST_ALL))
+                                       .stream()
+                                       .anyMatch(branch -> branch.getName().equals(branchName));
+        if (startPoint != null) {
+            if (branchExist) {
+                git.checkout(request);
+            } else {
+                checkoutAndRethrow(git,
+                                   request.withCreateNew(true).withStartPoint(startPoint),
+                                   String.format("Cannot find remote branch %s and start point %s in repo %s",
+                                                 branchName,
+                                                 startPoint,
+                                                 repositoryName));
+            }
+        } else {
+            checkoutAndRethrow(git,
+                               request,
+                               String.format("Cannot find remote branch %s in repo %s and start point undefined",
+                                             branchName,
+                                             repositoryName));
+        }
+    }
+

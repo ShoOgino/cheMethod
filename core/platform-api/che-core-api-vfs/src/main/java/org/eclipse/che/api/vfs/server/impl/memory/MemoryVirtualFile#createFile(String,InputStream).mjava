@@ -1,0 +1,37 @@
+    @Override
+    public VirtualFile createFile(String name, InputStream content)
+            throws ForbiddenException, ConflictException, ServerException {
+        checkExist();
+        checkName(name);
+        if (!isFolder()) {
+            throw new ForbiddenException("Unable create new file. Item specified as parent is not a folder. ");
+        }
+        if (mountPoint.acceptPath(getVirtualFilePath().newPath(name))) {
+            // Don't check permissions when create file "misc.xml" in folder ".codenvy". Dirty huck :( but seems simplest solution for now.
+            // Need to work with 'misc.xml' independently to user.
+            if (!hasPermission(BasicPermissions.WRITE.value(), true)) {
+                throw new ForbiddenException(String.format("Unable create new file in '%s'. Operation not permitted. ", getPath()));
+            }
+        }
+        final MemoryVirtualFile newFile;
+        try {
+            newFile = newFile(this, name, content);
+        } catch (IOException e) {
+            throw new ServerException(String.format("Unable set content of '%s'. ", getPath() + e.getMessage()));
+        }
+        if (!addChild(newFile)) {
+            throw new ConflictException(String.format("Item with the name '%s' already exists. ", name));
+        }
+        mountPoint.putItem(newFile);
+        SearcherProvider searcherProvider = mountPoint.getSearcherProvider();
+        if (searcherProvider != null) {
+            try {
+                searcherProvider.getSearcher(mountPoint, true).add(newFile);
+            } catch (ServerException e) {
+                LOG.error(e.getMessage(), e);
+            }
+        }
+        mountPoint.getEventService().publish(new CreateEvent(mountPoint.getWorkspaceId(), newFile.getPath(), false));
+        return newFile;
+    }
+

@@ -1,0 +1,40 @@
+    @Test
+    public void notificationShouldBeShowedWhenCreationIsFailed() throws Exception {
+        NewRecipe newRecipe = mock(NewRecipe.class);
+        when(dtoFactory.createDto(NewRecipe.class)).thenReturn(newRecipe);
+        when(newRecipe.withType(anyString())).thenReturn(newRecipe);
+        when(newRecipe.withScript(anyString())).thenReturn(newRecipe);
+        when(newRecipe.withName(anyString())).thenReturn(newRecipe);
+        when(newRecipe.withTags(Matchers.<List<String>>any())).thenReturn(newRecipe);
+        when(service.createRecipe(newRecipe)).thenReturn(recipeDescriptorPromise);
+        when(recipesContainerPresenter.getEditorPanel(Matchers.<RecipeWidget>any())).thenReturn(recipeEditorPanel);
+        when(recipeEditorPanel.getName()).thenReturn("name");
+
+        recipePartPresenter.onNewButtonClicked();
+
+        verify(service).createRecipe(newRecipe);
+        verify(newRecipe).withType(RECIPE_TYPE);
+        verify(newRecipe).withScript("script");
+        verify(newRecipe).withName("name");
+        verify(stubPanel,times(2)).getName();
+        verify(stubPanel).getTags();
+        assertTrue(newRecipe.getTags().isEmpty());
+
+        verify(recipeDescriptorPromise).then(operationDescriptorCaptor.capture());
+        operationDescriptorCaptor.getValue().apply(recipeDescriptor1);
+
+        verify(recipePartView).addRecipe(Matchers.<RecipeWidget>any());
+        verify(recipesContainerPresenter).addRecipePanel(Matchers.<RecipeWidget>any());
+        verify(recipesContainerPresenter).showEditorPanel(Matchers.<RecipeWidget>any());
+        verify(recipesContainerPresenter).getEditorPanel(Matchers.<RecipeWidget>any());
+        verify(recipeEditorPanel).setDelegate(recipePartPresenter);
+
+        PromiseError promiseError = mock(PromiseError.class);
+        when(promiseError.getMessage()).thenReturn("text");
+
+        verify(recipeDescriptorPromise).catchError(operationErrorArgumentCaptor.capture());
+        operationErrorArgumentCaptor.getValue().apply(promiseError);
+
+        verify(notificationManager).notify(anyString(), anyString(), any(StatusNotification.Status.class), anyBoolean());
+    }
+

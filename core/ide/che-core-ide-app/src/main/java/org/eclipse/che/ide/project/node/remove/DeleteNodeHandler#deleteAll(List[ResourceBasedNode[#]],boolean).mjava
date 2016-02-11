@@ -1,0 +1,28 @@
+    @NotNull
+    public Promise<Void> deleteAll(@NotNull List<ResourceBasedNode<?>> nodes, boolean needConfirmation) {
+
+        if (nodes == null || nodes.isEmpty()) {
+            return Promises.reject(JsPromiseError.create("Nodes shouldn't be empty"));
+        }
+
+        final List<ResourceBasedNode<?>> filteredNodes = filterDescendants(nodes);
+
+        if (!needConfirmation) {
+            Promise<Void> promise = Promises.resolve(null);
+            return chainNodes(promise, filteredNodes.iterator());
+        }
+
+        List<ResourceBasedNode<?>> projects = Lists.newArrayList(Iterables.filter(filteredNodes, isProjectNode()));
+
+        if (projects.isEmpty()) {
+            //if no project were found in nodes list
+            return promptUserToDelete(filteredNodes);
+        } else if (projects.size() < filteredNodes.size()) {
+            //inform user that we can't delete mixed list of the nodes
+            return Promises.reject(JsPromiseError.create(localization.mixedProjectDeleteMessage()));
+        } else {
+            //delete only project nodes
+            return promptUserToDelete(projects);
+        }
+    }
+

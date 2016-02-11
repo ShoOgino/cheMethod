@@ -1,0 +1,61 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        final ResourceBinderImpl resources = new ResourceBinderImpl();
+        resources.addResource(UserProfileService.class, null);
+        final DependencySupplierImpl dependencies = new DependencySupplierImpl();
+        dependencies.addComponent(UserDao.class, userDao);
+        dependencies.addComponent(UserProfileDao.class, profileDao);
+        dependencies.addComponent(PreferenceDao.class, preferenceDao);
+        final URI uri = new URI(BASE_URI);
+        final ContainerRequest req = new ContainerRequest(null, uri, uri, null, null, securityContext);
+        final ApplicationContextImpl contextImpl = new ApplicationContextImpl(req, null, ProviderBinder.getInstance());
+        contextImpl.setDependencySupplier(dependencies);
+        ApplicationContextImpl.setCurrent(contextImpl);
+        final ApplicationProviderBinder binder = new ApplicationProviderBinder();
+        binder.addExceptionMapper(ApiExceptionMapper.class);
+        final EverrestProcessor processor = new EverrestProcessor(resources,
+                                                                  binder,
+                                                                  dependencies,
+                                                                  new EverrestConfiguration(),
+                                                                  null);
+        launcher = new ResourceLauncher(processor);
+        service = (UserProfileService)resources.getMatchedResource("/profile", new ArrayList<String>())
+                                               .getInstance(ApplicationContextImpl.getCurrent());
+        //setup testUser
+        final String id = "user123abc456def";
+        final String email = "user@testuser.com";
+        when(testUser.getEmail()).thenReturn(email);
+        when(testUser.getId()).thenReturn(id);
+        when(environmentContext.get(SecurityContext.class)).thenReturn(securityContext);
+        when(securityContext.getUserPrincipal()).thenReturn(new PrincipalImpl(email));
+        when(userDao.getByAlias(email)).thenReturn(testUser);
+        when(userDao.getById(id)).thenReturn(testUser);
+        org.eclipse.che.commons.env.EnvironmentContext.getCurrent().setUser(new org.eclipse.che.commons.user.User() {
+
+            @Override
+            public String getName() {
+                return testUser.getEmail();
+            }
+
+            @Override
+            public boolean isMemberOf(String s) {
+                return false;
+            }
+
+            @Override
+            public String getToken() {
+                return null;
+            }
+
+            @Override
+            public String getId() {
+                return testUser.getId();
+            }
+
+            @Override
+            public boolean isTemporary() {
+                return false;
+            }
+        });
+    }
+

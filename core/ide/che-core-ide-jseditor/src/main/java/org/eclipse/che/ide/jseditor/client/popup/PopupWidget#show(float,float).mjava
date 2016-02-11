@@ -1,0 +1,76 @@
+    /**
+     * Show the widget at the given document position.
+     * @param left the horizontal pixel position in the document
+     * @param top the vertical pixel position in the document
+     */
+    public void show(final float left, final float top) {
+        if (!listElement.hasChildNodes()) {
+            Element emptyElement = Elements.createLiElement(popupResources.popupStyle().item());
+            emptyElement.setTextContent(getEmptyMessage());
+            listElement.appendChild(emptyElement);
+            return;
+        }
+
+        /* Reset popup dimensions and show. */
+        popupElement.getStyle().setLeft(left, PX);
+        popupElement.getStyle().setTop(top, PX);
+        popupElement.getStyle().setWidth("" + MIN_WIDTH + "px");
+        popupElement.getStyle().setHeight("" + MIN_HEIGHT + "px");
+        popupElement.getStyle().setOpacity(0);
+        Elements.getDocument().getBody().appendChild(popupElement);
+
+        Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
+            @Override
+            public void execute() {
+                popupElement.getStyle().setOpacity(1);
+            }
+        });
+
+        Elements.getDocument().addEventListener(Event.MOUSEDOWN, popupListener, false);
+
+        // does it fit inside the doc body?
+        // This does exactly the same thing for height/top and width/left
+
+        final Window window = Elements.getWindow();
+        final int winX = window.getInnerWidth();
+        final int winY = window.getInnerHeight();
+        ClientRect widgetRect = this.popupElement.getBoundingClientRect();
+        if (widgetRect.getBottom() > winY) {
+            // it doesn't fit
+            final float overflow = widgetRect.getBottom() - winY;
+            if (widgetRect.getHeight() - overflow > MIN_HEIGHT) {
+                // the widget can be shrunk to fit
+                this.popupElement.getStyle().setHeight(widgetRect.getHeight() - overflow, PX);
+            } else {
+                // we need to shrink AND move the widget up
+                this.popupElement.getStyle().setHeight(MIN_HEIGHT, PX);
+                final int newTop = Math.max(winY - MIN_HEIGHT, MIN_HEIGHT);
+                this.popupElement.getStyle().setTop(newTop, PX);
+            }
+        }
+        // bounding rect has changed
+        widgetRect = this.popupElement.getBoundingClientRect();
+        if (widgetRect.getRight() > winX) {
+            // it doesn't fit
+            final float overflow = widgetRect.getRight() - winX;
+            if (widgetRect.getWidth() - overflow > MIN_WIDTH) {
+                // the widget can be shrunk to fit
+                this.popupElement.getStyle().setWidth(widgetRect.getWidth() - overflow, PX);
+            } else {
+                // we need to shrink AND move the widget up
+                this.popupElement.getStyle().setWidth(MIN_WIDTH, PX);
+                final int newLeft = Math.max(winX - MIN_WIDTH, MIN_WIDTH);
+                this.popupElement.getStyle().setLeft(newLeft - MIN_WIDTH, PX);
+            }
+        }
+
+        if (needsFocus()) {
+            // save previous focus and set focus in popup
+            previousFocus = Elements.getDocument().getActiveElement();
+            listElement.getFirstElementChild().focus();
+        }
+
+        // add key event listener on popup
+        listElement.addEventListener(Event.KEYDOWN, keyboardListener, false);
+    }
+

@@ -1,0 +1,60 @@
+    /**
+     * Updates specified factory with a new factory content.
+     *
+     * @param id
+     *         id of factory
+     * @param newFactory
+     *         the new data for the factory
+     * @return updated factory with links
+     * @throws BadRequestException
+     *         when the factory config is invalid
+     * @throws NotFoundException
+     *         when the factory with specified id doesn't not found
+     * @throws ServerException
+     *         when any server error occurs
+     * @throws ForbiddenException
+     *         when the current user is not granted to edit the factory
+     * @throws ConflictException
+     *         when not rewritable factory information is present in the new factory
+     */
+    @PUT
+    @Path("/{id}")
+    @RolesAllowed("user")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @ApiOperation(value = "Updates factory information by its id",
+                  notes = "Updates factory based on the factory id which is passed in a path parameter. " +
+                          "For perform this operation user needs respective rights")
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 409, message = "Not rewritable factory information is present in the new factory"),
+                   @ApiResponse(code = 404, message = "Factory to update not found"),
+                   @ApiResponse(code = 500, message = "Internal server error")})
+    public Factory updateFactory(@ApiParam(value = "Factory id")
+                                 @PathParam("id")
+                                 String id,
+                                 Factory newFactory)
+            throws BadRequestException, NotFoundException, ServerException, ForbiddenException, ConflictException {
+        // forbid null update
+        if (newFactory == null) {
+            throw new BadRequestException("The updating factory shouldn't be null");
+        }
+        final Factory existingFactory = factoryStore.getFactory(id);
+
+        // check if the current user has enough access to edit the factory
+        factoryEditValidator.validate(existingFactory);
+
+        processDefaults(newFactory);
+        newFactory.getCreator().withCreated(existingFactory.getCreator().getCreated());
+        newFactory.setId(existingFactory.getId());
+
+        // validate the new content
+        createValidator.validateOnCreate(newFactory);
+
+        // access granted, user can update the factory
+        factoryStore.updateFactory(id, newFactory);
+        newFactory.setLinks(createLinks(newFactory, factoryStore.getFactoryImages(id, null), uriInfo));
+        return newFactory;
+    }
+

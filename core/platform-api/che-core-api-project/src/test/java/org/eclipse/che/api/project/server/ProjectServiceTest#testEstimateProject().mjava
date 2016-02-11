@@ -1,0 +1,55 @@
+    @Test
+    public void testEstimateProject() throws Exception {
+        VirtualFile root = pm.getVirtualFileSystemRegistry().getProvider("my_ws").getMountPoint(false).getRoot();
+        root.createFolder("testEstimateProjectGood").createFolder("check");
+        root.createFolder("testEstimateProjectBad");
+
+        final ValueProviderFactory vpf1 = projectFolder -> new ValueProvider() {
+            @Override
+            public List<String> getValues(String attributeName) throws ValueStorageException {
+
+                VirtualFileEntry file;
+                try {
+                    file = projectFolder.getChild("check");
+                } catch (ForbiddenException | ServerException e) {
+                    throw new ValueStorageException(e.getMessage());
+                }
+
+                if (file == null) {
+                    throw new ValueStorageException("Check not found");
+                }
+                return singletonList("checked");
+            }
+
+            @Override
+            public void setValues(String attributeName, List<String> value) {
+            }
+        };
+
+        ProjectTypeDef pt = new ProjectTypeDef("testEstimateProjectPT", "my testEstimateProject type", true, false) {
+            {
+                addVariableDefinition("calculated_attribute", "attr description", true, vpf1);
+                addVariableDefinition("my_property_1", "attr description", true);
+                addVariableDefinition("my_property_2", "attr description", false);
+            }
+        };
+
+        pm.getProjectTypeRegistry().registerProjectType(pt);
+
+        ContainerResponse response =
+                launcher.service(GET, String.format("http://localhost:8080/api/project/%s/estimate/%s?type=%s",
+                                                    workspace, "testEstimateProjectGood", "testEstimateProjectPT"),
+                                 "http://localhost:8080/api", null, null, null);
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+        //noinspection unchecked
+        Map<String, List<String>> result = (Map<String, List<String>>)response.getEntity();
+
+        assertEquals(result.size(), 1);
+        assertEquals(result.get("calculated_attribute").get(0), "checked");
+
+        response = launcher.service(GET, String.format("http://localhost:8080/api/project/%s/estimate/%s?type=%s",
+                                                       workspace, "testEstimateProjectBad", "testEstimateProjectPT"),
+                                    "http://localhost:8080/api", null, null, null);
+        assertEquals(response.getStatus(), 409, "Error: " + response.getEntity());
+    }
+

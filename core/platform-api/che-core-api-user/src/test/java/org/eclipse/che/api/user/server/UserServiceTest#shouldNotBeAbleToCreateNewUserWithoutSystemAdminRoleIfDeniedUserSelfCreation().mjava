@@ -1,0 +1,19 @@
+    @Test
+    public void shouldNotBeAbleToCreateNewUserWithoutSystemAdminRoleIfDeniedUserSelfCreation() throws Exception {
+        when(securityContext.isUserInRole("system/admin")).thenReturn(false);
+        final Field uriField = userService.getClass()
+                                          .getDeclaredField("userSelfCreationAllowed");
+        uriField.setAccessible(true);
+        uriField.set(userService, false);
+
+        final String userEmail = "test@email.com";
+        final String token = "test_token";
+        when(tokenValidator.validateToken(token)).thenReturn(userEmail);
+
+        final ContainerResponse response = makeRequest(HttpMethod.POST, SERVICE_PATH + "/create?token=" + token, null);
+
+        assertEquals(response.getStatus(), FORBIDDEN.getStatusCode());
+        verify(userDao, never()).create(any(User.class));
+        verify(profileDao, never()).create(any(Profile.class));
+    }
+

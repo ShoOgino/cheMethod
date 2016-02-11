@@ -1,0 +1,31 @@
+    private void applyChanges() {
+        final RefactoringSession session = dtoFactory.createDto(RefactoringSession.class);
+        session.setSessionId(renameRefactoringSession.getSessionId());
+
+        prepareRenameChanges(session).then(new Operation<ChangeCreationResult>() {
+            @Override
+            public void apply(ChangeCreationResult arg) throws OperationException {
+                int severityCode = arg.getStatus().getSeverity();
+
+                switch (severityCode) {
+                    case 2:
+                    case 3:
+                        showWarningDialog(session, arg);
+                        break;
+                    case 4:
+                        if (!arg.isCanShowPreviewPage()) {
+                            view.showErrorMessage(arg.getStatus());
+                        }
+                        break;
+                    default:
+                        applyRefactoring(session);
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                notificationManager.notify(locale.failedToRename(), arg.getMessage(), FAIL, true);
+            }
+        });
+    }
+

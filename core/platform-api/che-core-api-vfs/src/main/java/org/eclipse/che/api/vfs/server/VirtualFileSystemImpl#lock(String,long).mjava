@@ -1,0 +1,17 @@
+    @Path("lock/{id}")
+    @Override
+    public Lock lock(@PathParam("id") String id,
+                     @DefaultValue("0") @QueryParam("timeout") long timeout)
+            throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+        if (!getInfo().isLockSupported()) {
+            throw new ServerException("Locking is not supported. ");
+        }
+        final VirtualFileSystemUser user = userContext.getVirtualFileSystemUser();
+        final VirtualFile virtualFile = mountPoint.getVirtualFileById(id);
+        if (!virtualFile.isFile()) {
+            throw new ForbiddenException(String.format("Unable lock '%s'. Locking allowed for files only. ", virtualFile.getPath()));
+        }
+        final String lockToken = mountPoint.getVirtualFileById(id).lock(timeout);
+        return DtoFactory.getInstance().createDto(Lock.class).withLockToken(lockToken).withOwner(user.getUserId()).withTimeout(timeout);
+    }
+

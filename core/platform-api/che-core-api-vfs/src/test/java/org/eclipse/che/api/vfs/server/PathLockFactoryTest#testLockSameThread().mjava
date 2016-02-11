@@ -1,0 +1,23 @@
+    public void testLockSameThread() throws Exception {
+        final AtomicInteger acquired = new AtomicInteger(0);
+        final CountDownLatch waiter = new CountDownLatch(1);
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    PathLockFactory.PathLock lock1 = pathLockFactory.getLock(path, true);
+                    PathLockFactory.PathLock lock2 = pathLockFactory.getLock(path, true);
+                    lock1.acquire();
+                    acquired.incrementAndGet();
+                    lock2.acquire(1000); // try with timeout.
+                    acquired.incrementAndGet();
+                } finally {
+                    waiter.countDown();
+                }
+            }
+        };
+        new Thread(task).start();
+        waiter.await();
+        assertEquals(2, acquired.get());
+    }
+

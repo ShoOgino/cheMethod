@@ -1,0 +1,44 @@
+    public void updateDependencies(ProjectConfig config) {
+        if (appContext.getCurrentProject() == null) {
+            return;
+        }
+
+        final String path = config.getPath();
+
+        final StatusNotification notification = new StatusNotification(locale.updatingDependencies(path), PROGRESS, true);
+        notificationManager.notify(notification);
+
+        Unmarshallable<ClassPathBuilderResult> unmarshaller = dtoUnmarshallerFactory.newWSUnmarshaller(ClassPathBuilderResult.class);
+
+        final String channel = "dependencyUpdate:output:" + appContext.getWorkspace().getId() + ':' + path;
+
+        notifications.put(channel, notification);
+
+        final LogsOutputHandler logsOutputHandler = outputHandlerProvider.get();
+
+        classpathServiceClient.updateDependencies(path, new RequestCallback<ClassPathBuilderResult>(unmarshaller) {
+            @Override
+            protected void onSuccess(ClassPathBuilderResult result) {
+                String updatedChannel = result.getChannel();
+
+                StatusNotification notification = notifications.get(updatedChannel);
+
+                if (SUCCESS.equals(result.getStatus())) {
+                    onUpdated(updatedChannel, notification);
+                } else {
+                    updateFinishedWithError(locale.updateDependenciesFailed(), notification);
+                }
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                Log.warn(DependenciesUpdater.class, "Failed to launch update dependency process for " + path);
+                updateFinishedWithError(exception.getMessage(), notification);
+            }
+        });
+
+        String moduleName = path.substring(path.lastIndexOf('/'));
+
+        logsOutputHandler.subscribeToOutput(channel, locale.dependenciesOutputTabTitle(moduleName));
+    }
+

@@ -1,0 +1,35 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onFetchClicked() {
+        final String remoteUrl = view.getRepositoryUrl();
+        String remoteName = view.getRepositoryName();
+        boolean removeDeletedRefs = view.isRemoveDeletedRefs();
+
+        final StatusNotification notification =
+                notificationManager.notify(constant.fetchProcess(), PROGRESS, true, project.getRootProject());
+        final GitOutputConsole console = gitOutputConsoleFactory.create(FETCH_COMMAND_NAME);
+        try {
+            service.fetch(workspaceId, project.getRootProject(), remoteName, getRefs(), removeDeletedRefs,
+                          new RequestCallback<String>() {
+                              @Override
+                              protected void onSuccess(String result) {
+                                  console.printInfo(constant.fetchSuccess(remoteUrl));
+                                  consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                  notification.setStatus(SUCCESS);
+                                  notification.setTitle(constant.fetchSuccess(remoteUrl));
+                              }
+
+                              @Override
+                              protected void onFailure(Throwable exception) {
+                                  handleError(exception, remoteUrl, notification, console);
+                                  consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                              }
+                          }
+                         );
+        } catch (WebSocketException e) {
+            handleError(e, remoteUrl, notification, console);
+            consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+        }
+        view.close();
+    }
+

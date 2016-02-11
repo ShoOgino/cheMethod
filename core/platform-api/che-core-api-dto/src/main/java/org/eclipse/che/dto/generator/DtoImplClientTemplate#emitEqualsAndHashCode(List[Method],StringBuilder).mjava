@@ -1,0 +1,50 @@
+    private void emitEqualsAndHashCode(List<Method> getters, StringBuilder builder) {
+        builder.append("    @Override\n");
+        builder.append("    public boolean equals(Object o) {\n");
+        builder.append("      if (!(o instanceof ").append(getImplClassName()).append(")) {\n");
+        builder.append("        return false;\n");
+        builder.append("      }\n");
+        builder.append("      ").append(getImplClassName()).append(" other = (").append(getImplClassName()).append(") o;\n");
+        for (Method getter : getters) {
+            String fieldName = getJavaFieldName(getter.getName());
+            Class<?> returnType = getter.getReturnType();
+            if (returnType.isPrimitive()) {
+                builder.append("      if (this.").append(fieldName).append(" != other.").append(fieldName).append(") {\n");
+                builder.append("        return false;\n");
+                builder.append("      }\n");
+            } else {
+                builder.append("      if (this.").append(fieldName).append(" != null) {\n");
+                builder.append("        if (!this.").append(fieldName).append(".equals(other.").append(fieldName).append(")) {\n");
+                builder.append("          return false;\n");
+                builder.append("        }\n");
+                builder.append("      } else {\n");
+                builder.append("        if (other.").append(fieldName).append(" != null) {\n");
+                builder.append("          return false;\n");
+                builder.append("        }\n");
+                builder.append("      }\n");
+            }
+        }
+        builder.append("      return true;\n");
+        builder.append("    }\n\n");
+        // this isn't the greatest hash function in the world, but it meets the requirement that for any
+        // two objects A and B, A.equals(B) only if A.hashCode() == B.hashCode()
+        builder.append("    @Override\n");
+        builder.append("    public int hashCode() {\n");
+        builder.append("      int hash = 7;\n");
+        for (Method method : getters) {
+            Class<?> type = method.getReturnType();
+
+            String fieldName = getJavaFieldName(method.getName());
+            if (type.isPrimitive()) {
+                Class<?> wrappedType = Primitives.wrap(type);
+                builder.append("      hash = hash * 31 + ").append(wrappedType.getName()).append(".valueOf(").append(fieldName)
+                       .append(").hashCode();\n");
+            } else {
+                builder.append("      hash = hash * 31 + (").append(fieldName).append(" != null ? ").append(fieldName).append(
+                        ".hashCode() : 0);\n");
+            }
+        }
+        builder.append("      return hash;\n");
+        builder.append("    }\n\n");
+    }
+

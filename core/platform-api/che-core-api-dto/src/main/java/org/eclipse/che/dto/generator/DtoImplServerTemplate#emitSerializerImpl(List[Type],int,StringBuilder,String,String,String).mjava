@@ -1,0 +1,103 @@
+    /**
+     * Produces code to serialize the type with the given variable names.
+     *
+     * @param expandedTypes
+     *         the type and its generic (and its generic (..))
+     *         expanded into a list, @see {@link #expandType(java.lang.reflect.Type)}
+     * @param depth
+     *         the depth (in the generics) for this recursive call. This can
+     *         be used to index into {@code expandedTypes}
+     * @param inVar
+     *         the java type that will be the input for serialization
+     * @param outVar
+     *         the JsonElement subtype that will be the output for
+     *         serialization
+     * @param i
+     *         indentation string
+     */
+    private void emitSerializerImpl(List<Type> expandedTypes, int depth, StringBuilder builder, String inVar, String outVar, String i) {
+        Type type = expandedTypes.get(depth);
+        String childInVar = inVar + "_";
+        String childOutVar = outVar + "_";
+        String entryVar = "entry" + depth;
+        Class<?> rawClass = getRawClass(type);
+        if (isList(rawClass)) {
+            String childInTypeName = getImplName(expandedTypes.get(depth + 1), false);
+            builder.append(i).append("JsonArray ").append(outVar).append(" = new JsonArray();\n");
+            if (depth == 0) {
+                builder.append(i).append("this.").append(getEnsureName(inVar)).append("();\n");
+            }
+            builder.append(i).append("for (").append(childInTypeName).append(" ").append(childInVar).append(" : ").append(
+                    depth == 0 ? "this." + inVar : inVar).append(") {\n");
+
+        } else if (isMap(rawClass)) {
+            String childInTypeName = getImplName(expandedTypes.get(depth + 1), false);
+            builder.append(i).append("JsonObject ").append(outVar).append(" = new JsonObject();\n");
+            if (depth == 0) {
+                builder.append(i).append("this.").append(getEnsureName(inVar)).append("();\n");
+            }
+            builder.append(i).append("for (java.util.Map.Entry<String, ").append(childInTypeName).append("> ").append(
+                    entryVar).append(" : ").append(depth == 0 ? "this." + inVar : inVar).append(".entrySet()) {\n");
+            builder.append(i).append("  ").append(childInTypeName).append(" ").append(childInVar).append(" = ").append(
+                    entryVar).append(".getValue();\n");
+        } else if (rawClass.isEnum()) {
+            builder.append(i).append("JsonElement ").append(outVar).append(" = (").append(depth == 0 ? "this." + inVar : inVar).append(
+                    " == null) ? JsonNull.INSTANCE : new JsonPrimitive(").append(depth == 0 ? "this." + inVar : inVar)
+                   .append(".name());\n");
+        } else if (getEnclosingTemplate().isDtoInterface(rawClass)) {
+            builder.append(i).append("JsonElement ").append(outVar).append(" = ").append(depth == 0 ? "this." + inVar : inVar).append(
+                    " == null ? JsonNull.INSTANCE : ((").append(getImplNameForDto((Class<?>)expandedTypes.get(depth))).append(")")
+                   .append(depth == 0 ? "this." + inVar : inVar).append(").toJsonElementInt(").append(COPY_JSONS_PARAM).append(");\n");
+        } else if (rawClass.equals(String.class)) {
+            builder.append(i).append("JsonElement ").append(outVar).append(" = (").append(depth == 0 ? "this." + inVar : inVar).append(
+                    " == null) ? JsonNull.INSTANCE : new JsonPrimitive(").append(depth == 0 ? "this." + inVar : inVar).append(");\n");
+        } else if (rawClass == boolean.class
+                   || rawClass == int.class
+                   || rawClass == long.class
+                   || rawClass == double.class
+                   || rawClass == float.class
+                   || rawClass == short.class
+                   || rawClass == byte.class) {
+            builder.append(i).append("JsonPrimitive ").append(outVar).append(" = new JsonPrimitive(")
+                   .append(depth == 0 ? "this." + inVar : inVar).append(");\n");
+        } else if (rawClass == Boolean.class
+                   || rawClass == Integer.class
+                   || rawClass == Long.class
+                   || rawClass == Double.class
+                   || rawClass == Float.class
+                   || rawClass == Short.class
+                   || rawClass == Byte.class) {
+            builder.append(i).append("JsonElement ").append(outVar).append(" = ").append(depth == 0 ? " this." + inVar : inVar).append(
+                    " == null ? JsonNull.INSTANCE : new JsonPrimitive(").append(depth == 0 ? "this." + inVar : inVar).append(");\n");
+        } else if (isAny(rawClass)) {
+            // TODO JsonElement.deepCopy() is package-protected, JSONs are serialized to strings then parsed for copying them
+            // outVar = inVar == null ? JsonNull.INSTNACE : (copyJsons ? new JsonParser().parse(inVar) : inVar);
+            builder.append(i).append("JsonElement ").append(outVar).append(" = ").append(depth == 0 ? " this." + inVar : inVar)
+                    .append(" == null || !(").append(inVar).append(" instanceof JsonElement) ? JsonNull.INSTANCE : (");
+            appendCopyJsonExpression(inVar, builder).append(");\n");
+        } else {
+            final Class<?> dtoImplementation = getEnclosingTemplate().getDtoImplementation(rawClass);
+            if (dtoImplementation != null) {
+                builder.append(i).append("JsonElement ").append(outVar).append(" = ").append(depth == 0 ? "this." + inVar : inVar).append(
+                        " == null ? JsonNull.INSTANCE : ((").append(dtoImplementation.getCanonicalName()).append(")")
+                       .append(depth == 0 ? "this." + inVar : inVar).append(").toJsonElementInt(").append(COPY_JSONS_PARAM).append(");\n");
+            } else {
+                throw new IllegalArgumentException("Unable to generate server implementation for DTO interface " +
+                                                   getDtoInterface().getCanonicalName() + ". Type " + rawClass +
+                                                   " is not allowed to use in DTO interface.");
+            }
+        }
+
+        if (depth + 1 < expandedTypes.size()) {
+            emitSerializerImpl(expandedTypes, depth + 1, builder, childInVar, childOutVar, i + "  ");
+        }
+        if (isList(rawClass)) {
+            builder.append(i).append("  ").append(outVar).append(".add(").append(childOutVar).append(");\n");
+            builder.append(i).append("}\n");
+        } else if (isMap(rawClass)) {
+            builder.append(i).append("  ").append(outVar).append(".add(").append(entryVar).append(".getKey(), ").append(
+                    childOutVar).append(");\n");
+            builder.append(i).append("}\n");
+        }
+    }
+

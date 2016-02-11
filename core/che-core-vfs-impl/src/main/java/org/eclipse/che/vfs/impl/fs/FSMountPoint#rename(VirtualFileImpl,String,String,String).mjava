@@ -1,0 +1,55 @@
+    VirtualFileImpl rename(VirtualFileImpl virtualFile, String newName, String newMediaType, String lockToken)
+            throws ForbiddenException, ConflictException, ServerException {
+        if (virtualFile.isRoot()) {
+            throw new ForbiddenException("Unable rename root folder. ");
+        }
+        final String sourcePath = virtualFile.getPath();
+        if (!hasPermission(virtualFile, BasicPermissions.WRITE.value(), true)) {
+            throw new ForbiddenException(String.format("Unable rename item '%s'. Operation not permitted. ", sourcePath));
+        }
+        if (virtualFile.isFile() && !validateLockTokenIfLocked(virtualFile, lockToken)) {
+            throw new ForbiddenException(String.format("Unable rename file '%s'. File is locked. ", sourcePath));
+        }
+        final String name = virtualFile.getName();
+        final VirtualFileImpl renamed;
+        if (!(newName == null || name.equals(newName))) {
+            final Path newPath = virtualFile.getVirtualFilePath().getParent().newPath(newName);
+            renamed = new VirtualFileImpl(new java.io.File(ioRoot, toIoPath(newPath)), newPath, pathToId(newPath), this);
+            if (renamed.exists()) {
+                throw new ConflictException(String.format("Item '%s' already exists. ", renamed.getName()));
+            }
+            // use copy and delete
+            doCopy(virtualFile, renamed);
+            // permissions is not copied with 'doCopy' method, copy them now if any
+            final AccessControlList sourceAcl = getACL(virtualFile);
+            if (!sourceAcl.isEmpty()) {
+                final java.io.File renamedAclFile = new java.io.File(ioRoot, toIoPath(getAclFilePath(renamed.getVirtualFilePath())));
+                DataOutputStream dos = null;
+                try {
+                    // Ignore result of 'mkdirs' here. If we are failed to create directory
+                    // We will get FileNotFoundException at the next line when try to create FileOutputStream.
+                    renamedAclFile.getParentFile().mkdirs();
+                    dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(renamedAclFile)));
+                } catch (IOException e) {
+                    String msg = String.format("Unable save ACL for '%s'. ", virtualFile.getPath());
+                    LOG.error(msg + e.getMessage(), e); // More details in log but do not show internal error to caller.
+                    throw new ServerException(msg);
+                } finally {
+                    closeQuietly(dos);
+                }
+            }
+            doDelete(virtualFile, lockToken);
+        } else {
+            renamed = virtualFile;
+        }
+
+        if (newMediaType != null) {
+            setProperty(renamed, "vfs:mimeType", newMediaType);
+            if (!virtualFile.getIoFile().setLastModified(System.currentTimeMillis())) {
+                LOG.warn("Unable to set timestamp to '{}'. ", virtualFile.getIoFile());
+            }
+        }
+        eventService.publish(new RenameEvent(workspaceId, renamed.getPath(), sourcePath, renamed.isFolder()));
+        return renamed;
+    }
+

@@ -1,0 +1,49 @@
+    /**
+     * Creates snapshot of runtime workspace.
+     *
+     * <p>Basically creates {@link SnapshotImpl snapshot} instance for each machine from
+     * runtime workspace's active environment.
+     *
+     * <p> If snapshot of workspace's dev machine was created successfully
+     * publishes {@link EventType#SNAPSHOT_CREATED} event, otherwise publishes {@link EventType#SNAPSHOT_CREATION_ERROR}
+     * with appropriate error message.
+     *
+     * <p> Note that:
+     * <br>Snapshots are created asynchronously
+     * <br>If snapshot creation for one machine failed, it wouldn't affect another snapshot creations
+     *
+     * @param workspaceId
+     *         runtime workspace id
+     * @throws BadRequestException
+     *         when workspace id is null
+     * @throws NotFoundException
+     *         when runtime workspace with given id does not exist
+     * @throws ServerException
+     *         when any other error occurs
+     */
+    public void createSnapshot(String workspaceId) throws BadRequestException, NotFoundException, ServerException {
+        requiredNotNull(workspaceId, "Required non-null workspace id");
+
+        final RuntimeWorkspaceImpl workspace = workspaceRegistry.get(workspaceId);
+        executor.execute(ThreadLocalPropagateContext.wrap(() -> {
+            String devMachineSnapshotFailMessage = null;
+            for (MachineStateImpl machineState : workspace.getMachines()) {
+                try {
+                    machineManager.saveSync(machineState.getId(), workspace.getOwner(), workspace.getActiveEnvName());
+                } catch (ApiException apiEx) {
+                    if (machineState.isDev()) {
+                        devMachineSnapshotFailMessage = apiEx.getLocalizedMessage();
+                    }
+                    LOG.error(apiEx.getLocalizedMessage(), apiEx);
+                }
+            }
+            if (devMachineSnapshotFailMessage != null) {
+                eventService.publish(newDto(WorkspaceStatusEvent.class).withEventType(SNAPSHOT_CREATION_ERROR)
+                                                                       .withWorkspaceId(workspaceId)
+                                                                       .withError(devMachineSnapshotFailMessage));
+            } else {
+                eventService.publish(newDto(WorkspaceStatusEvent.class).withEventType(SNAPSHOT_CREATED).withWorkspaceId(workspaceId));
+            }
+        }));
+    }
+

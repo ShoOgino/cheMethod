@@ -1,0 +1,27 @@
+    public void startExec(String execId, MessageProcessor<LogMessage> execOutputProcessor) throws IOException {
+        final ExecStart execStart = new ExecStart().withDetach(execOutputProcessor == null);
+        final String entity = JsonHelper.toJson(execStart, FIRST_LETTER_LOWERCASE);
+        final List<Pair<String, ?>> headers = new ArrayList<>(2);
+        headers.add(Pair.of("Content-Type", MediaType.APPLICATION_JSON));
+        headers.add(Pair.of("Content-Length", entity.getBytes().length));
+
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("POST")
+                                                            .path("/exec/" + execId + "/start")
+                                                            .headers(headers)
+                                                            .entity(entity)) {
+            final DockerResponse response = connection.request();
+            final int status = response.getStatus();
+            // According to last doc (https://docs.docker.com/reference/api/docker_remote_api_v1.15/#exec-start) status must be 201 but
+            // in fact docker API returns 200 or 204 status.
+            if (status / 100 != 2) {
+                throw new DockerException(getDockerExceptionMessage(response), status);
+            }
+            if (status != NO_CONTENT.getStatusCode() && execOutputProcessor != null) {
+                try (InputStream responseStream = response.getInputStream()) {
+                    new LogMessagePumper(responseStream, execOutputProcessor).start();
+                }
+            }
+        }
+    }
+

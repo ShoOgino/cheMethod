@@ -1,0 +1,26 @@
+    LazyIterator<VirtualFile> getChildren(VirtualFileImpl parent, VirtualFileFilter filter) throws ServerException {
+        if (!parent.isFolder()) {
+            return LazyIterator.emptyIterator();
+        }
+
+        if (parent.isRoot()) {
+            // NOTE: We do not check read permissions when access to ROOT folder.
+            if (!hasPermission(parent, BasicPermissions.READ.value(), false)) {
+                // User has not access to ROOT folder.
+                return LazyIterator.emptyIterator();
+            }
+        }
+        final List<VirtualFile> children = doGetChildren(parent, SERVICE_DIR_FILTER);
+        for (Iterator<VirtualFile> iterator = children.iterator(); iterator.hasNext(); ) {
+            VirtualFile child = iterator.next();
+            // Check permission directly for current file only.
+            // We know the parent is accessible for current user otherwise we should not be here.
+            if (!hasPermission((VirtualFileImpl)child, BasicPermissions.READ.value(), false) || !filter.accept(child)) {
+                iterator.remove(); // Do not show item in list if current user has not permission to see it
+            }
+        }
+        // Always sort to get the exact same order of files for each listing.
+        Collections.sort(children);
+        return LazyIterator.fromList(children);
+    }
+

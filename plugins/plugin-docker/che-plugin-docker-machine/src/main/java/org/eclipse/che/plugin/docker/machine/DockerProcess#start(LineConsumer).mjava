@@ -1,0 +1,30 @@
+    @Override
+    public void start(LineConsumer output) throws ConflictException, MachineException {
+        if (started) {
+            throw new ConflictException("Process already started.");
+        }
+        // Trap is invoked when bash session ends. Here we kill all sub-processes of shell and remove pid-file.
+        final String trap = format("trap '[ -z \"$(jobs -p)\" ] || kill $(jobs -p); [ -e %1$s ] && rm %1$s' EXIT", pidFilePath);
+        // 'echo' saves shell pid in file, then run command
+        final String shellCommand = trap + "; echo $$>" + pidFilePath + "; " + commandLine;
+        final String[] command = {"/bin/bash", "-c", shellCommand};
+        Exec exec;
+        try {
+            exec = docker.createExec(container, output == null, command);
+        } catch (IOException e) {
+            throw new MachineException(format("Error occurs while initializing command %s in docker container %s: %s",
+                                              Arrays.toString(command), container, e.getMessage()), e);
+        }
+        started = true;
+        try {
+            docker.startExec(exec.getId(), output == null ? null : new LogMessagePrinter(output));
+        } catch (IOException e) {
+            if (output != null && e instanceof SocketTimeoutException) {
+                throw new MachineException(getErrorMessage());
+            } else {
+                throw new MachineException(format("Error occurs while executing command %s: %s",
+                                                  Arrays.toString(exec.getCommand()), e.getMessage()), e);
+            }
+        }
+    }
+

@@ -1,0 +1,36 @@
+    private boolean processClassPrepareEvent(com.sun.jdi.event.ClassPrepareEvent event) throws DebuggerException {
+        setCurrentThread(event.thread());
+        final String className = event.referenceType().name();
+
+        // add deferred breakpoints
+        List<BreakPoint> breakpointsToAdd = deferredBreakpoints.get(className);
+        if (breakpointsToAdd != null) {
+            List<DebuggerEvent> eventsList = new ArrayList<>();
+
+            for (BreakPoint b : breakpointsToAdd) {
+                addBreakpoint(b);
+
+                BreakpointActivatedEvent breakpointActivatedEvent;
+                synchronized (events) {
+                    breakpointActivatedEvent = DtoFactory.getInstance().createDto(BreakpointActivatedEvent.class);
+                    breakpointActivatedEvent.setType(DebuggerEvent.BREAKPOINT_ACTIVATED);
+                    breakpointActivatedEvent.setBreakPoint(b);
+                    events.add(breakpointActivatedEvent);
+                }
+                eventsList.add(breakpointActivatedEvent);
+            }
+            deferredBreakpoints.remove(className);
+
+            // All deferred breakpoints for className have been already added,
+            // so no need to listen for an appropriate ClassPrepareRequests any more.
+            ClassPrepareRequest request = classPrepareRequests.remove(className);
+            if (request != null) {
+                getEventManager().deleteEventRequest(request);
+            }
+
+            publishWebSocketMessage(DtoFactory.getInstance().createDto(DebuggerEventList.class).withEvents(eventsList),
+                                    EVENTS_CHANNEL + id);
+        }
+        return true;
+    }
+

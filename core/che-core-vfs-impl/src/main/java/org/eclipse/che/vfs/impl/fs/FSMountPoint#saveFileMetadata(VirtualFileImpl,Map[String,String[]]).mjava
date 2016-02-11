@@ -1,0 +1,32 @@
+    private void saveFileMetadata(VirtualFileImpl virtualFile, Map<String, String[]> properties) throws ServerException {
+        DataOutputStream dos = null;
+
+        try {
+            final Path metadataFilePath = getMetadataFilePath(virtualFile.getVirtualFilePath());
+            final java.io.File metadataFile = new java.io.File(ioRoot, toIoPath(metadataFilePath));
+            if (properties.isEmpty()) {
+                if (!metadataFile.delete()) {
+                    if (metadataFile.exists()) {
+                        throw new IOException(String.format("Unable delete file '%s'. ", metadataFile));
+                    }
+                }
+            } else {
+                metadataFile.getParentFile().mkdirs(); // Ignore result of 'mkdirs' here. If we are failed to create
+                // directory we will get FileNotFoundException at the next line when try to create FileOutputStream.
+                final PathLockFactory.PathLock lock = pathLockFactory.getLock(metadataFilePath, true).acquire(LOCK_FILE_TIMEOUT);
+                try {
+                    dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(metadataFile)));
+                    metadataSerializer.write(dos, properties);
+                } finally {
+                    lock.release();
+                }
+            }
+        } catch (IOException e) {
+            String msg = String.format("Unable save properties for '%s'. ", virtualFile.getPath());
+            LOG.error(msg + e.getMessage(), e); // More details in log but do not show internal error to caller.
+            throw new ServerException(msg);
+        } finally {
+            closeQuietly(dos);
+        }
+    }
+

@@ -1,0 +1,46 @@
+    /**
+     * Get the JSON at the given HTTP request url.
+     *
+     * @param requestUrl
+     *         the HTTP request url with encoded query parameters.
+     * @param token
+     *         the token.
+     * @param tokenSecret
+     *         the token secret.
+     * @param userClass
+     *         the {@link java.lang.Class} to be deserialized from the JSON response.
+     * @return an instance of {@code userClass}.
+     * @throws OAuthAuthenticationException
+     *         if something is wrong with authentication.
+     */
+    protected <O> O getJson(@NotNull final String requestUrl,
+                            @NotNull final String token,
+                            @NotNull final String tokenSecret,
+                            @NotNull final Class<O> userClass) throws OAuthAuthenticationException {
+
+        HttpURLConnection connection = null;
+
+        try {
+
+            connection = (HttpURLConnection)new URL(requestUrl).openConnection();
+
+            final Map<String, String> requestParameters = emptyMap();
+            final String authorizationHeaderValue = computeAuthorizationHeader(GET, requestUrl, requestParameters, token, tokenSecret);
+
+            connection.setRequestProperty(AUTHORIZATION, authorizationHeaderValue);
+            connection.setRequestProperty(ACCEPT, APPLICATION_JSON);
+
+            try (final InputStream urlInputStream = connection.getInputStream()) {
+                return JsonHelper.fromJson(urlInputStream, userClass, null);
+            }
+
+        } catch (final JsonParseException | IOException e) {
+            throw new OAuthAuthenticationException(e);
+
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+

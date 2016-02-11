@@ -1,0 +1,37 @@
+	/**
+	 * Create a fresh type reference
+	 * @param typeBinding the type we want to refer to
+	 * @param ast AST for creating new nodes
+	 * @param imports use this for optimal type names
+	 * @return a fully features non-null type reference (can be parameterized and/or array).
+	 */
+	public static Type newType(ITypeBinding typeBinding, AST ast, ImportRewrite imports) {
+		// unwrap array type:
+		int dimensions = typeBinding.getDimensions();
+		if (dimensions > 0)
+			typeBinding = typeBinding.getElementType();
+
+		// unwrap parameterized type:
+		ITypeBinding[] typeArguments = typeBinding.getTypeArguments();
+		typeBinding = typeBinding.getErasure();
+
+		// create leaf type:
+		Type elementType = (typeBinding.isPrimitive())
+						   ? ast.newPrimitiveType(PrimitiveType.toCode(typeBinding.getName()))
+						   : ast.newSimpleType(ast.newName(imports.addImport(typeBinding)));
+
+		// re-wrap as parameterized type:
+		if (typeArguments.length > 0) {
+			ParameterizedType parameterizedType = ast.newParameterizedType(elementType);
+			for (ITypeBinding typeArgument : typeArguments)
+				parameterizedType.typeArguments().add(newType(typeArgument, ast, imports));
+			elementType = parameterizedType;
+		}
+
+		// re-wrap as array type:
+		if (dimensions > 0)
+			return ast.newArrayType(elementType, dimensions);
+		else
+			return elementType;
+	}
+

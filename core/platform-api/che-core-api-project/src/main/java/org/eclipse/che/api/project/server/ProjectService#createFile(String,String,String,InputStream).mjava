@@ -1,0 +1,34 @@
+    @ApiOperation(value = "Create file",
+                  notes = "Create a new file in a project. If file type isn't specified the server will resolve its type.",
+                  position = 7)
+    @ApiResponses(value = {
+            @ApiResponse(code = 201, message = ""),
+            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+            @ApiResponse(code = 404, message = "Not found"),
+            @ApiResponse(code = 409, message = "File already exists"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @POST
+    @Consumes({MediaType.MEDIA_TYPE_WILDCARD})
+    @Produces({MediaType.APPLICATION_JSON})
+    @Path("/file/{parent:.*}")
+    public Response createFile(@ApiParam(value = "Workspace ID", required = true)
+                               @PathParam("ws-id") String workspace,
+                               @ApiParam(value = "Path to a target directory", required = true)
+                               @PathParam("parent") String parentPath,
+                               @ApiParam(value = "New file name", required = true)
+                               @QueryParam("name") String fileName,
+                               InputStream content) throws NotFoundException, ConflictException, ForbiddenException, ServerException {
+        filesBuffer.addToBuffer(parentPath + '/' + fileName);
+
+        final FolderEntry parent = asFolder(workspace, parentPath);
+        final FileEntry newFile = parent.createFile(fileName, content);
+        final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
+        final ItemReference fileReference = DtoConverter.toItemReference(newFile, uriBuilder.clone());
+        final URI location = uriBuilder.clone().path(getClass(), "getFile").build(workspace, newFile.getPath().substring(1));
+
+        eventService.publish(new ProjectItemModifiedEvent(ProjectItemModifiedEvent.EventType.CREATED,
+                                                          workspace, projectPath(newFile.getPath()), newFile.getPath(), false));
+
+        return Response.created(location).entity(fileReference).build();
+    }
+

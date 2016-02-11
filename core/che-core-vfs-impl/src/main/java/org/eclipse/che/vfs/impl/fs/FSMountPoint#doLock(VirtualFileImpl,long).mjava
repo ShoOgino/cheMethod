@@ -1,0 +1,36 @@
+    private String doLock(VirtualFileImpl virtualFile, long timeout) throws ConflictException, ServerException {
+        final int index = virtualFile.getVirtualFilePath().hashCode() & MASK;
+        if (NO_LOCK == lockTokensCache[index].get(virtualFile.getVirtualFilePath())) // causes read from file if need.
+        {
+            final String lockToken = NameGenerator.generate(null, 16);
+            final long expired = timeout > 0 ? (System.currentTimeMillis() + timeout) : Long.MAX_VALUE;
+            final FileLock fileLock = new FileLock(lockToken, expired);
+            DataOutputStream dos = null;
+            try {
+                final Path lockFilePath = getLockFilePath(virtualFile.getVirtualFilePath());
+                final java.io.File lockIoFile = new java.io.File(ioRoot, toIoPath(lockFilePath));
+                lockIoFile.getParentFile().mkdirs(); // Ignore result of 'mkdirs' here. If we are failed to create
+                // directory we will get FileNotFoundException at the next line when try to create FileOutputStream.
+                final PathLockFactory.PathLock lockFilePathLock = pathLockFactory.getLock(lockFilePath, true).acquire(LOCK_FILE_TIMEOUT);
+                try {
+                    dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(lockIoFile)));
+                    locksSerializer.write(dos, fileLock);
+                } finally {
+                    lockFilePathLock.release();
+                }
+            } catch (IOException e) {
+                String msg = String.format("Unable lock file '%s'. ", virtualFile.getPath());
+                LOG.error(msg + e.getMessage(), e); // More details in log but do not show internal error to caller.
+                throw new ServerException(msg);
+            } finally {
+                closeQuietly(dos);
+            }
+
+            // Save lock token in cache if lock successful.
+            lockTokensCache[index].put(virtualFile.getVirtualFilePath(), fileLock);
+            return lockToken;
+        }
+
+        throw new ConflictException(String.format("Unable lock file '%s'. File already locked. ", virtualFile.getPath()));
+    }
+

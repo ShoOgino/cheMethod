@@ -1,0 +1,37 @@
+    /**
+     * Save factory to storage and return stored data.
+     *
+     * @param factory
+     *         instance of factory which would be stored
+     * @return decorated the factory instance of which has been stored
+     * @throws BadRequestException
+     *         when stored the factory is invalid
+     * @throws ServerException
+     *         when any server errors occurs
+     * @throws ForbiddenException
+     *         when the user have no access rights for saving the factory
+     * @throws ConflictException
+     *         when stored the factory is already exist
+     */
+    @POST
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed("user")
+    @ApiOperation(value = "Stores the factory from the configuration",
+                  notes = "Stores the factory without pictures and returns instance of the stored factory with links")
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "The user does not have appropriate rights for perform factory save"),
+                   @ApiResponse(code = 409, message = "Conflict error. Some parameter is missing"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    public Factory saveFactory(Factory factory)
+            throws BadRequestException, ServerException, ForbiddenException, ConflictException, NotFoundException {
+        if (factory == null) {
+            throw new BadRequestException("Not null factory required");
+        }
+        processDefaults(factory);
+        createValidator.validateOnCreate(factory);
+        final Factory storedFactory = factoryStore.getFactory(factoryStore.saveFactory(factory, null));
+        return storedFactory.withLinks(createLinks(storedFactory, null, uriInfo));
+    }
+

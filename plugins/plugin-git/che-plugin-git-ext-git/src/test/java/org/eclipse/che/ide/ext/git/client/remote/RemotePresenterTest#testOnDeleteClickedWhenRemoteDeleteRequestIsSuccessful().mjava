@@ -1,0 +1,27 @@
+    @Test
+    public void testOnDeleteClickedWhenRemoteDeleteRequestIsSuccessful() throws Exception {
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<String> callback = (AsyncRequestCallback<String>)arguments[2];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, EMPTY_TEXT);
+                return callback;
+            }
+        }).when(service).remoteDelete(anyString(), anyObject(), anyString(), (AsyncRequestCallback<String>)anyObject());
+
+        presenter.showDialog();
+        presenter.onRemoteSelected(selectedRemote);
+        presenter.onDeleteClicked();
+
+        AsyncRequestCallback<ProjectConfigDto> getProjectCallback = getProjectCallbackCaptor.getValue();
+        org.eclipse.che.test.GwtReflectionUtils.callOnSuccess(getProjectCallback, PROJECT_PATH);
+
+        verify(service).remoteDelete(anyString(), eq(rootProjectConfig), eq(REPOSITORY_NAME), (AsyncRequestCallback<String>)anyObject());
+        verify(service, times(2)).remoteList(anyString(), anyObject(), anyString(), eq(SHOW_ALL_INFORMATION),
+                                             (AsyncRequestCallback<List<Remote>>)anyObject());
+        verify(projectService).getProject(anyString(), anyString(), anyObject());
+        verify(eventBus).fireEvent(Matchers.<ProjectUpdatedEvent>anyObject());
+    }
+

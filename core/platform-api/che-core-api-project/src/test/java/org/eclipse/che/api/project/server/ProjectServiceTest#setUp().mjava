@@ -1,0 +1,114 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        when(filterProvider.get()).thenReturn(filter);
+        final EventService eventService = new EventService();
+        VirtualFileSystemRegistry vfsRegistry = new VirtualFileSystemRegistry();
+
+        final MemoryFileSystemProvider memoryFileSystemProvider =
+                new MemoryFileSystemProvider(workspace,
+                                             eventService,
+                                             new VirtualFileSystemUserContext() {
+                                                 @Override
+                                                 public VirtualFileSystemUser getVirtualFileSystemUser() {
+                                                     return new VirtualFileSystemUser(vfsUser, vfsUserGroups);
+                                                 }
+                                             },
+                                             vfsRegistry,
+                                             new SystemPathsFilter(singleton(new ProjectMiscPathFilter())));
+
+        MemoryMountPoint mmp = (MemoryMountPoint)memoryFileSystemProvider.getMountPoint(true);
+        vfsRegistry.registerProvider(workspace, memoryFileSystemProvider);
+
+        // PTs for test
+        ProjectTypeDef chuck = new ProjectTypeDef("chuck_project_type", "chuck_project_type", true, false) {
+            {
+                addConstantDefinition("x", "attr description", new AttributeValue(Arrays.asList("a", "b")));
+            }
+        };
+
+        Set<ProjectTypeDef> projectTypes = new HashSet<>();
+        final LocalProjectType myProjectType = new LocalProjectType("my_project_type", "my project type");
+        projectTypes.add(myProjectType);
+        projectTypes.add(new LocalProjectType("module_type", "module type"));
+        projectTypes.add(chuck);
+
+        ProjectTypeRegistry ptRegistry = new ProjectTypeRegistry(projectTypes);
+
+        phRegistry = new ProjectHandlerRegistry(new HashSet<>());
+
+        pm = new DefaultProjectManager(vfsRegistry,
+                                       eventService,
+                                       ptRegistry,
+                                       phRegistry,
+                                       filterProvider,
+                                       apiEndpoint,
+                                       httpJsonRequestFactory);
+
+        httpJsonRequest = mock(HttpJsonRequest.class, new SelfReturningAnswer());
+
+        modules = new ArrayList<>();
+
+        final ProjectConfigDto testProjectConfigMock = mock(ProjectConfigDto.class);
+        when(testProjectConfigMock.getPath()).thenReturn("/my_project");
+        when(testProjectConfigMock.getName()).thenReturn("my_project");
+        when(testProjectConfigMock.getDescription()).thenReturn("my test project");
+        when(testProjectConfigMock.getType()).thenReturn("my_project_type");
+        when(testProjectConfigMock.getModules()).thenReturn(modules);
+        when(testProjectConfigMock.getSource()).thenReturn(DtoFactory.getInstance().createDto(SourceStorageDto.class));
+        when(testProjectConfigMock.findModule(anyString())).thenReturn(testProjectConfigMock);
+        Map<String, List<String>> attr = new HashMap<>();
+        for (Attribute attribute : myProjectType.getAttributes()) {
+            attr.put(attribute.getName(), attribute.getValue().getList());
+        }
+        when(testProjectConfigMock.getAttributes()).thenReturn(attr);
+
+        projects = new ArrayList<>();
+        projects.add(testProjectConfigMock);
+        when(httpJsonRequestFactory.fromLink(any())).thenReturn(httpJsonRequest);
+        when(httpJsonRequest.request()).thenReturn(httpJsonResponse);
+        when(httpJsonResponse.asDto(UsersWorkspaceDto.class)).thenReturn(usersWorkspaceMock);
+        when(usersWorkspaceMock.getProjects()).thenReturn(projects);
+
+        pm.createProject(workspace, "my_project", testProjectConfigMock, null);
+        verify(httpJsonRequestFactory).fromLink(eq(newDto(Link.class)
+                                                           .withHref(apiEndpoint + "/workspace/" + workspace + "/project")
+                                                           .withMethod(PUT)));
+
+        DependencySupplierImpl dependencies = new DependencySupplierImpl();
+        importerRegistry = new ProjectImporterRegistry(Collections.<ProjectImporter>emptySet());
+
+        dependencies.addComponent(ProjectTypeRegistry.class, ptRegistry);
+        dependencies.addComponent(UserDao.class, userDao);
+        dependencies.addComponent(ProjectManager.class, pm);
+        dependencies.addComponent(ProjectImporterRegistry.class, importerRegistry);
+        dependencies.addComponent(ProjectHandlerRegistry.class, phRegistry);
+        dependencies.addComponent(SearcherProvider.class, mmp.getSearcherProvider());
+        dependencies.addComponent(EventService.class, eventService);
+
+        ResourceBinder resources = new ResourceBinderImpl();
+        ProviderBinder providers = new ApplicationProviderBinder();
+        EverrestProcessor processor = new EverrestProcessor(resources, providers, dependencies, new EverrestConfiguration(), null);
+        launcher = new ResourceLauncher(processor);
+
+        processor.addApplication(new Application() {
+            @Override
+            public Set<Class<?>> getClasses() {
+                return java.util.Collections.<Class<?>>singleton(ProjectService.class);
+            }
+
+            @Override
+            public Set<Object> getSingletons() {
+                return new HashSet<>(Arrays.asList(new CodenvyJsonProvider(singleton(ContentStream.class)),
+                                                   new ContentStreamWriter(),
+                                                   new ApiExceptionMapper()));
+            }
+        });
+
+        ApplicationContextImpl.setCurrent(new ApplicationContextImpl(null, null, ProviderBinder.getInstance()));
+
+        env = org.eclipse.che.commons.env.EnvironmentContext.getCurrent();
+        env.setUser(new UserImpl(vfsUser, vfsUser, "dummy_token", vfsUserGroups, false));
+        env.setWorkspaceName(workspace);
+        env.setWorkspaceId(workspace);
+    }
+

@@ -1,0 +1,41 @@
+    /**
+     * Update the list of branches.
+     *
+     * @param remoteMode
+     *         is a remote mode
+     */
+    private void updateBranches(@NotNull final String remoteMode) {
+        gitServiceClient.branchList(workspaceId, project.getRootProject(), remoteMode,
+                                    new AsyncRequestCallback<List<Branch>>(dtoUnmarshallerFactory.newListUnmarshaller(Branch.class)) {
+                                        @Override
+                                        protected void onSuccess(List<Branch> result) {
+                                            if (LIST_REMOTE.equals(remoteMode)) {
+                                                view.setRemoteBranches(branchSearcher.getRemoteBranchesToDisplay(view.getRepositoryName(),
+                                                                                                                 result));
+                                                updateBranches(LIST_LOCAL);
+                                            } else {
+                                                view.setLocalBranches(branchSearcher.getLocalBranchesToDisplay(result));
+                                                for (Branch branch : result) {
+                                                    if (branch.isActive()) {
+                                                        view.selectRemoteBranch(branch.getDisplayName());
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        @Override
+                                        protected void onFailure(Throwable exception) {
+                                            String errorMessage =
+                                                    exception.getMessage() != null ? exception.getMessage()
+                                                                                   : constant.branchesListFailed();
+                                            GitOutputConsole console = gitOutputConsoleFactory.create(BRANCH_LIST_COMMAND_NAME);
+                                            console.printError(errorMessage);
+                                            consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                            notificationManager.notify(constant.branchesListFailed(), FAIL, true, project.getRootProject());
+                                            view.setEnablePullButton(false);
+                                        }
+                                    }
+                                   );
+    }
+

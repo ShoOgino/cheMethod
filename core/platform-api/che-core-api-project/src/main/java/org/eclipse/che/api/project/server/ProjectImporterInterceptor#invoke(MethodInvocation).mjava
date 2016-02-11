@@ -1,0 +1,35 @@
+    @Override
+    public Object invoke(MethodInvocation methodInvocation) throws Throwable {
+        Object result = methodInvocation.proceed();
+
+        FolderEntry baseFolder = (FolderEntry)methodInvocation.getArguments()[0];
+
+        String workspaceId = baseFolder.getWorkspace();
+        String pathToFolder = baseFolder.getPath();
+        String projectPath = pathToFolder.substring(pathToFolder.lastIndexOf("/"));
+        String projectName = projectPath.substring(1);
+
+        ProjectConfigDto projectFromWorkspace = projectManager.getProjectFromWorkspace(workspaceId, projectPath);
+
+        if (projectFromWorkspace != null) {
+            return result;
+        }
+
+        SourceStorage sourceStorage = (SourceStorage)methodInvocation.getArguments()[1];
+
+        SourceStorageDto sourceStorageDto = newDto(SourceStorageDto.class).withLocation(sourceStorage.getLocation())
+                                                                          .withParameters(sourceStorage.getParameters())
+                                                                          .withType(sourceStorage.getType());
+
+        ProjectConfigDto blankProject = newDto(ProjectConfigDto.class).withName(projectName)
+                                                                      .withPath(projectPath)
+                                                                      .withType("blank")
+                                                                      .withContentRoot("")
+                                                                      .withDescription("")
+                                                                      .withSource(sourceStorageDto);
+
+        projectManager.convertFolderToProject(workspaceId, projectPath, blankProject);
+
+        return result;
+    }
+

@@ -1,0 +1,30 @@
+    @Test
+    public void shouldBeAbleToUpdateRecipe() throws Exception {
+        final ManagedRecipe recipe = new RecipeImpl().withId("id")
+                                                     .withCreator(USER_ID)
+                                                     .withType("docker")
+                                                     .withScript("script1 content")
+                                                     .withTags(asList("java"));
+        when(recipeDao.getById(recipe.getId())).thenReturn(recipe);
+        when(permissionsChecker.hasAccess(recipe, USER_ID, "write")).thenReturn(true);
+        when(permissionsChecker.hasAccess(recipe, USER_ID, "update_acl")).thenReturn(true);
+
+        //prepare update
+        GroupDescriptor group = newDto(GroupDescriptor.class).withName("public").withAcl(asList("read"));
+        RecipeUpdate update = newDto(RecipeUpdate.class).withId(recipe.getId())
+                                                        .withType("new-type")
+                                                        .withScript("new script content")
+                                                        .withTags(asList("java", "mongodb"))
+                                                        .withPermissions(newDto(PermissionsDescriptor.class).withGroups(asList(group)));
+
+        final Response response = given().auth()
+                                         .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                         .contentType("application/json")
+                                         .body(update)
+                                         .when()
+                                         .put(SECURE_PATH + "/recipe");
+
+        assertEquals(response.getStatusCode(), 200);
+        verify(recipeDao).update(any(RecipeUpdate.class));
+    }
+

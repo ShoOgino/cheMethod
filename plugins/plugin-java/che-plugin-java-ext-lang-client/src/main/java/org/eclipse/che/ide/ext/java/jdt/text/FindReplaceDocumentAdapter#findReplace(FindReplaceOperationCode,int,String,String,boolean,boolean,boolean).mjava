@@ -1,0 +1,104 @@
+    /**
+     * Stateful findReplace executes a FIND, REPLACE, REPLACE_FIND or FIND_FIRST operation. In case of REPLACE and REPLACE_FIND it
+     * sends a <code>DocumentEvent</code> to all registered <code>IDocumentListener</code>.
+     *
+     * @param startOffset
+     *         document offset at which search starts this value is only used in the FIND_FIRST operation and otherwise
+     *         ignored
+     * @param findString
+     *         the string to find this value is only used in the FIND_FIRST operation and otherwise ignored
+     * @param replaceText
+     *         the string to replace the current match this value is only used in the REPLACE and REPLACE_FIND
+     *         operations and otherwise ignored
+     * @param forwardSearch
+     *         the search direction
+     * @param caseSensitive
+     *         indicates whether lower and upper case should be distinguished
+     * @param wholeWord
+     *         indicates whether the findString should be limited by white spaces as defined by Character.isWhiteSpace.
+     *         Must not be used in combination with <code>regExSearch</code>.
+     * @param regExSearch
+     *         if <code>true</code> this operation represents a regular expression Must not be used in combination with
+     *         <code>wholeWord</code>.
+     * @param operationCode
+     *         specifies what kind of operation is executed
+     * @return the find or replace region or <code>null</code> if there was no match
+     * @throws org.eclipse.che.ide.api.text.BadLocationException
+     *         if startOffset is an invalid document offset
+     * @throws IllegalStateException
+     *         if a REPLACE or REPLACE_FIND operation is not preceded by a successful FIND operation
+     * @throws PatternSyntaxException
+     *         if a regular expression has invalid syntax
+     */
+    private Region findReplace(final FindReplaceOperationCode operationCode, int startOffset, String findString,
+                               String replaceText, boolean forwardSearch, boolean caseSensitive, boolean wholeWord)
+            throws BadLocationException {
+        // Validate state
+        if ((operationCode == REPLACE || operationCode == REPLACE_FIND_NEXT)
+            && (fFindReplaceState != FIND_FIRST && fFindReplaceState != FIND_NEXT))
+            throw new IllegalStateException("illegal findReplace state: cannot replace without preceding find"); //$NON-NLS-1$
+
+        if (operationCode == FIND_FIRST) {
+            // Reset
+
+            if (findString == null || findString.length() == 0)
+                return null;
+
+            // Validate start offset
+            if (startOffset < 0 || startOffset >= length())
+                throw new BadLocationException();
+
+            String patternFlags = "g";
+
+            if (caseSensitive)
+                patternFlags += "i";
+
+            if (wholeWord)
+                findString = "\\b" + findString + "\\b"; //$NON-NLS-1$ //$NON-NLS-2$
+
+            if (!wholeWord)
+                findString = asRegPattern(findString);
+
+            fFindReplaceMatchOffset = startOffset;
+            regExp = RegExp.compile(findString, patternFlags);
+            regExp.setLastIndex(fFindReplaceMatchOffset);
+        }
+
+        // Set state
+        fFindReplaceState = operationCode;
+
+        if (operationCode != REPLACE) {
+
+            if (forwardSearch) {
+                MatchResult matchResult = regExp.exec(String.valueOf(this));
+                if (matchResult != null && matchResult.getGroupCount() > 0 && !matchResult.getGroup(0).isEmpty())
+                    return new RegionImpl(matchResult.getIndex(), matchResult.getGroup(0).length());
+                return null;
+            }
+            // backward search
+            regExp.setLastIndex(0);
+            MatchResult matchResult = regExp.exec(String.valueOf(this));
+
+            boolean found = matchResult != null;
+            int index = -1;
+            int length = -1;
+            while (found && matchResult.getIndex() + matchResult.getGroup(0).length() <= fFindReplaceMatchOffset + 1) {
+                index = matchResult.getIndex();
+                length = matchResult.getGroup(0).length();
+                regExp.setLastIndex(index + 1);
+                matchResult = regExp.exec(String.valueOf(this));
+                found = matchResult != null;
+            }
+            fFindReplaceMatchOffset = index;
+            if (index > -1) {
+                // must set matcher to correct position
+                regExp.setLastIndex(index);
+                matchResult = regExp.exec(String.valueOf(this));
+                return new RegionImpl(index, length);
+            }
+            return null;
+        }
+
+        return null;
+    }
+

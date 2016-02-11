@@ -1,0 +1,37 @@
+    @Test
+    public void testOnRenameClickedWhenRemoteBranchSelectedAndUserConfirmRename() throws Exception {
+        reset(selectedBranch);
+        when(selectedBranch.getDisplayName()).thenReturn(REMOTE_BRANCH_NAME);
+        when(selectedBranch.isRemote()).thenReturn(true);
+        InputDialog inputDialog = mock(InputDialog.class);
+        when(dialogFactory.createInputDialog(anyString(), anyString(), anyString(), anyInt(), anyInt(), anyObject(), anyObject()))
+                .thenReturn(inputDialog);
+        ConfirmDialog confirmDialog = mock(ConfirmDialog.class);
+        when(dialogFactory.createConfirmDialog(anyString(), anyString(), anyObject(), anyObject())).thenReturn(confirmDialog);
+
+        selectBranch();
+        presenter.onRenameClicked();
+
+        verify(dialogFactory).createConfirmDialog(anyString(), anyString(), confirmCallbackCaptor.capture(), anyObject());
+        ConfirmCallback confirmCallback = confirmCallbackCaptor.getValue();
+        confirmCallback.accepted();
+
+        verify(dialogFactory).createInputDialog(anyString(), anyString(), anyString(), anyInt(), anyInt(), inputCallbackCaptor.capture(),
+                                                anyObject());
+        InputCallback inputCallback = inputCallbackCaptor.getValue();
+        inputCallback.accepted(RETURNED_MESSAGE);
+
+
+        verify(service).branchRename(anyString(), eq(rootProjectConfig), eq(REMOTE_BRANCH_NAME), eq(RETURNED_MESSAGE),
+                                     asyncRequestCallbackCaptor.capture());
+        AsyncRequestCallback<String> renameBranchCallback = asyncRequestCallbackCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(renameBranchCallback, PROJECT_PATH);
+
+        verify(selectedBranch, times(2)).getDisplayName();
+        verify(service, times(2))
+                .branchList(anyString(), eq(rootProjectConfig), eq(LIST_ALL), anyObject());
+        verify(console, never()).printError(anyString());
+        verify(notificationManager, never()).notify(anyString(), eq(rootProjectConfig));
+        verify(constant, never()).branchRenameFailed();
+    }
+

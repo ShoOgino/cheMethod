@@ -1,0 +1,23 @@
+    @SuppressWarnings("unchecked")
+    @Test
+    public void testSearchByName() throws Exception {
+        Project myProject = pm.getProject(workspace, "my_project");
+        myProject.getBaseFolder().createFolder("a/b").createFile("test.txt", "hello".getBytes());
+        myProject.getBaseFolder().createFolder("x/y").createFile("test.txt", "test".getBytes());
+        myProject.getBaseFolder().createFolder("c").createFile("exclude", "test".getBytes());
+
+        ContainerResponse response = launcher.service(GET,
+                                                      String.format("http://localhost:8080/api/project/%s/search/my_project?name=test.txt",
+                                                                    workspace),
+                                                      "http://localhost:8080/api", null, null, null);
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+        List<ItemReference> result = (List<ItemReference>)response.getEntity();
+        assertEquals(result.size(), 2);
+        Set<String> paths = new LinkedHashSet<>(2);
+        for (ItemReference itemReference : result) {
+            paths.add(itemReference.getPath());
+        }
+        Assert.assertTrue(paths.contains("/my_project/a/b/test.txt"));
+        Assert.assertTrue(paths.contains("/my_project/x/y/test.txt"));
+    }
+

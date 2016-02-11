@@ -1,0 +1,50 @@
+    /**
+     * Reads the keymap preferences and fills the {@link KeymapValuesHolder} instance.
+     *
+     * @param preferencesManager
+     *         the preferences manager
+     * @param valuesHolder
+     *         the object that keeps the values
+     */
+    public static void readPref(final PreferencesManager preferencesManager, final KeymapValuesHolder valuesHolder) {
+        final String keymapPrefAsJson = preferencesManager.getValue(KEYMAP_PREF_KEY);
+        if (keymapPrefAsJson == null || keymapPrefAsJson.isEmpty()) {
+            return;
+        }
+        JSONObject propertyObject;
+        try {
+            final JSONValue parseResult = JSONParser.parseStrict(keymapPrefAsJson);
+            propertyObject = parseResult.isObject();
+        } catch (final RuntimeException e) {
+            Log.error(KeymapPrefReader.class, "Error during preference parsing.", e);
+            return;
+        }
+        for (final String key : propertyObject.keySet()) {
+            final JSONValue value = propertyObject.get(key);
+            if (value == null) {
+                continue;
+            }
+            String valueString = null;
+            try {
+                valueString = value.isString().stringValue();
+            } catch (final ClassCastException e) {
+                Log.warn(KeymapPrefReader.class, "Incorrect value type for keymap preference for editor " + key + ": " + value);
+                continue;
+            }
+            if (valueString != null) {
+                EditorType editorType = null;
+                Keymap keymap = null;
+                try {
+                    editorType = EditorType.fromKey(key);
+                    keymap = Keymap.fromKey(valueString);
+                } catch (final RuntimeException e) {
+                    Log.error(KeymapPrefReader.class, "Invalid value for keymap preference.", e);
+                    continue;
+                }
+                if (editorType != null && keymap != null) {
+                    valuesHolder.setKeymap(editorType, keymap);
+                }
+            }
+        }
+    }
+

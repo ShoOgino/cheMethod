@@ -1,0 +1,34 @@
+    /**
+     * Update list of local and remote branches on view.
+     */
+    void updateLocalBranches() {
+        //getting local branches
+        getBranchesForCurrentProject(LIST_LOCAL, new AsyncCallback<List<Branch>>() {
+            @Override
+            public void onSuccess(List<Branch> result) {
+                List<String> localBranches = branchSearcher.getLocalBranchesToDisplay(result);
+                view.setLocalBranches(localBranches);
+
+                for (Branch branch : result) {
+                    if (branch.isActive()) {
+                        view.selectLocalBranch(branch.getDisplayName());
+                        break;
+                    }
+                }
+
+                //getting remote branch only after selecting current local branch
+                updateRemoteBranches();
+            }
+
+            @Override
+            public void onFailure(Throwable exception) {
+                String errorMessage = exception.getMessage() != null ? exception.getMessage() : constant.localBranchesListFailed();
+                GitOutputConsole console = gitOutputConsoleFactory.create(BRANCH_LIST_COMMAND_NAME);
+                console.printError(errorMessage);
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                notificationManager.notify(constant.localBranchesListFailed(), FAIL, true, project.getRootProject());
+                view.setEnablePushButton(false);
+            }
+        });
+    }
+

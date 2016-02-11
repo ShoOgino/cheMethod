@@ -1,0 +1,34 @@
+    /**
+     * Recursively chains the given promise with the promise that performs the next action from the given iterator.
+     */
+    private Promise<Void> chainActionsRecursively(Promise<Void> promise,
+                                                  ListIterator<Pair<Action, ActionEvent>> iterator,
+                                                  boolean breakOnFail) {
+        if (!iterator.hasNext()) {
+            return promise;
+        }
+
+        final Pair<Action, ActionEvent> actionWithEvent = iterator.next();
+
+        final Promise<Void> derivedPromise = promise.thenPromise(new Function<Void, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(Void arg) throws FunctionException {
+                return promiseAction(actionWithEvent.first, actionWithEvent.second);
+            }
+        });
+
+        if (breakOnFail) {
+            return chainActionsRecursively(derivedPromise, iterator, breakOnFail);
+        }
+
+        final Promise<Void> derivedErrorSafePromise = derivedPromise.catchErrorPromise(new Function<PromiseError, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(PromiseError arg) throws FunctionException {
+                // 'hide' the error to avoid rejecting chain of promises
+                return Promises.resolve(null);
+            }
+        });
+
+        return chainActionsRecursively(derivedErrorSafePromise, iterator, breakOnFail);
+    }
+

@@ -1,0 +1,23 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void testResetHard(GitConnectionFactory connectionFactory) throws Exception {
+        //given
+        GitConnection connection = connectToGitRepositoryWithContent(connectionFactory, repository);
+        File aaa = addFile(connection, "aaa", "aaa\n");
+        FileOutputStream fos = new FileOutputStream(new File(connection.getWorkingDir(), "README.txt"));
+        fos.write("MODIFIED\n".getBytes());
+        fos.flush();
+        fos.close();
+        String initMessage = connection.log(newDto(LogRequest.class)).getCommits().get(0).getMessage();
+        connection.add(newDto(AddRequest.class).withFilepattern(new ArrayList<>(Arrays.asList("."))));
+        connection.commit(newDto(CommitRequest.class).withMessage("add file"));
+        //when
+        ResetRequest resetRequest = newDto(ResetRequest.class).withCommit("HEAD^");
+        resetRequest.setType(ResetRequest.ResetType.HARD);
+        connection.reset(resetRequest);
+        //then
+        assertEquals(connection.log(newDto(LogRequest.class)).getCommits().get(0).getMessage(), initMessage);
+        assertFalse(aaa.exists());
+        assertNotCached(connection, "aaa");
+        assertEquals(CONTENT, Files.toString(new File(connection.getWorkingDir(), "README.txt"), Charsets.UTF_8));
+    }
+

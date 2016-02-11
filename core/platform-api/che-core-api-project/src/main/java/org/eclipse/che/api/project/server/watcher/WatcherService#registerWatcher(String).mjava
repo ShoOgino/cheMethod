@@ -1,0 +1,26 @@
+    @GET
+    @Path("/{workspaceId}/register")
+    public void registerWatcher(@PathParam("workspaceId") String workspaceId) throws ServerException, NotFoundException, IOException {
+        VirtualFileSystem virtualFileSystem = virtualFileSystemRegistry.getProvider(workspaceId).newInstance(null);
+
+        MountPoint mountPoint = virtualFileSystem.getMountPoint();
+
+        VirtualFile root = mountPoint.getRoot();
+
+        File ioFile = root.getIoFile();
+
+        final Watcher watcher = new Watcher(ioFile.toPath(), FilesBuffer.get(), true);
+
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                watcher.processEvents();
+            }
+        };
+        Thread watcherThread = new Thread(runnable, "Thread of file system listener");
+
+        watcherThread.setDaemon(true);
+
+        watcherThread.start();
+    }
+

@@ -1,0 +1,33 @@
+    /** Iterate over changes except update changes. Refresh tree according to change type. */
+    private Promise<Void> proceedGeneralChanges(Promise<Void> promise, Iterator<ChangeInfo> iterator, final RefactorInfo refactorInfo) {
+        if (!iterator.hasNext()) {
+            return promise;
+        }
+
+        final ChangeInfo changeInfo = iterator.next();
+
+        if (changeInfo == null || changeInfo.getName() == null) {
+            return proceedGeneralChanges(promise, iterator, refactorInfo);
+        }
+
+        final Promise<Void> derivedPromise;
+
+        switch (changeInfo.getName()) {
+            case MOVE:
+            case RENAME_COMPILATION_UNIT:
+                if (refactorInfo != null && refactorInfo.getSelectedItems() != null) {
+                    removeNodeFor(changeInfo, refactorInfo.getSelectedItems());
+                }
+
+                derivedPromise = promise.thenPromise(proceedRefactoringMove(changeInfo));
+                break;
+            case RENAME_PACKAGE:
+                derivedPromise = promise.thenPromise(proceedRefactoringRenamePackage(changeInfo, refactorInfo));
+                break;
+            default:
+                return proceedGeneralChanges(promise, iterator, refactorInfo);
+        }
+
+        return proceedGeneralChanges(derivedPromise, iterator, refactorInfo);
+    }
+

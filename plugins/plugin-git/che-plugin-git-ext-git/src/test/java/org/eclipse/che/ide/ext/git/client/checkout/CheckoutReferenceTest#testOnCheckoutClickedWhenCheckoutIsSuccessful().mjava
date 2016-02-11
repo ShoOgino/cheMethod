@@ -1,0 +1,41 @@
+    @Test
+    public void testOnCheckoutClickedWhenCheckoutIsSuccessful() throws Exception {
+        VirtualFile virtualFile = mock(VirtualFile.class);
+
+        NavigableMap<String, EditorPartPresenter> partPresenterMap = new TreeMap<>();
+        partPresenterMap.put("partPresenter", partPresenter);
+
+        when(editorAgent.getOpenedEditors()).thenReturn(partPresenterMap);
+        when(partPresenter.getEditorInput()).thenReturn(editorInput);
+
+        when(editorInput.getFile()).thenReturn(virtualFile);
+        when(virtualFile.getPath()).thenReturn("/foo");
+
+        when(dtoFactory.createDto(CheckoutRequest.class)).thenReturn(checkoutRequest);
+        when(checkoutRequest.withName(anyString())).thenReturn(checkoutRequest);
+        when(checkoutRequest.withCreateNew(anyBoolean())).thenReturn(checkoutRequest);
+        reset(service);
+        when(view.getReference()).thenReturn(CORRECT_REFERENCE);
+        when(rootProjectConfig.getPath()).thenReturn(PROJECT_PATH);
+
+        presenter.onEnterClicked();
+
+        verify(service).checkout(anyString(), anyObject(), anyObject(), asyncCallbackCaptor.capture());
+        AsyncRequestCallback<String> callback = asyncCallbackCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(callback, "");
+
+        verify(checkoutRequest).withName(CORRECT_REFERENCE);
+        verify(checkoutRequest).withCreateNew(false);
+        verifyNoMoreInteractions(checkoutRequest);
+        verify(view).close();
+        verify(projectServiceClient).getProject(anyString(), eq(PROJECT_PATH), projectDescriptorCaptor.capture());
+        AsyncRequestCallback<ProjectConfigDto> asyncRequestCallback = projectDescriptorCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(asyncRequestCallback, projectConfig);
+        verify(projectConfig).getProblems();
+        verify(projectExplorer).reloadChildren();
+        verify(editorAgent).getOpenedEditors();
+        verify(partPresenter).getEditorInput();
+        verify(editorInput).getFile();
+        verify(eventBus).fireEvent(Matchers.<FileContentUpdateEvent>anyObject());
+    }
+

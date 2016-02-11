@@ -1,0 +1,43 @@
+    @Test
+    public void shouldBindCommonAndDevVolumesToContainerOnDevInstanceCreationFromSnapshot() throws Exception {
+        final String expectedHostPathOfProjects = "/tmp/projects";
+        Set<String> devVolumes = new HashSet<>(asList("/etc:/tmp/etc:ro", "/some/thing:/home/some/thing"));
+        Set<String> commonVolumes = new HashSet<>(asList("/some/thing/else:/home/some/thing/else", "/other/path:/home/other/path"));
+
+        final ArrayList<String> expectedVolumes = new ArrayList<>();
+        expectedVolumes.addAll(devVolumes);
+        expectedVolumes.addAll(commonVolumes);
+        expectedVolumes.add(expectedHostPathOfProjects + ":/projects");
+
+        dockerInstanceProvider = new DockerInstanceProvider(dockerConnector,
+                                                            dockerConnectorConfiguration,
+                                                            dockerMachineFactory,
+                                                            dockerInstanceStopDetector,
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            devVolumes,
+                                                            commonVolumes,
+                                                            null,
+                                                            workspaceFolderPathProvider,
+                                                            PROJECT_FOLDER_PATH,
+                                                            false,
+                                                            Collections.<String>emptySet(),
+                                                            Collections.<String>emptySet());
+
+        when(workspaceFolderPathProvider.getPath(anyString())).thenReturn(expectedHostPathOfProjects);
+
+        final boolean isDev = true;
+
+
+        createInstanceFromSnapshot(isDev);
+
+
+        ArgumentCaptor<ContainerConfig> argumentCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture(), anyString());
+        verify(dockerConnector).startContainer(anyString(), eq(null));
+
+        final String[] actualBinds = argumentCaptor.getValue().getHostConfig().getBinds();
+        assertEquals(actualBinds.length, expectedVolumes.size());
+        assertEquals(new HashSet<>(asList(actualBinds)), new HashSet<>(expectedVolumes));
+    }
+

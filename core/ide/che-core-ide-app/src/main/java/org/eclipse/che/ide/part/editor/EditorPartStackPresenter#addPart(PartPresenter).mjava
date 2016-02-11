@@ -1,0 +1,53 @@
+    /** {@inheritDoc} */
+    @Override
+    public void addPart(@NotNull PartPresenter part) {
+        if (!containsPart(part)) {
+            part.addPropertyListener(propertyListener);
+
+            VirtualFile file = part instanceof AbstractEditorPresenter ? ((AbstractEditorPresenter)part).getEditorInput().getFile()
+                                                                       : null;
+
+            final EditorTab editorTab = tabItemFactory.createEditorPartButton(file, part.getTitleSVGImage(), part.getTitle());
+
+            part.addPropertyListener(new PropertyListener() {
+                @Override
+                public void propertyChanged(PartPresenter source, int propId) {
+                    if (propId == EditorPartPresenter.PROP_INPUT && source instanceof EditorPartPresenter) {
+                        editorTab.setReadOnlyMark(((EditorPartPresenter)source).getEditorInput().getFile().isReadOnly());
+                    }
+                }
+            });
+
+            editorTab.setDelegate(this);
+
+            parts.put(editorTab, part);
+            partsOrder.add(part);
+
+            view.addTab(editorTab, part);
+
+            TabItem tabItem = getTabByPart(part);
+
+            if (tabItem != null) {
+                ListItem item = new ListItemWidget(tabItem);
+                listButton.addListItem(item);
+                items.put(item, tabItem);
+            }
+
+            if (part instanceof EditorWithErrors) {
+                final EditorWithErrors presenter = ((EditorWithErrors)part);
+
+                part.addPropertyListener(new PropertyListener() {
+                    @Override
+                    public void propertyChanged(PartPresenter source, int propId) {
+                        EditorState editorState = presenter.getErrorState();
+
+                        editorTab.setErrorMark(ERROR.equals(editorState));
+                        editorTab.setWarningMark(WARNING.equals(editorState));
+                    }
+                });
+            }
+        }
+
+        view.selectTab(part);
+    }
+

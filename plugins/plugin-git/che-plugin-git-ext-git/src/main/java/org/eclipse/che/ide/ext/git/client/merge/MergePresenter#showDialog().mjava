@@ -1,0 +1,55 @@
+    /** Show dialog. */
+    public void showDialog() {
+        final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
+        final GitOutputConsole console = gitOutputConsoleFactory.create(MERGE_COMMAND_NAME);
+        selectedReference = null;
+        view.setEnableMergeButton(false);
+
+        service.branchList(workspaceId, project, LIST_LOCAL,
+                           new AsyncRequestCallback<List<Branch>>(dtoUnmarshallerFactory.newListUnmarshaller(Branch.class)) {
+                               @Override
+                               protected void onSuccess(List<Branch> result) {
+                                   List<Reference> references = new ArrayList<>();
+                                   for (Branch branch : result) {
+                                       if (!branch.isActive()) {
+                                           Reference reference = new Reference(branch.getName(), branch.getDisplayName(), LOCAL_BRANCH);
+                                           references.add(reference);
+                                       }
+                                   }
+                                   view.setLocalBranches(references);
+                               }
+
+                               @Override
+                               protected void onFailure(Throwable exception) {
+                                   console.printError(exception.getMessage());
+                                   consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                   notificationManager.notify(constant.branchesListFailed(), FAIL, true, project);
+                               }
+                           });
+
+        service.branchList(workspaceId, project, LIST_REMOTE,
+                           new AsyncRequestCallback<List<Branch>>(dtoUnmarshallerFactory.newListUnmarshaller(Branch.class)) {
+                               @Override
+                               protected void onSuccess(List<Branch> result) {
+                                   List<Reference> references = new ArrayList<>();
+                                   for (Branch branch : result) {
+                                       if (!branch.isActive()) {
+                                           Reference reference =
+                                                   new Reference(branch.getName(), branch.getDisplayName(), REMOTE_BRANCH);
+                                           references.add(reference);
+                                       }
+                                   }
+                                   view.setRemoteBranches(references);
+                               }
+
+                               @Override
+                               protected void onFailure(Throwable exception) {
+                                   console.printError(exception.getMessage());
+                                   consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                   notificationManager.notify(constant.branchesListFailed(), FAIL, true, project);
+                               }
+                           });
+
+        view.showDialog();
+    }
+

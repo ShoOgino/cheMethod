@@ -1,0 +1,46 @@
+    /**
+     * Transforms {@link ManagedRecipe} to {@link RecipeDescriptor}.
+     */
+    private RecipeDescriptor asRecipeDescriptor(ManagedRecipe recipe) {
+        final RecipeDescriptor descriptor = DtoFactory.getInstance()
+                                                      .createDto(RecipeDescriptor.class)
+                                                      .withId(recipe.getId())
+                                                      .withName(recipe.getName())
+                                                      .withType(recipe.getType())
+                                                      .withScript(recipe.getScript())
+                                                      .withCreator(recipe.getCreator())
+                                                      .withTags(recipe.getTags());
+        final Permissions permissions = recipe.getPermissions();
+        if (permissions != null) {
+            final List<GroupDescriptor> groups = new ArrayList<>(permissions.getGroups().size());
+            for (Group group : permissions.getGroups()) {
+                groups.add(DtoFactory.getInstance()
+                                     .createDto(GroupDescriptor.class)
+                                     .withName(group.getName())
+                                     .withUnit(group.getUnit())
+                                     .withAcl(group.getAcl()));
+            }
+            descriptor.setPermissions(DtoFactory.getInstance()
+                                                .createDto(PermissionsDescriptor.class)
+                                                .withGroups(groups)
+                                                .withUsers(permissions.getUsers()));
+        }
+
+        final UriBuilder builder = getServiceContext().getServiceUriBuilder();
+        final Link removeLink = LinksHelper.createLink("DELETE",
+                                                       builder.clone()
+                                                              .path(getClass(), "removeRecipe")
+                                                              .build(recipe.getId())
+                                                              .toString(),
+                                                       LINK_REL_REMOVE_RECIPE);
+        final Link scriptLink = LinksHelper.createLink("GET",
+                                                       builder.clone()
+                                                              .path(getClass(), "getRecipeScript")
+                                                              .build(recipe.getId())
+                                                              .toString(),
+                                                       TEXT_PLAIN,
+                                                       LINK_REL_GET_RECIPE_SCRIPT);
+        descriptor.setLinks(asList(scriptLink, removeLink));
+        return descriptor;
+    }
+

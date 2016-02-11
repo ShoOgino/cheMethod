@@ -1,0 +1,36 @@
+	/**
+	 * Generates the Assignment in an iterator based for, used in the first statement of an iterator
+	 * based <code>for</code> loop body, to retrieve the next element of the {@link Iterable}
+	 * instance.
+	 * 
+	 * @param rewrite the current instance of {@link ASTRewrite}
+	 * @param loopOverType the {@link ITypeBinding} of the loop variable
+	 * @param loopVariableName the name of the loop variable
+	 * @return an {@link Assignment}, which retrieves the next element of the {@link Iterable} using
+	 *         the active {@link Iterator}
+	 */
+	private Assignment getIteratorBasedForBodyAssignment(ASTRewrite rewrite, ITypeBinding loopOverType, SimpleName loopVariableName) {
+		AST ast= rewrite.getAST();
+		Assignment assignResolvedVariable= ast.newAssignment();
+
+		// left hand side
+		SimpleName resolvedVariableName= resolveLinkedVariableNameWithProposals(rewrite, loopOverType.getName(), loopVariableName.getIdentifier(), false);
+		VariableDeclarationFragment resolvedVariableDeclarationFragment= ast.newVariableDeclarationFragment();
+		resolvedVariableDeclarationFragment.setName(resolvedVariableName);
+		VariableDeclarationExpression resolvedVariableDeclaration= ast.newVariableDeclarationExpression(resolvedVariableDeclarationFragment);
+		resolvedVariableDeclaration.setType(getImportRewrite().addImport(loopOverType, ast, new ContextSensitiveImportRewriteContext(fCurrentNode, getImportRewrite())));
+		assignResolvedVariable.setLeftHandSide(resolvedVariableDeclaration);
+
+		// right hand side
+		MethodInvocation invokeIteratorNextExpression= ast.newMethodInvocation();
+		invokeIteratorNextExpression.setName(ast.newSimpleName("next")); //$NON-NLS-1$
+		SimpleName currentElementName= ast.newSimpleName(loopVariableName.getIdentifier());
+		addLinkedPosition(rewrite.track(currentElementName), LinkedPositionGroup.NO_STOP, currentElementName.getIdentifier());
+		invokeIteratorNextExpression.setExpression(currentElementName);
+		assignResolvedVariable.setRightHandSide(invokeIteratorNextExpression);
+
+		assignResolvedVariable.setOperator(Assignment.Operator.ASSIGN);
+
+		return assignResolvedVariable;
+	}
+

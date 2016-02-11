@@ -1,0 +1,42 @@
+    /**
+     * Recursive update opened editor parts after renaming their parent folder or parent module
+     *
+     * @param editorParts
+     *         list opened editor parts
+     */
+    private void updateEditorPartsAfterRename(final LinkedList<EditorPartPresenter> editorParts,
+                                              final String oldTargetPath,
+                                              final String newTargetPath,
+                                              final Unmarshallable<ItemReference> unmarshaller) {
+        if (editorParts.isEmpty()) {
+            return;
+        }
+        final EditorPartPresenter editorPart = editorParts.pop();
+        final String oldFilePath = editorPart.getEditorInput().getFile().getPath();
+
+        if (!oldFilePath.startsWith(oldTargetPath + "/")) {
+            updateEditorPartsAfterRename(editorParts, oldTargetPath, newTargetPath, unmarshaller);
+        }
+
+        final String newFilePath = oldFilePath.replaceFirst(oldTargetPath, newTargetPath);
+
+        projectService.getItem(appContext.getWorkspace().getId(), newFilePath, new AsyncRequestCallback<ItemReference>(unmarshaller) {
+            @Override
+            protected void onSuccess(ItemReference result) {
+                FileReferenceNode fileReferenceNode = ((FileReferenceNode)editorPart.getEditorInput().getFile());
+                ProjectConfigDto configDto = fileReferenceNode.getProjectConfig();
+                final ItemReferenceBasedNode wrappedNode = nodeManager.wrap(result, configDto);
+
+                if (wrappedNode instanceof FileReferenceNode) {
+                    updateEditorNode(oldFilePath, (FileReferenceNode)wrappedNode);
+                }
+                updateEditorPartsAfterRename(editorParts, oldTargetPath, newTargetPath, unmarshaller);
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                updateEditorPartsAfterRename(editorParts, oldTargetPath, newTargetPath, unmarshaller);
+            }
+        });
+    }
+

@@ -1,0 +1,50 @@
+    public String getContent(IJavaProject project, int rootId, String path) throws CoreException {
+        IPackageFragmentRoot root = getPackageFragmentRoot(project, rootId);
+        if (root == null) {
+            return null;
+        }
+
+        if (path.startsWith("/")) {
+            //non java file
+            if (root instanceof JarPackageFragmentRoot) {
+                JarPackageFragmentRoot jarPackageFragmentRoot = (JarPackageFragmentRoot)root;
+                ZipFile jar = null;
+                try {
+                    jar = jarPackageFragmentRoot.getJar();
+                    ZipEntry entry = jar.getEntry(path.substring(1));
+                    if (entry != null) {
+                        try (InputStream stream = jar.getInputStream(entry)) {
+                            return IoUtil.readStream(stream);
+                        } catch (IOException e) {
+                            LOG.error("Can't read file content: " + entry.getName(), e);
+                        }
+                    }
+                } finally {
+                    if (jar != null) {
+                        JavaModelManager.getJavaModelManager().closeZipFile(jar);
+                    }
+                }
+            }
+            Object[] resources = root.getNonJavaResources();
+
+            for (Object resource : resources) {
+                if (resource instanceof JarEntryFile) {
+                    JarEntryFile file = (JarEntryFile)resource;
+                    if (file.getFullPath().toOSString().equals(path)) {
+                        return readFileContent(file);
+                    }
+                }
+                if (resource instanceof JarEntryDirectory) {
+                    JarEntryDirectory directory = (JarEntryDirectory)resource;
+                    JarEntryFile file = findJarFile(directory, path);
+                    if (file != null) {
+                        return readFileContent(file);
+                    }
+                }
+            }
+        } else {
+            return getContent(project, path);
+        }
+        return null;
+    }
+

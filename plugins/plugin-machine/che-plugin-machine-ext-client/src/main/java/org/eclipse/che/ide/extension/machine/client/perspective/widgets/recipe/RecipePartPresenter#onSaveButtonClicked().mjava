@@ -1,0 +1,36 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onSaveButtonClicked() {
+        RecipeEditorPanel editorPanel = recipesContainerPresenter.getEditorPanel(selectedRecipe);
+        RecipeDescriptor recipeDescriptor = selectedRecipe.getDescriptor();
+        final RecipeUpdate recipeUpdate = dtoFactory.createDto(RecipeUpdate.class)
+                                                    .withId(recipeDescriptor.getId())
+                                                    .withType(recipeDescriptor.getType())
+                                                    .withScript(editorPanel.getScript())
+                                                    .withName(editorPanel.getName())
+                                                    .withTags(editorPanel.getTags());
+        Promise<RecipeDescriptor> updateRecipe = service.updateRecipe(recipeUpdate);
+        updateRecipe.then(new Operation<RecipeDescriptor>() {
+            @Override
+            public void apply(RecipeDescriptor recipeDescriptor) throws OperationException {
+                RecipeDescriptor selectedRecipeDescriptor = recipes.get(selectedRecipe);
+                selectedRecipeDescriptor.setScript(recipeDescriptor.getScript());
+                selectedRecipeDescriptor.setTags(recipeDescriptor.getTags());
+                selectedRecipeDescriptor.setName(recipeDescriptor.getName());
+
+                selectedRecipe.setName(recipeDescriptor.getName());
+
+                notificationManager.notify("Recipe \"" + recipeDescriptor.getName() + "\" was saved.");
+            }
+        });
+
+        updateRecipe.catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                if (arg.getMessage() != null) {
+                    notificationManager.notify(locale.failedToSaveRecipe(), arg.getMessage(), FAIL, true);
+                }
+            }
+        });
+    }
+

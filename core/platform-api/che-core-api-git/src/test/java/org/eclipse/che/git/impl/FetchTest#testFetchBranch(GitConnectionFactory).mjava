@@ -1,0 +1,37 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = GitConnectionFactoryProvider.class)
+    public void testFetchBranch(GitConnectionFactory connectionFactory)
+            throws ServerException, IOException, UnauthorizedException, URISyntaxException {
+
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        GitConnection fetchConnection = connectionFactory.getConnection(fetchTestRepo.getAbsolutePath());
+
+        addFile(connection, "README", "readme content");
+        connection.add(newDto(AddRequest.class).withFilepattern(Arrays.asList(".")));
+        connection.commit(newDto(CommitRequest.class).withMessage("fetch test"));
+        //clone default repo into fetchRepo
+        fetchConnection.clone(newDto(CloneRequest.class).withRemoteUri(repository.getAbsolutePath()));
+
+        //add new File into defaultRepository
+        addFile(connection, "newfile1", "newfile1 content");
+        //add file to index and make commit
+        connection.add(newDto(AddRequest.class).withFilepattern(Arrays.asList(".")));
+        connection.commit(newDto(CommitRequest.class).withMessage("fetch test"));
+
+        String branchName = "branch";
+        connection.checkout(newDto(CheckoutRequest.class).withCreateNew(true).withName(branchName));
+        addFile(connection, "otherfile1", "otherfile1 content");
+        addFile(connection, "otherfile2", "otherfile2 content");
+        connection.add(newDto(AddRequest.class).withFilepattern(Arrays.asList(".")));
+        connection.commit(newDto(CommitRequest.class).withMessage("fetch branch test"));
+
+        //when
+        fetchConnection.fetch(newDto(FetchRequest.class).withRemote(repository.getAbsolutePath()));
+        //then
+        //make merge with FETCH_HEAD
+        fetchConnection.merge(newDto(MergeRequest.class).withCommit("FETCH_HEAD"));
+        assertTrue(new File(fetchTestRepo, "otherfile1").exists());
+        assertTrue(new File(fetchTestRepo, "otherfile2").exists());
+        assertEquals(fetchConnection.log(newDto(LogRequest.class)).getCommits().get(0).getMessage(), "fetch branch test");
+    }
+

@@ -1,0 +1,36 @@
+    /**
+     * Attaches to the container with specified id.
+     *
+     * @param container
+     *         id of container
+     * @param containerLogsProcessor
+     *         output for container logs
+     * @param stream
+     *         if {@code true} then get 'live' stream from container. Typically need to run this method in separate thread, if {@code
+     *         stream} is {@code true} since this method blocks until container is running.
+     * @throws java.io.IOException
+     */
+    public void attachContainer(String container, MessageProcessor<LogMessage> containerLogsProcessor, boolean stream) throws IOException {
+        final List<Pair<String, ?>> headers = new ArrayList<>(2);
+        headers.add(Pair.of("Content-Type", MediaType.TEXT_PLAIN));
+        headers.add(Pair.of("Content-Length", 0));
+
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("POST")
+                                                            .path("/containers/" + container + "/attach")
+                                                            .query("stream", (stream ? 1 : 0))
+                                                            .query("logs", (stream ? 0 : 1))
+                                                            .query("stdout", 1)
+                                                            .query("stderr", 1)
+                                                            .headers(headers)) {
+            final DockerResponse response = connection.request();
+            final int status = response.getStatus();
+            if (OK.getStatusCode() != status) {
+                throw new DockerException(getDockerExceptionMessage(response), status);
+            }
+            try (InputStream responseStream = response.getInputStream()) {
+                new LogMessagePumper(responseStream, containerLogsProcessor).start();
+            }
+        }
+    }
+

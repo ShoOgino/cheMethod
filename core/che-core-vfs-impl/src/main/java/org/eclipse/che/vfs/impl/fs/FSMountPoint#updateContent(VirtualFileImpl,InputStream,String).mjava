@@ -1,0 +1,29 @@
+    void updateContent(VirtualFileImpl virtualFile, InputStream content, String lockToken) throws ForbiddenException, ServerException {
+        if (!virtualFile.isFile()) {
+            throw new ForbiddenException(String.format("Unable update content. Item '%s' is not file. ", virtualFile.getPath()));
+        }
+
+        if (systemFilter.accept(workspaceId, virtualFile.getVirtualFilePath())) {
+            // Don't check permissions when update file ".codenvy/misc.xml". Dirty huck :( but seems simplest solution for now.
+            // Need to work with 'misc.xml' independently to user.
+            if (!hasPermission(virtualFile, BasicPermissions.WRITE.value(), true)) {
+                throw new ForbiddenException(
+                        String.format("Unable update content of file '%s'. Operation not permitted. ", virtualFile.getPath()));
+            }
+        }
+        if (!validateLockTokenIfLocked(virtualFile, lockToken)) {
+            throw new ForbiddenException(String.format("Unable update content of file '%s'. File is locked. ", virtualFile.getPath()));
+        }
+
+        doUpdateContent(virtualFile, content);
+
+        if (searcherProvider != null) {
+            try {
+                searcherProvider.getSearcher(this, true).update(virtualFile);
+            } catch (ServerException e) {
+                LOG.error(e.getMessage(), e);
+            }
+        }
+        eventService.publish(new UpdateContentEvent(workspaceId, virtualFile.getPath()));
+    }
+

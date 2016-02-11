@@ -1,0 +1,44 @@
+    /**
+     * Create move refactoring session.
+     * @param cmr move settings, contains resource paths to move.
+     * @return refactoring session id.
+     * @throws JavaModelException when JavaModel has a failure
+     * @throws RefactoringException when impossible to create move refactoring session
+     */
+    @POST
+    @Path("move/create")
+    @Consumes("application/json")
+    @Produces("text/plain")
+    public String createMoveRefactoring(CreateMoveRefactoring cmr) throws JavaModelException, RefactoringException {
+        IJavaProject javaProject = model.getJavaProject(cmr.getProjectPath());
+        IJavaElement[] javaElements;
+        try {
+            Function<ElementToMove, IJavaElement> map = javaElement -> {
+                try {
+                    if (javaElement.isPack()) {
+                        return javaProject.findPackageFragment(new org.eclipse.core.runtime.Path(javaElement.getPath()));
+                    } else {
+                        return javaProject.findType(javaElement.getPath()).getCompilationUnit();
+
+                    }
+                } catch (JavaModelException e) {
+                    throw new IllegalArgumentException(e);
+                }
+
+            };
+            javaElements = cmr.getElements().stream().map(map).toArray(IJavaElement[]::new);
+
+        } catch (IllegalArgumentException e) {
+            if (e.getCause() instanceof JavaModelException) {
+                throw (JavaModelException)e.getCause();
+            } else {
+                throw e;
+            }
+        }
+        if (RefactoringAvailabilityTester.isMoveAvailable(new IResource[0], javaElements)) {
+            return manager.createMoveRefactoringSession(javaElements);
+        }
+
+        throw new RefactoringException("Can't create move refactoring.");
+    }
+

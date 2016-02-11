@@ -1,0 +1,50 @@
+    private void activateLinkedModeIntoEditor(final RenameRefactoringSession session,
+                                              final HasLinkedMode linkedEditor,
+                                              final Document document) {
+        mode = linkedEditor.getLinkedMode();
+        LinkedModel model = linkedEditor.createLinkedModel();
+        LinkedModeModel linkedModeModel = session.getLinkedModeModel();
+        List<LinkedModelGroup> groups = new ArrayList<>();
+        for (LinkedPositionGroup positionGroup : linkedModeModel.getGroups()) {
+            LinkedModelGroup group = linkedEditor.createLinkedGroup();
+            LinkedData data = positionGroup.getData();
+            if (data != null) {
+                LinkedModelData modelData = linkedEditor.createLinkedModelData();
+                modelData.setType("link");
+                modelData.setValues(data.getValues());
+                group.setData(modelData);
+            }
+            List<Position> positions = new ArrayList<>();
+            for (Region region : positionGroup.getPositions()) {
+                positions.add(new Position(region.getOffset(), region.getLength()));
+            }
+            group.setPositions(positions);
+            groups.add(group);
+        }
+        model.setGroups(groups);
+        if (linkedEditor instanceof EditorWithAutoSave) {
+            ((EditorWithAutoSave)linkedEditor).disableAutoSave();
+        }
+
+        mode.enterLinkedMode(model);
+
+        mode.addListener(new LinkedMode.LinkedModeListener() {
+            @Override
+            public void onLinkedModeExited(boolean successful, int start, int end) {
+                try {
+                    if (successful) {
+                        loader.show(locale.renameLoader());
+                        String newName = document.getContentRange(start, end - start);
+                        performRename(newName, session, linkedEditor);
+                    }
+                } finally {
+                    mode.removeListener(this);
+                    isActiveLinkedEditor = false;
+                    if (linkedEditor instanceof EditorWithAutoSave) {
+                        ((EditorWithAutoSave)linkedEditor).enableAutoSave();
+                    }
+                }
+            }
+        });
+    }
+

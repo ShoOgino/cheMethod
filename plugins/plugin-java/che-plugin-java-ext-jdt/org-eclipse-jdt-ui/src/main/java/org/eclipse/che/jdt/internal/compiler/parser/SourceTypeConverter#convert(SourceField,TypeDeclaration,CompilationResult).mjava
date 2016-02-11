@@ -1,0 +1,62 @@
+	/*
+	 * Convert a field source element into a parsed field declaration
+	 */
+	private FieldDeclaration convert(SourceField fieldHandle, TypeDeclaration type, CompilationResult compilationResult) throws
+																														 JavaModelException {
+
+		SourceFieldElementInfo fieldInfo = (SourceFieldElementInfo) fieldHandle.getElementInfo();
+		FieldDeclaration field = new FieldDeclaration();
+
+		int start = fieldInfo.getNameSourceStart();
+		int end = fieldInfo.getNameSourceEnd();
+
+		field.name = fieldHandle.getElementName().toCharArray();
+		field.sourceStart = start;
+		field.sourceEnd = end;
+		field.declarationSourceStart = fieldInfo.getDeclarationSourceStart();
+		field.declarationSourceEnd = fieldInfo.getDeclarationSourceEnd();
+		int modifiers = fieldInfo.getModifiers();
+		boolean isEnumConstant = (modifiers & ClassFileConstants.AccEnum) != 0;
+		if (isEnumConstant) {
+			field.modifiers = modifiers & ~ClassFileConstants.AccEnum; // clear AccEnum bit onto AST (binding will add it)
+		} else {
+			field.modifiers = modifiers;
+			field.type = createTypeReference(fieldInfo.getTypeName(), start, end);
+		}
+
+		// convert 1.5 specific constructs only if compliance is 1.5 or above
+		if (this.has1_5Compliance) {
+			/* convert annotations */
+			field.annotations = convertAnnotations(fieldHandle);
+		}
+
+		/* conversion of field constant */
+		if ((this.flags & FIELD_INITIALIZATION) != 0) {
+			char[] initializationSource = fieldInfo.getInitializationSource();
+			if (initializationSource != null) {
+				if (this.parser == null) {
+					this.parser = new Parser(this.problemReporter, true);
+				}
+				this.parser.parse(field, type, this.unit, initializationSource);
+			}
+		}
+
+		/* conversion of local and anonymous types */
+		if ((this.flags & LOCAL_TYPE) != 0) {
+			IJavaElement[] children = fieldInfo.getChildren();
+			int childrenLength = children.length;
+			if (childrenLength == 1) {
+				field.initialization = convert(children[0], isEnumConstant ? field : null, compilationResult);
+			} else if (childrenLength > 1) {
+				ArrayInitializer initializer = new ArrayInitializer();
+				field.initialization = initializer;
+				Expression[] expressions = new Expression[childrenLength];
+				initializer.expressions = expressions;
+				for (int i = 0; i < childrenLength; i++) {
+					expressions[i] = convert(children[i], isEnumConstant ? field : null, compilationResult);
+				}
+			}
+		}
+		return field;
+	}
+

@@ -1,0 +1,31 @@
+    @Test
+    public void testOnRenameClickedWhenLocalBranchSelected() throws Exception {
+        reset(selectedBranch);
+        when(selectedBranch.getDisplayName()).thenReturn(BRANCH_NAME);
+        when(selectedBranch.isRemote()).thenReturn(false);
+        InputDialog inputDialog = mock(InputDialog.class);
+        when(dialogFactory.createInputDialog(anyString(), anyString(), anyString(), anyInt(), anyInt(), anyObject(), anyObject()))
+                .thenReturn(inputDialog);
+
+        selectBranch();
+        presenter.onRenameClicked();
+
+        verify(dialogFactory).createInputDialog(anyString(), anyString(), anyString(), anyInt(), anyInt(), inputCallbackCaptor.capture(),
+                                                anyObject());
+        InputCallback inputCallback = inputCallbackCaptor.getValue();
+        inputCallback.accepted(RETURNED_MESSAGE);
+
+
+        verify(service)
+                .branchRename(anyString(), eq(rootProjectConfig), eq(BRANCH_NAME), eq(RETURNED_MESSAGE), asyncRequestCallbackCaptor.capture());
+        AsyncRequestCallback<String> renameBranchCallback = asyncRequestCallbackCaptor.getValue();
+        GwtReflectionUtils.callOnSuccess(renameBranchCallback, PROJECT_PATH);
+
+        verify(selectedBranch, times(2)).getDisplayName();
+        verify(service, times(2)).branchList(anyString(), eq(rootProjectConfig), eq(LIST_ALL), anyObject());
+        verify(dialogFactory, never()).createConfirmDialog(anyString(), anyString(), anyObject(), anyObject());
+        verify(console, never()).printError(anyString());
+        verify(notificationManager, never()).notify(anyString(), eq(rootProjectConfig));
+        verify(constant, never()).branchRenameFailed();
+    }
+

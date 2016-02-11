@@ -1,0 +1,68 @@
+    @Override
+    public void generateProject(FolderEntry baseFolder, Map<String, AttributeValue> attributes, Map<String, String> options)
+            throws ForbiddenException, ConflictException, ServerException {
+        AttributeValue artifactId = attributes.get(ARTIFACT_ID);
+        AttributeValue groupId = attributes.get(GROUP_ID);
+        AttributeValue version = attributes.get(VERSION);
+        if (artifactId == null) {
+            throw new ConflictException("Missed required attribute artifactId");
+        }
+
+        if (groupId == null) {
+            throw new ConflictException("Missed required attribute groupId");
+        }
+
+        if (version == null) {
+            throw new ConflictException("Missed required attribute version");
+        }
+
+        Model model = Model.createModel();
+        model.setModelVersion("4.0.0");
+
+        if (baseFolder.getChild("pom.xml") == null) {
+            baseFolder.createFile("pom.xml", new byte[0]);
+        }
+
+        AttributeValue parentArtifactId = attributes.get(PARENT_ARTIFACT_ID);
+        if (parentArtifactId != null) {
+            model.setArtifactId(parentArtifactId.getString());
+        }
+        AttributeValue parentGroupId = attributes.get(PARENT_GROUP_ID);
+        if (parentGroupId != null) {
+            model.setGroupId(parentGroupId.getString());
+        }
+        AttributeValue parentVersion = attributes.get(PARENT_VERSION);
+        if (parentVersion != null) {
+            model.setVersion(parentVersion.getString());
+        }
+        model.setArtifactId(artifactId.getString());
+        model.setGroupId(groupId.getString());
+        model.setVersion(version.getString());
+        AttributeValue packaging = attributes.get(PACKAGING);
+        if (packaging != null) {
+            model.setPackaging(packaging.getString());
+        }
+        AttributeValue sourceFolders = attributes.get(SOURCE_FOLDER);
+        if (sourceFolders != null) {
+            final String sourceFolder = sourceFolders.getString();
+            baseFolder.createFolder(sourceFolder);
+            if (!DEFAULT_SOURCE_FOLDER.equals(sourceFolder)) {
+                model.setBuild(new Build().setSourceDirectory(sourceFolder));
+            }
+        }
+        AttributeValue testSourceFolders = attributes.get(TEST_SOURCE_FOLDER);
+        if (testSourceFolders != null) {
+            final String testSourceFolder = testSourceFolders.getString();
+            baseFolder.createFolder(testSourceFolder);
+            if (!DEFAULT_TEST_SOURCE_FOLDER.equals(testSourceFolder)) {
+                Build build = model.getBuild();
+                if (build != null) {
+                    build.setTestSourceDirectory(testSourceFolder);
+                } else {
+                    model.setBuild(new Build().setTestSourceDirectory(testSourceFolder));
+                }
+            }
+        }
+        model.writeTo(baseFolder.getChild("pom.xml").getVirtualFile());
+    }
+

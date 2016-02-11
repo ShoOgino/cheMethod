@@ -1,0 +1,51 @@
+    private void askAddToIndex(final ProjectConfigDto project, List<ResourceBasedNode<?>> nodes, List<String> missing) {
+        final List<String> itemsToAddToIndex = new ArrayList<>();
+        for (ResourceBasedNode<?> node : nodes) {
+            for (String missingItem : missing) {
+                String itemPath = getNodePath(node, project.getName());
+                if (!itemPath.isEmpty() && missingItem.contains(itemPath)) {
+                    itemsToAddToIndex.add(itemPath);
+                }
+            }
+        }
+
+        if (itemsToAddToIndex.isEmpty()) {
+            return;
+        }
+
+        ConfirmCallback confirmCallback = new ConfirmCallback() {
+            @Override
+            public void accepted() {
+                try {
+                    gitService.add(workspaceId, project, false, itemsToAddToIndex, new RequestCallback<Void>() {
+                        @Override
+                        protected void onSuccess(Void result) {
+                            notificationManager.notify(locale.deleteAddToIndexIndexUpdated(), locale.deleteAddToIndexDialogNotification());
+                        }
+
+                        @Override
+                        protected void onFailure(Throwable exception) {
+                            notificationManager.notify(locale.deleteAddToIndexIndexFailedToUpdate(), exception.getMessage(), FAIL, false);
+                        }
+                    });
+                } catch (WebSocketException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        CancelCallback cancelCallback = new CancelCallback() {
+            @Override
+            public void cancelled() {
+                //Do nothing
+            }
+        };
+
+        dialogFactory.createConfirmDialog(locale.deleteAddToIndexDialogTitle(),
+                                          locale.deleteAddToIndexDialogText(),
+                                          "Yes",
+                                          "No",
+                                          confirmCallback,
+                                          cancelCallback).show();
+    }
+

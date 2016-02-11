@@ -1,0 +1,32 @@
+    @Test
+    public void testOnFetchClickedWhenFetchWSRequestIsFailed() throws Exception {
+        when(view.getRepositoryUrl()).thenReturn(REMOTE_URI);
+        when(view.getRepositoryName()).thenReturn(REPOSITORY_NAME, REPOSITORY_NAME);
+        when(view.isRemoveDeletedRefs()).thenReturn(NO_REMOVE_DELETE_REFS);
+        when(view.getLocalBranch()).thenReturn(LOCAL_BRANCH);
+        when(view.getRemoteBranch()).thenReturn(REMOTE_BRANCH);
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                RequestCallback<String> callback = (RequestCallback<String>)arguments[4];
+                Method onFailure = GwtReflectionUtils.getMethod(callback.getClass(), "onFailure");
+                onFailure.invoke(callback, mock(Throwable.class));
+                return callback;
+            }
+        }).when(service).fetch(anyString(), anyObject(), anyString(), (List<String>)anyObject(), anyBoolean(),
+                               (RequestCallback<String>)anyObject());
+
+        presenter.showDialog();
+        presenter.onFetchClicked();
+
+        verify(service).fetch(anyString(), eq(rootProjectConfig), eq(REPOSITORY_NAME), (List<String>)anyObject(),
+                              eq(NO_REMOVE_DELETE_REFS), (RequestCallback<String>)anyObject());
+        verify(view).close();
+        verify(constant, times(2)).fetchFail(eq(REMOTE_URI));
+        verify(gitOutputConsoleFactory).create(FETCH_COMMAND_NAME);
+        verify(console).printError(anyString());
+        verify(consolesPanelPresenter).addCommandOutput(anyString(), eq(console));
+        verify(notificationManager).notify(anyString(), rootProjectConfig);
+    }
+

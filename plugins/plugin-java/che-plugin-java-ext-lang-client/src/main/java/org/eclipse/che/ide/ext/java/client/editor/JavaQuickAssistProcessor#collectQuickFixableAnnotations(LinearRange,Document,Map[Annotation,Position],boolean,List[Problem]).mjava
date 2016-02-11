@@ -1,0 +1,49 @@
+    private int collectQuickFixableAnnotations(final LinearRange lineRange,
+                                               Document document, final Map<Annotation, Position> annotations,
+                                               final boolean goToClosest, List<Problem> resultingProblems) {
+        int invocationLocation = lineRange.getStartOffset();
+        if (goToClosest) {
+
+
+            LinearRange line =
+                    document.getLinearRangeForLine(document.getPositionFromIndex(lineRange.getStartOffset()).getLine());
+            int rangeStart = line.getStartOffset();
+            int rangeEnd = rangeStart + line.getLength();
+
+            ArrayList<Position> allPositions = new ArrayList<>();
+            List<JavaAnnotation> allAnnotations = new ArrayList<>();
+            int bestOffset = Integer.MAX_VALUE;
+            for (Annotation problem : annotations.keySet()) {
+                if (problem instanceof JavaAnnotation) {
+                    JavaAnnotation ann = ((JavaAnnotation)problem);
+
+                    Position pos = annotations.get(problem);
+                    if (pos != null && isInside(pos.offset, rangeStart, rangeEnd)) { // inside our range?
+
+                        allAnnotations.add(ann);
+                        allPositions.add(pos);
+                        bestOffset = processAnnotation(problem, pos, invocationLocation, bestOffset);
+                    }
+                }
+            }
+            if (bestOffset == Integer.MAX_VALUE) {
+                return invocationLocation;
+            }
+            for (int i = 0; i < allPositions.size(); i++) {
+                Position pos = allPositions.get(i);
+                if (isInside(bestOffset, pos.offset, pos.offset + pos.length)) {
+                    resultingProblems.add(createProblem(allAnnotations.get(i), pos));
+                }
+            }
+            return bestOffset;
+        } else {
+            for (Annotation problem : annotations.keySet()) {
+                Position pos = annotations.get(problem);
+                if (pos != null && isInside(invocationLocation, pos.offset, pos.offset + pos.length)) {
+                    resultingProblems.add(createProblem((JavaAnnotation)problem, pos));
+                }
+            }
+            return invocationLocation;
+        }
+    }
+

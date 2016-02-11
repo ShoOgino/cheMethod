@@ -1,0 +1,20 @@
+    @Test
+    public void shouldNotDestroyNonDevMachineIfRegistryWasStoppedWhileDevMachineWasStarting() throws Exception {
+        final UsersWorkspaceImpl workspaceMock = workspaceMock();
+
+        doAnswer(invocation -> {
+            final MachineConfig machineCfg = (MachineConfig)invocation.getArguments()[0];
+            if (!machineCfg.isDev()) {
+                registry.stopRegistry();
+            }
+            return machineMock((MachineConfig)invocation.getArguments()[0]);
+        }).when(machineManagerMock).createMachineSync(any(), anyString(), anyString());
+
+        try {
+            registry.start(workspaceMock, workspaceMock.getDefaultEnv());
+        } catch (ServerException ex) {
+            assertEquals(ex.getMessage(), "Workspace '" + WORKSPACE_ID + "' had been stopped before all its machines were started");
+        }
+        verify(machineManagerMock, never()).destroy(any(), anyBoolean());
+    }
+

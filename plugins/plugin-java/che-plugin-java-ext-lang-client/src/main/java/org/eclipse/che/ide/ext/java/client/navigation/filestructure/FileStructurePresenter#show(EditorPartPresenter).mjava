@@ -1,0 +1,38 @@
+    /**
+     * Shows the structure of the opened class.
+     *
+     * @param editorPartPresenter
+     *         the active editor
+     */
+    public void show(EditorPartPresenter editorPartPresenter) {
+        loader.show();
+        view.setTitle(editorPartPresenter.getEditorInput().getFile().getName());
+
+        if (!(editorPartPresenter instanceof EmbeddedTextEditorPresenter)) {
+            Log.error(getClass(), "Open Declaration support only EmbeddedTextEditorPresenter as editor");
+            return;
+        }
+        activeEditor = ((EmbeddedTextEditorPresenter)editorPartPresenter);
+        VirtualFile file = activeEditor.getEditorInput().getFile();
+
+        String projectPath = file.getProject().getProjectConfig().getPath();
+        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+
+        Promise<CompilationUnit> promise = javaNavigationService.getCompilationUnit(projectPath, fqn, showInheritedMembers);
+        promise.then(new Operation<CompilationUnit>() {
+            @Override
+            public void apply(CompilationUnit arg) throws OperationException {
+                view.setStructure(arg, showInheritedMembers);
+                showInheritedMembers = !showInheritedMembers;
+                loader.hide();
+                view.show();
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                Log.error(FileStructurePresenter.class, arg.getMessage());
+                loader.hide();
+            }
+        });
+    }
+

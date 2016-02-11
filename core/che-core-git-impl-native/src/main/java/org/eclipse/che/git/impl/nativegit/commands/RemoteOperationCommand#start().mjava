@@ -1,0 +1,23 @@
+    @Override
+    protected void start() throws GitException {
+        if (GitUrl.isSSH(remoteUri)) {
+            GitSshScript sshScript = gitSshScriptProvider.gitSshScript(remoteUri);
+            setCommandEnvironment("GIT_SSH", sshScript.getSshScriptFile().getAbsolutePath());
+
+            try {
+                super.start();
+            } finally {
+                sshScript.delete();
+            }
+        } else {
+            UserCredential credentials = firstNonNull(credentialsLoader.getUserCredential(remoteUri), UserCredential.EMPTY_CREDENTIALS);
+            setCommandEnvironment("GIT_ASKPASS", gitAskPassScript.build(credentials).toString());
+
+            try {
+                super.start();
+            } finally {
+                gitAskPassScript.remove();
+            }
+        }
+    }
+

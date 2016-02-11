@@ -1,0 +1,38 @@
+	/**
+	 * Creates an {@link Assignment} as first expression appearing in an index based
+	 * <code>for</code> loop's body. This Assignment declares a local variable and initializes it
+	 * using the {@link List}'s current element identified by the loop index.
+	 * 
+	 * @param rewrite the current {@link ASTRewrite} instance
+	 * @param loopVariableName the name of the index variable in String representation
+	 * @return a completed {@link Assignment} containing the mentioned declaration and
+	 *         initialization
+	 */
+	private Expression getIndexBasedForBodyAssignment(ASTRewrite rewrite, SimpleName loopVariableName) {
+		AST ast= rewrite.getAST();
+		ITypeBinding loopOverType= extractElementType(ast);
+
+		Assignment assignResolvedVariable= ast.newAssignment();
+
+		// left hand side
+		SimpleName resolvedVariableName= resolveLinkedVariableNameWithProposals(rewrite, loopOverType.getName(), loopVariableName.getIdentifier(), false);
+		VariableDeclarationFragment resolvedVariableDeclarationFragment= ast.newVariableDeclarationFragment();
+		resolvedVariableDeclarationFragment.setName(resolvedVariableName);
+		VariableDeclarationExpression resolvedVariableDeclaration= ast.newVariableDeclarationExpression(resolvedVariableDeclarationFragment);
+		resolvedVariableDeclaration.setType(getImportRewrite().addImport(loopOverType, ast, new ContextSensitiveImportRewriteContext(fCurrentNode, getImportRewrite())));
+		assignResolvedVariable.setLeftHandSide(resolvedVariableDeclaration);
+
+		// right hand side
+		MethodInvocation invokeGetExpression= ast.newMethodInvocation();
+		invokeGetExpression.setName(ast.newSimpleName("get")); //$NON-NLS-1$
+		SimpleName indexVariableName= ast.newSimpleName(loopVariableName.getIdentifier());
+		addLinkedPosition(rewrite.track(indexVariableName), LinkedPositionGroup.NO_STOP, indexVariableName.getIdentifier());
+		invokeGetExpression.arguments().add(indexVariableName);
+		invokeGetExpression.setExpression((Expression) rewrite.createCopyTarget(fCurrentExpression));
+		assignResolvedVariable.setRightHandSide(invokeGetExpression);
+
+		assignResolvedVariable.setOperator(Assignment.Operator.ASSIGN);
+
+		return assignResolvedVariable;
+	}
+

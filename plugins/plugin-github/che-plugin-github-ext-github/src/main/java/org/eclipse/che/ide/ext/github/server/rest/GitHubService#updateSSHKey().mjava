@@ -1,0 +1,30 @@
+    @POST
+    @Path("ssh/generate")
+    public void updateSSHKey() throws ApiException {
+        final String host = "github.com";
+        SshPair sshPair = null;
+        try {
+            sshPair = sshServiceClient.getPair("git", host);
+        } catch (NotFoundException ignored) {
+        }
+
+        if (sshPair != null) {
+            if (sshPair.getPublicKey() == null) {
+                sshServiceClient.removePair("git", host);
+                sshPair = sshServiceClient.generatePair(newDto(GenerateSshPairRequest.class).withService("git")
+                                                                                            .withName(host));
+            }
+        } else {
+            sshPair = sshServiceClient.generatePair(newDto(GenerateSshPairRequest.class).withService("git")
+                                                                                        .withName(host));
+        }
+
+        // update public key
+        try {
+            githubKeyUploader.uploadKey(sshPair.getPublicKey());
+        } catch (IOException e) {
+            LOG.error("Upload github ssh key fail", e);
+            throw new GitException(e.getMessage(), e);
+        }
+    }
+

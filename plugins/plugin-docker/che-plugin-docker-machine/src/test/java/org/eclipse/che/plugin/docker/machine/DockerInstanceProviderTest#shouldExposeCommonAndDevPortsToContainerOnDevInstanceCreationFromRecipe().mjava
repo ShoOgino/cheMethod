@@ -1,0 +1,42 @@
+    @Test
+    public void shouldExposeCommonAndDevPortsToContainerOnDevInstanceCreationFromRecipe() throws Exception {
+        Map<String, Map<String, String>> expectedExposedPorts = new HashMap<>();
+        final Set<ServerConf> commonServers = new HashSet<>(asList(new ServerConf("reference1", "8080", "http"),
+                                                                   new ServerConf("reference2", "8081", "ftp")));
+        for (ServerConf server : commonServers) {
+            expectedExposedPorts.put(server.getPort(), Collections.<String, String>emptyMap());
+        }
+
+        final Set<ServerConf> devServers = new HashSet<>(asList(new ServerConf("reference3", "8082", "https"),
+                                                                new ServerConf("reference4", "8083", "sftp")));
+        for (ServerConf server : devServers) {
+            expectedExposedPorts.put(server.getPort(), Collections.<String, String>emptyMap());
+        }
+
+        dockerInstanceProvider = new DockerInstanceProvider(dockerConnector,
+                                                            dockerConnectorConfiguration,
+                                                            dockerMachineFactory,
+                                                            dockerInstanceStopDetector,
+                                                            devServers,
+                                                            commonServers,
+                                                            Collections.<String>emptySet(),
+                                                            Collections.<String>emptySet(),
+                                                            null,
+                                                            workspaceFolderPathProvider,
+                                                            PROJECT_FOLDER_PATH,
+                                                            false,
+                                                            Collections.<String>emptySet(),
+                                                            Collections.<String>emptySet());
+
+        final boolean isDev = true;
+
+
+        createInstanceFromRecipe(isDev);
+
+
+        ArgumentCaptor<ContainerConfig> argumentCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture(), anyString());
+
+        assertEquals(argumentCaptor.getValue().getExposedPorts(), expectedExposedPorts);
+    }
+

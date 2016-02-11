@@ -1,0 +1,27 @@
+    /** {@inheritDoc} */
+    @Override
+    public OAuthToken getToken(String oauthProviderName, String userId) throws IOException {
+        if (userId.isEmpty()) {
+            return null;
+        }
+        try {
+            UriBuilder ub = UriBuilder.fromUri(apiEndpoint)
+                                      .path(OAuthAuthenticationService.class)
+                                      .path(OAuthAuthenticationService.class, "token")
+                                      .queryParam("oauth_provider", oauthProviderName);
+            Link getTokenLink = DtoFactory.newDto(Link.class).withHref(ub.build().toString()).withMethod("GET");
+            OAuthToken token = httpJsonRequestFactory.fromLink(getTokenLink)
+                                                     .request()
+                                                     .asDto(OAuthToken.class);
+
+            if (token == null) {
+                LOG.warn("Token not found for user {}", userId);
+                return null;
+            }
+            return token;
+        } catch (ServerException | UnauthorizedException | ForbiddenException | NotFoundException | ConflictException | BadRequestException e) {
+            LOG.error("Exception on token retrieval, message : {}", e.getLocalizedMessage());
+            return null;
+        }
+    }
+

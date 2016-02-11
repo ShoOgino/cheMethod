@@ -1,0 +1,33 @@
+    @Test(enabled = false)
+    public void testGetModule() throws Exception {
+        ProjectTypeDef pt = new ProjectTypeDef("my_module_type", "my module type", true, false) {
+            {
+                addConstantDefinition("my_module_attribute", "attr description", "attribute value 1");
+            }
+        };
+        pm.getProjectTypeRegistry().registerProjectType(pt);
+
+        final ProjectConfigDto moduleConfig = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                                        .withPath("/my_project/my_module")
+                                                        .withName("my_module")
+                                                        .withDescription("my test module")
+                                                        .withType("my_module_type");
+        modules.add(moduleConfig);
+
+        ContainerResponse response =
+                launcher.service(GET, String.format("http://localhost:8080/api/project/%s/my_project/my_module", workspace),
+                                 "http://localhost:8080/api", null, null, null);
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+        ProjectConfigDto result = (ProjectConfigDto)response.getEntity();
+        assertNotNull(result);
+        assertEquals(result.getDescription(), "my test module");
+        assertEquals(result.getType(), "my_module_type");
+        assertEquals(result.getType(), "my module type");
+
+        Map<String, List<String>> attributes = result.getAttributes();
+        assertNotNull(attributes);
+        assertEquals(attributes.size(), 1);
+        assertEquals(attributes.get("my_module_attribute"), singletonList("attribute value 1"));
+        validateProjectLinks(result);
+    }
+

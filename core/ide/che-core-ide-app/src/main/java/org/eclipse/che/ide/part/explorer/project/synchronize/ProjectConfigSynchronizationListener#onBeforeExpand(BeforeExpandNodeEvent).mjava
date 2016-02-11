@@ -1,0 +1,46 @@
+    @Override
+    public void onBeforeExpand(final BeforeExpandNodeEvent event) {
+        Node expandedNode = event.getNode();
+
+        if (!(expandedNode instanceof ProjectNode)) {
+            return;
+        }
+
+        this.projectConfig = ((ProjectNode)expandedNode).getProjectConfig();
+
+        if (isProjectImporting()) {
+            event.setCancelled(true);
+
+            dialogFactory.createMessageDialog(locale.projectStatusTitle(),
+                                              locale.projectStatusContent(projectConfig.getName()),
+                                              new ConfirmCallback() {
+                                                  @Override
+                                                  public void accepted() {
+                                                  }
+                                              }).show();
+            return;
+        }
+
+        List<ProjectProblemDto> problems = projectConfig.getProblems();
+
+        if (problems.isEmpty()) {
+            return;
+        }
+
+        for (ProjectProblemDto problem : problems) {
+            switch (problem.getCode()) {
+                case 10:
+                    event.setCancelled(true);
+
+                    projectExistInWSButAbsentOnVFS();
+                    break;
+                case 9:
+                    projectExistOnVFSButAbsentInWS();
+                    break;
+                case 8:
+                    projectConfigurationChanged();
+                default:
+            }
+        }
+    }
+

@@ -1,0 +1,79 @@
+    @SuppressWarnings("unchecked")
+    CategoryNodeElement(Category category,
+                        CategoriesList.SelectionManager selectionManager, CategoriesList.Resources resources) {
+        this.category = category;
+        this.selectionManager = selectionManager;
+        CategoryRenderer renderer = category.getRenderer();
+        this.resources = resources;
+        setStyleName(resources.defaultCategoriesListCss().category());
+        FlowPanel header = new FlowPanel();
+        header.sinkEvents(Event.ONCLICK);
+        header.addDomHandler(new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                expandOrCollapse();
+            }
+        }, ClickEvent.getType());
+        header.setStyleName(resources.defaultCategoriesListCss().categoryHeader());
+        SpanElement label = Document.get().createSpanElement();
+        label.setClassName(resources.defaultCategoriesListCss().categoryLabel());
+
+        label.appendChild(renderer.renderCategory(category));
+
+        header.getElement().appendChild(label);
+        header.ensureDebugId("categoryHeader-" + category.getTitle());
+
+        expandControl = Document.get().createDivElement();
+        expandControl.appendChild(resources.arrowExpansionImage().getSvg().getElement());
+        expandControl.setClassName(resources.defaultCategoriesListCss().expandControl());
+        header.getElement().appendChild(expandControl);
+        container = new FocusPanel();
+        container.setTabIndex(1);
+        container.setStyleName(resources.defaultCategoriesListCss().itemContainer());
+        container.sinkEvents(Event.ONCLICK);
+        container.addDomHandler(new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                selectElement(Element.as(event.getNativeEvent().getEventTarget()));
+            }
+        }, ClickEvent.getType());
+        container.sinkEvents(Event.ONKEYDOWN);
+        container.addHandler(new KeyDownHandler() {
+            @Override
+            public void onKeyDown(KeyDownEvent keyDownEvent) {
+
+                if (selectedElement == null) {
+                    return;
+                }
+
+                Element element = null;
+
+                if (keyDownEvent.isDownArrow()) {
+                    element = selectedElement.getNextSiblingElement();
+                    if (element == null) {
+                        return;
+                    }
+                }
+
+                if (keyDownEvent.isUpArrow()) {
+                    element = selectedElement.getPreviousSiblingElement();
+                    if (element.getClassName().equals("")) {
+                        return;
+                    }
+                }
+
+                if (keyDownEvent.isUpArrow() || keyDownEvent.isDownArrow()) {
+                    keyDownEvent.preventDefault();
+                    element.scrollIntoView();
+                    selectElement(element);
+                }
+            }
+        }, KeyDownEvent.getType());
+        add(header);
+        add(container);
+        animator = new AnimationController.Builder().setCollapse(true).setFade(true).build();
+        expanded = true;
+        renderChildren();
+        expandControl.addClassName(resources.defaultCategoriesListCss().expandedImage());
+    }
+

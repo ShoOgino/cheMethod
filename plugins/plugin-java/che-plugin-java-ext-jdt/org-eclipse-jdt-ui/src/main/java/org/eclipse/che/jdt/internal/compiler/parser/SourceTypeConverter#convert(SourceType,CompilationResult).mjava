@@ -1,0 +1,159 @@
+	/*
+	 * Convert a source element type into a parsed type declaration
+	 */
+	private TypeDeclaration convert(SourceType typeHandle, CompilationResult compilationResult) throws JavaModelException {
+		SourceTypeElementInfo typeInfo = (SourceTypeElementInfo) typeHandle.getElementInfo();
+		if (typeInfo.isAnonymousMember())
+			throw new AnonymousMemberFound();
+		/* create type declaration - can be member type */
+		TypeDeclaration type = new TypeDeclaration(compilationResult);
+		if (typeInfo.getEnclosingType() == null) {
+			if (typeHandle.isAnonymous()) {
+				type.name = CharOperation.NO_CHAR;
+				type.bits |= (ASTNode.IsAnonymousType| ASTNode.IsLocalType);
+			} else {
+				if (typeHandle.isLocal()) {
+					type.bits |= ASTNode.IsLocalType;
+				}
+			}
+		}  else {
+			type.bits |= ASTNode.IsMemberType;
+		}
+		if ((type.bits & ASTNode.IsAnonymousType) == 0) {
+			type.name = typeInfo.getName();
+		}
+		type.name = typeInfo.getName();
+		int start, end; // only positions available
+		type.sourceStart = start = typeInfo.getNameSourceStart();
+		type.sourceEnd = end = typeInfo.getNameSourceEnd();
+		type.modifiers = typeInfo.getModifiers();
+		type.declarationSourceStart = typeInfo.getDeclarationSourceStart();
+		type.declarationSourceEnd = typeInfo.getDeclarationSourceEnd();
+		type.bodyEnd = type.declarationSourceEnd;
+
+		// convert 1.5 specific constructs only if compliance is 1.5 or above
+		if (this.has1_5Compliance) {
+			/* convert annotations */
+			type.annotations = convertAnnotations(typeHandle);
+		}
+		/* https://bugs.eclipse.org/bugs/show_bug.cgi?id=324850, even in a 1.4 project, we
+		   must internalize type variables and observe any parameterization of super class
+		   and/or super interfaces in order to be able to detect overriding in the presence
+		   of generics.
+		 */
+		char[][] typeParameterNames = typeInfo.getTypeParameterNames();
+		if (typeParameterNames.length > 0) {
+			int parameterCount = typeParameterNames.length;
+			char[][][] typeParameterBounds = typeInfo.getTypeParameterBounds();
+			type.typeParameters = new TypeParameter[parameterCount];
+			for (int i = 0; i < parameterCount; i++) {
+				type.typeParameters[i] = createTypeParameter(typeParameterNames[i], typeParameterBounds[i], start, end);
+			}
+		}
+
+		/* set superclass and superinterfaces */
+		if (typeInfo.getSuperclassName() != null) {
+			type.superclass = createTypeReference(typeInfo.getSuperclassName(), start, end, true /* include generics */);
+			type.superclass.bits |= ASTNode.IsSuperType;
+		}
+		char[][] interfaceNames = typeInfo.getInterfaceNames();
+		int interfaceCount = interfaceNames == null ? 0 : interfaceNames.length;
+		if (interfaceCount > 0) {
+			type.superInterfaces = new TypeReference[interfaceCount];
+			for (int i = 0; i < interfaceCount; i++) {
+				type.superInterfaces[i] = createTypeReference(interfaceNames[i], start, end, true /* include generics */);
+				type.superInterfaces[i].bits |= ASTNode.IsSuperType;
+			}
+		}
+		/* convert member types */
+		if ((this.flags & MEMBER_TYPE) != 0) {
+			SourceType[] sourceMemberTypes = typeInfo.getMemberTypeHandles();
+			int sourceMemberTypeCount = sourceMemberTypes.length;
+			type.memberTypes = new TypeDeclaration[sourceMemberTypeCount];
+			for (int i = 0; i < sourceMemberTypeCount; i++) {
+				type.memberTypes[i] = convert(sourceMemberTypes[i], compilationResult);
+				type.memberTypes[i].enclosingType = type;
+			}
+		}
+
+		/* convert intializers and fields*/
+		InitializerElementInfo[] initializers = null;
+		int initializerCount = 0;
+		if ((this.flags & LOCAL_TYPE) != 0) {
+			initializers = typeInfo.getInitializers();
+			initializerCount = initializers.length;
+		}
+		SourceField[] sourceFields = null;
+		int sourceFieldCount = 0;
+		if ((this.flags & FIELD) != 0) {
+			sourceFields = typeInfo.getFieldHandles();
+			sourceFieldCount = sourceFields.length;
+		}
+		int length = initializerCount + sourceFieldCount;
+		if (length > 0) {
+			type.fields = new FieldDeclaration[length];
+			for (int i = 0; i < initializerCount; i++) {
+				type.fields[i] = convert(initializers[i], compilationResult);
+			}
+			int index = 0;
+			for (int i = initializerCount; i < length; i++) {
+				type.fields[i] = convert(sourceFields[index++], type, compilationResult);
+			}
+		}
+
+		/* convert methods - need to add default constructor if necessary */
+		boolean needConstructor = (this.flags & CONSTRUCTOR) != 0;
+		boolean needMethod = (this.flags & METHOD) != 0;
+		if (needConstructor || needMethod) {
+
+			SourceMethod[] sourceMethods = typeInfo.getMethodHandles();
+			int sourceMethodCount = sourceMethods.length;
+
+			/* source type has a constructor ?           */
+			/* by default, we assume that one is needed. */
+			int extraConstructor = 0;
+			int methodCount = 0;
+			int kind = TypeDeclaration.kind(type.modifiers);
+			boolean isAbstract = kind == TypeDeclaration.INTERFACE_DECL || kind == TypeDeclaration.ANNOTATION_TYPE_DECL;
+			if (!isAbstract) {
+				extraConstructor = needConstructor ? 1 : 0;
+				for (int i = 0; i < sourceMethodCount; i++) {
+					if (sourceMethods[i].isConstructor()) {
+						if (needConstructor) {
+							extraConstructor = 0; // Does not need the extra constructor since one constructor already exists.
+							methodCount++;
+						}
+					} else if (needMethod) {
+						methodCount++;
+					}
+				}
+			} else {
+				methodCount = needMethod ? sourceMethodCount : 0;
+			}
+			type.methods = new AbstractMethodDeclaration[methodCount + extraConstructor];
+			if (extraConstructor != 0) { // add default constructor in first position
+				type.methods[0] = type.createDefaultConstructor(false, false);
+			}
+			int index = 0;
+			boolean hasAbstractMethods = false;
+			for (int i = 0; i < sourceMethodCount; i++) {
+				SourceMethod sourceMethod = sourceMethods[i];
+				SourceMethodElementInfo methodInfo = (SourceMethodElementInfo)sourceMethod.getElementInfo();
+				boolean isConstructor = methodInfo.isConstructor();
+				if ((methodInfo.getModifiers() & ClassFileConstants.AccAbstract) != 0) {
+					hasAbstractMethods = true;
+				}
+				if ((isConstructor && needConstructor) || (!isConstructor && needMethod)) {
+					AbstractMethodDeclaration method = convert(sourceMethod, methodInfo, compilationResult);
+					if (isAbstract || method.isAbstract()) { // fix-up flag
+						method.modifiers |= ExtraCompilerModifiers.AccSemicolonBody;
+					}
+					type.methods[extraConstructor + index++] = method;
+				}
+			}
+			if (hasAbstractMethods) type.bits |= ASTNode.HasAbstractMethods;
+		}
+
+		return type;
+	}
+

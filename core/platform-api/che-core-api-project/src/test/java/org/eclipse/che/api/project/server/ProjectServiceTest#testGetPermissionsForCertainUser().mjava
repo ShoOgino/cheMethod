@@ -1,0 +1,35 @@
+    @Test
+    public void testGetPermissionsForCertainUser() throws Exception {
+        Project myProject = pm.getProject(workspace, "my_project");
+        AccessControlEntry newEntry = DtoFactory.getInstance().createDto(AccessControlEntry.class)
+                                                .withPermissions(singletonList("all"))
+                                                .withPrincipal(DtoFactory.getInstance().createDto(Principal.class)
+                                                                         .withName(vfsUser).withType(Principal.Type.USER));
+        AccessControlEntry newEntry2 = DtoFactory.getInstance().createDto(AccessControlEntry.class)
+                                                 .withPermissions(singletonList("all"))
+                                                 .withPrincipal(DtoFactory.getInstance().createDto(Principal.class)
+                                                                          .withName("other").withType(Principal.Type.USER));
+        //set up permissions
+        myProject.getBaseFolder().getVirtualFile().updateACL(Arrays.asList(newEntry, newEntry2), false, null);
+
+        ContainerResponse response = launcher.service(GET,
+                                                      String.format("http://localhost:8080/api/project/%s/permissions/my_project?userid=%s",
+                                                                    workspace, vfsUser),
+                                                      "http://localhost:8080/api",
+                                                      null,
+                                                      null,
+                                                      null);
+        //response entity is ACL
+        @SuppressWarnings("unchecked")
+        List<AccessControlEntry> entries = (List<AccessControlEntry>)response.getEntity();
+
+        assertEquals(entries.size(), 1);
+        //"all" should be replaced with "read" & "write" & "update_acl", etc
+        Set<String> permissions = new HashSet<>(entries.get(0).getPermissions());
+        Assert.assertTrue(permissions.contains("read"));
+        Assert.assertTrue(permissions.contains("write"));
+        Assert.assertTrue(permissions.contains("update_acl"));
+        Assert.assertTrue(permissions.contains("run"));
+        Assert.assertTrue(permissions.contains("build"));
+    }
+

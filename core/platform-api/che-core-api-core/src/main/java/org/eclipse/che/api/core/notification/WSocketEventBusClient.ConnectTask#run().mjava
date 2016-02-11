@@ -1,0 +1,31 @@
+        @Override
+        public void run() {
+            for (; ; ) {
+
+                if (Thread.currentThread().isInterrupted()) {
+                    return;
+                }
+                LOG.debug("Start connection loop {} channels {} ", wsUri, channels);
+                try {
+                    connect(wsUri, channels);
+                    LOG.debug("Connection complete");
+                    return;
+                } catch (IOException | DeploymentException e) {
+                    LOG.warn("Not able to connect to {} because {}. Retrying ", wsUri, e.getLocalizedMessage());
+                    LOG.debug(e.getLocalizedMessage(), e);
+                    synchronized (this) {
+                        try {
+                            wait(WS_CONNECTION_TIMEOUT * 2 * 1000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+                } catch (Throwable e) {
+                    LOG.error("Unexpected here");
+                    LOG.error(e.getLocalizedMessage(), e);
+                }
+                LOG.debug("Iteration complete");
+            }
+        }
+

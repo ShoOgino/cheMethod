@@ -1,0 +1,22 @@
+    public void testUpdateAclOverride() throws Exception {
+        Principal anyPrincipal = createPrincipal("any", Principal.Type.USER);
+        Map<Principal, Set<String>> permissions = new HashMap<>(1);
+        permissions.put(anyPrincipal, Sets.newHashSet(BasicPermissions.ALL.value()));
+        mountPoint.getVirtualFileById(objectId).updateACL(createAcl(permissions), false, null);
+
+        ByteArrayContainerResponseWriter writer = new ByteArrayContainerResponseWriter();
+        String path = SERVICE_URI + "acl/" + objectId + '?' + "override=" + true;
+        String body = "[{\"principal\":{\"name\":\"admin\",\"type\":\"USER\"},\"permissions\":[\"all\"]}," + //
+                      "{\"principal\":{\"name\":\"john\",\"type\":\"USER\"},\"permissions\":[\"read\"]}]";
+        Map<String, List<String>> h = new HashMap<>(1);
+        h.put(HttpHeaders.CONTENT_TYPE, Arrays.asList(MediaType.APPLICATION_JSON));
+        ContainerResponse response = launcher.service(HttpMethod.POST, path, BASE_URI, h, body.getBytes(), writer, null);
+        assertEquals(204, response.getStatus());
+
+        List<AccessControlEntry> acl = mountPoint.getVirtualFileById(objectId).getACL();
+        Map<String, List<String>> m = toMap(acl);
+        assertEquals(m.get("admin"), Arrays.asList("all"));
+        assertEquals(m.get("john"), Arrays.asList("read"));
+        assertNull("Anonymous permissions must be removed.", m.get("anonymous"));
+    }
+

@@ -1,0 +1,36 @@
+        /**
+         * Get result of project generation.
+         *
+         * @return result of project generating or {@code null} if task is not done yet
+         * @throws ServerException
+         *         if an error occurs when try to start project generating process or get its result.
+         */
+        GenerationResult getResult() throws ServerException {
+            if (!isDone()) {
+                return null;
+            }
+            if (result == null) {
+                boolean successful;
+                try {
+                    successful = super.get();
+                } catch (InterruptedException e) {
+                    // Should not happen since we checked is task done or not.
+                    Thread.currentThread().interrupt();
+                    successful = false;
+                } catch (ExecutionException e) {
+                    final Throwable cause = e.getCause();
+                    if (cause instanceof Error) {
+                        throw (Error)cause;
+                    } else if (cause instanceof ServerException) {
+                        throw (ServerException)cause;
+                    } else {
+                        throw new ServerException(cause.getMessage(), cause);
+                    }
+                } catch (CancellationException ce) {
+                    successful = false;
+                }
+                result = ArchetypeGenerator.this.getTaskResult(this, successful);
+            }
+            return result;
+        }
+

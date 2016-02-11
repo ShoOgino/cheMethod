@@ -1,0 +1,59 @@
+    @Override
+    protected void setUp() throws Exception {
+        super.setUp();
+
+        Map<Principal, Set<String>> permissions = new HashMap<>(2);
+        Principal user = DtoFactory.getInstance().createDto(Principal.class).withName("admin").withType(Principal.Type.USER);
+        Principal admin = DtoFactory.getInstance().createDto(Principal.class).withName("admin").withType(Principal.Type.USER);
+        permissions.put(user, Sets.newHashSet(BasicPermissions.ALL.value()));
+        permissions.put(admin, Sets.newHashSet(BasicPermissions.READ.value()));
+
+        properties = new HashMap<>(2);
+        properties.put("MyProperty01", new String[]{"foo"});
+        properties.put("MyProperty02", new String[]{"bar"});
+
+        filePath = createFile(testRootPath, fileName, DEFAULT_CONTENT_BYTES);
+        lockedFilePath = createFile(testRootPath, lockedFileName, DEFAULT_CONTENT_BYTES);
+        protectedFilePath = createFile(testRootPath, protectedFileName, DEFAULT_CONTENT_BYTES);
+        folderPath = createDirectory(testRootPath, folderName);
+        createTree(folderPath, 6, 4, properties);
+        protectedFolderPath = createDirectory(testRootPath, protectedFolderName);
+        createTree(protectedFolderPath, 6, 4, properties);
+        protectedChildFolderPath = createDirectory(testRootPath, protectedChildFolderName);
+        createTree(protectedChildFolderPath, 6, 4, properties);
+        lockedChildFolderPath = createDirectory(testRootPath, lockedChildFolderName);
+        createTree(lockedChildFolderPath, 6, 4, properties);
+
+        List<String> l = flattenDirectory(protectedChildFolderPath);
+        // Find one child in the list and remove write permission for 'admin'.
+        writePermissions(protectedChildFolderPath + '/' + l.get(new Random().nextInt(l.size())), permissions);
+
+        l = flattenDirectory(lockedChildFolderPath);
+        // Find one child in the list and lock it.
+        for (String s : l) {
+            if (createLock(lockedChildFolderPath + '/' + s, lockToken, Long.MAX_VALUE)) {
+                break;
+            }
+        }
+
+        destinationPath = createDirectory(testRootPath, "MoveTest_Destination");
+        protectedDestinationPath = createDirectory(testRootPath, "MoveTest_ProtectedDestination");
+
+        createLock(lockedFilePath, lockToken, Long.MAX_VALUE);
+
+        writePermissions(protectedDestinationPath, permissions);
+        writePermissions(protectedFilePath, permissions);
+        writePermissions(protectedFolderPath, permissions);
+
+        fileId = pathToId(filePath);
+        lockedFileId = pathToId(lockedFilePath);
+        protectedFileId = pathToId(protectedFilePath);
+        folderId = pathToId(folderPath);
+        protectedFolderId = pathToId(protectedFolderPath);
+        protectedChildFolderId = pathToId(protectedChildFolderPath);
+        lockedChildFolderId = pathToId(lockedChildFolderPath);
+
+        destinationId = pathToId(destinationPath);
+        protectedDestinationId = pathToId(protectedDestinationPath);
+    }
+

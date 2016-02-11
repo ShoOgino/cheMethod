@@ -1,0 +1,37 @@
+    @Override
+    public Future<?> schedule(final Runnable task, final CronExpression expression) {
+        if (task == null) {
+            throw new NullPointerException();
+        }
+        setCorePoolSize(getCorePoolSize() + 1);
+        Runnable scheduleTask = new Runnable() {
+            @Override
+            public void run() {
+                CountDownLatch countDownLatch = new CountDownLatch(1);
+                cronJobWatchDogs.add(countDownLatch);
+                Date now = new Date();
+                Date time = expression.getNextValidTimeAfter(now);
+                try {
+                    while (time != null) {
+                        CronThreadPoolExecutor.this
+                                .schedule(task, time.getTime() - now.getTime(), TimeUnit.MILLISECONDS);
+                        while (now.before(time)) {
+                            LOG.debug("Cron watch dog wait {} ", time.getTime() - now.getTime());
+                            if (countDownLatch.await(time.getTime() - now.getTime(), TimeUnit.MILLISECONDS)) {
+                                LOG.debug("Stopping cron watch dog.");
+                                return;
+                            }
+                            now = new Date();
+                        }
+                        time = expression.getNextValidTimeAfter(now);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (RejectedExecutionException | CancellationException e) {
+                    LOG.error(e.getMessage(), e);
+                }
+            }
+        };
+        return this.submit(scheduleTask);
+    }
+

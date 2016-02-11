@@ -1,0 +1,34 @@
+    @Test
+    public void testShowDialogWhenStatusRequestIsSuccessfulButIndexIsEmpty() throws Exception {
+        MessageDialog messageDialog = mock(MessageDialog.class);
+        when(constant.messagesWarningTitle()).thenReturn("Warning");
+        when(constant.indexIsEmpty()).thenReturn("Index is Empty");
+        when(dialogFactory.createMessageDialog(anyString(), anyString(), (ConfirmCallback)anyObject()))
+                .thenReturn(messageDialog);
+        final Status status = mock(Status.class);
+        List<String> changes = new ArrayList<>();
+        when(status.getAdded()).thenReturn(changes);
+        when(status.getChanged()).thenReturn(changes);
+        when(status.getRemoved()).thenReturn(changes);
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<Status> callback = (AsyncRequestCallback<Status>)arguments[1];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, status);
+                return callback;
+            }
+        }).when(service).status(anyString(), anyObject(), (AsyncRequestCallback<Status>)anyObject());
+
+        presenter.showDialog();
+
+        verify(appContext).getCurrentProject();
+        verify(service).status(anyString(), eq(rootProjectConfig), (AsyncRequestCallback<Status>)anyObject());
+        verify(dialogFactory).createMessageDialog(eq("Warning"), eq("Index is Empty"),
+                                                  (ConfirmCallback)anyObject());
+        verify(view, never()).setIndexedFiles((List<IndexFile>)anyObject());
+        verify(view, never()).showDialog();
+    }
+

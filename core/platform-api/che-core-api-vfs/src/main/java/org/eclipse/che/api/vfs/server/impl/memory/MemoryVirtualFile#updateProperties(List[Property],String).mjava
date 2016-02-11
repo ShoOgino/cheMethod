@@ -1,0 +1,23 @@
+    public VirtualFile updateProperties(List<Property> update, String lockToken) throws ForbiddenException {
+        checkExist();
+        if (!hasPermission(BasicPermissions.UPDATE_ACL.value(), true)) {
+            throw new ForbiddenException(String.format("Unable update properties for '%s'. Operation not permitted. ", getPath()));
+        }
+        if (isFile() && !validateLockTokenIfLocked(lockToken)) {
+            throw new ForbiddenException(String.format("Unable update properties of item '%s'. Item is locked. ", getPath()));
+        }
+        for (Property p : update) {
+            String name = p.getName();
+            List<String> value = p.getValue();
+            if (value != null) {
+                List<String> copy = new ArrayList<>(value);
+                properties.put(name, copy);
+            } else {
+                properties.remove(name);
+            }
+        }
+        lastModificationDate = System.currentTimeMillis();
+        mountPoint.getEventService().publish(new UpdatePropertiesEvent(mountPoint.getWorkspaceId(), getPath(), isFolder()));
+        return this;
+    }
+

@@ -1,0 +1,53 @@
+    /**
+     * Tries to open file from the project.
+     * If fails then method will try to find resource from external dependencies.
+     */
+    private void openFile(@NotNull final Location location,
+                          final List<String> filePaths,
+                          final int pathNumber,
+                          final AsyncCallback<VirtualFile> callback) {
+
+        String filePath = filePaths.get(pathNumber);
+
+        projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(filePath)).then(new Operation<Node>() {
+            public HandlerRegistration handlerRegistration;
+
+            @Override
+            public void apply(final Node node) throws OperationException {
+                if (!(node instanceof FileReferenceNode)) {
+                    return;
+                }
+
+                handlerRegistration = eventBus.addHandler(ActivePartChangedEvent.TYPE, new ActivePartChangedHandler() {
+                    @Override
+                    public void onActivePartChanged(ActivePartChangedEvent event) {
+                        if (event.getActivePart() instanceof EditorPartPresenter) {
+                            final VirtualFile openedFile = ((EditorPartPresenter)event.getActivePart()).getEditorInput().getFile();
+                            if (((FileReferenceNode)node).getStorablePath().equals(openedFile.getPath())) {
+                                handlerRegistration.removeHandler();
+                                // give the editor some time to fully render it's view
+                                new Timer() {
+                                    @Override
+                                    public void run() {
+                                        callback.onSuccess((VirtualFile)node);
+                                    }
+                                }.schedule(300);
+                            }
+                        }
+                    }
+                });
+                eventBus.fireEvent(new FileEvent((VirtualFile)node, OPEN));
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                if (pathNumber + 1 == filePaths.size()) {
+                    openExternalResource(location);
+                } else {
+                    // try another path
+                    openFile(location, filePaths, pathNumber + 1, callback);
+                }
+            }
+        });
+    }
+

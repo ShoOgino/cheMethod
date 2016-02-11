@@ -1,0 +1,61 @@
+    private FindUsagesResponse performFindUsageSearch(IJavaElement element) throws JavaModelException, BadLocationException {
+        JavaSearchScopeFactory factory = JavaSearchScopeFactory.getInstance();
+        boolean isInsideJRE = factory.isInsideJRE(element);
+        JavaSearchQuery
+                query = new JavaSearchQuery(new ElementQuerySpecification(element, IJavaSearchConstants.REFERENCES,
+                                                                          factory.createWorkspaceScope(isInsideJRE),
+                                                                          "workspace scope"));
+        NewSearchUI.runQueryInForeground(null, query);
+        ISearchResult result = query.getSearchResult();
+        JavaSearchResult javaResult = ((JavaSearchResult)result);
+        FindUsagesResponse response = DtoFactory.newDto(FindUsagesResponse.class);
+        Map<String, List<org.eclipse.che.ide.ext.java.shared.dto.search.Match>> mapMaches = new HashMap<>();
+        JavaElementToDtoConverter converter = new JavaElementToDtoConverter(javaResult);
+        for (Object o : javaResult.getElements()) {
+            IJavaElement javaElement = (IJavaElement)o;
+            IDocument document = null;
+            if (javaElement instanceof IMember) {
+                IMember member = ((IMember)javaElement);
+                if (member.isBinary()) {
+                    if (member.getClassFile().getSource() != null) {
+                        document = new Document(member.getClassFile().getSource());
+                    }
+                } else {
+                    document = getDocument(member.getCompilationUnit());
+                }
+            } else if (javaElement instanceof IPackageDeclaration) {
+                ICompilationUnit ancestor = (ICompilationUnit)(javaElement).getAncestor(IJavaElement.COMPILATION_UNIT);
+                document = getDocument(ancestor);
+
+            }
+            converter.addElementToProjectHierarchy(javaElement);
+
+            Match[] matches = javaResult.getMatches(o);
+
+            List<org.eclipse.che.ide.ext.java.shared.dto.search.Match> matchList = new ArrayList<>();
+            for (Match match : matches) {
+                org.eclipse.che.ide.ext.java.shared.dto.search.Match dtoMatch = DtoFactory.newDto(
+                        org.eclipse.che.ide.ext.java.shared.dto.search.Match.class);
+                if (document != null) {
+                    IRegion lineInformation = document.getLineInformationOfOffset(match.getOffset());
+
+                    int offsetInLine = match.getOffset() - lineInformation.getOffset();
+                    Region matchInLine = DtoFactory.newDto(Region.class).withOffset(offsetInLine).withLength(match.getLength());
+                    dtoMatch.setMatchInLine(matchInLine);
+                    dtoMatch.setMatchLineNumber(document.getLineOfOffset(match.getOffset()));
+                    dtoMatch.setMatchedLine(document.get(lineInformation.getOffset(), lineInformation.getLength()));
+                }
+                dtoMatch.setFileMatchRegion(
+                        DtoFactory.newDto(Region.class).withOffset(match.getOffset()).withLength(match.getLength()));
+                matchList.add(dtoMatch);
+
+            }
+            mapMaches.put(javaElement.getHandleIdentifier(), matchList);
+        }
+        List<JavaProject> projects = converter.getProjects();
+        response.setProjects(projects);
+        response.setMatches(mapMaches);
+        response.setSearchElementLabel(JavaElementLabels.getElementLabel(element, JavaElementLabels.ALL_DEFAULT));
+        return response;
+    }
+

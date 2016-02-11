@@ -1,0 +1,37 @@
+    private Callable<Boolean> createTaskFor(final CommandLine commandLine,
+                                            final GeneratorLogger logger,
+                                            final File workDir) {
+        return new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                StreamPump output = null;
+                int result = -1;
+                try {
+                    ProcessBuilder processBuilder = new ProcessBuilder().command(commandLine.toShellCommand())
+                                                                        .directory(workDir).redirectErrorStream(true);
+                    Process process = processBuilder.start();
+
+                    output = new StreamPump();
+                    output.start(process, logger);
+                    try {
+                        result = process.waitFor();
+                    } catch (InterruptedException e) {
+                        Thread.interrupted();
+                        ProcessUtil.kill(process);
+                    }
+                    try {
+                        output.await(); // wait for logger
+                    } catch (InterruptedException e) {
+                        Thread.interrupted();
+                    }
+                } finally {
+                    if (output != null) {
+                        output.stop();
+                    }
+                }
+                LOG.debug("Done: {}, exit code: {}", commandLine, result);
+                return result == 0;
+            }
+        };
+    }
+

@@ -1,0 +1,31 @@
+    /** Execute the the given command configuration on the developer machine. */
+    public void execute(@NotNull CommandConfiguration configuration) {
+        final String devMachineId = appContext.getDevMachineId();
+        if (devMachineId == null) {
+            notificationManager.notify(localizationConstant.failedToExecuteCommand(), localizationConstant.noDevMachine(), FAIL, true);
+            return;
+        }
+
+        final String outputChannel = "process:output:" + UUID.uuid();
+
+        final CommandOutputConsole console = commandConsoleFactory.create(configuration, devMachineId);
+        console.listenToOutput(outputChannel);
+        consolesPanelPresenter.addCommandOutput(devMachineId, console);
+        workspaceAgent.setActivePart(consolesPanelPresenter);
+
+        final String commandLine = substituteProperties(configuration.toCommandLine());
+
+        final CommandDto command = dtoFactory.createDto(CommandDto.class)
+                                             .withName(configuration.getName())
+                                             .withCommandLine(commandLine)
+                                             .withType(configuration.getType().getId());
+
+        final Promise<MachineProcessDto> processPromise = machineServiceClient.executeCommand(devMachineId, command, outputChannel);
+        processPromise.then(new Operation<MachineProcessDto>() {
+            @Override
+            public void apply(MachineProcessDto process) throws OperationException {
+                console.attachToProcess(process);
+            }
+        });
+    }
+

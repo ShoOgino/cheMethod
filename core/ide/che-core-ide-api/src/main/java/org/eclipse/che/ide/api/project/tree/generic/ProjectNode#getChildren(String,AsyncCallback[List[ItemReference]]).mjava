@@ -1,0 +1,34 @@
+    /**
+     * Method helps to retrieve child {@link ItemReference}s by the specified path using Codenvy Project API.
+     * <p/>
+     * It takes into account state of the 'show hidden items' setting.
+     *
+     * @param path
+     *         path to retrieve children
+     * @param callback
+     *         callback to return retrieved children
+     */
+    protected void getChildren(String path, final AsyncCallback<List<ItemReference>> callback) {
+        final List<ItemReference> children = new ArrayList<>();
+        final Unmarshallable<List<ItemReference>> unmarshaller = dtoUnmarshallerFactory.newListUnmarshaller(ItemReference.class);
+        projectServiceClient.getChildren(workspaceId, path, new AsyncRequestCallback<List<ItemReference>>(unmarshaller) {
+            @Override
+            protected void onSuccess(List<ItemReference> result) {
+                final boolean isShowHiddenItems = getTreeStructure().getSettings().isShowHiddenItems();
+                for (ItemReference item : result) {
+                    if (!isShowHiddenItems && item.getName().startsWith(".")) {
+                        continue;
+                    }
+                    children.add(item);
+                }
+
+                callback.onSuccess(children);
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                callback.onFailure(exception);
+            }
+        });
+    }
+

@@ -1,0 +1,49 @@
+    private void emitDeepCopyCollections(List<Type> expandedTypes, int depth, StringBuilder builder, String varIn, String varOut,
+                                         String i) {
+        Type type = expandedTypes.get(depth);
+        String childVarIn = varIn + "_";
+        String childVarOut = varOut + "_";
+        String entryVar = "entry" + depth;
+        Class<?> rawClass = getRawClass(type);
+        Class<?> childRawType = getRawClass(expandedTypes.get(depth + 1));
+        final String childTypeName = getImplName(expandedTypes.get(depth + 1), false);
+        if (isList(rawClass)) {
+            builder.append(i).append("  for (").append(childTypeName).append(" ").append(childVarIn)
+                   .append(" : ").append(varIn).append(") {\n");
+        } else if (isMap(rawClass)) {
+            builder.append(i).append("  for (java.util.Map.Entry<String, ").append(childTypeName).append("> ").append(entryVar)
+                   .append(" : ").append(varIn).append(".entrySet()) {\n");
+            builder.append(i).append("    ").append(childTypeName).append(" ").append(childVarIn).append(" = ").append(
+                    entryVar).append(".getValue();\n");
+        }
+        if (isList(childRawType) || isMap(childRawType)) {
+            builder.append(i).append("    if (").append(childVarIn).append(" != null) {\n");
+            builder.append(i).append("      ").append(childTypeName).append(" ").append(childVarOut)
+                   .append(" = new ").append(getImplName(expandedTypes.get(depth + 1), true)).append("();\n");
+            emitDeepCopyCollections(expandedTypes, depth + 1, builder, childVarIn, childVarOut, i + "    ");
+            builder.append(i).append("      ").append(varOut);
+            if (isList(rawClass)) {
+                builder.append(".add(");
+            } else {
+                builder.append(".put(").append(entryVar).append(".getKey(), ");
+            }
+            builder.append(childVarOut);
+            builder.append(");\n");
+            builder.append(i).append("    ").append("}\n");
+        } else {
+            builder.append(i).append("      ").append(varOut);
+            if (isList(rawClass)) {
+                builder.append(".add(");
+            } else {
+                builder.append(".put(").append(entryVar).append(".getKey(), ");
+            }
+            if (getEnclosingTemplate().isDtoInterface(childRawType)) {
+                emitCheckNullAndCopyDto(childRawType, childVarIn, builder);
+            } else {
+                builder.append(childVarIn);
+            }
+            builder.append(");\n");
+        }
+        builder.append(i).append("  }\n");
+    }
+

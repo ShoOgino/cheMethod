@@ -1,0 +1,43 @@
+    @Override
+    public Project createProject(String workspace,
+                                 String name,
+                                 ProjectConfig projectConfig,
+                                 Map<String, String> options) throws ConflictException,
+                                                                     ForbiddenException,
+                                                                     ServerException,
+                                                                     NotFoundException {
+        FolderEntry myRoot = getProjectsRoot(workspace);
+        FolderEntry projectFolder = myRoot.createFolder(name);
+        Project project = new Project(projectFolder, this);
+
+        CreateProjectHandler generator = handlers.getCreateProjectHandler(projectConfig.getType());
+
+        if (generator != null) {
+            Map<String, AttributeValue> valueMap = new HashMap<>();
+
+            Map<String, List<String>> attributes = projectConfig.getAttributes();
+
+            if (attributes != null) {
+                for (String key : attributes.keySet()) {
+                    valueMap.put(key, new AttributeValue(attributes.get(key)));
+                }
+            }
+
+            generator.onCreateProject(project.getBaseFolder(), valueMap, options);
+        }
+
+        project.updateConfig(projectConfig);
+
+        ProjectMisc misc = project.getMisc();
+        misc.setCreationDate(System.currentTimeMillis());
+        misc.save(); // Important to save misc!!
+
+        ProjectCreatedHandler projectCreatedHandler = handlers.getProjectCreatedHandler(projectConfig.getType());
+
+        if (projectCreatedHandler != null) {
+            projectCreatedHandler.onProjectCreated(project.getBaseFolder());
+        }
+
+        return project;
+    }
+

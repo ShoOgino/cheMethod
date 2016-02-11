@@ -1,0 +1,32 @@
+    /**
+     * Get upstream branch for selected local branch. Can invoke {@code onSuccess(null)} if upstream branch isn't set
+     */
+    private void getUpstreamBranch(final AsyncCallback<Branch> result) {
+
+        final String configBranchRemote = "branch." + view.getLocalBranch() + ".remote";
+        final String configUpstreamBranch = "branch." + view.getLocalBranch() + ".merge";
+        service.config(workspaceId, project.getRootProject(), Arrays.asList(configUpstreamBranch, configBranchRemote), false,
+                       new AsyncRequestCallback<Map<String, String>>(new StringMapUnmarshaller()) {
+                           @Override
+                           protected void onSuccess(Map<String, String> configs) {
+                               if (configs.containsKey(configBranchRemote) && configs.containsKey(configUpstreamBranch)) {
+                                   String displayName = configs.get(configBranchRemote) + "/" + configs.get(configUpstreamBranch);
+                                   Branch upstream = dtoFactory.createDto(Branch.class)
+                                                               .withActive(false)
+                                                               .withRemote(true)
+                                                               .withDisplayName(displayName)
+                                                               .withName("refs/remotes/" + displayName);
+
+                                   result.onSuccess(upstream);
+                               } else {
+                                   result.onSuccess(null);
+                               }
+                           }
+
+                           @Override
+                           protected void onFailure(Throwable exception) {
+                               result.onFailure(exception);
+                           }
+                       });
+    }
+

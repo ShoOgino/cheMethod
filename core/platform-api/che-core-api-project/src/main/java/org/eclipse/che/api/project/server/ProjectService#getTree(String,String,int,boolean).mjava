@@ -1,0 +1,30 @@
+    @ApiOperation(value = "Get project tree",
+                  notes = "Get project tree. Depth is specified in a query parameter",
+                  response = TreeElement.class,
+                  position = 22)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+            @ApiResponse(code = 404, message = "Not found"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @GET
+    @Path("/tree/{parent:.*}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public TreeElement getTree(@ApiParam(value = "Workspace ID", required = true)
+                               @PathParam("ws-id") String workspace,
+                               @ApiParam(value = "Path to resource. Can be project or its folders", required = true)
+                               @PathParam("parent") String path,
+                               @ApiParam(value = "Tree depth. This parameter can be dropped. If not specified ?depth=1 is used by default")
+                               @DefaultValue("1") @QueryParam("depth") int depth,
+                               @ApiParam(value = "include children files (in addition to children folders). This parameter can be dropped" +
+                                                 ". If not specified ?includeFiles=false is used by default")
+                               @DefaultValue("false") @QueryParam("includeFiles") boolean includeFiles)
+            throws NotFoundException, ForbiddenException, ServerException {
+        final FolderEntry folder = asFolder(workspace, path);
+        final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
+        final DtoFactory dtoFactory = DtoFactory.getInstance();
+        return dtoFactory.createDto(TreeElement.class)
+                         .withNode(DtoConverter.toItemReference(folder, uriBuilder.clone(), projectManager))
+                         .withChildren(getTree(folder, depth, includeFiles, uriBuilder, dtoFactory));
+    }
+

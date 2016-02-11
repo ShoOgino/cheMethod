@@ -1,0 +1,34 @@
+    @Test
+    public void testOnPullClickedWhenPullIsUpToDate() throws Exception {
+        when(pullResponse.getCommandOutput()).thenReturn("Already up-to-date");
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<Void> callback = (AsyncRequestCallback<Void>)arguments[3];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, pullResponse);
+                return callback;
+            }
+        }).when(service).pull(anyObject(), anyObject(), anyString(), anyString(), (AsyncRequestCallback<PullResponse>)anyObject());
+
+        presenter.showDialog();
+        presenter.onPullClicked();
+
+        verify(view, times(2)).getRepositoryName();
+        verify(view).getRepositoryUrl();
+        verify(view).close();
+        verify(editorAgent).getOpenedEditors();
+        verify(service).pull(anyObject(), eq(rootProjectConfig), anyString(), eq(REPOSITORY_NAME), (AsyncRequestCallback)anyObject());
+        verify(gitOutputConsoleFactory).create(PULL_COMMAND_NAME);
+        verify(console).printInfo(anyString());
+        verify(consolesPanelPresenter).addCommandOutput(anyString(), eq(console));
+        verify(constant).pullUpToDate();
+        verify(notificationManager).notify(anyString(), rootProjectConfig);
+        verify(appContext).getCurrentProject();
+        verify(eventBus, never()).fireEvent(Matchers.<Event<GwtEvent>>anyObject());
+        verify(partPresenter, never()).getEditorInput();
+        verify(file, never()).getPath();
+    }
+

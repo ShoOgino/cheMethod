@@ -1,0 +1,36 @@
+    @Override
+    public Project convertFolderToProject(String workspace, String path, ProjectConfig projectConfig) throws ConflictException,
+                                                                                                             ForbiddenException,
+                                                                                                             ServerException,
+                                                                                                             NotFoundException,
+                                                                                                             IOException {
+        final VirtualFileEntry projectEntry = getProjectsRoot(workspace).getChild(path);
+        if (projectEntry == null || !projectEntry.isFolder())
+            throw new NotFoundException("Not found or not a folder " + path);
+
+        FolderEntry projectFolder = (FolderEntry)projectEntry;
+
+        final Project project = new Project(projectFolder, this);
+
+        if (projectConfig.getType() != null) {
+            //TODO: need add checking for concurrency attributes name in giving config and in estimation
+            for (Map.Entry<String, AttributeValue> entry : estimateProject(workspace, path, projectConfig.getType()).entrySet()) {
+                projectConfig.getAttributes().put(entry.getKey(), entry.getValue().getList());
+            }
+            project.updateConfig(projectConfig);
+        }
+
+        if (projectConfig.getType() != null) {
+            PostImportProjectHandler postImportProjectHandler = handlers.getPostImportProjectHandler(projectConfig.getType());
+            if (postImportProjectHandler != null) {
+                postImportProjectHandler.onProjectImported(project.getBaseFolder());
+            }
+        }
+
+        final ProjectMisc misc = project.getMisc();
+        misc.setCreationDate(System.currentTimeMillis());
+        misc.save(); // Important to save misc!!
+
+        return project;
+    }
+

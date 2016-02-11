@@ -1,0 +1,33 @@
+    /**
+     * Checks if workspace is valid for start.
+     */
+    private void checkWorkspaceIsValidForStart(UsersWorkspace workspace, String envName) throws BadRequestException {
+        if (workspace == null) {
+            throw new BadRequestException("Required non-null workspace");
+        }
+        if (envName == null) {
+            throw new BadRequestException(format("Couldn't start workspace '%s', environment name is null", workspace.getName()));
+        }
+        final Optional<? extends EnvironmentState> environmentOptional =
+                workspace.getEnvironments().stream().filter(env -> env.getName().equals(envName)).findFirst();
+        if (!environmentOptional.isPresent()) {
+            throw new BadRequestException(format("Couldn't start workspace '%s', workspace doesn't have environment '%s'",
+                                                 workspace.getName(),
+                                                 envName));
+        }
+        EnvironmentState environment = environmentOptional.get();
+        if (environment.getRecipe() != null && !"docker".equals(environment.getRecipe().getType())) {
+            throw new BadRequestException(format("Couldn't start workspace '%s' from environment '%s', " +
+                                                 "environment recipe has unsupported type '%s'",
+                                                 workspace.getName(),
+                                                 envName,
+                                                 environment.getRecipe().getType()));
+        }
+        if (findDev(environment.getMachineConfigs()) == null) {
+            throw new BadRequestException(format("Couldn't start workspace '%s' from environment '%s', " +
+                                                 "environment doesn't contain dev-machine",
+                                                 workspace.getName(),
+                                                 envName));
+        }
+    }
+

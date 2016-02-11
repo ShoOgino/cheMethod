@@ -1,0 +1,49 @@
+    /**
+     * Reads the file of saved time stamps and populates the {@link #fgInstallTimeMap}.
+     * See https://bugs.eclipse.org/bugs/show_bug.cgi?id=266651 for more information
+     *
+     * @since 3.7
+     */
+    private static void readInstallInfo() {
+        fgInstallTimeMap = new HashMap<String, Long>();
+        IPath libPath = getDefault().getStateLocation();
+        libPath = libPath.append(".install.xml"); //$NON-NLS-1$
+        File file = libPath.toFile();
+        if (file.exists()) {
+            try {
+                InputStream stream = new BufferedInputStream(new FileInputStream(file));
+                DocumentBuilder parser = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+                parser.setErrorHandler(new DefaultHandler());
+                Element root = parser.parse(new InputSource(stream)).getDocumentElement();
+                if(root.getNodeName().equalsIgnoreCase("dirs")) { //$NON-NLS-1$
+                    NodeList nodes = root.getChildNodes();
+                    Node node = null;
+                    Element element = null;
+                    for (int i = 0; i < nodes.getLength(); i++) {
+                        node = nodes.item(i);
+                        if(node.getNodeType() == Node.ELEMENT_NODE) {
+                            element = (Element) node;
+                            if(element.getNodeName().equalsIgnoreCase("entry")) { //$NON-NLS-1$
+                                String loc = element.getAttribute("loc"); //$NON-NLS-1$
+                                String stamp = element.getAttribute("stamp"); //$NON-NLS-1$
+                                try {
+                                    Long l = new Long(stamp);
+                                    fgInstallTimeMap.put(loc, l);
+                                }
+                                catch(NumberFormatException nfe) {
+                                    //do nothing
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                log(e);
+            } catch (ParserConfigurationException e) {
+                log(e);
+            } catch (SAXException e) {
+                log(e);
+            }
+        }
+    }
+

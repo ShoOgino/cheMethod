@@ -1,0 +1,61 @@
+    @ApiOperation(value = "Search for resources",
+                  notes = "Search for resources applying a number of search filters as query parameters",
+                  response = ItemReference.class,
+                  responseContainer = "List",
+                  position = 23)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+            @ApiResponse(code = 404, message = "Not found"),
+            @ApiResponse(code = 409, message = "Conflict error"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @GET
+    @Path("/search/{path:.*}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<ItemReference> search(@ApiParam(value = "Workspace ID", required = true)
+                                      @PathParam("ws-id") String workspace,
+                                      @ApiParam(value = "Path to resource, i.e. where to search?", required = true)
+                                      @PathParam("path") String path,
+                                      @ApiParam(value = "Resource name")
+                                      @QueryParam("name") String name,
+                                      @ApiParam(value = "Media type")
+                                      @QueryParam("mediatype") String mediatype,
+                                      @ApiParam(value = "Search keywords")
+                                      @QueryParam("text") String text,
+                                      @ApiParam(value = "Maximum items to display. If this parameter is dropped, there are no limits")
+                                      @QueryParam("maxItems") @DefaultValue("-1") int maxItems,
+                                      @ApiParam(value = "Skip count")
+                                      @QueryParam("skipCount") int skipCount)
+            throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+        // to search from workspace root path should end with "/" i.e /{ws}/search/?<query>
+        final FolderEntry folder = path.isEmpty() ? projectManager.getProjectsRoot(workspace) : asFolder(workspace, path);
+        if (searcherProvider != null) {
+            if (skipCount < 0) {
+                throw new ConflictException(String.format("Invalid 'skipCount' parameter: %d.", skipCount));
+            }
+            final QueryExpression query = new QueryExpression().setPath(path.startsWith("/") ? path : ('/' + path))
+                                                               .setName(name)
+                                                               .setText(text)
+                                                               .setSkipCount(skipCount)
+                                                               .setMaxItems(maxItems);
+
+            final String[] paths = searcherProvider.getSearcher(folder.getVirtualFile().getMountPoint(), true).search(query);
+            final List<ItemReference> items = new ArrayList<>(paths.length);
+            final FolderEntry root = projectManager.getProjectsRoot(workspace);
+            final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
+            for (String relativePath : paths) {
+                VirtualFileEntry child = null;
+                try {
+                    child = root.getChild(relativePath);
+                } catch (ForbiddenException ignored) {
+                    // Ignore item that user can't access
+                }
+                if (child != null && child.isFile()) {
+                    items.add(DtoConverter.toItemReference((FileEntry)child, uriBuilder.clone()));
+                }
+            }
+            return items;
+        }
+        return Collections.emptyList();
+    }
+

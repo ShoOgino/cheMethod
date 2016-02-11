@@ -1,0 +1,41 @@
+    @Test
+    public void shouldBeAbleToGetWorkspacesByOwner() throws Exception {
+        // given
+        final WorkspaceConfig config = createConfig();
+
+        final UsersWorkspaceImpl workspace1 = workspaceManager.createWorkspace(config, "user123", null);
+        workspace1.setStatus(STARTING);
+        workspace1.setTemporary(true);
+
+        final UsersWorkspaceImpl workspace2 = workspaceManager.createWorkspace(config, "user123", null);
+        final RuntimeWorkspaceImpl workspace2Runtime = createRuntime(workspace2);
+        workspace2Runtime.setStatus(RUNNING);
+        when(registry.getByOwner("user123")).thenReturn(singletonList(workspace2Runtime));
+
+        when(workspaceDao.getByOwner("user123")).thenReturn(asList(workspace1, workspace2));
+
+        // when
+        final List<UsersWorkspaceImpl> result = workspaceManager.getWorkspaces("user123");
+
+        // then
+        assertEquals(result.size(), 2);
+
+        final UsersWorkspaceImpl res1 = result.get(0);
+        assertEquals(res1.getStatus(), STOPPED, "Workspace status wasn't changed from STARTING to STOPPED");
+        assertFalse(res1.isTemporary(), "Workspace must be permanent");
+        assertNotNull(res1.getEnvironments()
+                          .get(0)
+                          .getMachineConfigs()
+                          .get(0)
+                          .getChannels());
+
+        final UsersWorkspaceImpl res2 = result.get(1);
+        assertEquals(res2.getStatus(), workspace2Runtime.getStatus(), "Workspace status wasn't changed to the runtime instance status");
+        assertFalse(res2.isTemporary(), "Workspace must be permanent");
+        assertNotNull(res2.getEnvironments()
+                          .get(0)
+                          .getMachineConfigs()
+                          .get(0)
+                          .getChannels());
+    }
+

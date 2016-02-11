@@ -1,0 +1,32 @@
+    public void openDeclaration() {
+        EditorPartPresenter activeEditor = editorAgent.getActiveEditor();
+        if (activeEditor == null) {
+            return;
+        }
+
+        if (!(activeEditor instanceof EmbeddedTextEditorPresenter)) {
+            Log.error(getClass(), "Open Declaration support only EmbeddedTextEditorPresenter as editor");
+            return;
+        }
+        EmbeddedTextEditorPresenter editor = ((EmbeddedTextEditorPresenter)activeEditor);
+        int offset = editor.getCursorOffset();
+        final VirtualFile file = editor.getEditorInput().getFile();
+        Unmarshallable<OpenDeclarationDescriptor> unmarshaller =
+                factory.newUnmarshaller(OpenDeclarationDescriptor.class);
+        navigationService
+                .findDeclaration(file.getProject().getProjectConfig().getPath(), JavaSourceFolderUtil.getFQNForFile(file), offset,
+                                 new AsyncRequestCallback<OpenDeclarationDescriptor>(unmarshaller) {
+                                     @Override
+                                     protected void onSuccess(OpenDeclarationDescriptor result) {
+                                         if (result != null) {
+                                             handleDescriptor(result);
+                                         }
+                                     }
+
+                                     @Override
+                                     protected void onFailure(Throwable exception) {
+                                         Log.error(OpenDeclarationFinder.class, exception);
+                                     }
+                                 });
+    }
+

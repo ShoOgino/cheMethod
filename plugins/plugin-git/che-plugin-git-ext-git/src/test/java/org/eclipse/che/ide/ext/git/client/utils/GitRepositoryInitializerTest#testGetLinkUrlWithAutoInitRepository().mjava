@@ -1,0 +1,33 @@
+    @Test
+    public void testGetLinkUrlWithAutoInitRepository() throws Exception {
+        final HashMap<String, List<String>> attributes = new HashMap<>();
+        doReturn(attributes).when(rootProjectConfig).getAttributes();
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                RequestCallback<Void> callback = (RequestCallback<Void>)arguments[2];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, (Void)null);
+                return callback;
+            }
+        }).when(service).init(anyString(), anyObject(), anyBoolean(), (RequestCallback<Void>)anyObject());
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<String> callback = (AsyncRequestCallback<String>)arguments[1];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, REMOTE_URI);
+                return callback;
+            }
+        }).when(service).getGitReadOnlyUrl(anyString(), anyObject(), (AsyncRequestCallback<String>)anyObject());
+
+        gitRepositoryInitializer.getGitUrlWithAutoInit(rootProjectConfig, stringCallback);
+
+        verify(service).init(anyString(), eq(rootProjectConfig), eq(BARE), (RequestCallback<Void>)anyObject());
+        verify(stringCallback).onSuccess(eq(REMOTE_URI));
+    }
+

@@ -1,0 +1,44 @@
+    @Inject
+    public TerminalPresenter(TerminalView view,
+                             NotificationManager notificationManager,
+                             MachineLocalizationConstant locale,
+                             @Assisted Machine machine) {
+        this.view = view;
+        view.setDelegate(this);
+        this.notificationManager = notificationManager;
+        this.locale = locale;
+        this.machine = machine;
+
+        isTerminalConnected = false;
+
+        promise = AsyncPromiseHelper.createFromAsyncRequest(new AsyncPromiseHelper.RequestCall<Boolean>() {
+            @Override
+            public void makeCall(final AsyncCallback<Boolean> callback) {
+                ScriptInjector.fromUrl(GWT.getModuleBaseURL() + "term/term.js")
+                              .setWindow(ScriptInjector.TOP_WINDOW)
+                              .setCallback(new Callback<Void, Exception>() {
+                                  @Override
+                                  public void onFailure(Exception reason) {
+                                      callback.onFailure(reason);
+                                  }
+
+                                  @Override
+                                  public void onSuccess(Void result) {
+                                      callback.onSuccess(true);
+                                  }
+                              }).inject();
+            }
+        });
+
+        countRetry = 2;
+
+        retryConnectionTimer = new Timer() {
+            @Override
+            public void run() {
+                connect();
+
+                countRetry--;
+            }
+        };
+    }
+

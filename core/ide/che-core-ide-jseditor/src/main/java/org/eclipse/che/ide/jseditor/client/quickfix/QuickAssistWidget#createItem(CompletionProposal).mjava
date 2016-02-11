@@ -1,0 +1,54 @@
+    public Element createItem(final CompletionProposal proposal) {
+        final Element element = Elements.createLiElement(popupResources.popupStyle().item());
+
+        final Element icon = Elements.createDivElement(popupResources.popupStyle().icon());
+        if (proposal.getIcon() != null && proposal.getIcon().getSVGImage() != null) {
+            icon.appendChild((Node)proposal.getIcon().getSVGImage().getElement());
+        } else if (proposal.getIcon() != null && proposal.getIcon().getImage() != null) {
+            icon.appendChild((Node)proposal.getIcon().getImage().getElement());
+        }
+        element.appendChild(icon);
+
+        final SpanElement label = Elements.createSpanElement(popupResources.popupStyle().label());
+        label.setInnerHTML(proposal.getDisplayString());
+        element.appendChild(label);
+
+        final EventListener validateListener = new EventListener() {
+            @Override
+            public void handleEvent(final Event evt) {
+                proposal.getCompletion(new CompletionProposal.CompletionCallback() {
+                    @Override
+                    public void onCompletion(final Completion completion) {
+                        HandlesUndoRedo undoRedo = null;
+                        if(textEditor instanceof UndoableEditor){
+                            UndoableEditor undoableEditor = (UndoableEditor)QuickAssistWidget.this.textEditor;
+                            undoRedo = undoableEditor.getUndoRedo();
+                        }
+                        try {
+                            if(undoRedo != null){
+                                undoRedo.beginCompoundChange();
+                            }
+                            completion.apply(textEditor.getDocument());
+                            final LinearRange selection = completion.getSelection(textEditor.getDocument());
+                            if (selection != null) {
+                                textEditor.getDocument().setSelectedRange(selection, true);
+                            }
+                        } catch (final Exception e) {
+                            Log.error(getClass(), e);
+                        } finally {
+                            if(undoRedo != null){
+                                undoRedo.endCompoundChange();
+                            }
+                        }
+                    }
+                });
+                hide();
+            }
+        };
+
+        element.addEventListener(Event.DBLCLICK, validateListener, false);
+        element.addEventListener(CUSTOM_EVT_TYPE_VALIDATE, validateListener, false);
+
+        return element;
+    }
+

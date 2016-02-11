@@ -1,0 +1,41 @@
+    @Override
+    public ContentStream zip(VirtualFileFilter filter) throws ForbiddenException, ServerException {
+        checkExist();
+        if (!isFolder()) {
+            throw new ForbiddenException(String.format("Unable export to zip. Item '%s' is not a folder. ", getPath()));
+        }
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            final ZipOutputStream zipOut = new ZipOutputStream(out);
+            final LinkedList<VirtualFile> q = new LinkedList<>();
+            q.add(this);
+            final int rootZipPathLength = isRoot() ? 1 : (getPath().length() + 1);
+            while (!q.isEmpty()) {
+                final LazyIterator<VirtualFile> children = q.pop().getChildren(filter);
+                while (children.hasNext()) {
+                    VirtualFile current = children.next();
+                    final String zipEntryName = current.getPath().substring(rootZipPathLength);
+                    if (current.isFile()) {
+                        final ZipEntry zipEntry = new ZipEntry(zipEntryName);
+                        zipEntry.setTime(current.getLastModificationDate());
+                        zipOut.putNextEntry(zipEntry);
+                        zipOut.write(((MemoryVirtualFile)current).content);
+                        zipOut.closeEntry();
+                    } else if (current.isFolder()) {
+                        final ZipEntry zipEntry = new ZipEntry(zipEntryName + '/');
+                        zipEntry.setTime(0);
+                        zipOut.putNextEntry(zipEntry);
+                        q.add(current);
+                        zipOut.closeEntry();
+                    }
+                }
+            }
+            zipOut.close();
+        } catch (IOException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
+        final byte[] zipContent = out.toByteArray();
+        return new ContentStream(getName() + ".zip", new ByteArrayInputStream(zipContent), ExtMediaType.APPLICATION_ZIP, zipContent.length,
+                                 new Date());
+    }
+

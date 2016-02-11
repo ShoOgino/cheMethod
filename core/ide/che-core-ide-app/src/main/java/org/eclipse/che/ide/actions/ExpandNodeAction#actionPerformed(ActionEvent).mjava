@@ -1,0 +1,51 @@
+    @Override
+    public void actionPerformed(ActionEvent event) {
+        final CurrentProject currentProject = appContext.getCurrentProject();
+
+        if (currentProject == null || currentProject.getRootProject() == null) {
+            return;
+        }
+
+        if (event.getParameters() == null) {
+            Log.error(getClass(), localization.canNotOpenNodeWithoutParams());
+            return;
+        }
+
+        final String path = event.getParameters().get(NODE_PARAM_ID);
+
+        if (Strings.isNullOrEmpty(path)) {
+            Log.error(getClass(), localization.nodeToOpenIsNotSpecified());
+            return;
+        }
+
+        projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(path)).then(new Operation<Node>() {
+            private HandlerRegistration handlerRegistration;
+
+            @Override
+            public void apply(final Node arg) throws OperationException {
+                if (!projectExplorer.isExpanded(arg)) {
+                    handlerRegistration = projectExplorer.addExpandHandler(new ExpandNodeEvent.ExpandNodeHandler() {
+                        @Override
+                        public void onExpand(ExpandNodeEvent event) {
+                            if (((HasStorablePath)event.getNode()).getStorablePath().equals(((HasStorablePath)arg).getStorablePath())) {
+                                handlerRegistration.removeHandler();
+                                if (actionCompletedCallBack != null) {
+                                    actionCompletedCallBack.onSuccess(null);
+                                }
+                            }
+                        }
+                    });
+
+                    projectExplorer.setExpanded(arg, true);
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                if (actionCompletedCallBack != null) {
+                    actionCompletedCallBack.onFailure(arg.getCause());
+                }
+            }
+        });
+    }
+

@@ -1,0 +1,315 @@
+    /*
+     * @see org.eclipse.jface.text.rules.ITokenScanner#nextToken()
+     */
+    public Token nextToken() {
+
+        // emulate JavaPartitionScanner
+        if (fEmulate) {
+            if (fJavaOffset != -1 && fTokenOffset + fTokenLength != fJavaOffset + fJavaLength) {
+                fTokenOffset += fTokenLength;
+                return fTokens[JAVA];
+            } else {
+                fJavaOffset = -1;
+                fJavaLength = 0;
+            }
+        }
+
+        fTokenOffset += fTokenLength;
+        fTokenLength = fPrefixLength;
+
+        while (true) {
+            final int ch = fScanner.read();
+
+            // characters
+            switch (ch) {
+                case CharacterScanner.EOF:
+                    if (fTokenLength > 0) {
+                        fLast = NONE; // ignore last
+                        return preFix(fState, JAVA, NONE, 0);
+
+                    } else {
+                        fLast = NONE;
+                        fPrefixLength = 0;
+                        return TokenImpl.EOF;
+                    }
+
+                case '\r':
+                    // emulate JavaPartitionScanner
+                    if (!fEmulate && fLast != CARRIAGE_RETURN) {
+                        fLast = CARRIAGE_RETURN;
+                        fTokenLength++;
+                        continue;
+
+                    } else {
+
+                        switch (fState) {
+                            case SINGLE_LINE_COMMENT:
+                            case CHARACTER:
+                            case STRING:
+                                if (fTokenLength > 0) {
+                                    final Token token = fTokens[fState];
+
+                                    // emulate JavaPartitionScanner
+                                    if (fEmulate) {
+                                        fTokenLength++;
+                                        fLast = NONE;
+                                        fPrefixLength = 0;
+                                    } else {
+                                        fLast = CARRIAGE_RETURN;
+                                        fPrefixLength = 1;
+                                    }
+
+                                    fState = JAVA;
+                                    return token;
+
+                                } else {
+                                    consume();
+                                    continue;
+                                }
+
+                            default:
+                                consume();
+                                continue;
+                        }
+                    }
+
+                case '\n':
+                    switch (fState) {
+                        case SINGLE_LINE_COMMENT:
+                        case CHARACTER:
+                        case STRING:
+                            // assert(fTokenLength > 0);
+                            return postFix(fState);
+
+                        default:
+                            consume();
+                            continue;
+                    }
+
+                default:
+                    if (!fEmulate && fLast == CARRIAGE_RETURN) {
+                        switch (fState) {
+                            case SINGLE_LINE_COMMENT:
+                            case CHARACTER:
+                            case STRING:
+
+                                int last;
+                                int newState;
+                                switch (ch) {
+                                    case '/':
+                                        last = SLASH;
+                                        newState = JAVA;
+                                        break;
+
+                                    case '*':
+                                        last = STAR;
+                                        newState = JAVA;
+                                        break;
+
+                                    case '\'':
+                                        last = NONE;
+                                        newState = CHARACTER;
+                                        break;
+
+                                    case '"':
+                                        last = NONE;
+                                        newState = STRING;
+                                        break;
+
+                                    case '\r':
+                                        last = CARRIAGE_RETURN;
+                                        newState = JAVA;
+                                        break;
+
+                                    case '\\':
+                                        last = BACKSLASH;
+                                        newState = JAVA;
+                                        break;
+
+                                    default:
+                                        last = NONE;
+                                        newState = JAVA;
+                                        break;
+                                }
+
+                                fLast = NONE; // ignore fLast
+                                return preFix(fState, newState, last, 1);
+
+                            default:
+                                break;
+                        }
+                    }
+            }
+
+            // states
+            switch (fState) {
+                case JAVA:
+                    switch (ch) {
+                        case '/':
+                            if (fLast == SLASH) {
+                                if (fTokenLength - getLastLength(fLast) > 0) {
+                                    return preFix(JAVA, SINGLE_LINE_COMMENT, NONE, 2);
+                                } else {
+                                    preFix(JAVA, SINGLE_LINE_COMMENT, NONE, 2);
+                                    fTokenOffset += fTokenLength;
+                                    fTokenLength = fPrefixLength;
+                                    break;
+                                }
+
+                            } else {
+                                fTokenLength++;
+                                fLast = SLASH;
+                                break;
+                            }
+
+                        case '*':
+                            if (fLast == SLASH) {
+                                if (fTokenLength - getLastLength(fLast) > 0) {
+                                    return preFix(JAVA, MULTI_LINE_COMMENT, SLASH_STAR, 2);
+                                } else {
+                                    preFix(JAVA, MULTI_LINE_COMMENT, SLASH_STAR, 2);
+                                    fTokenOffset += fTokenLength;
+                                    fTokenLength = fPrefixLength;
+                                    break;
+                                }
+
+                            } else {
+                                consume();
+                                break;
+                            }
+
+                        case '\'':
+                            fLast = NONE; // ignore fLast
+                            if (fTokenLength > 0) {
+                                return preFix(JAVA, CHARACTER, NONE, 1);
+                            } else {
+                                preFix(JAVA, CHARACTER, NONE, 1);
+                                fTokenOffset += fTokenLength;
+                                fTokenLength = fPrefixLength;
+                                break;
+                            }
+
+                        case '"':
+                            fLast = NONE; // ignore fLast
+                            if (fTokenLength > 0) {
+                                return preFix(JAVA, STRING, NONE, 1);
+                            } else {
+                                preFix(JAVA, STRING, NONE, 1);
+                                fTokenOffset += fTokenLength;
+                                fTokenLength = fPrefixLength;
+                                break;
+                            }
+
+                        default:
+                            consume();
+                            break;
+                    }
+                    break;
+
+                case SINGLE_LINE_COMMENT:
+                    consume();
+                    break;
+
+                case JAVADOC:
+                    switch (ch) {
+                        case '/':
+                            switch (fLast) {
+                                case SLASH_STAR_STAR:
+                                    return postFix(MULTI_LINE_COMMENT);
+
+                                case STAR:
+                                    return postFix(JAVADOC);
+
+                                default:
+                                    consume();
+                                    break;
+                            }
+                            break;
+
+                        case '*':
+                            fTokenLength++;
+                            fLast = STAR;
+                            break;
+
+                        default:
+                            consume();
+                            break;
+                    }
+                    break;
+
+                case MULTI_LINE_COMMENT:
+                    switch (ch) {
+                        case '*':
+                            if (fLast == SLASH_STAR) {
+                                fLast = SLASH_STAR_STAR;
+                                fTokenLength++;
+                                fState = JAVADOC;
+                            } else {
+                                fTokenLength++;
+                                fLast = STAR;
+                            }
+                            break;
+
+                        case '/':
+                            if (fLast == STAR) {
+                                return postFix(MULTI_LINE_COMMENT);
+                            } else {
+                                consume();
+                                break;
+                            }
+
+                        default:
+                            consume();
+                            break;
+                    }
+                    break;
+
+                case STRING:
+                    switch (ch) {
+                        case '\\':
+                            fLast = (fLast == BACKSLASH) ? NONE : BACKSLASH;
+                            fTokenLength++;
+                            break;
+
+                        case '\"':
+                            if (fLast != BACKSLASH) {
+                                return postFix(STRING);
+
+                            } else {
+                                consume();
+                                break;
+                            }
+
+                        default:
+                            consume();
+                            break;
+                    }
+                    break;
+
+                case CHARACTER:
+                    switch (ch) {
+                        case '\\':
+                            fLast = (fLast == BACKSLASH) ? NONE : BACKSLASH;
+                            fTokenLength++;
+                            break;
+
+                        case '\'':
+                            if (fLast != BACKSLASH) {
+                                return postFix(CHARACTER);
+
+                            } else {
+                                consume();
+                                break;
+                            }
+
+                        default:
+                            consume();
+                            break;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+

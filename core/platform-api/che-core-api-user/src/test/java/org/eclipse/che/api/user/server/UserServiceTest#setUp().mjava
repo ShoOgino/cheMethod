@@ -1,0 +1,62 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        ResourceBinderImpl resources = new ResourceBinderImpl();
+        DependencySupplierImpl dependencies = new DependencySupplierImpl();
+        dependencies.addComponent(UserProfileDao.class, profileDao);
+        dependencies.addComponent(UserDao.class, userDao);
+        dependencies.addComponent(TokenValidator.class, tokenValidator);
+        dependencies.addComponent(PreferenceDao.class, preferenceDao);
+
+        userService = new UserService(userDao, profileDao, preferenceDao, tokenValidator, true);
+        final Field uriField = userService.getClass()
+                                          .getSuperclass()
+                                          .getDeclaredField("uriInfo");
+        uriField.setAccessible(true);
+        uriField.set(userService, uriInfo);
+
+        resources.addResource(userService, null);
+
+        EverrestProcessor processor = new EverrestProcessor(resources,
+                                                            new ApplicationProviderBinder(),
+                                                            dependencies,
+                                                            new EverrestConfiguration(),
+                                                            null);
+        launcher = new ResourceLauncher(processor);
+        ProviderBinder providerBinder = ProviderBinder.getInstance();
+        providerBinder.addExceptionMapper(ApiExceptionMapper.class);
+        ApplicationContextImpl.setCurrent(new ApplicationContextImpl(null, null, providerBinder));
+        //set up user
+        final User user = createUser();
+        when(environmentContext.get(SecurityContext.class)).thenReturn(securityContext);
+
+        when(uriInfo.getBaseUriBuilder()).thenReturn(new UriBuilderImpl());
+
+        org.eclipse.che.commons.env.EnvironmentContext.getCurrent().setUser(new org.eclipse.che.commons.user.User() {
+
+            @Override
+            public String getName() {
+                return user.getEmail();
+            }
+
+            @Override
+            public boolean isMemberOf(String s) {
+                return false;
+            }
+
+            @Override
+            public String getToken() {
+                return null;
+            }
+
+            @Override
+            public String getId() {
+                return user.getId();
+            }
+
+            @Override
+            public boolean isTemporary() {
+                return false;
+            }
+        });
+    }
+

@@ -1,0 +1,29 @@
+    @Test
+    public void testGetTree() throws Exception {
+        Project myProject = pm.getProject(workspace, "my_project");
+        FolderEntry a = myProject.getBaseFolder().createFolder("a");
+        a.createFolder("b/c");
+        a.createFolder("x/y");
+        a.createFile("test.txt", "test".getBytes());
+        ContainerResponse response = launcher.service(GET,
+                                                      String.format("http://localhost:8080/api/project/%s/tree/my_project/a", workspace),
+                                                      "http://localhost:8080/api", null, null, null);
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+        TreeElement tree = (TreeElement)response.getEntity();
+        ItemReference a_node = tree.getNode();
+        assertEquals(a_node.getName(), "a");
+        validateFolderLinks(a_node);
+        List<TreeElement> children = tree.getChildren();
+        assertNotNull(children);
+        assertEquals(children.size(), 2);
+        Set<String> names = new LinkedHashSet<>(2);
+        for (TreeElement subTree : children) {
+            ItemReference _node = subTree.getNode();
+            validateFolderLinks(_node);
+            names.add(_node.getName());
+            Assert.assertTrue(subTree.getChildren().isEmpty()); // default depth is 1
+        }
+        Assert.assertTrue(names.contains("b"));
+        Assert.assertTrue(names.contains("x"));
+    }
+

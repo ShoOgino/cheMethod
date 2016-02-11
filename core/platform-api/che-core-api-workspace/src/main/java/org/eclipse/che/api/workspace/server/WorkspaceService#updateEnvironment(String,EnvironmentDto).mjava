@@ -1,0 +1,31 @@
+    @PUT
+    @Path("/{id}/environment")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed("user")
+    @ApiOperation(value = "Update the workspace environment by replacing it with a new one",
+                  notes = "This operation can be performed only by the workspace owner")
+    @ApiResponses({@ApiResponse(code = 200, message = "The environment successfully updated"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "The user does not have access to update the environment"),
+                   @ApiResponse(code = 404, message = "The workspace or the environment not found"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public UsersWorkspaceDto updateEnvironment(@ApiParam("The workspace id")
+                                               @PathParam("id")
+                                               String id,
+                                               @ApiParam(value = "The environment update", required = true)
+                                               EnvironmentDto update) throws ServerException,
+                                                                             BadRequestException,
+                                                                             NotFoundException,
+                                                                             ConflictException,
+                                                                             ForbiddenException {
+        requiredNotNull(update, "Environment description");
+        final UsersWorkspaceImpl workspace = workspaceManager.getWorkspace(id);
+        ensureUserIsWorkspaceOwner(workspace);
+        if (!workspace.getEnvironments().stream().anyMatch(env -> env.getName().equals(update.getName()))) {
+            throw new NotFoundException("Workspace " + id + " doesn't contain environment " + update.getName());
+        }
+        workspace.getEnvironments().add(new EnvironmentStateImpl(update));
+        return injectLinks(asDto(workspaceManager.updateWorkspace(id, workspace)));
+    }
+

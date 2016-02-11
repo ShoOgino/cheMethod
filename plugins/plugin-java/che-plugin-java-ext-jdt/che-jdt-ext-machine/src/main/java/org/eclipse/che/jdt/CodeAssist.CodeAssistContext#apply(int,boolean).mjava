@@ -1,0 +1,50 @@
+        public ProposalApplyResult apply(int index, boolean insert) {
+            IDocument document = viewer.getDocument();
+            final List<Change> changes = new ArrayList<>();
+            document.addDocumentListener(new IDocumentListener() {
+                @Override
+                public void documentAboutToBeChanged(DocumentEvent event) {
+                }
+
+                @Override
+                public void documentChanged(DocumentEvent event) {
+                    changes.add(DtoFactory.newDto(Change.class)
+                                          .withLength(event.getLength())
+                                          .withOffset(event.getOffset())
+                                          .withText(event.getText()));
+                }
+            });
+            try {
+                char trigger = (char)0;
+                int stateMask = insert ? 0 : SWT.CTRL;
+                ICompletionProposal completionProposal = proposals.get(index);
+                ProposalApplyResult result = DtoFactory.newDto(ProposalApplyResult.class);
+                if (completionProposal instanceof ChangeCorrectionProposal) {
+                    result.setChangeInfo(prepareChangeInfo((ChangeCorrectionProposal)completionProposal));
+                }
+                if (completionProposal instanceof ICompletionProposalExtension2) {
+                    ICompletionProposalExtension2 completionProposalExtension2 = (ICompletionProposalExtension2)completionProposal;
+                    completionProposalExtension2.apply(viewer, trigger, stateMask, offset);
+                } else if (completionProposal instanceof ICompletionProposalExtension) {
+                    ICompletionProposalExtension completionProposalExtension = (ICompletionProposalExtension)completionProposal;
+                    completionProposalExtension.apply(document, trigger, offset);
+                } else {
+                    completionProposal.apply(document);
+                }
+
+                result.setChanges(changes);
+                Point selection = completionProposal.getSelection(document);
+                if (selection != null) {
+                    result.setSelection(DtoFactory.newDto(Region.class).withOffset(selection.x).withLength(selection.y));
+                }
+                if (completionProposal instanceof HasLinkedModel) {
+                    result.setLinkedModeModel(((HasLinkedModel)completionProposal).getLinkedModel());
+                }
+                return result;
+
+
+            } catch (IndexOutOfBoundsException | CoreException e) {
+                throw new IllegalArgumentException("Can't find completion: " + index, e);
+            }
+        }
+

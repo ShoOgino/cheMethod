@@ -1,0 +1,38 @@
+    @Test
+    public void testMavenProject() throws Exception {
+        UsersWorkspaceDto usersWorkspaceMock = mock(UsersWorkspaceDto.class);
+        when(httpJsonRequestFactory.fromLink(eq(DtoFactory.newDto(Link.class)
+                                                          .withMethod("GET")
+                                                          .withHref(API_ENDPOINT + "/workspace/" + workspace))))
+                .thenReturn(httpJsonRequest);
+        when(httpJsonRequestFactory.fromLink(eq(DtoFactory.newDto(Link.class)
+                                                          .withMethod("PUT")
+                                                          .withHref(API_ENDPOINT + "/workspace/" + workspace + "/project"))))
+                .thenReturn(httpJsonRequest);
+        when(httpJsonRequest.request()).thenReturn(httpJsonResponse);
+        when(httpJsonResponse.asDto(UsersWorkspaceDto.class)).thenReturn(usersWorkspaceMock);
+        final ProjectConfigDto projectConfig = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                                         .withName("project")
+                                                         .withPath("/myProject")
+                                                         .withType(MavenAttributes.MAVEN_ID);
+        when(usersWorkspaceMock.getProjects()).thenReturn(Collections.singletonList(projectConfig));
+
+        Map<String, List<String>> attributes = new HashMap<>();
+        attributes.put(MavenAttributes.ARTIFACT_ID, Collections.singletonList("myartifact"));
+        attributes.put(MavenAttributes.GROUP_ID, Collections.singletonList("mygroup"));
+        attributes.put(MavenAttributes.VERSION, Collections.singletonList("1.0"));
+        attributes.put(MavenAttributes.PACKAGING, Collections.singletonList("jar"));
+
+        Project project = pm.createProject(workspace, "myProject",
+                                           DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                                     .withType("maven").withAttributes(attributes),
+                                           null);
+
+        for (VirtualFileEntry file : project.getBaseFolder().getChildren()) {
+            if (file.getName().equals("pom.xml")) {
+                Model pom = Model.readFrom(file.getVirtualFile().getContent().getStream());
+                Assert.assertEquals(pom.getVersion(), "1.0");
+            }
+        }
+    }
+

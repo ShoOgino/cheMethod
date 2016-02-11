@@ -1,0 +1,20 @@
+    private void performRename(final String newName, RenameRefactoringSession session, final HasLinkedMode linkedEditor) {
+        final LinkedRenameRefactoringApply dto = createLinkedRenameRefactoringApplyDto(newName, session.getSessionId());
+        Promise<RefactoringResult> applyModelPromise = refactoringServiceClient.applyLinkedModeRename(dto);
+        applyModelPromise.then(new Operation<RefactoringResult>() {
+            @Override
+            public void apply(RefactoringResult result) throws OperationException {
+                onTargetRenamed(result, linkedEditor);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                if (linkedEditor instanceof EditorWithAutoSave) {
+                    ((EditorWithAutoSave)linkedEditor).enableAutoSave();
+                }
+                loader.hide();
+                notificationManager.notify(locale.failedToRename(), arg.getMessage(), FAIL, true);
+            }
+        });
+    }
+

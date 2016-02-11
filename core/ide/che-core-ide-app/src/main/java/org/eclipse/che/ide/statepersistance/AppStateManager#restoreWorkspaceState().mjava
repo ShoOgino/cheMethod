@@ -1,0 +1,32 @@
+    private void restoreWorkspaceState() {
+        final WorkspaceState workspaceState = appState.getWorkspaces().get(appContext.getWorkspace().getId());
+        if (workspaceState == null) {
+            return;
+        }
+
+        List<ActionDescriptor> actions = workspaceState.getActions();
+        if (actions.isEmpty()) {
+            return;
+        }
+
+        List<Pair<Action, ActionEvent>> actionsToPerform = new ArrayList<>(actions.size());
+        for (ActionDescriptor actionDescriptor : actions) {
+            final Action action = actionManager.getAction(actionDescriptor.getId());
+            if (action == null) {
+                continue;
+            }
+
+            actionsToPerform.add(new Pair<>(action, new ActionEvent(presentationFactory.getPresentation(action),
+                                                                    actionManager,
+                                                                    perspectiveManagerProvider.get(),
+                                                                    actionDescriptor.getParameters())));
+        }
+
+        actionManager.performActions(actionsToPerform, false).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                Log.info(AppStateManager.class, "Failed to restore workspace state.");
+            }
+        });
+    }
+

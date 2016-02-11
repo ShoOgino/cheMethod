@@ -1,0 +1,32 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onAcceptButtonClicked() {
+        final RefactoringSession session = dtoFactory.createDto(RefactoringSession.class);
+        session.setSessionId(refactoringSessionId);
+        prepareMovingChanges(session).then(new Operation<ChangeCreationResult>() {
+            @Override
+            public void apply(ChangeCreationResult arg) throws OperationException {
+                if (arg.isCanShowPreviewPage()) {
+                    refactorService.applyRefactoring(session).then(new Operation<RefactoringResult>() {
+                        @Override
+                        public void apply(RefactoringResult arg) throws OperationException {
+                            if (arg.getSeverity() == OK) {
+                                view.hide();
+                                refactoringUpdater.updateAfterRefactoring(refactorInfo, arg.getChanges());
+                            } else {
+                                view.showErrorMessage(arg);
+                            }
+                        }
+                    });
+                } else {
+                    view.showErrorMessage(arg.getStatus());
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                notificationManager.notify(locale.applyMoveError(), error.getMessage(), Status.FAIL, true);
+            }
+        });
+    }
+

@@ -1,0 +1,19 @@
+    @Override
+    public void startDetection(String container, MessageProcessor<LogMessage> containerLogProcessor) {
+        if (needStartOOMDetector(container)) {
+            if (cgroupMount == null) {
+                LOG.warn("System doesn't support OOM events");
+                return;
+            }
+            try {
+                final long memory = dockerConnector.inspectContainer(container).getConfig().getHostConfig().getMemory();
+                OOMDetector oomDetector = new OOMDetector(container, containerLogProcessor, memory);
+                oomDetectors.putIfAbsent(container, oomDetector);
+                oomDetector = oomDetectors.get(container);
+                oomDetector.start();
+            } catch (IOException e) {
+                LOG.error(e.getLocalizedMessage(), e);
+            }
+        }
+    }
+

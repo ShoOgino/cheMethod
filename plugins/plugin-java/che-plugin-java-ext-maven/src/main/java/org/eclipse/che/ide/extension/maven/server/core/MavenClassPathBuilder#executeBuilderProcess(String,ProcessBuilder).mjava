@@ -1,0 +1,52 @@
+    private ClassPathBuilderResult executeBuilderProcess(final String projectPath, ProcessBuilder processBuilder) {
+        StreamPump output = null;
+        Watchdog watcher = null;
+
+        ClassPathBuilderResult classPathBuilderResult = newDto(ClassPathBuilderResult.class);
+        int timeout = 10; //10 minutes
+        int result = -1;
+        try {
+            Process process = processBuilder.start();
+
+            watcher = new Watchdog("Maven classpath" + "-WATCHDOG", timeout, TimeUnit.MINUTES);
+            watcher.start(new CancellableProcessWrapper(process,
+                                                        cancellable -> LOG.warn("Update dependency process has been shutdown "
+                                                                                + "due to timeout. Project: "
+                                                                                + projectPath)));
+
+            String channel = "dependencyUpdate:output:" + workspaceId + ':' + projectPath;
+
+            classPathBuilderResult.setChannel(channel);
+
+            BufferOutputFixedRateSender fixedRateSender = new BufferOutputFixedRateSender(channel, 2_000);
+            output = new StreamPump();
+            output.start(process, fixedRateSender);
+            try {
+                result = process.waitFor();
+            } catch (InterruptedException e) {
+                Thread.interrupted(); // we interrupt thread when cancel task
+                ProcessUtil.kill(process);
+            }
+            try {
+                output.await(); // wait for logger
+
+                fixedRateSender.close();
+            } catch (InterruptedException e) {
+                Thread.interrupted(); // we interrupt thread when cancel task, NOTE: logs may be incomplete
+            }
+        } catch (IOException e) {
+            LOG.error("", e);
+        } finally {
+            if (watcher != null) {
+                watcher.stop();
+            }
+            if (output != null) {
+                output.stop();
+            }
+        }
+
+        classPathBuilderResult.setStatus(result == 0 ? ClassPathBuilderResult.Status.SUCCESS : ClassPathBuilderResult.Status.ERROR);
+
+        return classPathBuilderResult;
+    }
+

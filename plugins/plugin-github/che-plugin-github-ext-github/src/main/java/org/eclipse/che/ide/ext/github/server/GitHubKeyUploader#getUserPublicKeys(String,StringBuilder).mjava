@@ -1,0 +1,42 @@
+    private List<GitHubKey> getUserPublicKeys(String url, StringBuilder answer) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection)new URL(url).openConnection();
+            conn.setInstanceFollowRedirects(false);
+            conn.setRequestMethod(HTTPMethod.GET);
+            conn.setRequestProperty(HTTPHeader.ACCEPT, MimeType.APPLICATION_JSON);
+            if (conn.getResponseCode() == HTTPStatus.OK) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        answer.append(line).append('\n');
+                    }
+                }
+                if (conn.getHeaderFields().containsKey("Link")) {
+                    String strForParsing = conn.getHeaderFields().get("Link").get(0);
+                    int indexNext = strForParsing.indexOf("rel=\"next\"");
+
+                    if (indexNext != -1) {
+                        String nextSubStr = strForParsing.substring(0, indexNext);
+                        String nextPageLink = nextSubStr.substring(nextSubStr.indexOf("<") + 1, nextSubStr.indexOf(">"));
+
+                        getUserPublicKeys(nextPageLink, answer);
+                    }
+                    int indexToReplace;
+                    while ((indexToReplace = answer.indexOf("]\n[")) != -1) {
+                        answer.replace(indexToReplace, indexToReplace + 3, ",");
+                    }
+                }
+                return DtoFactory.getInstance().createListDtoFromJson(answer.toString(), GitHubKey.class);
+            }
+            return Collections.emptyList();
+        } catch (IOException e) {
+            LOG.error(e.getMessage(), e);
+            return Collections.emptyList();
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+

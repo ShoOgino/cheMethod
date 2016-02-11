@@ -1,0 +1,31 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void testSimpleDelete(GitConnectionFactory connectionFactory) throws GitException, IOException, UnauthorizedException {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        addFile(connection, "README.txt", org.eclipse.che.git.impl.GitTestUtil.CONTENT);
+        connection.add(newDto(AddRequest.class).withFilepattern(ImmutableList.of("README.txt")));
+        connection.commit(newDto(CommitRequest.class).withMessage("Initial addd"));
+        connection.branchCreate(newDto(BranchCreateRequest.class).withName("newbranch"));
+
+        assertTrue(Sets.symmetricDifference(
+                Sets.newHashSet(
+                        connection.branchList(newDto(BranchListRequest.class).withListMode(LIST_LOCAL))),
+                Sets.newHashSet(
+                        newDto(Branch.class).withName("refs/heads/master")
+                                .withDisplayName("master").withActive(true).withRemote(false),
+                        newDto(Branch.class).withName("refs/heads/newbranch")
+                                .withDisplayName("newbranch").withActive(false).withRemote(false)
+                )
+        ).isEmpty());
+        //when
+        connection.branchDelete(newDto(BranchDeleteRequest.class).withName("newbranch").withForce(false));
+        //then
+        assertTrue(Sets.symmetricDifference(
+                Sets.newHashSet(
+                        connection.branchList(newDto(BranchListRequest.class).withListMode(LIST_LOCAL))),
+                Sets.newHashSet(
+                        newDto(Branch.class).withName("refs/heads/master")
+                                .withDisplayName("master").withActive(true).withRemote(false))
+        ).isEmpty());
+    }
+

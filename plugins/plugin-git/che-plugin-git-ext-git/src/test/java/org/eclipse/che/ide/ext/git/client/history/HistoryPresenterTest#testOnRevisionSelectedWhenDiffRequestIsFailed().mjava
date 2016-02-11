@@ -1,0 +1,43 @@
+    @Test
+    public void testOnRevisionSelectedWhenDiffRequestIsFailed() throws Exception {
+        List<Revision> revisions = new ArrayList<Revision>();
+        revisions.add(selectedRevision);
+        revisions.add(selectedRevision);
+        when(logResponse.getCommits()).thenReturn(revisions);
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<String> callback = (AsyncRequestCallback<String>)arguments[2];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, logResponse);
+                return callback;
+            }
+        }).when(service).log(anyObject(), anyObject(), null, anyBoolean(), (AsyncRequestCallback<LogResponse>)anyObject());
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<String> callback = (AsyncRequestCallback<String>)arguments[7];
+                Method onFailure = GwtReflectionUtils.getMethod(callback.getClass(), "onFailure");
+                onFailure.invoke(callback, mock(Throwable.class));
+                return callback;
+            }
+        }).when(service)
+          .diff(anyObject(), anyObject(), (List<String>)anyObject(), (DiffRequest.DiffType)anyObject(), anyBoolean(), anyInt(),
+                anyString(), anyString(), (AsyncRequestCallback<String>)anyObject());
+
+        presenter.showDialog();
+        reset(view);
+        presenter.onRevisionSelected(selectedRevision);
+
+        verify(service)
+                .diff(anyObject(), eq(rootProjectConfig), (List<String>)anyObject(), eq(DiffRequest.DiffType.RAW), anyBoolean(), anyInt(),
+                      eq(REVISION_ID), eq(REVISION_ID), (AsyncRequestCallback<String>)anyObject());
+        verify(view).setDiffContext(eq(EMPTY_TEXT));
+        verify(view).setCommitADate(anyString());
+        verify(view).setCommitARevision(anyString());
+        verify(view).setCommitBDate(anyString());
+        verify(view).setCommitBRevision(anyString());
+    }
+

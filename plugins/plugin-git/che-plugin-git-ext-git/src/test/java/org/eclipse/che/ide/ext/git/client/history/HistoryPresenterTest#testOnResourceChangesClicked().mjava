@@ -1,0 +1,40 @@
+    @Test
+    public void testOnResourceChangesClicked() throws Exception {
+        Selection sel = mock(Selection.class);
+        ItemReference item = mock(ItemReference.class);
+        ActivePartChangedEvent event = mock(ActivePartChangedEvent.class);
+        when(event.getActivePart()).thenReturn(activePart);
+        when(activePart.getSelection()).thenReturn(sel);
+        when(sel.getFirstElement()).thenReturn(item);
+        when(selection.getFirstElement()).thenReturn(item);
+        when(item.getPath()).thenReturn("testProject/src");
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+
+                List<String> filePatterns = (List<String>)arguments[1];
+                if (filePatterns.size() != 0) {
+                    int expected = 1;
+                    int actual = filePatterns.size();
+                    assertEquals(expected, actual);
+                    assertEquals("src", filePatterns.get(0));
+                }
+                AsyncRequestCallback<String> callback = (AsyncRequestCallback<String>)arguments[7];
+                Method onFailure = GwtReflectionUtils.getMethod(callback.getClass(), "onFailure");
+                onFailure.invoke(callback, mock(Throwable.class));
+                return callback;
+            }
+        }).when(service)
+          .diff(anyObject(), anyObject(), anyObject(), anyObject(), anyBoolean(), anyInt(), anyString(), anyBoolean(), anyObject());
+
+        presenter.showDialog();
+        presenter.onDiffWithIndexClicked();
+        presenter.onRevisionSelected(selectedRevision);
+        reset(view);
+        presenter.onResourceChangesClicked();
+
+        verify(view).selectProjectChangesButton(eq(DISABLE_BUTTON));
+        verify(view).selectResourceChangesButton(eq(ENABLE_BUTTON));
+    }
+

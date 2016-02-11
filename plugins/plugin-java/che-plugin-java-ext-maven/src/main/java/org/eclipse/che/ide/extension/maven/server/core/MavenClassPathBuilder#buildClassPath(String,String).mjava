@@ -1,0 +1,30 @@
+    /** {@inheritDoc} */
+    @Override
+    public ClassPathBuilderResult buildClassPath(String workspaceId, String projectPath) throws ExecutionException, InterruptedException {
+        this.workspaceId = workspaceId;
+
+        Callable<ClassPathBuilderResult> callable = () -> {
+
+            ClassPathBuilderResult result = dependencyUpdateProcessor(projectPath);
+
+            IJavaProject javaProject = JavaModelManager.getJavaModelManager().getJavaModel().getJavaProject(projectPath);
+
+            if (ClassPathBuilderResult.Status.SUCCESS.equals(result.getStatus())) {
+                IClasspathContainer container = MavenClasspathUtil.readMavenClasspath(javaProject);
+                try {
+                    JavaCore.setClasspathContainer(container.getPath(), new IJavaProject[]{javaProject},
+                                                   new IClasspathContainer[]{container},
+                                                   null);
+                } catch (JavaModelException e) {
+                    LOG.error(e.getMessage(), e);
+                    e.printStackTrace();
+                }
+            }
+
+            return result;
+
+        };
+
+        return executorService.submit(callable).get();
+    }
+

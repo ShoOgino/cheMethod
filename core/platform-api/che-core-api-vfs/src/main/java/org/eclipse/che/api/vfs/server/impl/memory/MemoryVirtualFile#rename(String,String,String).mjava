@@ -1,0 +1,89 @@
+    @Override
+    public VirtualFile rename(String newName, String newMediaType, String lockToken)
+            throws ForbiddenException, ConflictException, ServerException {
+        checkExist();
+        checkName(newName);
+        boolean isFile = isFile();
+        if (isRoot()) {
+            throw new ForbiddenException("We were unable to rename a root folder.");
+        }
+        if (!hasPermission(BasicPermissions.WRITE.value(), true)) {
+            throw new ForbiddenException(String.format("We were unable to delete an item '%s'." +
+                                                       " You do not have the correct permissions to complete this operation.", getPath()));
+        }
+        final String myPath = getPath();
+        final boolean folder = isFolder();
+        if (folder) {
+            final ValueHolder<Exception> errorHolder = new ValueHolder<>();
+            accept(new VirtualFileVisitor() {
+                @Override
+                public void visit(VirtualFile virtualFile) {
+                    try {
+                        if (virtualFile.isFolder()) {
+                            for (VirtualFile childVirtualFile : doGetChildren(virtualFile)) {
+                                childVirtualFile.accept(this);
+                            }
+                        }
+                        if (!((MemoryVirtualFile)virtualFile).hasPermission(BasicPermissions.WRITE.value(), false)) {
+                            throw new ForbiddenException(
+                                    String.format("We were unable to rename an item '%s'." +
+                                                  " You do not have the correct permissions to complete this operation.",
+                                                  virtualFile.getPath()));
+                        }
+                        if (virtualFile.isFile() && virtualFile.isLocked()) {
+                            throw new ForbiddenException(
+                                    String.format("We were unable to rename an item '%s'." +
+                                                  " The child item '%s' is currently locked by the system.", getPath(),
+                                                  virtualFile.getPath()));
+                        }
+                    } catch (ServerException | ForbiddenException e) {
+                        errorHolder.set(e);
+                    }
+                }
+            });
+            final Exception error = errorHolder.get();
+            if (error != null) {
+                if (error instanceof ForbiddenException) {
+                    throw (ForbiddenException)error;
+                } else if (error instanceof ServerException) {
+                    throw (ServerException)error;
+                } else {
+                    throw new ServerException(error.getMessage(), error);
+                }
+            }
+        } else {
+            if (!validateLockTokenIfLocked(lockToken)) {
+                throw new ForbiddenException(String.format("We were unable to rename an item '%s'." +
+                                                           " The item is currently locked by the system.", getPath()));
+            }
+        }
+
+        if (parent.getChild(newName) != null) {
+            throw new ConflictException(String.format("Item '%s' already exists. ", newName));
+        }
+        parent.children.remove(name);
+        parent.children.put(newName, this);
+        name = newName;
+        path = null;
+
+        if (newMediaType != null) {
+            setMediaType(newMediaType);
+        }
+        lastModificationDate = System.currentTimeMillis();
+        SearcherProvider searcherProvider = mountPoint.getSearcherProvider();
+        if (searcherProvider != null) {
+            try {
+                searcherProvider.getSearcher(mountPoint, true).delete(myPath, isFile);
+            } catch (ServerException e) {
+                LOG.error(e.getMessage(), e);
+            }
+            try {
+                searcherProvider.getSearcher(mountPoint, true).add(parent);
+            } catch (ServerException e) {
+                LOG.error(e.getMessage(), e);
+            }
+        }
+        mountPoint.getEventService().publish(new RenameEvent(mountPoint.getWorkspaceId(), getPath(), myPath, folder));
+        return this;
+    }
+

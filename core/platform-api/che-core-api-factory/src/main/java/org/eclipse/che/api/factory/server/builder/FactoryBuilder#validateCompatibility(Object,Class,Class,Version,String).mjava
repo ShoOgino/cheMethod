@@ -1,0 +1,110 @@
+    /**
+     * Validate compatibility of factory parameters.
+     *
+     * @param object
+     *         - object to validate factory parameters
+     * @param methodsProvider
+     *         - class that provides methods with {@link org.eclipse.che.api.core.factory.FactoryParameter}
+     *         annotations
+     * @param allowedMethodsProvider
+     *         - class that provides allowed methods
+     * @param version
+     *         - version of factory
+     * @param parentName
+     *         - parent parameter queryParameterName
+     * @throws org.eclipse.che.api.core.ConflictException
+     */
+    void validateCompatibility(Object object,
+                               Class methodsProvider,
+                               Class allowedMethodsProvider,
+                               Version version,
+                               String parentName) throws ConflictException {
+        // validate source
+        if (SourceStorageDto.class.equals(methodsProvider)) {
+            sourceStorageParametersValidator.validate((SourceStorage)object, version);
+        }
+
+        // get all methods recursively
+        for (Method method : methodsProvider.getMethods()) {
+            FactoryParameter factoryParameter = method.getAnnotation(FactoryParameter.class);
+            // is it factory parameter
+
+            if (factoryParameter == null) {
+                continue;
+            }
+            String fullName = (parentName.isEmpty() ? "" : (parentName + ".")) + CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_CAMEL,
+                                                                                                           method.getName()
+                                                                                                                 .substring(3)
+                                                                                                                 .toLowerCase());
+            // check that field is set
+            Object parameterValue;
+            try {
+                parameterValue = method.invoke(object);
+            } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
+                // should never happen
+                LOG.error(e.getLocalizedMessage(), e);
+                throw new ConflictException(FactoryConstants.INVALID_PARAMETER_MESSAGE);
+            }
+
+
+
+            // if value is null or empty collection or default value for primitives
+            if (ValueHelper.isEmpty(parameterValue)) {
+                // field must not be a mandatory, unless it's ignored or deprecated or doesn't suit to the version
+                if (Obligation.MANDATORY.equals(factoryParameter.obligation()) &&
+                    factoryParameter.deprecatedSince()
+                                    .compareTo(version) > 0 &&
+                    factoryParameter.ignoredSince()
+                                    .compareTo(version) > 0 &&
+                    method.getDeclaringClass()
+                          .isAssignableFrom(allowedMethodsProvider)) {
+                    throw new ConflictException(String.format(FactoryConstants.MISSING_MANDATORY_MESSAGE, method.getName()));
+                }
+            } else if (!method.getDeclaringClass()
+                              .isAssignableFrom(allowedMethodsProvider)) {
+                throw new ConflictException(String.format(FactoryConstants.PARAMETRIZED_INVALID_PARAMETER_MESSAGE, fullName, version));
+            } else {
+                // is parameter deprecated
+                if (factoryParameter.deprecatedSince().compareTo(version) <= 0 || factoryParameter.setByServer()) {
+                    throw new ConflictException(
+                            String.format(FactoryConstants.PARAMETRIZED_INVALID_PARAMETER_MESSAGE, fullName, version));
+                }
+
+                // use recursion if parameter is DTO object
+                if (method.getReturnType().isAnnotationPresent(DTO.class)) {
+                    // validate inner objects such Git ot ProjectAttributes
+                    validateCompatibility(parameterValue, method.getReturnType(), method.getReturnType(), version, fullName);
+                } else if (Map.class.isAssignableFrom(method.getReturnType())) {
+                    Type tp = ((ParameterizedType)method.getGenericReturnType()).getActualTypeArguments()[1];
+
+                    Class secMapParamClass = (tp instanceof ParameterizedType) ? (Class)((ParameterizedType)tp).getRawType() : (Class)tp;
+                    if (!String.class.equals(secMapParamClass) && !List.class.equals(secMapParamClass)) {
+                        if (secMapParamClass.isAnnotationPresent(DTO.class)) {
+                            Map<Object, Object> map = (Map)parameterValue;
+                            for (Map.Entry<Object, Object> entry : map.entrySet()) {
+                                validateCompatibility(entry.getValue(), secMapParamClass, secMapParamClass, version,
+                                                      fullName + "." + entry.getKey());
+                            }
+                        } else {
+                            throw new RuntimeException("This type of fields is not supported by factory.");
+                        }
+                    }
+                } else if (List.class.isAssignableFrom(method.getReturnType())) {
+                    Type tp = ((ParameterizedType)method.getGenericReturnType()).getActualTypeArguments()[0];
+
+                    Class secListParamClass = (tp instanceof ParameterizedType) ? (Class)((ParameterizedType)tp).getRawType() : (Class)tp;
+                    if (!String.class.equals(secListParamClass) && !List.class.equals(secListParamClass)) {
+                        if (secListParamClass.isAnnotationPresent(DTO.class)) {
+                            List<Object> list = (List)parameterValue;
+                            for (Object entry : list) {
+                                validateCompatibility(entry, secListParamClass, secListParamClass, version, fullName);
+                            }
+                        } else {
+                            throw new RuntimeException("This type of fields is not supported by factory.");
+                        }
+                    }
+                }
+            }
+        }
+    }
+

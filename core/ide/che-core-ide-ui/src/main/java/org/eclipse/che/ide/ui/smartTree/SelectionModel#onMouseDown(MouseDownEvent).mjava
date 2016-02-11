@@ -1,0 +1,112 @@
+    protected void onMouseDown(MouseDownEvent mde) {
+        NativeTreeEvent e = mde.getNativeEvent().cast();
+        Element target = e.getEventTargetEl();
+        NodeDescriptor selNode = tree.getNodeDescriptor(target);
+
+        if (selNode == null || tree == null) {
+            return;
+        }
+
+        Node sel = selNode.getNode();
+        if (!tree.getView().isSelectableTarget(sel, target)) {
+            return;
+        }
+
+        boolean isSelected = isSelected(sel);
+        boolean isMeta = e.getCtrlOrMetaKey();
+        boolean isShift = e.getShiftKey();
+
+        if (e.isRightClick() && isSelected) {
+            return;
+        } else {
+            switch (selectionMode) {
+                case SIMPLE:
+                    tree.focus();
+                    if (isSelected(sel)) {
+                        deselect(sel);
+                    } else {
+                        doSelect(Collections.singletonList(sel), true, false);
+                    }
+                    break;
+
+                case SINGLE:
+                    tree.focus();
+                    if (isMeta && isSelected) {
+                        deselect(sel);
+                    } else if (!isSelected) {
+                        select(sel, false);
+                    }
+                    break;
+
+                case MULTI:
+                    if (isShift && lastSelectedNode != null) {
+                        List<Node> selectedItems = new ArrayList<>();
+
+                        // from last selected or firstly selected
+                        NodeDescriptor lastSelTreeNode = tree.getNodeDescriptor(lastSelectedNode);
+                        Element lastSelTreeEl = tree.getView().getRootContainer(lastSelTreeNode);
+
+                        // to selected or secondly selected
+                        NodeDescriptor selTreeNode = tree.getNodeDescriptor(sel);
+                        Element selTreeNodeEl = tree.getView().getRootContainer(selTreeNode);
+
+                        // holding shift down, selecting the same item again, selecting itself
+                        if (sel == lastSelectedNode) {
+                            tree.focus();
+                            doSelect(Collections.singletonList(sel), false, false);
+
+                        } else if (lastSelTreeEl != null && selTreeNodeEl != null) {
+                            // add the last selected, as its not added during the walk
+                            selectedItems.add(lastSelectedNode);
+
+                            // After walking reset back to previously selected
+                            final Node previouslyLastSelected = lastSelectedNode;
+
+                            // This deals with flipping directions
+                            if (lastSelTreeEl.getAbsoluteTop() < selTreeNodeEl.getAbsoluteTop()) {
+                                // down selection
+                                Node next = next();
+                                while (next != null) {
+                                    selectedItems.add(next);
+                                    lastSelectedNode = next;
+                                    if (next == sel) break;
+                                    next = next();
+                                }
+
+                            } else {
+                                // up selection
+                                Node prev = prev();
+                                while (prev != null) {
+                                    selectedItems.add(prev);
+                                    lastSelectedNode = prev;
+                                    if (prev == sel) break;
+                                    prev = prev();
+                                }
+                            }
+
+                            tree.focus();
+                            doSelect(selectedItems, false, false);
+
+                            // change back to last selected, the walking causes this need
+                            lastSelectedNode = previouslyLastSelected;
+                        }
+
+                    } else if (!isSelected(sel)) {
+                        tree.focus();
+                        doSelect(Collections.singletonList(sel), e.getCtrlOrMetaKey(), false);
+
+                        // reset the starting location of multi select
+                        lastSelectedNode = sel;
+                    } else if (isSelected(sel) && !e.getShiftKey() && !e.getCtrlOrMetaKey() && !selectionStorage.isEmpty()) {
+                        doSelect(Collections.singletonList(sel), false, false);
+                        tree.focus();
+                    } else if (isSelected(sel) && !selectionStorage.isEmpty()) {
+                        doDeselect(Collections.singletonList(sel), false);
+                    }
+                    break;
+            }
+        }
+
+        mouseDown = false;
+    }
+

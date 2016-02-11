@@ -1,0 +1,54 @@
+    /**
+     * The method tries to provide as much as possible information about project.If get error then save information about error
+     * with 'problems' field in ProjectConfigDto.
+     *
+     * @param project
+     *         project from which we need get information
+     * @param serviceUriBuilder
+     *         service for building URI
+     * @return an instance of {@link ProjectConfigDto}
+     * @throws InvalidValueException
+     */
+    public static ProjectConfigDto toProjectConfig(Project project,
+                                                   UriBuilder serviceUriBuilder) throws ForbiddenException,
+                                                                                        ServerException,
+                                                                                        NotFoundException,
+                                                                                        ValueStorageException {
+        String name = project.getName();
+        String path = project.getPath();
+
+        ProjectConfigDto projectConfigDto = newDto(ProjectConfigDto.class);
+
+        projectConfigDto.withName(name).withPath(path);
+
+        try {
+            ProjectConfig config = project.getConfig();
+
+            projectConfigDto.withDescription(config.getDescription());
+
+            projectConfigDto.withMixins(config.getMixins());
+
+            projectConfigDto.withAttributes(config.getAttributes());
+
+            List<ProjectConfigDto> modules = config.getModules()
+                                                   .stream()
+                                                   .map(DtoConverter::toProjectConfigDto)
+                                                   .collect(Collectors.toList());
+            projectConfigDto.withModules(modules);
+            projectConfigDto.withContentRoot(config.getContentRoot());
+
+            projectConfigDto.withType(config.getType());
+            projectConfigDto.withSource(toSourceDto(config.getSource()));
+        } catch (ServerException | ValueStorageException | ProjectTypeConstraintException exception) {
+            projectConfigDto.withType(BaseProjectType.ID).withType("blank");
+            ProjectProblemDto projectProblem = newDto(ProjectProblemDto.class).withCode(1).withMessage(exception.getMessage());
+            projectConfigDto.getProblems().add(projectProblem);
+        }
+
+        if (serviceUriBuilder != null) {
+            projectConfigDto.withLinks(generateProjectLinks(project, serviceUriBuilder));
+        }
+
+        return projectConfigDto;
+    }
+

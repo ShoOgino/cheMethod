@@ -1,0 +1,39 @@
+    /**
+     * Returns the package fragment or package fragment root corresponding to the given folder,
+     * its parent or great parent being the given project.
+     * or <code>null</code> if unable to associate the given folder with a Java element.
+     * <p>
+     * Note that a package fragment root is returned rather than a default package.
+     * <p>
+     * Creating a Java element has the side effect of creating and opening all of the
+     * element's parents if they are not yet open.
+     */
+    public static IJavaElement create(IFolder folder, IJavaProject project) {
+        if (folder == null) {
+            return null;
+        }
+        IJavaElement element;
+        if (project == null) {
+            project = JavaCore.create(folder.getProject());
+            element = determineIfOnClasspath(folder, project);
+            if (element == null) {
+                // walk all projects and find one that have the given folder on its classpath
+                IJavaProject[] projects;
+                try {
+                    projects = org.eclipse.jdt.internal.core.JavaModelManager.getJavaModelManager().getJavaModel().getJavaProjects();
+                } catch (JavaModelException e) {
+                    return null;
+                }
+                for (int i = 0, length = projects.length; i < length; i++) {
+                    project = projects[i];
+                    element = determineIfOnClasspath(folder, project);
+                    if (element != null)
+                        break;
+                }
+            }
+        } else {
+            element = determineIfOnClasspath(folder, project);
+        }
+        return element;
+    }
+

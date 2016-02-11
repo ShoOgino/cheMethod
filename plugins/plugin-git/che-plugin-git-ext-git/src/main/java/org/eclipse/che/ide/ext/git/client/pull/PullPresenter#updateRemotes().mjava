@@ -1,0 +1,32 @@
+    /**
+     * Update the list of remote repositories for local one. If remote repositories are found, then update the list of branches (remote and
+     * local).
+     */
+    private void updateRemotes() {
+        view.setEnablePullButton(true);
+
+        gitServiceClient.remoteList(workspaceId, project.getRootProject(), null, true,
+                                    new AsyncRequestCallback<List<Remote>>(dtoUnmarshallerFactory.newListUnmarshaller(Remote.class)) {
+                                        @Override
+                                        protected void onSuccess(List<Remote> result) {
+                                            updateBranches(LIST_REMOTE);
+                                            view.setRepositories(result);
+                                            view.setEnablePullButton(!result.isEmpty());
+                                            view.showDialog();
+                                        }
+
+                                        @Override
+                                        protected void onFailure(Throwable exception) {
+                                            String errorMessage =
+                                                    exception.getMessage() != null ? exception.getMessage()
+                                                                                   : constant.remoteListFailed();
+                                            GitOutputConsole console = gitOutputConsoleFactory.create(REMOTE_REPO_COMMAND_NAME);
+                                            console.printError(errorMessage);
+                                            consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                            notificationManager.notify(constant.remoteListFailed(), FAIL, true, project.getRootProject());
+                                            view.setEnablePullButton(false);
+                                        }
+                                    }
+                                   );
+    }
+

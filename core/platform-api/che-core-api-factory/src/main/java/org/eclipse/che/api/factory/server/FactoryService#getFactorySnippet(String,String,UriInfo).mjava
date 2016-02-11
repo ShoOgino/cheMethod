@@ -1,0 +1,62 @@
+    /**
+     * Get factory snippet by factory id and snippet type. If snippet type is not set, "url" type will be used as default.
+     *
+     * @param id
+     *         id of factory
+     * @param type
+     *         type of snippet
+     * @param uriInfo
+     *         url context
+     * @return snippet content.
+     * @throws NotFoundException
+     *         when factory with specified id doesn't not found - with response code 400
+     * @throws ServerException
+     *         when any server error occurs during snippet creation
+     * @throws BadRequestException
+     *         when the snippet type is not supported,
+     *         or if the specified factory does not contain enough information for snippet creation
+     */
+    @GET
+    @Path("/{id}/snippet")
+    @Produces(TEXT_PLAIN)
+    @ApiOperation(value = "Get factory snippet by id",
+                  notes = "If snippet type not set then default 'url' will be used")
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 404, message = "Factory or factory images not found"),
+                   @ApiResponse(code = 500, message = "Internal server error")})
+    public String getFactorySnippet(@ApiParam(value = "Factory ID")
+                                    @PathParam("id")
+                                    String id,
+                                    @ApiParam(value = "Snippet type",
+                                              required = true,
+                                              allowableValues = "url,html,iframe,markdown",
+                                              defaultValue = "url")
+                                    @DefaultValue("url")
+                                    @QueryParam("type")
+                                    String type,
+                                    @Context
+                                    UriInfo uriInfo) throws NotFoundException, ServerException, BadRequestException {
+        final Factory factory = factoryStore.getFactory(id);
+        final String baseUrl = UriBuilder.fromUri(uriInfo.getBaseUri()).replacePath("").build().toString();
+        switch (type) {
+            case "url":
+                return UriBuilder.fromUri(uriInfo.getBaseUri()).replacePath("factory").queryParam("id", id).build().toString();
+            case "html":
+                return SnippetGenerator.generateHtmlSnippet(baseUrl, id);
+            case "iframe":
+                return SnippetGenerator.generateiFrameSnippet(baseUrl, id);
+            case "markdown":
+                final Set<FactoryImage> factoryImages = factoryStore.getFactoryImages(id, null);
+                final String imageId = (factoryImages.size() > 0) ? factoryImages.iterator().next().getName() : null;
+                try {
+                    return SnippetGenerator.generateMarkdownSnippet(baseUrl, factory, imageId);
+                } catch (IllegalArgumentException e) {
+                    throw new BadRequestException(e.getLocalizedMessage());
+                }
+            default:
+                LOG.warn("Snippet type {} is unsupported", type);
+                throw new BadRequestException("Snippet type \"" + type + "\" is unsupported.");
+        }
+    }
+

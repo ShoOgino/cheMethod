@@ -1,0 +1,41 @@
+    @Test
+    public void testUpdateBadProject() throws Exception {
+        MountPoint mountPoint = pm.getProjectsRoot(workspace).getVirtualFile().getMountPoint();
+        mountPoint.getRoot().createFolder("not_project");
+
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
+        Map<String, List<String>> attributeValues = new LinkedHashMap<>();
+        attributeValues.put("my_attribute", singletonList("to be or not to be"));
+        ProjectConfigDto descriptor = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                                .withName("not_project")
+                                                .withPath("/not_project")
+                                                .withType("my_project_type")
+                                                .withDescription("updated project")
+                                                .withAttributes(attributeValues);
+
+        final ProjectConfigDto newProjectConfig = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
+                                                            .withPath("/not_project")
+                                                            .withName("not_project")
+                                                            .withDescription("updated project")
+                                                            .withType("my_project_type")
+                                                            .withAttributes(attributeValues)
+                                                            .withSource(DtoFactory.getInstance().createDto(SourceStorageDto.class));
+        projects.add(newProjectConfig);
+
+        ContainerResponse response = launcher.service(PUT,
+                                                      String.format("http://localhost:8080/api/project/%s/not_project", workspace),
+                                                      "http://localhost:8080/api",
+                                                      headers,
+                                                      DtoFactory.getInstance().toJson(descriptor).getBytes(),
+                                                      null);
+
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+        Project project = pm.getProject(workspace, "not_project");
+        assertNotNull(project);
+        ProjectConfig description = project.getConfig();
+
+        assertEquals(description.getDescription(), "updated project");
+        assertEquals(description.getType(), "my_project_type");
+    }
+

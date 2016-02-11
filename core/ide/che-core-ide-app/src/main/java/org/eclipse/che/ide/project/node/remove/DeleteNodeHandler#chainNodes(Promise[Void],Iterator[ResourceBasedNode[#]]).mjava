@@ -1,0 +1,27 @@
+    @NotNull
+    private Promise<Void> chainNodes(@NotNull Promise<Void> promise,
+                                     @NotNull Iterator<ResourceBasedNode<?>> nodes) {
+        if (!nodes.hasNext()) {
+            return promise;
+        }
+
+        final ResourceBasedNode<?> node = nodes.next();
+
+        final Promise<Void> derivedPromise = promise.thenPromise(new Function<Void, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(Void empty) throws FunctionException {
+                return node.delete();
+            }
+        });
+
+        final Promise<Void> derivedErrorSafePromise = derivedPromise.catchErrorPromise(new Function<PromiseError, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(PromiseError arg) throws FunctionException {
+                // 'hide' the error to avoid rejecting chain of promises
+                return Promises.resolve(null);
+            }
+        });
+
+        return chainNodes(derivedErrorSafePromise, nodes);
+    }
+

@@ -1,0 +1,34 @@
+    /**
+     * Returns all accounts memberships for current user.
+     *
+     * @return accounts memberships of current user
+     * @throws NotFoundException
+     *         when any of memberships contains account that doesn't exist
+     * @throws ServerException
+     *         when some error occurred while retrieving accounts or memberships
+     * @see MemberDescriptor
+     */
+    @ApiOperation(value = "Get current user memberships",
+                  notes = "This API call returns a JSON with all user membership in a single or multiple accounts",
+                  response = MemberDescriptor.class,
+                  responseContainer = "List",
+                  position = 2)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 404, message = "Not Found"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @GET
+    @GenerateLink(rel = Constants.LINK_REL_GET_ACCOUNTS)
+    @RolesAllowed("user")
+    @Produces(APPLICATION_JSON)
+    public List<MemberDescriptor> getMemberships(@Context SecurityContext securityContext) throws NotFoundException, ServerException {
+        final Principal principal = securityContext.getUserPrincipal();
+        final User current = userDao.getByAlias(principal.getName());
+        final List<Member> memberships = accountDao.getByMember(current.getId());
+        final List<MemberDescriptor> result = new ArrayList<>(memberships.size());
+        for (Member membership : memberships) {
+            result.add(toDescriptor(membership, accountDao.getById(membership.getAccountId()), securityContext));
+        }
+        return result;
+    }
+

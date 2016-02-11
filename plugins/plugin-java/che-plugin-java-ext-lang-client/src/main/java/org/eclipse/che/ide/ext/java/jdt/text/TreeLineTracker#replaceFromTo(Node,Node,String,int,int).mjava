@@ -1,0 +1,59 @@
+    /**
+     * Replace spanning from one node to another.
+     *
+     * @param node
+     *         the first affected node
+     * @param last
+     *         the last affected node
+     * @param text
+     *         the added text
+     * @param length
+     *         the replace length, &gt;= <code>firstLineDelta</code>
+     * @param firstLineDelta
+     *         the number of characters removed from the replacement offset to the end of <code>node</code>, &lt;=
+     *         <code>length</code>
+     */
+    private void replaceFromTo(Node node, Node last, String text, int length, int firstLineDelta) {
+        // 2) modification covers several lines
+
+        // delete intermediate nodes
+        // TODO could be further optimized: replace intermediate lines with intermediate added lines
+        // to reduce re-balancing
+        Node successor = successor(node);
+        while (successor != last) {
+            length -= successor.length;
+            Node toDelete = successor;
+            successor = successor(successor);
+            updateLength(toDelete, -toDelete.length);
+        }
+
+        DelimiterInfo info = text == null ? null : nextDelimiterInfo(text, 0);
+
+        if (info == null || info.delimiter == null) {
+            int added = text == null ? 0 : text.length();
+
+            // join the two lines if there are no lines added
+            join(node, last, added - length);
+
+        } else {
+
+            // join the first line with the first added
+            int consumed = info.delimiterIndex + info.delimiterLength;
+            updateLength(node, consumed - firstLineDelta);
+            node.delimiter = info.delimiter;
+            length -= firstLineDelta;
+
+            // Inline addLines start
+            info = nextDelimiterInfo(text, consumed);
+            while (info != null) {
+                int lineLen = info.delimiterIndex - consumed + info.delimiterLength;
+                node = insertAfter(node, lineLen, info.delimiter);
+                consumed += lineLen;
+                info = nextDelimiterInfo(text, consumed);
+            }
+            // Inline addLines end
+
+            updateLength(last, text.length() - consumed - length);
+        }
+    }
+

@@ -1,0 +1,32 @@
+    @ApiOperation(value = "Import zip",
+                  notes = "Import resources as zip",
+                  position = 19)
+    @ApiResponses(value = {
+            @ApiResponse(code = 201, message = ""),
+            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+            @ApiResponse(code = 404, message = "Not found"),
+            @ApiResponse(code = 409, message = "Resource already exists"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @POST
+    @Path("/import/{path:.*}")
+    @Consumes(ExtMediaType.APPLICATION_ZIP)
+    public Response importZip(@ApiParam(value = "Workspace ID", required = true)
+                              @PathParam("ws-id") String workspace,
+                              @ApiParam(value = "Path to a location (where import to?)")
+                              @PathParam("path") String path,
+                              InputStream zip,
+                              @DefaultValue("false") @QueryParam("skipFirstLevel") Boolean skipFirstLevel)
+            throws NotFoundException, ConflictException, ForbiddenException, ServerException {
+        final FolderEntry parent = asFolder(workspace, path);
+        VirtualFileSystemImpl.importZip(parent.getVirtualFile(), zip, true, skipFirstLevel);
+        final Project project = projectManager.getProject(workspace, path);
+        if (project != null) {
+            eventService.publish(new ProjectCreatedEvent(project.getWorkspace(), project.getPath()));
+            final String projectType = project.getConfig().getType();
+            logProjectCreatedEvent(path, projectType);
+        }
+        return Response.created(getServiceContext().getServiceUriBuilder()
+                                                   .path(getClass(), "getChildren")
+                                                   .build(workspace, parent.getPath().substring(1))).build();
+    }
+

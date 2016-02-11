@@ -1,0 +1,49 @@
+    @Test
+    public void testShowDialogWhenBranchListRequestIsFailed() throws Exception {
+        final List<Remote> remotes = new ArrayList<>();
+        remotes.add(mock(Remote.class));
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<List<Remote>> callback = (AsyncRequestCallback<List<Remote>>)arguments[3];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, remotes);
+                return callback;
+            }
+        }).when(service).remoteList(anyString(), anyObject(), anyString(), anyBoolean(),
+                                    (AsyncRequestCallback<List<Remote>>)anyObject());
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<List<Branch>> callback = (AsyncRequestCallback<List<Branch>>)arguments[2];
+                Method onFailure = GwtReflectionUtils.getMethod(callback.getClass(), "onFailure");
+                onFailure.invoke(callback, mock(Throwable.class));
+                return callback;
+            }
+        }).doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<List<Branch>> callback = (AsyncRequestCallback<List<Branch>>)arguments[2];
+                Method onFailure = GwtReflectionUtils.getMethod(callback.getClass(), "onFailure");
+                onFailure.invoke(callback, mock(Throwable.class));
+                return callback;
+            }
+        }).when(service).branchList(anyString(), anyObject(), anyString(), (AsyncRequestCallback<List<Branch>>)anyObject());
+
+        presenter.showDialog();
+
+        verify(appContext).getCurrentProject();
+        verify(service).remoteList(anyString(), eq(rootProjectConfig), anyString(), eq(SHOW_ALL_INFORMATION),
+                                   (AsyncRequestCallback<List<Remote>>)anyObject());
+        verify(constant).branchesListFailed();
+        verify(gitOutputConsoleFactory).create(FETCH_COMMAND_NAME);
+        verify(console).printError(anyString());
+        verify(consolesPanelPresenter).addCommandOutput(anyString(), eq(console));
+        verify(notificationManager).notify(anyString(), rootProjectConfig);
+        verify(view).setEnableFetchButton(eq(DISABLE_BUTTON));
+    }
+

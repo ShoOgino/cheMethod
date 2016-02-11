@@ -1,0 +1,39 @@
+    /**
+     * Reset current HEAD to the specified state and refresh project in the success case.
+     */
+    private void reset() {
+        ResetRequest.ResetType type = view.isMixMode() ? ResetRequest.ResetType.MIXED : null;
+        type = (type == null && view.isSoftMode()) ? ResetRequest.ResetType.SOFT : type;
+        type = (type == null && view.isHardMode()) ? ResetRequest.ResetType.HARD : type;
+
+        final ResetRequest.ResetType finalType = type;
+        final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
+        final GitOutputConsole console = gitOutputConsoleFactory.create(RESET_COMMAND_NAME);
+        service.reset(workspaceId, project, selectedRevision.getId(), finalType, null,
+                      new AsyncRequestCallback<Void>() {
+                          @Override
+                          protected void onSuccess(Void result) {
+                              if (ResetRequest.ResetType.HARD.equals(finalType) || ResetRequest.ResetType.MERGE.equals(finalType)) {
+                                  // Only in the cases of <code>ResetRequest.ResetType.HARD</code>  or <code>ResetRequest.ResetType
+                                  // .MERGE</code>
+                                  // must change the workdir
+                                  //In this case we can have unconfigured state of the project,
+                                  //so we must repeat the logic which is performed when we open a project
+                                  eventBus.fireEvent(new OpenProjectEvent(project));
+                              }
+                              console.printInfo(constant.resetSuccessfully());
+                              consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                              notificationManager.notify(constant.resetSuccessfully(), project);
+
+                          }
+
+                          @Override
+                          protected void onFailure(Throwable exception) {
+                              String errorMessage = (exception.getMessage() != null) ? exception.getMessage() : constant.resetFail();
+                              console.printError(errorMessage);
+                              consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                              notificationManager.notify(constant.resetFail(), FAIL, true, project);
+                          }
+                      });
+    }
+

@@ -1,0 +1,25 @@
+    // For usage from Project API.
+    public static Response exportZip(VirtualFile folder, InputStream in) throws ForbiddenException, ServerException {
+        final List<String> deleted = new LinkedList<>();
+        final ContentStream zip = exportZip(folder, in, deleted);
+        if (zip == null) {
+            return Response.status(204).build();
+        }
+        final Response.ResponseBuilder responseBuilder = Response
+                .ok(zip.getStream(), zip.getMimeType())
+                .lastModified(zip.getLastModificationDate())
+                .header(HttpHeaders.CONTENT_LENGTH, Long.toString(zip.getLength()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + zip.getFileName() + '"');
+        if (!deleted.isEmpty()) {
+            final StringBuilder buff = new StringBuilder();
+            for (String str : deleted) {
+                if (buff.length() > 0) {
+                    buff.append(',');
+                }
+                buff.append(str);
+            }
+            responseBuilder.header("x-removed-paths", deleted.toString());
+        }
+        return responseBuilder.build();
+    }
+

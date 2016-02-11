@@ -1,0 +1,28 @@
+    @SuppressWarnings("unchecked")
+    public Proposals computeAssistProposals(IJavaProject project, String fqn, int offset, List<Problem> problems) throws CoreException {
+        ICompilationUnit compilationUnit;
+
+        IType type = project.findType(fqn);
+        if (type == null) {
+            return null;
+        }
+        if (type.isBinary()) {
+            throw new JavaModelException(
+                    new JavaModelStatus(IJavaModelStatusConstants.CORE_EXCEPTION, "Can't calculate Quick Assist on binary file"));
+        } else {
+            compilationUnit = type.getCompilationUnit();
+        }
+
+        IBuffer buffer = compilationUnit.getBuffer();
+
+        ITextFileBufferManager bufferManager = FileBuffers.getTextFileBufferManager();
+        bufferManager.connect(compilationUnit.getPath(), LocationKind.IFILE, new NullProgressMonitor());
+        ITextFileBuffer textFileBuffer = bufferManager.getTextFileBuffer(compilationUnit.getPath(), LocationKind.IFILE);
+        IDocument document = textFileBuffer.getDocument();
+        TextViewer viewer = new TextViewer(document, new Point(offset, 0));
+        AssistContext context = new AssistContext(compilationUnit, offset, 0);
+        ArrayList proposals = new ArrayList<>();
+        JavaCorrectionProcessor.collectProposals(context, problems, true, true, proposals);
+        return convertProposals(offset, compilationUnit, viewer, proposals);
+    }
+

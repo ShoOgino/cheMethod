@@ -1,0 +1,68 @@
+    /**
+     * Validates that the given workspace path is valid for the given type.  If
+     * <code>lastSegmentOnly</code> is true, it is assumed that all segments except
+     * the last one have previously been validated.  This is an optimization for validating
+     * a leaf resource when it is known that the parent exists (and thus its parent path
+     * must already be valid).
+     */
+    public IStatus validatePath(IPath path, int type, boolean lastSegmentOnly) {
+        String message;
+
+		/* path must not be null */
+        if (path == null) {
+            message = Messages.resources_pathNull;
+            return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+        }
+
+		/* path must not have a device separator */
+        if (path.getDevice() != null) {
+            message = NLS.bind(Messages.resources_invalidCharInPath, String.valueOf(IPath.DEVICE_SEPARATOR), path);
+            return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+        }
+
+		/* path must not be the root path */
+        if (path.isRoot()) {
+            message = Messages.resources_invalidRoot;
+            return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+        }
+
+		/* path must be absolute */
+        if (!path.isAbsolute()) {
+            message = NLS.bind(Messages.resources_mustBeAbsolute, path);
+            return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+        }
+
+		/* validate segments */
+        int numberOfSegments = path.segmentCount();
+        if ((type & IResource.PROJECT) != 0) {
+            if (numberOfSegments == ICoreConstants.PROJECT_SEGMENT_LENGTH) {
+                return validateName(path.segment(0), IResource.PROJECT);
+            } else if (type == IResource.PROJECT) {
+                message = NLS.bind(Messages.resources_projectPath, path);
+                return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+            }
+        }
+        if ((type & (IResource.FILE | IResource.FOLDER)) != 0) {
+            if (numberOfSegments < ICoreConstants.MINIMUM_FILE_SEGMENT_LENGTH) {
+                message = NLS.bind(Messages.resources_resourcePath, path);
+                return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+            }
+            int fileFolderType = type &= ~IResource.PROJECT;
+            int segmentCount = path.segmentCount();
+            if (lastSegmentOnly)
+                return validateName(path.segment(segmentCount - 1), fileFolderType);
+            IStatus status = validateName(path.segment(0), IResource.PROJECT);
+            if (!status.isOK())
+                return status;
+            // ignore first segment (the project)
+            for (int i = 1; i < segmentCount; i++) {
+                status = validateName(path.segment(i), fileFolderType);
+                if (!status.isOK())
+                    return status;
+            }
+            return Status.OK_STATUS;
+        }
+        message = NLS.bind(Messages.resources_invalidPath, path);
+        return new org.eclipse.core.internal.resources.ResourceStatus(IResourceStatus.INVALID_VALUE, null, message);
+    }
+

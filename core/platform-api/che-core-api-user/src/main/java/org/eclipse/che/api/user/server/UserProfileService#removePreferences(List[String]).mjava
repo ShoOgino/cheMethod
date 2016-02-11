@@ -1,0 +1,45 @@
+    /**
+     * Removes preferences with given name from current user profile.
+     * If names are {@code null} - all preferences will be removed
+     *
+     * @param names
+     *         preferences names to remove
+     * @throws ServerException
+     *         when some error occurred while retrieving/updating profile
+     * @see #removeAttributes(List, SecurityContext)
+     */
+    @ApiOperation(value = "Remove profile references of a current user",
+                  notes = "Remove profile references of a current user",
+                  position = 7)
+    @ApiResponses(value = {
+            @ApiResponse(code = 204, message = "OK"),
+            @ApiResponse(code = 404, message = "Not Found"),
+            @ApiResponse(code = 409, message = "Preferences names required"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @DELETE
+    @Path("/prefs")
+    @GenerateLink(rel = LINK_REL_REMOVE_PREFERENCES)
+    @RolesAllowed({"user", "temp_user"})
+    @Consumes(APPLICATION_JSON)
+    public void removePreferences(@ApiParam(value = "Preferences to remove", required = true)
+                                  @Required
+                                  List<String> names) throws ServerException, NotFoundException {
+        String userId = currentUser().getId();
+        if (names == null) {
+            preferenceDao.remove(userId);
+        } else {
+            // Keep the lock in a variable so it isn't garbage collected while in use
+            Lock lock = preferencesUpdateLocksByUser.get(userId);
+            lock.lock();
+            try {
+                final Map<String, String> preferences = preferenceDao.getPreferences(userId);
+                for (String name : names) {
+                    preferences.remove(name);
+                }
+                preferenceDao.setPreferences(userId, preferences);
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+

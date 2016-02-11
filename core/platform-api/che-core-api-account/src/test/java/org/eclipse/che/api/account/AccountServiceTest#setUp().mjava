@@ -1,0 +1,54 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        resources = new ResourceBinderImpl();
+        providers = new ApplicationProviderBinder();
+        DependencySupplierImpl dependencies = new DependencySupplierImpl();
+        dependencies.addComponent(UserDao.class, userDao);
+        dependencies.addComponent(AccountDao.class, accountDao);
+        dependencies.addComponent(WorkspaceManager.class, workspaceManager);
+        resources.addResource(AccountService.class, null);
+        EverrestProcessor processor = new EverrestProcessor(resources, providers, dependencies, new EverrestConfiguration(), null);
+        launcher = new ResourceLauncher(processor);
+        ApplicationContextImpl.setCurrent(new ApplicationContextImpl(null, null, ProviderBinder.getInstance()));
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("secret", "bit secret");
+        account = new Account(ACCOUNT_ID, ACCOUNT_NAME, null, attributes);
+
+        memberships = new ArrayList<>(1);
+        Member ownerMembership = new Member();
+        ownerMembership.setAccountId(account.getId());
+        ownerMembership.setUserId(USER_ID);
+        ownerMembership.setRoles(Arrays.asList("account/owner"));
+        memberships.add(ownerMembership);
+
+        when(environmentContext.get(SecurityContext.class)).thenReturn(securityContext);
+        when(securityContext.getUserPrincipal()).thenReturn(new SimplePrincipal(USER_EMAIL));
+
+        org.eclipse.che.commons.env.EnvironmentContext.getCurrent().setUser(new org.eclipse.che.commons.user.User() {
+            @Override
+            public String getName() {
+                return user.getEmail();
+            }
+
+            @Override
+            public boolean isMemberOf(String role) {
+                return false;
+            }
+
+            @Override
+            public String getToken() {
+                return "token";
+            }
+
+            @Override
+            public String getId() {
+                return user.getId();
+            }
+
+            @Override
+            public boolean isTemporary() {
+                return false;
+            }
+        });
+    }
+

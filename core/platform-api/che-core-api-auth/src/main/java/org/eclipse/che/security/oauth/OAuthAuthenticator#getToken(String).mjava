@@ -1,0 +1,31 @@
+    /**
+     * Return authorization token by userId.
+     * <p/>
+     * WARN!!!. DO not use it directly.
+     *
+     * @param userId
+     * @return
+     * @throws IOException
+     * @see org.eclipse.che.api.auth.oauth.OAuthTokenProvider#getToken(String, String)
+     */
+    public OAuthToken getToken(String userId) throws IOException {
+        if (!isConfigured()) {
+            throw new IOException("Authenticator is not configured");
+        }
+
+        Credential credential = flow.loadCredential(userId);
+        if (credential != null) {
+            Long expirationTime = credential.getExpiresInSeconds();
+            if (expirationTime != null && expirationTime < 0) {
+                if (credential.refreshToken()) {
+                    credential = flow.loadCredential(userId);
+                } else {
+                    return null;
+                }
+            }
+
+            return newDto(OAuthToken.class).withToken(credential.getAccessToken());
+        }
+        return null;
+    }
+

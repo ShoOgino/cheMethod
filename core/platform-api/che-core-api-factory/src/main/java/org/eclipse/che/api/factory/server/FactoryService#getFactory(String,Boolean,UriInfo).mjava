@@ -1,0 +1,43 @@
+    /**
+     * Get factory information from storage by specified id.
+     *
+     * @param id
+     *         id of factory
+     * @param uriInfo
+     *         url context
+     * @return the factory instance if it's found by id
+     * @throws NotFoundException
+     *         when the factory with specified id doesn't not found
+     * @throws ServerException
+     *         when any server errors occurs
+     * @throws BadRequestException
+     *         when the factory is invalid e.g. is expired
+     */
+    @GET
+    @Path("/{id}")
+    @Produces(APPLICATION_JSON)
+    @ApiOperation(value = "Get factory information by its id",
+                  notes = "Get JSON with factory information. Factory id is passed in a path parameter")
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 404, message = "Factory not found"),
+                   @ApiResponse(code = 400, message = "Failed to validate factory e.g. if it expired"),
+                   @ApiResponse(code = 500, message = "Internal server error")})
+    public Factory getFactory(@ApiParam(value = "Factory ID")
+                              @PathParam("id")
+                              String id,
+                              @ApiParam(value = "Whether or not to validate values like it is done when accepting a Factory",
+                                        allowableValues = "true,false",
+                                        defaultValue = "false")
+                              @DefaultValue("false")
+                              @QueryParam("validate")
+                              Boolean validate,
+                              @Context
+                              UriInfo uriInfo) throws NotFoundException, ServerException, BadRequestException {
+        final Factory factory = factoryStore.getFactory(id);
+        factory.setLinks(createLinks(factory, factoryStore.getFactoryImages(id, null), uriInfo));
+        if (validate) {
+            acceptValidator.validateOnAccept(factory);
+        }
+        return factory;
+    }
+

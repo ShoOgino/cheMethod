@@ -1,0 +1,27 @@
+    @GenerateLink(rel = "log analytics event")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Path("log/{event}")
+    @RolesAllowed({"user", "temp_user", "system/admin", "system/manager"})
+    public Response logEvent(@PathParam("event") String event,
+                             @Context SecurityContext securityContext,
+                             EventParameters parameters) throws ServerException {
+        try {
+            Map<String, String> params;
+            if (parameters == null) {
+                params = new HashMap<>();
+            } else {
+                params = parameters.getParams();
+            }
+
+            if (!params.containsKey(EventLogger.USER_PARAM) && securityContext != null && securityContext.getUserPrincipal() != null) {
+                params.put(EventLogger.USER_PARAM, securityContext.getUserPrincipal().getName());
+            }
+
+            eventLogger.log(event, params);
+            return Response.status(Response.Status.ACCEPTED).build();
+        } catch (Exception e) {
+            throw new ServerException("Unexpected error occurred. Can't log event " + event);
+        }
+    }
+

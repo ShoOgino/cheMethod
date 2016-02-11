@@ -1,0 +1,43 @@
+    protected static void configureGlobalErrorCallback() {
+        Requirejs.get().setOnError(new RequirejsErrorHandler() {
+
+            @Override
+            public void onError(final RequireError err) {
+                final String type = err.getRequireType();
+                if ("scripterror".equals(type)) {
+                    // leave the module as-is
+                    final JsArrayString modules = err.getRequireModules();
+                    if (modules != null && modules.length() > 0) {
+                        final String failed = modules.get(0);
+                        String formattedMsg = "";
+                        if (err.getMessage() != null) {
+                            formattedMsg = formattedMsg.replace("\n", "\n\t\t");
+                        }
+                        consoleWarn("Required module '%s' load failed with script error "
+                                    + "(nonexistant script or error in the loaded script)\n" + "\t- error message = '%s'\n"
+                                    + "\t- original error = %o", failed, formattedMsg, err);
+                    } else {
+                        consoleWarn("Unexpected requirejs of type 'scripterror' without requireModules property: %o", err);
+                        throw new RuntimeException(err.toString());
+                    }
+
+                } else if ("timeout".equals(type)) {
+                    // we'll retry next time
+                    final JsArrayString modules = err.getRequireModules();
+                    if (modules != null && modules.length() > 0) {
+                        final String failed = modules.get(0);
+                        consoleWarn("Required module '%s' load failed on timeout.", failed);
+                        Requirejs.get().undef(failed);
+                    } else {
+                        consoleWarn("Unexpected requirejs of type 'timeout' without requireModules property: %o", err);
+                        throw new RuntimeException(err.toString());
+                    }
+
+                } else {
+                    throw new RuntimeException(err.toString());
+                }
+
+            }
+        });
+    }
+

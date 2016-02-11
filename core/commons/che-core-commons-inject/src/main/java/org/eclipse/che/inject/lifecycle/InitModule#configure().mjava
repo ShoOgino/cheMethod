@@ -1,0 +1,31 @@
+    @Override
+    protected void configure() {
+        bindListener(Matchers.any(), new TypeListener() {
+            @Override
+            public <T> void hear(TypeLiteral<T> type, TypeEncounter<T> encounter) {
+                encounter.register(new InjectionListener<T>() {
+                    @Override
+                    public void afterInjection(T injectee) {
+                        final Method[] methods = get(injectee.getClass(), annotationType);
+                        if (methods.length > 0) {
+                            for (Method method : methods) {
+                                try {
+                                    method.invoke(injectee);
+                                } catch (IllegalArgumentException e) {
+                                    // method MUST NOT have any parameters
+                                    throw new ProvisionException(e.getMessage(), e);
+                                } catch (IllegalAccessException e) {
+                                    throw new ProvisionException(String.format("Failed access to %s on %s", method, injectee), e);
+                                } catch (InvocationTargetException e) {
+                                    final Throwable cause = e.getTargetException();
+                                    throw new ProvisionException(String.format("Invocation error of method %s on %s", method, injectee),
+                                                                 cause);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+

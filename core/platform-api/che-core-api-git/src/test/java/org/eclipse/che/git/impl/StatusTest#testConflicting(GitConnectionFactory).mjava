@@ -1,0 +1,37 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = org.eclipse.che.git.impl.GitConnectionFactoryProvider.class)
+    public void testConflicting(GitConnectionFactory connectionFactory) throws Exception {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        addFile(connection, "a", "a content");
+        addFile(connection, "b", "b content");
+        //add "a" and "b"
+        connection.add(newDto(AddRequest.class).withFilepattern(asList("a", "b")));
+        //commit "a" and "b"
+        connection.commit(newDto(CommitRequest.class).withMessage("add 2 test files"));
+        //switch to other branch
+        connection.checkout(newDto(CheckoutRequest.class).withCreateNew(true)
+                .withName("new_branch"));
+        //modify and commit "a"
+        addFile(connection, "a", "new_branch a content");
+        connection.commit(newDto(CommitRequest.class).withAll(true)
+                .withMessage("a changed in new_branch"));
+        //switch back to master
+        connection.checkout(newDto(CheckoutRequest.class).withName("master"));
+        //modify and commit "a"
+        addFile(connection, "a", "master content");
+        connection.commit(newDto(CommitRequest.class).withAll(true)
+                .withMessage("a changed in master"));
+        //merge with "new_branch" to get conflict
+        connection.merge(newDto(MergeRequest.class).withCommit("new_branch"));
+        //when
+        final Status status = connection.status(StatusFormat.SHORT);
+        //then
+        assertEquals(status.getConflicting(), asList("a"));
+        assertTrue(status.getModified().isEmpty());
+        assertTrue(status.getAdded().isEmpty());
+        assertTrue(status.getUntracked().isEmpty());
+        assertTrue(status.getMissing().isEmpty());
+        assertTrue(status.getRemoved().isEmpty());
+        assertTrue(status.getUntrackedFolders().isEmpty());
+    }
+

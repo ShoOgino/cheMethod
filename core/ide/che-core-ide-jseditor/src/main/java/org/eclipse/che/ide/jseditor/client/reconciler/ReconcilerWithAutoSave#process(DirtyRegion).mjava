@@ -1,0 +1,31 @@
+    /**
+     * Processes a dirty region. If the dirty region is <code>null</code> the whole document is consider being dirty. The dirty region is
+     * partitioned by the document and each partition is handed over to a reconciling strategy registered for the partition's content type.
+     *
+     * @param dirtyRegion the dirty region to be processed
+     */
+    protected void process(final DirtyRegion dirtyRegion) {
+
+        Region region = dirtyRegion;
+
+        if (region == null) {
+            region = new RegionImpl(0, getDocument().getContents().length());
+        }
+
+        final List<TypedRegion> regions = computePartitioning(region.getOffset(),
+                                                              region.getLength());
+
+        for (final TypedRegion r : regions) {
+            final ReconcilingStrategy strategy = getReconcilingStrategy(r.getType());
+            if (strategy == null) {
+                continue;
+            }
+
+            if (dirtyRegion != null) {
+                strategy.reconcile(dirtyRegion, r);
+            } else {
+                strategy.reconcile(r);
+            }
+        }
+    }
+

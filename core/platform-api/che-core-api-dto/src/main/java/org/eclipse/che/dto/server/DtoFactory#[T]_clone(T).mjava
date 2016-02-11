@@ -1,0 +1,43 @@
+    /**
+     * Created deep copy of DTO object.
+     *
+     * @param origin
+     *         origin DTO object
+     * @return copy
+     * @throws IllegalArgumentException
+     *         if specified object doesn't implement DTO interface annotated with {@link org.eclipse.che.dto.shared.DTO &#064DTO} or if
+     *         specified instance implements more than one interface annotated with {@link org.eclipse.che.dto.shared.DTO &#064DTO}
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T clone(T origin) {
+        final Class<?> implClass = origin.getClass();
+        DtoProvider provider = dtoImpl2Providers.get(implClass);
+        if (provider == null) {
+            Class<?> dtoInterface = null;
+            Class<?>[] interfaces = implClass.getInterfaces();
+            if (interfaces.length == 0) {
+                return null;
+            }
+
+            for (Class<?> i : interfaces) {
+                if (i.isAnnotationPresent(DTO.class)) {
+                    if (dtoInterface != null) {
+                        throw new IllegalArgumentException("Unable determine DTO interface. Type " + implClass.getName() +
+                                                           " implements or extends more than one interface annotated with @DTO annotation.");
+                    }
+                    dtoInterface = i;
+                }
+            }
+
+            if (dtoInterface != null) {
+                provider = getDtoProvider(dtoInterface);
+            }
+        }
+
+        if (provider == null) {
+            throw new IllegalArgumentException("Unknown DTO type " + implClass);
+        }
+
+        return (T)provider.clone(origin);
+    }
+

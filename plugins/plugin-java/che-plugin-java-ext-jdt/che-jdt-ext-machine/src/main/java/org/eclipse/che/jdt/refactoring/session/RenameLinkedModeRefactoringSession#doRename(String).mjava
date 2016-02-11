@@ -1,0 +1,32 @@
+    /**
+     * Make rename operation.
+     * @param newName the name which will be applied
+     * @return result of the rename operation
+     * @throws CoreException if an error occurs while creating the refactoring instance
+     * @throws InvocationTargetException if an error occurred while executing the
+     * operation.
+     * @throws InterruptedException if the operation has been canceled by the
+     * user.
+     */
+    public RefactoringResult doRename(String newName) throws CoreException, InvocationTargetException, InterruptedException {
+        if (fOriginalName.equals(newName)) {
+            return DtoConverter.toRefactoringResultDto(new RefactoringStatus());
+        }
+        RenameSupport renameSupport= undoAndCreateRenameSupport(newName);
+        if (renameSupport == null)
+            return DtoConverter.toRefactoringResultDto(RefactoringStatus.createFatalErrorStatus("Can't create rename refactoring"));
+
+        RefactoringResult refactoringResult = DtoConverter.toRefactoringResultDto(renameSupport.perform());
+
+        PerformChangeOperation operation =renameSupport.getfPerformChangeOperation();
+        CompositeChange operationChange = (CompositeChange)operation.getUndoChange();
+        Change[] changes = operationChange.getChildren();
+
+        List<ChangeInfo> changesInfo = new ArrayList<>();
+        prepareChangesInfo(changes, changesInfo);
+
+        refactoringResult.setChanges(changesInfo);
+
+        return refactoringResult;
+    }
+

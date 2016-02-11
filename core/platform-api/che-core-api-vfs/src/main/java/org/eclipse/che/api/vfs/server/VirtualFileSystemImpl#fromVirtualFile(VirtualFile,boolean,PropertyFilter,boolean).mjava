@@ -1,0 +1,89 @@
+    protected Item fromVirtualFile(VirtualFile virtualFile, boolean includePermissions, PropertyFilter propertyFilter, boolean addLinks)
+            throws ServerException {
+        final String id = virtualFile.getId();
+        final String name = virtualFile.getName();
+        final String path = virtualFile.getPath();
+        final boolean isRoot = virtualFile.isFolder() && virtualFile.isRoot();
+        final String parentId = isRoot ? null : virtualFile.getParent().getId();
+        final String mediaType = virtualFile.getMediaType();
+        final long created = virtualFile.getCreationDate();
+
+        Item item;
+        if (virtualFile.isFile()) {
+            final boolean locked = virtualFile.isLocked();
+            File dtoFile = (File)DtoFactory.getInstance().createDto(File.class)
+                                           .withVersionId(virtualFile.getVersionId())
+                                           .withLength(virtualFile.getLength())
+                                           .withLastModificationDate(virtualFile.getLastModificationDate())
+                                           .withLocked(locked)
+                                           .withItemType(ItemType.FILE)
+                                           .withParentId(parentId)
+                                           .withId(id)
+                                           .withName(name)
+                                           .withPath(path)
+                                           .withMimeType(mediaType)
+                                           .withCreationDate(created)
+                                           .withVfsId(vfsId)
+                                           .withProperties(virtualFile.getProperties(propertyFilter));
+            if (addLinks) {
+                dtoFile.setLinks(LinksHelper.createFileLinks(baseUri, vfsId, id, id, path, mediaType, locked, parentId));
+            }
+            item = dtoFile;
+        } else {
+            Folder dtoFolder = (Folder)DtoFactory.getInstance().createDto(Folder.class)
+                                                 .withItemType(ItemType.FOLDER)
+                                                 .withParentId(parentId)
+                                                 .withId(id)
+                                                 .withName(name)
+                                                 .withPath(path)
+                                                 .withMimeType(mediaType)
+                                                 .withCreationDate(created)
+                                                 .withVfsId(vfsId)
+                                                 .withProperties(virtualFile.getProperties(propertyFilter));
+            if (addLinks) {
+                dtoFolder.setLinks(LinksHelper.createFolderLinks(baseUri, vfsId, id, isRoot, parentId));
+            }
+            item = dtoFolder;
+        }
+
+        if (includePermissions) {
+            VirtualFileSystemUser user = userContext.getVirtualFileSystemUser();
+            VirtualFile current = virtualFile;
+            while (current != null) {
+                final Map<Principal, Set<String>> objectPermissions = current.getPermissions();
+                if (!objectPermissions.isEmpty()) {
+                    Set<String> userPermissions = new HashSet<>(4);
+                    final Principal userPrincipal =
+                            DtoFactory.getInstance().createDto(Principal.class).withName(user.getUserId()).withType(Principal.Type.USER);
+                    Set<String> permissionsSet = objectPermissions.get(userPrincipal);
+                    if (!(permissionsSet == null || permissionsSet.isEmpty())) {
+                        userPermissions.addAll(permissionsSet);
+                    }
+                    final Principal anyPrincipal = DtoFactory.getInstance().createDto(Principal.class)
+                                                             .withName(VirtualFileSystemInfo.ANY_PRINCIPAL).withType(Principal.Type.USER);
+                    permissionsSet = objectPermissions.get(anyPrincipal);
+                    if (!(permissionsSet == null || permissionsSet.isEmpty())) {
+                        userPermissions.addAll(permissionsSet);
+                    }
+                    for (String group : user.getGroups()) {
+                        final Principal groupPrincipal =
+                                DtoFactory.getInstance().createDto(Principal.class).withName(group).withType(Principal.Type.GROUP);
+                        permissionsSet = objectPermissions.get(groupPrincipal);
+                        if (!(permissionsSet == null || permissionsSet.isEmpty())) {
+                            userPermissions.addAll(permissionsSet);
+                        }
+                    }
+                    item.setPermissions(new ArrayList<>(userPermissions));
+                    break;
+                } else {
+                    current = current.getParent();
+                }
+            }
+            if (item.getPermissions() == null) {
+                item.setPermissions(Arrays.asList(BasicPermissions.ALL.value()));
+            }
+        }
+
+        return item;
+    }
+

@@ -1,0 +1,26 @@
+    @GET
+    @Path("list/available")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Map<String, List<GitHubRepository>> availableRepositories() throws ApiException {
+        Map<String, List<GitHubRepository>> repoList = new HashMap<>();
+        try {
+            GitHub gitHub = gitHubFactory.connect();
+
+            //Get users' repositories
+            GitHubRepositoryList gitHubRepositoryList = gitHubDTOFactory.createRepositoriesList(gitHub.getMyself().listRepositories());
+            repoList.put(getUserInfo().getLogin(), gitHubRepositoryList.getRepositories());
+
+            //Get other repositories from all organizations that user's belong to
+            for (GHOrganization ghOrganization : gitHub.getMyself().getAllOrganizations()) {
+                String organizationName = ghOrganization.getLogin();
+                repoList.put(organizationName, gitHubDTOFactory.createRepositoriesList(
+                        gitHub.getOrganization(organizationName).listRepositories())
+                                                               .getRepositories());
+            }
+        } catch (IOException e) {
+            LOG.error("Getting list of available repositories fail", e);
+            throw new ServerException(e.getMessage());
+        }
+        return repoList;
+    }
+

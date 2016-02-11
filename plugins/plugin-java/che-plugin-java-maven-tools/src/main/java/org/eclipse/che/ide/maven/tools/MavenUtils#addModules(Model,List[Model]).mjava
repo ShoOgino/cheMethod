@@ -1,0 +1,22 @@
+    private static void addModules(Model model, List<Model> modules) throws IOException {
+        if (!"pom".equals(model.getPackaging())) return;
+
+        for (String module : model.getModules()) {
+            final Path modulePom = model.getProjectDirectory()
+                                        .toPath()
+                                        .resolve(module)
+                                        .resolve("pom.xml");
+            if (exists(modulePom)) {
+                final Model child = Model.readFrom(modulePom);
+                final String relativePath = modulePom.getParent()
+                                                     .relativize(model.getPomFile().toPath())
+                                                     .toString();
+                child.setParent(new Parent(model.getGroupId(),
+                                           model.getArtifactId(),
+                                           model.getVersion()).setRelativePath(relativePath));
+                modules.add(child);
+                addModules(child, modules);
+            }
+        }
+    }
+

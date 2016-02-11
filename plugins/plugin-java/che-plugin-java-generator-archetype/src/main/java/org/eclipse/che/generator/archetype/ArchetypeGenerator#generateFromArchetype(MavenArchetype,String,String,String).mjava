@@ -1,0 +1,50 @@
+    /**
+     * Generates a new project from the specified archetype.
+     *
+     * @param archetype
+     *         archetype from which need to generate new project
+     * @param groupId
+     *         groupId of new project
+     * @param artifactId
+     *         artifactId of new project
+     * @param version
+     *         version of new project
+     * @return generating task
+     * @throws ServerException
+     *         if an error occurs while generating project
+     */
+    public GenerationTask generateFromArchetype(@NotNull MavenArchetype archetype, @NotNull String groupId, @NotNull String artifactId,
+                                                @NotNull String version) throws ServerException {
+        Map<String, String> archetypeProperties = new HashMap<>();
+        archetypeProperties.put("-DinteractiveMode", "false"); // get rid of the interactivity of the archetype plugin
+        archetypeProperties.put("-DarchetypeGroupId", archetype.getGroupId());
+        archetypeProperties.put("-DarchetypeArtifactId", archetype.getArtifactId());
+        archetypeProperties.put("-DarchetypeVersion", archetype.getVersion());
+        archetypeProperties.put("-DgroupId", groupId);
+        archetypeProperties.put("-DartifactId", artifactId);
+        archetypeProperties.put("-Dversion", version);
+        if (archetype.getRepository() != null) {
+            archetypeProperties.put("-DarchetypeRepository", archetype.getRepository());
+        }
+        if (archetype.getProperties() != null) {
+            archetypeProperties.putAll(archetype.getProperties());
+        }
+
+        final File workDir;
+        try {
+            workDir = Files.createTempDirectory(archetypeGeneratorTempFolder, "project-").toFile();
+        } catch (IOException e) {
+            throw new ServerException(e);
+        }
+
+        final File logFile = new File(workDir, workDir.getName() + ".log");
+        final GeneratorLogger logger = createLogger(logFile);
+        final CommandLine commandLine = createCommandLine(archetypeProperties);
+        final Callable<Boolean> callable = createTaskFor(commandLine, logger, workDir);
+        final Long internalId = taskIdSequence.getAndIncrement();
+        final GenerationTask task = new GenerationTask(callable, internalId, workDir, artifactId, logger);
+        tasks.put(internalId, task);
+        executor.execute(task);
+        return task;
+    }
+

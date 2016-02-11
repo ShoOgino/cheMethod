@@ -1,0 +1,71 @@
+    @Override
+    public void create() {
+        ProjectConfigDto projectConfig = dtoFactory.createDto(ProjectConfigDto.class);
+        projectConfig.setType(MAVEN_ID);
+
+        Map<String, List<String>> attributes = new HashMap<>();
+        attributes.put(ARTIFACT_ID, Arrays.asList(artifactId));
+        attributes.put(GROUP_ID, Arrays.asList(view.getGroupId()));
+        attributes.put(VERSION, Arrays.asList(view.getVersion()));
+        attributes.put(PACKAGING, Arrays.asList(view.getPackaging()));
+        attributes.put(PARENT_ARTIFACT_ID, Arrays.asList(parentProject.getAttributeValue(ARTIFACT_ID)));
+        attributes.put(PARENT_GROUP_ID, Arrays.asList(parentProject.getAttributeValue(GROUP_ID)));
+        attributes.put(PARENT_VERSION, Arrays.asList(parentProject.getAttributeValue(VERSION)));
+
+        projectConfig.setAttributes(attributes);
+        projectConfig.setName(view.getName());
+
+        view.showButtonLoader(true);
+
+        String pathToSelectedNode = getPathToSelectedNode();
+
+        if (pathToSelectedNode.isEmpty()) {
+            showErrorDialog(locale.mavenCreateModuleMultySelectionError());
+
+            return;
+        }
+
+        projectService.createModule(appContext.getWorkspace().getId(),
+                                    pathToSelectedNode,
+                                    projectConfig,
+                                    new AsyncRequestCallback<ProjectConfigDto>(
+                                            unmarshallerFactory.newUnmarshaller(ProjectConfigDto.class)) {
+                                        @Override
+                                        protected void onSuccess(ProjectConfigDto addedModule) {
+                                            view.close();
+                                            view.showButtonLoader(false);
+
+                                            Selection<?> selection = selectionAgent.getSelection();
+
+                                            HasStorablePath parentFolder = (HasStorablePath)selection.getHeadElement();
+
+                                            boolean isModule = parentFolder instanceof ModuleNode;
+                                            boolean isProject = parentFolder instanceof ProjectNode;
+
+                                            ProjectConfigDto projectConfigDto = appContext.getCurrentProject().getProjectConfig();
+
+                                            ProjectConfigDto parentConfig =
+                                                    projectConfigDto.findModule(parentFolder.getStorablePath());
+
+                                            if (parentConfig == null) {
+                                                throw new IllegalArgumentException("Parent folder not found for " + addedModule.getPath());
+                                            }
+
+                                            parentConfig.getModules().add(addedModule);
+
+                                            if (isModule) {
+                                                projectExplorer.reloadChildren((ModuleNode)parentFolder);
+                                            }
+
+                                            if (isProject) {
+                                                projectExplorer.reloadChildren((ProjectNode)parentFolder);
+                                            }
+                                        }
+
+                                        @Override
+                                        protected void onFailure(Throwable exception) {
+                                            showErrorDialog(exception.getMessage());
+                                        }
+                                    });
+    }
+

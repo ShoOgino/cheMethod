@@ -1,0 +1,17 @@
+    void delete(VirtualFileImpl virtualFile, String lockToken) throws ForbiddenException, ServerException {
+        if (virtualFile.isRoot()) {
+            throw new ForbiddenException("Unable delete root folder. ");
+        }
+        final String myPath = virtualFile.getPath();
+        final boolean folder = virtualFile.isFolder();
+        if (!hasPermission(virtualFile, BasicPermissions.WRITE.value(), true)) {
+            throw new ForbiddenException(String.format("Unable delete item '%s'. Operation not permitted. ", myPath));
+        }
+        if (virtualFile.isFile() && !validateLockTokenIfLocked(virtualFile, lockToken)) {
+            throw new ForbiddenException(String.format("Unable delete item '%s'. Item is locked. ", myPath));
+        }
+
+        doDelete(virtualFile, lockToken);
+        eventService.publish(new DeleteEvent(workspaceId, myPath, folder));
+    }
+

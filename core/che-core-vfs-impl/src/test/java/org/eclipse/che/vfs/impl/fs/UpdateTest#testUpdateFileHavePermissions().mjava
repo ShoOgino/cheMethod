@@ -1,0 +1,21 @@
+    public void testUpdateFileHavePermissions() throws Exception {
+        String properties = "[{\"name\":\"MyProperty\", \"value\":[\"MyValue\"]}]";
+
+        String requestPath = SERVICE_URI + "item/" + protectedFileId;
+        Map<String, List<String>> h = new HashMap<>(1);
+        h.put(HttpHeaders.CONTENT_TYPE, Arrays.asList(MediaType.APPLICATION_JSON));
+        ByteArrayContainerResponseWriter writer = new ByteArrayContainerResponseWriter();
+        // File is protected and default principal 'andrew' has not write permission.
+        // Replace default principal by principal who has write permission.
+        EnvironmentContext.getCurrent().setUser(new UserImpl("andrew", "andrew", null, Arrays.asList("workspace/developer"), false));
+        ContainerResponse response = launcher.service(HttpMethod.POST, requestPath, BASE_URI, h, properties.getBytes(), writer, null);
+        assertEquals("Error: " + response.getEntity(), 200, response.getStatus());
+
+        Map<String, String[]> expectedProperties = new HashMap<>(1);
+        expectedProperties.put("MyProperty", new String[]{"MyValue"});
+        validateProperties(protectedFilePath, expectedProperties);
+
+        Item item = getItem(protectedFileId);
+        assertEquals("MyValue", getPropertyValue(item, "MyProperty"));
+    }
+

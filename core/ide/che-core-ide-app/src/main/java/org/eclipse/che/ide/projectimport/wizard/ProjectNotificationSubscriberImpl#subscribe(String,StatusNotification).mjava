@@ -1,0 +1,42 @@
+    @Override
+    public void subscribe(final String projectName, final StatusNotification existingNotification) {
+        this.projectName = projectName;
+        this.wsChannel = "importProject:output:" + workspaceId + ":" + projectName;
+        this.notification = existingNotification;
+        this.subscriptionHandler = new SubscriptionHandler<String>(new LineUnmarshaller()) {
+            @Override
+            protected void onMessageReceived(String result) {
+                notification.setContent(result);
+            }
+
+            @Override
+            protected void onErrorReceived(final Throwable throwable) {
+                messageBusPromise.then(new Operation<MessageBus>() {
+                    @Override
+                    public void apply(MessageBus messageBus) throws OperationException {
+                        try {
+                            messageBus.unsubscribe(wsChannel, subscriptionHandler);
+                        } catch (WebSocketException e) {
+                            Log.error(getClass(), e);
+                        }
+                        notification.setTitle(locale.importProjectMessageFailure(projectName));
+                        notification.setContent("");
+                        notification.setStatus(FAIL);
+                        Log.error(getClass(), throwable);
+                    }
+                }).catchError(logErrorHandler);
+            }
+        };
+
+        messageBusPromise.then(new Operation<MessageBus>() {
+            @Override
+            public void apply(final MessageBus messageBus) throws OperationException {
+                try {
+                    messageBus.subscribe(wsChannel, subscriptionHandler);
+                } catch (WebSocketException wsEx) {
+                    Log.error(ProjectNotificationSubscriberImpl.class, wsEx);
+                }
+            }
+        }).catchError(logErrorHandler);
+    }
+

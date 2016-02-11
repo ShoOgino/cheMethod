@@ -1,0 +1,31 @@
+    @Override
+    protected void configure() {
+        bind(MachineService.class);
+
+        install(new FactoryModuleBuilder()
+                        .implement(Instance.class, DockerInstance.class)
+                        .implement(InstanceProcess.class, DockerProcess.class)
+                        .implement(DockerNode.class, LocalDockerNode.class)
+                        .implement(org.eclipse.che.plugin.docker.machine.DockerInstanceMetadata.class,
+                                   org.eclipse.che.plugin.docker.machine.local.LocalDockerInstanceMetadata.class)
+                        .build(org.eclipse.che.plugin.docker.machine.DockerMachineFactory.class));
+
+
+        bind(org.eclipse.che.plugin.docker.machine.node.WorkspaceFolderPathProvider.class)
+                .to(org.eclipse.che.plugin.docker.machine.local.node.provider.LocalWorkspaceFolderPathProvider.class);
+
+        bind(String.class).annotatedWith(Names.named("host.workspaces.root"))
+                          .toProvider(CheHostVfsRootDirProvider.class);
+
+        bind(org.eclipse.che.plugin.docker.client.DockerRegistryChecker.class).asEagerSingleton();
+
+        Multibinder<String> debMachineEnvVars = Multibinder.newSetBinder(binder(),
+                                                                         String.class,
+                                                                         Names.named("machine.docker.dev_machine.machine_env"))
+                                                           .permitDuplicates();
+        debMachineEnvVars.addBinding()
+                         .toProvider(org.eclipse.che.plugin.docker.machine.local.provider.DockerApiHostEnvVariableProvider.class);
+
+        install(new org.eclipse.che.plugin.docker.machine.DockerMachineModule());
+    }
+

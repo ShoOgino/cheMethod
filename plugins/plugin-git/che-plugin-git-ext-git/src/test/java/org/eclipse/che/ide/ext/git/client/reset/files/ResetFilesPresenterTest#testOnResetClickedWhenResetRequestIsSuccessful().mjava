@@ -1,0 +1,42 @@
+    @Test
+    public void testOnResetClickedWhenResetRequestIsSuccessful() throws Exception {
+        final Status status = mock(Status.class);
+        List<String> changes = new ArrayList<String>();
+        changes.add("Change");
+        when(status.getAdded()).thenReturn(changes);
+        when(status.getChanged()).thenReturn(changes);
+        when(status.getRemoved()).thenReturn(changes);
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<Status> callback = (AsyncRequestCallback<Status>)arguments[1];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, status);
+                return callback;
+            }
+        }).when(service).status(anyString(), anyObject(), (AsyncRequestCallback<Status>)anyObject());
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<Void> callback = (AsyncRequestCallback<Void>)arguments[4];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, (Void)null);
+                return callback;
+            }
+        }).when(service).reset(anyString(), anyObject(), anyString(), (ResetRequest.ResetType)anyObject(), (List<String>)anyObject(),
+                               (AsyncRequestCallback<Void>)anyObject());
+
+        presenter.showDialog();
+        presenter.onResetClicked();
+
+        verify(view).close();
+        verify(service).reset(anyString(), eq(rootProjectConfig), anyString(), (ResetRequest.ResetType)anyObject(), (List<String>)anyObject(),
+                              (AsyncRequestCallback<Void>)anyObject());
+        verify(notificationManager).notify(anyString(), rootProjectConfig);
+        verify(console).printInfo(anyString());
+        verify(constant, times(2)).resetFilesSuccessfully();
+    }
+

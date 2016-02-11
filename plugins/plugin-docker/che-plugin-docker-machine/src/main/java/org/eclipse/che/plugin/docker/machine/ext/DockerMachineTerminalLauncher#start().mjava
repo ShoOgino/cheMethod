@@ -1,0 +1,28 @@
+    @PostConstruct
+    public void start() {
+        eventService.subscribe(new EventSubscriber<MachineStatusEvent>() {
+            @Override
+            public void onEvent(MachineStatusEvent event) {
+                if (event.getEventType() == MachineStatusEvent.EventType.RUNNING) {
+                    try {
+                        final Instance machine = machineManager.getMachine(event.getMachineId());
+                        final String containerId = machine.getMetadata().getProperties().get("id");
+
+                        final Exec exec = docker.createExec(containerId, true, "/bin/bash", "-c", terminalStartCommand);
+                        docker.startExec(exec.getId(), logMessage -> {
+                            if (logMessage.getType() == LogMessage.Type.STDERR) {
+                                try {
+                                    machine.getLogger().writeLine("Terminal error. %s" + logMessage.getContent());
+                                } catch (IOException ignore) {
+                                }
+                            }
+                        });
+                    } catch (IOException | MachineException | NotFoundException e) {
+                        LOG.error(e.getLocalizedMessage(), e);
+                        // TODO send event that terminal is unavailable
+                    }
+                }
+            }
+        });
+    }
+

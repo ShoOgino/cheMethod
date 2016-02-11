@@ -1,0 +1,49 @@
+    @ApiOperation(value = "Copy resource",
+                  notes = "Copy resource to a new location which is specified in a query parameter",
+                  position = 15)
+    @ApiResponses({@ApiResponse(code = 201, message = ""),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 409, message = "Resource already exists"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    @POST
+    @Path("/copy/{path:.*}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response copy(@ApiParam("Workspace ID") @PathParam("ws-id") String workspace,
+                         @ApiParam("Path to a resource") @PathParam("path") String path,
+                         @ApiParam(value = "Path to a new location", required = true) @QueryParam("to") String newParent,
+                         CopyOptions copyOptions) throws NotFoundException,
+                                                         ForbiddenException,
+                                                         ConflictException,
+                                                         ServerException {
+        final VirtualFileEntry entry = getVirtualFileEntry(workspace, path);
+
+        filesBuffer.addToBuffer(newParent + '/' + entry.getName(), path);
+        // used to indicate over write of destination
+        boolean isOverWrite = false;
+        // used to hold new name set in request body
+        String newName = entry.getName();
+        if (copyOptions != null) {
+            if (copyOptions.getOverWrite() != null) {
+                isOverWrite = copyOptions.getOverWrite();
+            }
+            if (copyOptions.getName() != null) {
+                newName = copyOptions.getName();
+            }
+        }
+        final VirtualFileEntry copy = entry.copyTo(newParent, newName, isOverWrite);
+        final URI location = getServiceContext().getServiceUriBuilder()
+                                                .path(getClass(), copy.isFile() ? "getFile" : "getChildren")
+                                                .build(workspace, copy.getPath().substring(1));
+        if (copy.isFolder()) {
+            final Project project = projectManager.getProject(copy.getWorkspace(), copy.getPath());
+            if (project != null) {
+                final String name = project.getName();
+                final String projectType = project.getConfig().getType();
+
+                logProjectCreatedEvent(name, projectType);
+            }
+        }
+        return Response.created(location).build();
+    }
+

@@ -1,0 +1,42 @@
+    @Override
+    protected Promise<List<Node>> getChildrenImpl() {
+        return PromiseHelper.newPromise(new AsyncPromiseHelper.RequestCall<List<Node>>() {
+            @Override
+            public void makeCall(AsyncCallback<List<Node>> callback) {
+                List<Node> child = new ArrayList<>();
+                if (compilationUnit != null && type.isPrimary()) {
+                    for (ImportDeclaration importDeclaration : compilationUnit.getImports()) {
+                        createNodeForAllMatches(importDeclaration.getHandleIdentifier(), child);
+                    }
+                    for (Type subType : compilationUnit.getTypes()) {
+                        if (subType == type) {
+                            continue;
+                        }
+                        child.add(nodeFactory.create(subType, compilationUnit, classFile, matches));
+                    }
+                }
+                createNodeForAllMatches(type.getHandleIdentifier(), child);
+
+                for (Initializer initializer : type.getInitializers()) {
+                    createNodeForAllMatches(initializer.getHandleIdentifier(), child);
+                }
+
+                for (Field field : type.getFields()) {
+                    createNodeForAllMatches(field.getHandleIdentifier(), child);
+                }
+
+                for (Type subType : type.getTypes()) {
+                    child.add(nodeFactory.create(subType, compilationUnit, classFile, matches));
+                }
+
+                for (Method method : type.getMethods()) {
+                    child.add(nodeFactory.create(method, matches, compilationUnit, classFile));
+                }
+
+                Collections.sort(child, new NodeComparator());
+                callback.onSuccess(child);
+
+            }
+        });
+    }
+

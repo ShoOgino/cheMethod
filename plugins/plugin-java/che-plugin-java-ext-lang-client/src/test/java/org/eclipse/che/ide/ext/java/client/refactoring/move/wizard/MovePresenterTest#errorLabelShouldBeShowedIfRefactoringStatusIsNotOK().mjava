@@ -1,0 +1,30 @@
+    @Test
+    public void errorLabelShouldBeShowedIfRefactoringStatusIsNotOK() throws Exception {
+        when(moveSettings.isUpdateQualifiedNames()).thenReturn(true);
+        when(changeCreationResult.isCanShowPreviewPage()).thenReturn(true);
+        when(changeCreationResult.getStatus()).thenReturn(refactoringResult);
+        when(refactoringResult.getSeverity()).thenReturn(2);
+
+        presenter.onAcceptButtonClicked();
+
+        verify(moveSettings).setSessionId(anyString());
+        verify(moveSettings).setUpdateReferences(anyBoolean());
+        verify(moveSettings).setUpdateQualifiedNames(anyBoolean());
+        verify(moveSettings).setFilePatterns(anyString());
+        verify(session).setSessionId(anyString());
+
+        verify(moveSettingsPromise).thenPromise(changeCreationFunction.capture());
+        changeCreationFunction.getValue().apply(any());
+        verify(refactorService).createChange(session);
+
+        verify(changeCreationResultPromise).then(changeResultOperation.capture());
+        changeResultOperation.getValue().apply(changeCreationResult);
+
+        verify(refactoringResultPromise).then(refResultOperation.capture());
+        refResultOperation.getValue().apply(refactoringResult);
+        verify(moveView, never()).hide();
+        verify(refactoringUpdater, never()).updateAfterRefactoring(Matchers.<RefactorInfo>any(), anyList());
+
+        verify(moveView).showErrorMessage(refactoringResult);
+    }
+

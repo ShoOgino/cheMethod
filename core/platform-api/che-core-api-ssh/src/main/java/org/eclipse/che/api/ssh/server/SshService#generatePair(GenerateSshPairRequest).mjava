@@ -1,0 +1,27 @@
+    @POST
+    @Path("generate")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed("user")
+    @GenerateLink(rel = Constants.LINK_REL_GENERATE_PAIR)
+    @ApiOperation(value = "Generate and stores ssh pair based on the request",
+                  notes = "This operation can be performed only by authorized user," +
+                          "this user will be the owner of the created ssh pair",
+                  response = SshPairDto.class)
+    @ApiResponses({@ApiResponse(code = 201, message = "The ssh pair successfully generated"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 409, message = "Conflict error occurred during the ssh pair generation" +
+                                                      "(e.g. The Ssh pair with such name and service already exists)"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public Response generatePair(@ApiParam(value = "The configuration to generate the new ssh pair", required = true)
+                                   GenerateSshPairRequest request) throws BadRequestException, ServerException, ConflictException {
+        requiredNotNull(request, "Generate ssh pair request required");
+        requiredNotNull(request.getService(), "Service name required");
+        requiredNotNull(request.getName(), "Name required");
+        final SshPairImpl generatedPair = sshManager.generatePair(getCurrentUserId(), request.getService(), request.getName());
+
+        return Response.status(Response.Status.CREATED)
+                       .entity(asDto(injectLinks(asDto(generatedPair))))
+                       .build();
+    }
+

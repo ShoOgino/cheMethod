@@ -1,0 +1,37 @@
+    @Test
+    public void testUpdateProject() throws Exception {
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
+
+        ProjectTypeDef pt = new ProjectTypeDef("testUpdateProject", "my project type", true, false) {
+        };
+        pm.getProjectTypeRegistry().registerProjectType(pt);
+
+        pm.createProject(workspace, "module1", newDto(ProjectConfigDto.class).withDescription("created project")
+                                                                             .withType("testUpdateProject"), null);
+
+        Map<String, List<String>> attributeValues = new LinkedHashMap<>();
+        attributeValues.put("my_attribute", singletonList("to be or not to be"));
+        ProjectConfigDto descriptor = DtoFactory.newDto(ProjectConfigDto.class)
+                                                .withName("module1")
+                                                .withPath("/module1")
+                                                .withType("testUpdateProject")
+                                                .withDescription("updated project")
+                                                .withAttributes(attributeValues);
+
+        ContainerResponse response = launcher.service(PUT,
+                                                      String.format("http://localhost:8080/api/project/%s/module1", workspace),
+                                                      "http://localhost:8080/api",
+                                                      headers,
+                                                      DtoFactory.getInstance().toJson(descriptor).getBytes(),
+                                                      null);
+
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+
+        ProjectConfigDto config = (ProjectConfigDto)response.getEntity();
+        assertNotNull(config);
+
+        assertEquals(descriptor.getName(), config.getName());
+        assertEquals(descriptor.getPath(), config.getPath());
+    }
+

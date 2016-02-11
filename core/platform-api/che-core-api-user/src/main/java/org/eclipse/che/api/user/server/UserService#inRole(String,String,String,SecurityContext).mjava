@@ -1,0 +1,54 @@
+    /**
+     * Allow to check if current user has a given role or not. status <b>200</b> and {@link UserInRoleDescriptor} is returned by indicating if role is granted or not
+     *
+     * @param role
+     *         role to search (like admin or manager)
+     * @param scope
+     *         the optional scope like system, workspace, account.(default scope is system)
+     * @param scopeId
+     *         an optional scopeID used by the scope like the workspace ID if scope is workspace.
+     * @return {UserInRoleDescriptor} which indicates if role is granted or not
+     * @throws org.eclipse.che.api.core.ForbiddenException
+     *         with an uknown scope
+     * @throws ServerException
+     *         when unable to perform the check
+     */
+    @ApiOperation(value = "Check role for the authenticated user",
+                  notes = "Check if user has a role in given scope (default is system) and with an optional scope id. Roles allowed: user, system/admin, system/manager.",
+                  response = UserInRoleDescriptor.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 403, message = "Unable to check for the given scope"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    @GET
+    @Path("/inrole")
+    @GenerateLink(rel = LINK_REL_INROLE)
+    @RolesAllowed({"temp_user", "user", "system/admin", "system/manager"})
+    @Produces(APPLICATION_JSON)
+    @Beta
+    public UserInRoleDescriptor inRole(@Required @Description("role inside a scope") @QueryParam("role") String role,
+                                       @DefaultValue("system") @Description("scope of the role (like system, workspace)") @QueryParam("scope") String scope,
+                                       @DefaultValue("") @Description("id used by the scope, like workspaceId for workspace scope") @QueryParam("scopeId") String scopeId,
+                                       @Context SecurityContext context) throws NotFoundException, ServerException, ForbiddenException {
+
+        // handle scope
+        boolean isInRole;
+        if ("system".equals(scope)) {
+            String roleToCheck;
+            if ("user".equals(role) || "temp_user".equals(role)) {
+                roleToCheck = role;
+            } else {
+                roleToCheck = "system/" + role;
+            }
+
+            // check role
+            isInRole = context.isUserInRole(roleToCheck);
+        } else {
+            throw new ForbiddenException(String.format("Only system scope is handled for now. Provided scope is %s", scope));
+        }
+
+        return newDto(UserInRoleDescriptor.class).withIsInRole(isInRole)
+                                                 .withRoleName(role)
+                                                 .withScope(scope)
+                                                 .withScopeId(scopeId);
+    }
+

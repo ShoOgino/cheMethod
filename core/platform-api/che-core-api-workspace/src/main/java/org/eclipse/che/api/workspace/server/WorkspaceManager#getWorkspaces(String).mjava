@@ -1,0 +1,28 @@
+    /**
+     * Gets all user's workspaces(workspaces where user is owner).
+     *
+     * <p>Returned workspaces have either {@link WorkspaceStatus#STOPPED} status
+     * or status defined by their runtime instances(if those exist), all of these
+     * workspaces are permanent(non-temporary) and with websocket {@link Channels} injected
+     *
+     * @param owner
+     *         the id of the user whose workspaces should be fetched
+     * @return the list of workspaces or empty list if user doesn't own any workspace
+     * @throws BadRequestException
+     *         when {@code owner} is null
+     * @throws ServerException
+     *         when any server error occurs while getting workspaces with {@link WorkspaceDao#getByOwner(String)}
+     */
+    public List<UsersWorkspaceImpl> getWorkspaces(String owner) throws ServerException, BadRequestException {
+        requiredNotNull(owner, "Required non-null workspace owner");
+        final Map<String, RuntimeWorkspaceImpl> runtimeWorkspaces = new HashMap<>();
+        for (RuntimeWorkspaceImpl runtimeWorkspace : workspaceRegistry.getByOwner(owner)) {
+            runtimeWorkspaces.put(runtimeWorkspace.getId(), runtimeWorkspace);
+        }
+        final List<UsersWorkspaceImpl> workspaces = workspaceDao.getByOwner(owner);
+        for (UsersWorkspaceImpl workspace : workspaces) {
+            normalizeState(workspace, runtimeWorkspaces.get(workspace.getId()));
+        }
+        return workspaces;
+    }
+

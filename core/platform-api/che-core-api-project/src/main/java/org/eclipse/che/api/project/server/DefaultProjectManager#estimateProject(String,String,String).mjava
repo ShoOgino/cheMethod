@@ -1,0 +1,27 @@
+    @Override
+    public Map<String, AttributeValue> estimateProject(String workspace, String path, String projectTypeId)
+            throws ServerException, ForbiddenException, NotFoundException, ValueStorageException, ProjectTypeConstraintException {
+        ProjectType projectType = projectTypeRegistry.getProjectType(projectTypeId);
+        if (projectType == null) {
+            throw new NotFoundException("Project Type " + projectTypeId + " not found.");
+        }
+
+        final VirtualFileEntry baseFolder = getProjectsRoot(workspace).getChild(path.startsWith("/") ? path.substring(1) : path);
+        if (!baseFolder.isFolder()) {
+            throw new NotFoundException("Not a folder: " + path);
+        }
+
+        Map<String, AttributeValue> attributes = new HashMap<>();
+
+        for (Attribute attr : projectType.getAttributes()) {
+            if (attr.isVariable() && ((Variable)attr).getValueProviderFactory() != null) {
+
+                Variable var = (Variable)attr;
+                // getValue throws ValueStorageException if not valid
+                attributes.put(attr.getName(), var.getValue((FolderEntry)baseFolder));
+            }
+        }
+
+        return attributes;
+    }
+

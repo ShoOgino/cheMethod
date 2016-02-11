@@ -1,0 +1,65 @@
+    @Test
+    public void testComplicatedDtoSerializer() throws Exception {
+        final String fooString = "Something";
+        final int fooId = 1;
+        final String _default = "test_default_keyword";
+
+        List<String> listStrings = new ArrayList<>(2);
+        listStrings.add("Something 1");
+        listStrings.add("Something 2");
+
+        ComplicatedDto.SimpleEnum simpleEnum = ComplicatedDto.SimpleEnum.ONE;
+
+        // Assume that SimpleDto works. Use it to test nested objects
+        SimpleDto simpleDto = dtoFactory.createDto(SimpleDto.class).withName(fooString).withId(fooId).withDefault(_default);
+
+        Map<String, SimpleDto> mapDtos = new HashMap<>(1);
+        mapDtos.put(fooString, simpleDto);
+
+        List<SimpleDto> listDtos = new ArrayList<>(1);
+        listDtos.add(simpleDto);
+
+        List<List<ComplicatedDto.SimpleEnum>> listOfListOfEnum = new ArrayList<>(1);
+        List<ComplicatedDto.SimpleEnum> listOfEnum = new ArrayList<>(3);
+        listOfEnum.add(ComplicatedDto.SimpleEnum.ONE);
+        listOfEnum.add(ComplicatedDto.SimpleEnum.TWO);
+        listOfEnum.add(ComplicatedDto.SimpleEnum.THREE);
+        listOfListOfEnum.add(listOfEnum);
+
+        ComplicatedDto dto = dtoFactory.createDto(ComplicatedDto.class).withStrings(listStrings).
+                withSimpleEnum(simpleEnum).withMap(mapDtos).withSimpleDtos(listDtos).
+                                               withArrayOfArrayOfEnum(listOfListOfEnum);
+
+
+        final String json = dtoFactory.toJson(dto);
+        JsonObject jsonObject = new JsonParser().parse(json).getAsJsonObject();
+
+        Assert.assertTrue(jsonObject.has("strings"));
+        JsonArray jsonArray = jsonObject.get("strings").getAsJsonArray();
+        assertEquals(jsonArray.get(0).getAsString(), listStrings.get(0));
+        assertEquals(jsonArray.get(1).getAsString(), listStrings.get(1));
+
+        Assert.assertTrue(jsonObject.has("simpleEnum"));
+        assertEquals(jsonObject.get("simpleEnum").getAsString(), simpleEnum.name());
+
+        Assert.assertTrue(jsonObject.has("map"));
+        JsonObject jsonMap = jsonObject.get("map").getAsJsonObject();
+        JsonObject value = jsonMap.get(fooString).getAsJsonObject();
+        assertEquals(value.get("name").getAsString(), fooString);
+        assertEquals(value.get("id").getAsInt(), fooId);
+        assertEquals(value.get("default").getAsString(), _default);
+
+        Assert.assertTrue(jsonObject.has("simpleDtos"));
+        JsonArray simpleDtos = jsonObject.get("simpleDtos").getAsJsonArray();
+        JsonObject simpleDtoJsonObject = simpleDtos.get(0).getAsJsonObject();
+        assertEquals(simpleDtoJsonObject.get("name").getAsString(), fooString);
+        assertEquals(simpleDtoJsonObject.get("id").getAsInt(), fooId);
+        assertEquals(simpleDtoJsonObject.get("default").getAsString(), _default);
+
+        Assert.assertTrue(jsonObject.has("arrayOfArrayOfEnum"));
+        JsonArray arrayOfArrayOfEnum = jsonObject.get("arrayOfArrayOfEnum").getAsJsonArray().get(0).getAsJsonArray();
+        assertEquals(arrayOfArrayOfEnum.get(0).getAsString(), ComplicatedDto.SimpleEnum.ONE.name());
+        assertEquals(arrayOfArrayOfEnum.get(1).getAsString(), ComplicatedDto.SimpleEnum.TWO.name());
+        assertEquals(arrayOfArrayOfEnum.get(2).getAsString(), ComplicatedDto.SimpleEnum.THREE.name());
+    }
+

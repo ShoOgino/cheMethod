@@ -1,0 +1,42 @@
+    /**
+     * Writes dependency gathering code, like:
+     * <p/>
+     * Array<DependencyDescription> deps = Collections.<DependencyDescription> createArray();
+     * deps.add(new DependencyDescription("ide.api.ui.menu", ""));
+     * deps.add(new DependencyDescription("extension.demo", "1.0.0-alpha"));
+     *
+     * @param sw
+     * @param extension
+     * @throws UnableToCompleteException
+     */
+    private void generateDependenciesForExtension(SourceWriter sw, JClassType extension) throws UnableToCompleteException {
+        // expected code
+      /*      
+            Array<DependencyDescription> deps = Collections.<DependencyDescription> createArray();
+            deps.add(new DependencyDescription("ide.api.ui.menu", ""));
+      */
+        if (extension.getConstructors().length == 0) {
+            throw new UnableToCompleteException();
+        }
+        sw.println("List<DependencyDescription> deps = new ArrayList<>();");
+
+        JConstructor jConstructor = extension.getConstructors()[0];
+        JType[] parameterTypes = jConstructor.getParameterTypes();
+
+        for (JType jType : parameterTypes) {
+            JClassType argType = jType.isClassOrInterface();
+            if (argType != null
+                && (argType.isAnnotationPresent(SDK.class) || argType.isAnnotationPresent(Extension.class))) {
+                String id = "";
+                String version = "";
+                if (argType.isAnnotationPresent(SDK.class)) {
+                    id = argType.getAnnotation(SDK.class).title();
+                } else if (argType.isAnnotationPresent(Extension.class)) {
+                    id = argType.getQualifiedSourceName();
+                    version = argType.getAnnotation(Extension.class).version();
+                }
+                sw.println("deps.add(new DependencyDescription(\"%s\", \"%s\"));", escape(id), escape(version));
+            }
+        }
+    }
+

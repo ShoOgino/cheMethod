@@ -1,0 +1,29 @@
+    @Override
+    protected void protectPrivateKeyFile(File sshKey) throws GitException {
+        try {
+            AclFileAttributeView attributes = Files.getFileAttributeView(sshKey.toPath(), AclFileAttributeView.class);
+
+            AclEntry.Builder builder = AclEntry.newBuilder();
+            builder.setType(ALLOW);
+
+            String ownerName = System.getProperty(OWNER_NAME_PROPERTY);
+            UserPrincipal userPrincipal = FileSystems.getDefault().getUserPrincipalLookupService().lookupPrincipalByName(ownerName);
+
+            builder.setPrincipal(userPrincipal);
+            builder.setPermissions(READ_DATA,
+                                   APPEND_DATA,
+                                   READ_NAMED_ATTRS,
+                                   READ_ATTRIBUTES,
+                                   DELETE,
+                                   READ_ACL,
+                                   SYNCHRONIZE);
+
+            AclEntry entry = builder.build();
+            List<AclEntry> aclEntryList = new ArrayList<>();
+            aclEntryList.add(entry);
+            attributes.setAcl(aclEntryList);
+        } catch (IOException e) {
+            throw new GitException("Failed to set file permissions");
+        }
+    }
+

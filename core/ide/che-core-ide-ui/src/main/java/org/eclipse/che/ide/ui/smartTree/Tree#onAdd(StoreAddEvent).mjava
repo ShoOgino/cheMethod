@@ -1,0 +1,56 @@
+    private void onAdd(StoreAddEvent event) {
+        for (Node child : event.getNodes()) {
+            register(child);
+        }
+        if (isOrWasAttached()) {
+            Node parent = nodeStorage.getParent(event.getNodes().get(0));
+
+            final Element container = getContainer(parent);
+            final int index = event.getIndex();
+
+            if (parent == null) {
+                for (Node child : event.getNodes()) {
+                    if (index == 0) {
+                        container.insertFirst(renderNode(child, 0));
+                    } else if (index == getNodeStorage().getRootCount() - event.getNodes().size()) {
+                        com.google.gwt.dom.client.Node lastChild = container.getLastChild();
+                        container.insertAfter(renderNode(child, 0), lastChild);
+                    } else {
+                        container.insertBefore(renderNode(child, 0), container.getChild(index));
+                    }
+                    scrollIntoView(child);
+                }
+            } else {
+                NodeDescriptor descriptor = getNodeDescriptor(parent);
+                if (descriptor != null && descriptor.isChildrenRendered()) {
+                    int parentDepth = nodeStorage.getDepth(parent);
+
+                    int parentChildCount = nodeStorage.getChildCount(parent);
+                    for (Node child : event.getNodes()) {
+                        if (!descriptor.isExpanded() && nodeStorage.getChildCount(descriptor.getNode()) == 1) {
+                            setExpanded(descriptor.getNode(), true);
+                        }
+                        if (index == 0) {
+                            container.insertFirst(renderNode(child, parentDepth));
+                        } else if (index == parentChildCount - event.getNodes().size()) {
+                            com.google.gwt.dom.client.Node lastChild = container.getLastChild();
+                            container.insertAfter(renderNode(child, parentDepth), lastChild);
+                        } else {
+                            container.insertBefore(renderNode(child, parentDepth), container.getChild(index));
+                        }
+                        scrollIntoView(child);
+                    }
+                } else {
+                    redraw(parent);
+                }
+            }
+            update();
+
+            fireEvent(new NodeAddedEvent(event.getNodes()));
+        }
+
+        if (!getRootNodes().isEmpty()) {
+            emptyText.paint();
+        }
+    }
+

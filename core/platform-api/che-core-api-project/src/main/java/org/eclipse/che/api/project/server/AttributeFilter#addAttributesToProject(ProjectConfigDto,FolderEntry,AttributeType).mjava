@@ -1,0 +1,31 @@
+    private void addAttributesToProject(ProjectConfigDto projectConfig,
+                                        FolderEntry parentFolder,
+                                        AttributeType attributeType) throws ServerException,
+                                                                            ForbiddenException,
+                                                                            ProjectTypeConstraintException,
+                                                                            ValueStorageException,
+                                                                            NotFoundException {
+
+        ProjectTypes projectTypes = getProjectTypes(parentFolder, projectConfig);
+
+        ProjectTypeDef primaryType = projectTypes.getPrimary();
+
+        projectConfig.setType(primaryType == null ? "blank" : primaryType.getId());
+        projectConfig.setMixins(projectTypes.mixinIds());
+
+        for (ProjectTypeDef projectType : projectTypes.getAll().values()) {
+            Map<String, List<String>> attributes = AttributeType.PERSISTENT.equals(attributeType) ? getPersistedAttributes(projectType,
+                                                                                                                           projectConfig)
+                                                                                                  : getRuntimeAttributes(projectType,
+                                                                                                                         projectConfig,
+                                                                                                                         parentFolder);
+            projectConfig.getAttributes().putAll(attributes);
+        }
+
+        for (ProjectConfigDto configDto : projectConfig.getModules()) {
+            FolderEntry module = findModuleByPath(parentFolder, configDto.getPath());
+
+            addAttributesToProject(configDto, module, attributeType);
+        }
+    }
+

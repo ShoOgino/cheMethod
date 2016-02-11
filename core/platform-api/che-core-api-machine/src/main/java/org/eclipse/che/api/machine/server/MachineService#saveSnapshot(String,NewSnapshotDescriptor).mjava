@@ -1,0 +1,28 @@
+    @POST
+    @Path("/{machineId}/snapshot")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @RolesAllowed("user")
+    @ApiOperation(value = "Save snapshot of machine")
+    @ApiResponses({@ApiResponse(code = 200, message = "The response contains requested snapshot entity"),
+                   @ApiResponse(code = 400, message = "Snapshot description is not specified"),
+                   @ApiResponse(code = 404, message = "Snapshot with specified ID does not exist"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public SnapshotDto saveSnapshot(@ApiParam(value = "Machine ID")
+                                    @PathParam("machineId")
+                                    String machineId,
+                                    @ApiParam(value = "Snapshot description", required = true)
+                                    NewSnapshotDescriptor newSnapshotDescriptor)
+            throws NotFoundException,
+                   ServerException,
+                   ForbiddenException,
+                   BadRequestException {
+
+        requiredNotNull(newSnapshotDescriptor, "Snapshot description");
+        checkCurrentUserPermissions(machineManager.getMachine(machineId));
+
+        return injectLinks(DtoConverter.asDto(machineManager.save(machineId,
+                                                                  EnvironmentContext.getCurrent().getUser().getId(),
+                                                                  newSnapshotDescriptor.getDescription())));
+    }
+

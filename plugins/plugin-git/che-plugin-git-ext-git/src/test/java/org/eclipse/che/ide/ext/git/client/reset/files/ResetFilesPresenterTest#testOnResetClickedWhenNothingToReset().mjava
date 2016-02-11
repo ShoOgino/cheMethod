@@ -1,0 +1,38 @@
+    @Test
+    public void testOnResetClickedWhenNothingToReset() throws Exception {
+        MessageDialog messageDialog = mock(MessageDialog.class);
+        final Status status = mock(Status.class);
+        IndexFile indexFile = mock(IndexFile.class);
+        when(dtoFactory.createDto(IndexFile.class)).thenReturn(indexFile);
+        when(constant.messagesWarningTitle()).thenReturn("Warning");
+        when(constant.indexIsEmpty()).thenReturn("Index is Empty");
+        when(dialogFactory.createMessageDialog(constant.messagesWarningTitle(), constant.indexIsEmpty(), null)).thenReturn(messageDialog);
+        when(indexFile.isIndexed()).thenReturn(true);
+        List<String> changes = new ArrayList<String>();
+        changes.add("Change");
+        when(status.getAdded()).thenReturn(changes);
+        when(status.getChanged()).thenReturn(changes);
+        when(status.getRemoved()).thenReturn(changes);
+
+        doAnswer(new Answer() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                Object[] arguments = invocation.getArguments();
+                AsyncRequestCallback<Status> callback = (AsyncRequestCallback<Status>)arguments[1];
+                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
+                onSuccess.invoke(callback, status);
+                return callback;
+            }
+        }).when(service).status(anyString(), anyObject(), (AsyncRequestCallback<Status>)anyObject());
+
+        presenter.showDialog();
+        presenter.onResetClicked();
+
+        verify(view).close();
+        verify(service, never()).reset(anyString(), eq(projectConfig), anyString(), (ResetRequest.ResetType)anyObject(), (List<String>)anyObject(),
+                                       (AsyncRequestCallback<Void>)anyObject());
+        verify(console).printInfo(anyString());
+        verify(notificationManager).notify(anyString(), rootProjectConfig);
+        verify(constant, times(2)).nothingToReset();
+    }
+

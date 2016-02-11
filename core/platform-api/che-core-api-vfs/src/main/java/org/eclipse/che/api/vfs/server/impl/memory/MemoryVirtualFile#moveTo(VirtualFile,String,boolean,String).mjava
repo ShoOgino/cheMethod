@@ -1,0 +1,113 @@
+    @Override
+    public VirtualFile moveTo(VirtualFile parent, String newName, boolean overWrite, String lockToken) throws ForbiddenException, ConflictException, ServerException {
+        checkExist();
+        ((MemoryVirtualFile)parent).checkExist();
+        boolean isFile = isFile();
+
+        // the name set to destination after moving
+        String destinationName = ("".equals(String.valueOf(newName).trim()) || null == newName) ? this.getName() : newName;
+
+        if (isRoot()) {
+            throw new ForbiddenException("Unable move root folder. ");
+        }
+        final String myPath = getPath();
+        final String newParentPath = parent.getPath();
+        if (!parent.isFolder()) {
+            throw new ForbiddenException("Unable move item. Item specified as parent is not a folder. ");
+        }
+        if (!(((MemoryVirtualFile)parent).hasPermission(BasicPermissions.WRITE.value(), true)
+              && hasPermission(BasicPermissions.WRITE.value(), true))) {
+            throw new ForbiddenException(String.format("Unable move item '%s' to %s. Operation not permitted. ", myPath, newParentPath));
+        }
+
+        final boolean folder = isFolder();
+        if (folder) {
+            // Be sure destination folder is not child (direct or not) of moved item.
+            if (newParentPath.startsWith(myPath)) {
+                throw new ForbiddenException(
+                        String.format("Unable move item %s to %s. Item may not have itself as parent. ", myPath, newParentPath));
+            }
+            final ValueHolder<Exception> errorHolder = new ValueHolder<>();
+            accept(new VirtualFileVisitor() {
+                @Override
+                public void visit(VirtualFile virtualFile) {
+                    try {
+                        if (virtualFile.isFolder()) {
+                            for (VirtualFile childVirtualFile : doGetChildren(virtualFile)) {
+                                childVirtualFile.accept(this);
+                            }
+                        }
+                        if (!((MemoryVirtualFile)virtualFile).hasPermission(BasicPermissions.WRITE.value(), false)) {
+                            throw new ForbiddenException(
+                                    String.format("Unable move item '%s'. Operation not permitted. ", virtualFile.getPath()));
+                        }
+                        if (virtualFile.isFile() && virtualFile.isLocked()) {
+                            throw new ForbiddenException(
+                                    String.format("Unable move item '%s'. Child item '%s' is locked. ", name, virtualFile.getPath()));
+                        }
+                    } catch (ServerException | ForbiddenException e) {
+                        errorHolder.set(e);
+                    }
+                }
+            });
+            final Exception error = errorHolder.get();
+            if (error != null) {
+                if (error instanceof ForbiddenException) {
+                    throw (ForbiddenException)error;
+                } else if (error instanceof ServerException) {
+                    throw (ServerException)error;
+                } else {
+                    throw new ServerException(error.getMessage(), error);
+                }
+            }
+        } else {
+            if (!validateLockTokenIfLocked(lockToken)) {
+                throw new ForbiddenException(String.format("Unable move item %s. Item is locked. ", myPath));
+            }
+        }
+
+        //====-overwriting-====
+        if (overWrite) {
+            doOverWrite(parent, destinationName);
+        }
+        //=====================
+
+        /**
+         * if newName was sent NOT null NOR empty String, then request was
+         * intended to change the VirtualFile name after moving
+         */
+        if (!("".equals(String.valueOf(newName).trim()) || null == newName)) {
+            if (((MemoryVirtualFile) parent).children.containsKey(destinationName)) {
+                throw new ConflictException(String.format("Item '%s' already exists. ", (parent.getPath() + '/' + destinationName)));
+            }
+            this.parent.children.remove(getName());
+            this.parent = (MemoryVirtualFile) parent;
+            this.parent.children.put(destinationName, this);
+            this.name = destinationName;
+        } else { // default behavior is to move with current name
+            if (!((MemoryVirtualFile) parent).addChild(this)) {
+            throw new ConflictException(String.format("Item '%s' already exists. ", (parent.getPath() + '/' + name)));
+        }
+        this.parent.children.remove(getName());
+            this.parent = (MemoryVirtualFile) parent;
+        }
+        this.path = null;
+        // =======================
+
+        SearcherProvider searcherProvider = mountPoint.getSearcherProvider();
+        if (searcherProvider != null) {
+            try {
+                searcherProvider.getSearcher(mountPoint, true).delete(myPath, isFile);
+            } catch (ServerException e) {
+                LOG.error(e.getMessage(), e);
+            }
+            try {
+                searcherProvider.getSearcher(mountPoint, true).add(parent);
+            } catch (ServerException e) {
+                LOG.error(e.getMessage(), e);
+            }
+        }
+        mountPoint.getEventService().publish(new MoveEvent(mountPoint.getWorkspaceId(), getPath(), myPath, folder));
+        return this;
+    }
+

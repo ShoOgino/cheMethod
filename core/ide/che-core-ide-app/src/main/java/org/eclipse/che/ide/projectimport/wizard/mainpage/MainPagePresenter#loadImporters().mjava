@@ -1,0 +1,66 @@
+    private void loadImporters() {
+        final Map<String, Set<ProjectImporterDescriptor>> importersByCategory = new LinkedHashMap<>();
+
+        final Unmarshallable<ProjectImporterData> unmarshaller =
+                dtoUnmarshallerFactory.newUnmarshaller(ProjectImporterData.class);
+
+        AsyncRequestCallback<ProjectImporterData> callback =
+                new AsyncRequestCallback<ProjectImporterData>(unmarshaller) {
+                    @Override
+                    protected void onSuccess(ProjectImporterData data) {
+                        List<ProjectImporterDescriptor> result = data.getImporters();
+                        String defaultImporterId = data.getConfiguration().get(DEFAULT_PROJECT_IMPORTER);
+                        Iterator<ProjectImporterDescriptor> itr = result.iterator();
+                        while (itr.hasNext()) {
+                            ProjectImporterDescriptor importer = itr.next();
+                            if (importer.getId().equals(defaultImporterId)) {
+                                Set<ProjectImporterDescriptor> importersSet = new LinkedHashSet<>();
+                                importersSet.add(importer);
+                                importersByCategory.put(importer.getCategory(), importersSet);
+                                itr.remove();
+                            }
+                        }
+
+                        ProjectImporterDescriptor defaultImporter = null;
+                        for (ProjectImporterDescriptor importer : result) {
+                            if (importer.isInternal() || importer.getCategory() == null
+                                || importWizardRegistry.getWizardRegistrar(importer.getId()) == null) {
+                                continue;
+                            }
+
+                            if (importersByCategory.containsKey(importer.getCategory())) {
+                                importersByCategory.get(importer.getCategory()).add(importer);
+                            } else {
+                                Set<ProjectImporterDescriptor> importersSet = new LinkedHashSet<>();
+                                importersSet.add(importer);
+                                importersByCategory.put(importer.getCategory(), importersSet);
+                            }
+
+                            if (importer.getId().equals(defaultImporterId)) {
+                                defaultImporter = importer;
+                            }
+                        }
+
+                        setImporters(defaultImporter);
+                    }
+
+                    private void setImporters(final ProjectImporterDescriptor defaultImporter) {
+                        new Timer() {
+                            @Override
+                            public void run() {
+                                view.setImporters(importersByCategory);
+                                view.selectImporter(defaultImporter != null ? defaultImporter
+                                                                            : importersByCategory.get(importersByCategory.keySet().iterator().next())
+                                                                                                 .iterator().next() );
+                            }
+                        }.schedule(300);
+                    }
+                    @Override
+                    protected void onFailure(Throwable exception) {
+                        notificationManager.notify(locale.failedToImportProject(), FAIL, true);
+                    }
+                };
+
+        projectImportersService.getProjectImporters(appContext.getWorkspace().getId(), callback);
+    }
+

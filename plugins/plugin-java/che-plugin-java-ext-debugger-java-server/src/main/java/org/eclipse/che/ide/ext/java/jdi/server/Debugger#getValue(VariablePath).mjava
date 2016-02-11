@@ -1,0 +1,106 @@
+    /**
+     * Get value of variable with specified path. Each item in path is name of variable.
+     * <p/>
+     * Path must be specified according to the following rules:
+     * <ol>
+     * <li>If need to get field of this object of current frame then first element in array always should be
+     * 'this'.</li>
+     * <li>If need to get static field in current frame then first element in array always should be 'static'.</li>
+     * <li>If need to get local variable in current frame then first element should be the name of local variable.</li>
+     * </ol>
+     * <p/>
+     * Here is example. <br/>
+     * Assume we have next hierarchy of classes and breakpoint set in line: <i>// breakpoint</i>:
+     * <pre>
+     *    class A {
+     *       private String str;
+     *       ...
+     *    }
+     *
+     *    class B {
+     *       private A a;
+     *       ....
+     *
+     *       void method() {
+     *          A var = new A();
+     *          var.setStr(...);
+     *          a = var;
+     *          // breakpoint
+     *       }
+     *    }
+     * </pre>
+     * There are two ways to access variable <i>str</i> in class <i>A</i>:
+     * <ol>
+     * <li>Through field <i>a</i> in class <i>B</i>: ['this', 'a', 'str']</li>
+     * <li>Through local variable <i>var</i> in method <i>B.method()</i>: ['var', 'str']</li>
+     * </ol>
+     *
+     * @param variablePath
+     *         path to variable
+     * @return variable or <code>null</code> if variable not found
+     * @throws DebuggerStateException
+     *         when target JVM is not suspended
+     * @throws DebuggerException
+     *         when any other errors occur when try to access the variable
+     */
+    public Value getValue(VariablePath variablePath) throws DebuggerStateException, DebuggerException {
+        List<String> path = variablePath.getPath();
+        if (path.size() == 0) {
+            throw new IllegalArgumentException("Path to value may not be empty. ");
+        }
+        JdiVariable variable;
+        int offset;
+        if ("this".equals(path.get(0)) || "static".equals(path.get(0))) {
+            if (path.size() < 2) {
+                throw new IllegalArgumentException("Name of field required. ");
+            }
+            variable = getCurrentFrame().getFieldByName(path.get(1));
+            offset = 2;
+        } else {
+            try {
+                variable = getCurrentFrame().getLocalVariableByName(path.get(0));
+            } catch (DebuggerAbsentInformationException e) {
+                return null;
+            }
+            offset = 1;
+        }
+
+        for (int i = offset; variable != null && i < path.size(); i++) {
+            variable = variable.getValue().getVariableByName(path.get(i));
+        }
+
+        if (variable == null) {
+            return null;
+        }
+
+        Value value = DtoFactory.getInstance().createDto(Value.class).withValue(variable.getValue().getAsString());
+        for (JdiVariable ch : variable.getValue().getVariables()) {
+            VariablePath chPath = DtoFactory.getInstance().createDto(VariablePath.class).withPath(new ArrayList<>(path));
+            chPath.getPath().add(ch.getName());
+            if (ch instanceof JdiField) {
+                JdiField f = (JdiField)ch;
+                value.getVariables().add(DtoFactory.getInstance().createDto(Field.class)
+                                                   .withIsFinal(f.isFinal())
+                                                   .withIsStatic(f.isStatic())
+                                                   .withIsTransient(f.isTransient())
+                                                   .withIsVolatile(f.isVolatile())
+                                                   .withName(f.getName())
+                                                   .withExistInformation(true)
+                                                   .withValue(f.getValue().getAsString())
+                                                   .withType(f.getTypeName())
+                                                   .withVariablePath(chPath)
+                                                   .withPrimitive(f.isPrimitive()));
+            } else {
+                // Array element.
+                value.getVariables().add(DtoFactory.getInstance().createDto(Variable.class)
+                                                   .withName(ch.getName())
+                                                   .withExistInformation(true)
+                                                   .withValue(ch.getValue().getAsString())
+                                                   .withType(ch.getTypeName())
+                                                   .withVariablePath(chPath)
+                                                   .withPrimitive(ch.isPrimitive()));
+            }
+        }
+        return value;
+    }
+

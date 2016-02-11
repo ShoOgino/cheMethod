@@ -1,0 +1,25 @@
+    @Override
+    public void checkAlive() throws MachineException, NotFoundException {
+        // Read pid from file and run 'kill -0 [pid]' command.
+        final String isAliveCmd = format("[ -r %1$s ] && kill -0 $(cat %1$s) || echo 'Unable read PID file'", pidFilePath);
+        final ListLineConsumer output = new ListLineConsumer();
+        final String[] command = {"/bin/bash", "-c", isAliveCmd};
+        Exec exec;
+        try {
+            exec = docker.createExec(container, false, command);
+        } catch (IOException e) {
+            throw new MachineException(format("Error occurs while initializing command %s in docker container %s: %s",
+                                              Arrays.toString(command), container, e.getMessage()), e);
+        }
+        try {
+            docker.startExec(exec.getId(), new LogMessagePrinter(output));
+        } catch (IOException e) {
+            throw new MachineException(format("Error occurs while executing command %s in docker container %s: %s",
+                                              Arrays.toString(exec.getCommand()), container, e.getMessage()), e);
+        }
+        // 'kill -0 [pid]' is silent if process is running or print "No such process" message otherwise
+        if (!output.getText().isEmpty()) {
+            throw new NotFoundException(format("Process with pid %s not found", pid));
+        }
+    }
+

@@ -1,0 +1,51 @@
+    public LinkedModeModel getModel() {
+        CompilationUnit root = SharedASTProvider.getAST(compilationUnit, SharedASTProvider.WAIT_YES, null);
+
+        LinkedPositionGroupImpl group = new LinkedPositionGroupImpl();
+        ASTNode selectedNode = NodeFinder.perform(root, offset, 0);
+        if (!(selectedNode instanceof SimpleName)) {
+            return null;
+        }
+        SimpleName nameNode = (SimpleName)selectedNode;
+
+
+        fOriginalName = nameNode.getIdentifier();
+        final int pos = nameNode.getStartPosition();
+        ASTNode[] sameNodes = LinkedNodeFinder.findByNode(root, nameNode);
+
+        //TODO: copied from LinkedNamesAssistProposal#apply(..):
+        // sort for iteration order, starting with the node @ offset
+        Arrays.sort(sameNodes, new Comparator<ASTNode>() {
+            public int compare(ASTNode o1, ASTNode o2) {
+                return rank(o1) - rank(o2);
+            }
+
+            /**
+             * Returns the absolute rank of an <code>ASTNode</code>. Nodes
+             * preceding <code>pos</code> are ranked last.
+             *
+             * @param node the node to compute the rank for
+             * @return the rank of the node with respect to the invocation offset
+             */
+            private int rank(ASTNode node) {
+                int relativeRank = node.getStartPosition() + node.getLength() - pos;
+                if (relativeRank < 0)
+                    return Integer.MAX_VALUE + relativeRank;
+                else
+                    return relativeRank;
+            }
+        });
+        for (int i= 0; i < sameNodes.length; i++) {
+            ASTNode elem= sameNodes[i];
+            RegionImpl position = new RegionImpl();
+            position.setOffset(elem.getStartPosition());
+            position.setLength(elem.getLength());
+            group.addPositions(position);
+        }
+        LinkedModeModelImpl model = new LinkedModeModelImpl();
+        model.addGroups(group);
+        return model;
+
+
+    }
+

@@ -1,0 +1,39 @@
+    /**
+     * Returns all members of certain account.
+     *
+     * @param id
+     *         account identifier
+     * @return account members
+     * @throws NotFoundException
+     *         when account with given identifier doesn't exist
+     * @throws ServerException
+     *         when some error occurred while retrieving accounts or members
+     * @see MemberDescriptor
+     * @see #addMember(String, NewMembership, SecurityContext)
+     * @see #removeMember(String, String)
+     */
+    @ApiOperation(value = "Get account members",
+                  notes = "Get all members for a specific account. This API call requires account/owner, system/admin or system/manager role.",
+                  response = MemberDescriptor.class,
+                  responseContainer = "List",
+                  position = 7)
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "OK"),
+            @ApiResponse(code = 404, message = "Account ID not found"),
+            @ApiResponse(code = 500, message = "Internal Server Error")})
+    @GET
+    @Path("/{id}/members")
+    @RolesAllowed({"account/owner", "system/admin", "system/manager"})
+    @Produces(APPLICATION_JSON)
+    public List<MemberDescriptor> getMembers(@ApiParam(value = "Account ID")
+                                             @PathParam("id") String id,
+                                             @Context SecurityContext securityContext) throws NotFoundException, ServerException {
+        final Account account = accountDao.getById(id);
+        final List<Member> members = accountDao.getMembers(id);
+        final List<MemberDescriptor> result = new ArrayList<>(members.size());
+        for (Member member : members) {
+            result.add(toDescriptor(member, account, securityContext));
+        }
+        return result;
+    }
+

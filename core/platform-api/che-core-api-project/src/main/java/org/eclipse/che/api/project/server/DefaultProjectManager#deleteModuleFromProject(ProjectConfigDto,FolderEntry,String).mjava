@@ -1,0 +1,31 @@
+    private void deleteModuleFromProject(ProjectConfigDto project, FolderEntry entryToDelete, String workspaceId) throws ServerException,
+                                                                                                                         NotFoundException,
+                                                                                                                         ConflictException,
+                                                                                                                         ForbiddenException {
+        String pathToModule = entryToDelete.getPath();
+        String pathToParentModule = pathToModule.substring(0, pathToModule.lastIndexOf("/"));
+
+        ProjectConfigDto parentModule = project.findModule(pathToParentModule);
+        ProjectConfigDto moduleToDelete = project.findModule(pathToModule);
+
+        if (parentModule == null) {
+            parentModule = project;
+        }
+
+        if (moduleToDelete == null) {
+            throw new NotFoundException("Module " + pathToModule + " not found");
+        }
+
+        parentModule.getModules().remove(moduleToDelete);
+
+        updateProjectInWorkspace(workspaceId, project);
+
+        RemoveModuleHandler moduleHandler = this.getHandlers().getRemoveModuleHandler(moduleToDelete.getType());
+
+        if (moduleHandler != null) {
+            moduleHandler.onRemoveModule(entryToDelete.getParent(), moduleToDelete);
+        }
+
+        deleteEntryAndFireEvent(entryToDelete, workspaceId);
+    }
+

@@ -1,0 +1,24 @@
+    @Test
+    public void shouldReturnStatus409OnSaveFactoryIfImageHasUnsupportedMediaType() throws Exception {
+        // given
+        Factory factory = prepareFactoryWithGivenStorage("git", "http://github.com/codenvy/platform-api.git");
+        URL resource = Thread.currentThread().getContextClassLoader().getResource("100x100_image.jpeg");
+        assertNotNull(resource);
+        Path path = Paths.get(resource.toURI());
+
+        when(factoryStore.saveFactory(any(Factory.class), anySetOf(FactoryImage.class))).thenReturn(CORRECT_FACTORY_ID);
+        when(factoryStore.getFactory(CORRECT_FACTORY_ID)).thenReturn(factory);
+
+        // when, then
+        Response response = given().auth()
+                                   .basic(JettyHttpServer.ADMIN_USER_NAME, JettyHttpServer.ADMIN_USER_PASSWORD)//
+                                   .multiPart("factory", JsonHelper.toJson(factory), MediaType.APPLICATION_JSON)//
+                                   .multiPart("image", path.toFile(), "image/tiff")//
+                                   .expect()
+                                   .statusCode(409)
+                                   .when().post("/private" + SERVICE_PATH);
+
+        assertEquals(dto.createDtoFromJson(response.getBody().asString(), ServiceError.class).getMessage(),
+                     "Image media type 'image/tiff' is unsupported.");
+    }
+
