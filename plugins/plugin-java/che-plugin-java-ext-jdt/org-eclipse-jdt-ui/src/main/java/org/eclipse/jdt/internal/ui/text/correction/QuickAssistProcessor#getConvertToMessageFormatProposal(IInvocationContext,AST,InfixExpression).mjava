@@ -1,0 +1,106 @@
+	private static ASTRewriteCorrectionProposal getConvertToMessageFormatProposal(IInvocationContext context, AST ast, InfixExpression oldInfixExpression) {
+
+		ICompilationUnit cu= context.getCompilationUnit();
+		boolean is50OrHigher= JavaModelUtil.is50OrHigher(cu.getJavaProject());
+
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		CompilationUnit root= context.getASTRoot();
+		ImportRewrite importRewrite= StubUtility.createImportRewrite(root, true);
+		ContextSensitiveImportRewriteContext
+				importContext= new ContextSensitiveImportRewriteContext(root, oldInfixExpression.getStartPosition(), importRewrite);
+
+		// collect operands
+		List<Expression> operands= new ArrayList<Expression>();
+		collectInfixPlusOperands(oldInfixExpression, operands);
+
+		List<Expression> formatArguments= new ArrayList<Expression>();
+		String formatString= ""; //$NON-NLS-1$
+		int i= 0;
+		for (Iterator<Expression> iterator= operands.iterator(); iterator.hasNext();) {
+			Expression operand= iterator.next();
+
+			if (operand instanceof StringLiteral) {
+				String value= ((StringLiteral) operand).getEscapedValue();
+				value= value.substring(1, value.length() - 1);
+				value= value.replaceAll("'", "''"); //$NON-NLS-1$ //$NON-NLS-2$
+				formatString+= value;
+			} else {
+				formatString+= "{" + i + "}"; //$NON-NLS-1$ //$NON-NLS-2$
+
+				Expression argument;
+				if (is50OrHigher) {
+					argument= (Expression) rewrite.createCopyTarget(operand);
+				} else {
+					ITypeBinding binding= operand.resolveTypeBinding();
+					if (binding == null)
+						return null;
+
+					argument= (Expression) rewrite.createCopyTarget(operand);
+
+					if (binding.isPrimitive()) {
+						ITypeBinding boxedBinding= Bindings.getBoxedTypeBinding(binding, ast);
+						if (boxedBinding != binding) {
+							Type boxedType= importRewrite.addImport(boxedBinding, ast, importContext);
+							ClassInstanceCreation cic= ast.newClassInstanceCreation();
+							cic.setType(boxedType);
+							cic.arguments().add(argument);
+							argument= cic;
+						}
+					}
+				}
+
+				formatArguments.add(argument);
+				i++;
+			}
+		}
+
+		if (formatArguments.size() == 0)
+			return null;
+
+		String label= CorrectionMessages.QuickAssistProcessor_convert_to_message_format;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.CONVERT_TO_MESSAGE_FORMAT, image);
+		proposal.setCommandId(CONVERT_TO_MESSAGE_FORMAT_ID);
+
+		proposal.setImportRewrite(importRewrite);
+
+		String messageType= importRewrite.addImport("java.text.MessageFormat", importContext); //$NON-NLS-1$
+
+		MethodInvocation formatInvocation= ast.newMethodInvocation();
+		formatInvocation.setExpression(ast.newName(messageType));
+		formatInvocation.setName(ast.newSimpleName("format")); //$NON-NLS-1$
+
+		List<Expression> arguments= formatInvocation.arguments();
+
+		StringLiteral formatStringArgument= ast.newStringLiteral();
+		formatStringArgument.setEscapedValue("\"" + formatString + "\""); //$NON-NLS-1$ //$NON-NLS-2$
+		arguments.add(formatStringArgument);
+
+		if (is50OrHigher) {
+			for (Iterator<Expression> iterator= formatArguments.iterator(); iterator.hasNext();) {
+				arguments.add(iterator.next());
+			}
+		} else {
+			ArrayCreation objectArrayCreation= ast.newArrayCreation();
+
+			Type objectType= ast.newSimpleType(ast.newSimpleName("Object")); //$NON-NLS-1$
+			ArrayType arrayType= ast.newArrayType(objectType);
+			objectArrayCreation.setType(arrayType);
+
+			ArrayInitializer arrayInitializer= ast.newArrayInitializer();
+
+			List<Expression> initializerExpressions= arrayInitializer.expressions();
+			for (Iterator<Expression> iterator= formatArguments.iterator(); iterator.hasNext();) {
+				initializerExpressions.add(iterator.next());
+			}
+			objectArrayCreation.setInitializer(arrayInitializer);
+
+			arguments.add(objectArrayCreation);
+		}
+
+		rewrite.replace(oldInfixExpression, formatInvocation, null);
+
+		return proposal;
+	}
+

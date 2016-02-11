@@ -1,0 +1,54 @@
+	private SearchResultGroup[] batchFindNewOccurrences(IMethod[] wcNewMethods, final IMethod[] wcOldMethods, ICompilationUnit[] newDeclarationWCs, IProgressMonitor pm, RefactoringStatus status) throws CoreException {
+		pm.beginTask("", 2); //$NON-NLS-1$
+
+		SearchPattern refsPattern= RefactoringSearchEngine.createOrPattern(wcNewMethods, IJavaSearchConstants.REFERENCES);
+		SearchParticipant[] searchParticipants= SearchUtils.getDefaultSearchParticipants();
+		IJavaSearchScope scope= RefactoringScopeFactory.create(wcNewMethods);
+
+		MethodOccurenceCollector requestor;
+		if (getDelegateUpdating()) {
+			// There will be two new matches inside the delegate(s) (the invocation
+			// and the javadoc) which are OK and must not be reported.
+			// Note that except these ocurrences, the delegate bodies are empty
+			// (as they were created this way).
+			requestor= new MethodOccurenceCollector(getNewElementName()) {
+				@Override
+				public void acceptSearchMatch(ICompilationUnit unit, SearchMatch match) throws CoreException {
+					for (int i= 0; i < wcOldMethods.length; i++)
+						if (wcOldMethods[i].equals(match.getElement()))
+							return;
+					super.acceptSearchMatch(unit, match);
+				}
+			};
+		} else
+			requestor= new MethodOccurenceCollector(getNewElementName());
+
+		SearchEngine searchEngine= new SearchEngine(fWorkingCopyOwner);
+
+		ArrayList<ICompilationUnit> needWCs= new ArrayList<ICompilationUnit>();
+		HashSet<ICompilationUnit> declaringCUs= new HashSet<ICompilationUnit>(newDeclarationWCs.length);
+		for (int i= 0; i < newDeclarationWCs.length; i++)
+			declaringCUs.add(newDeclarationWCs[i].getPrimary());
+		for (int i= 0; i < fOccurrences.length; i++) {
+			ICompilationUnit cu= fOccurrences[i].getCompilationUnit();
+			if (! declaringCUs.contains(cu))
+				needWCs.add(cu);
+		}
+		ICompilationUnit[] otherWCs= null;
+		try {
+			otherWCs= RenameAnalyzeUtil.createNewWorkingCopies(
+					needWCs.toArray(new ICompilationUnit[needWCs.size()]),
+					fChangeManager, fWorkingCopyOwner, new SubProgressMonitor(pm, 1));
+			searchEngine.search(refsPattern, searchParticipants, scope,	requestor, new SubProgressMonitor(pm, 1));
+		} finally {
+			pm.done();
+			if (otherWCs != null) {
+				for (int i= 0; i < otherWCs.length; i++) {
+					otherWCs[i].discardWorkingCopy();
+				}
+			}
+		}
+		SearchResultGroup[] newResults= RefactoringSearchEngine.groupByCu(requestor.getResults(), status);
+		return newResults;
+	}
+

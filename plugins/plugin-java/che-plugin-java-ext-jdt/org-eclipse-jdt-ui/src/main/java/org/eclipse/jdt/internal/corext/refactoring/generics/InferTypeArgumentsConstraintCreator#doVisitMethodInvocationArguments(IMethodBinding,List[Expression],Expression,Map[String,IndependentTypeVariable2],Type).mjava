@@ -1,0 +1,148 @@
+	private void doVisitMethodInvocationArguments(IMethodBinding methodBinding, List<Expression> arguments, Expression receiver, Map<String, IndependentTypeVariable2> methodTypeVariables, Type createdType) {
+		//TODO: connect generic method type parameters, e.g. <T> void take(T t, List<T> ts)
+		ITypeBinding[] declaredParameterTypes= methodBinding.getMethodDeclaration().getParameterTypes();
+		int lastParamIdx= declaredParameterTypes.length - 1;
+		for (int i= 0; i < arguments.size(); i++) {
+			Expression arg= arguments.get(i);
+			ConstraintVariable2 argCv= getConstraintVariable(arg);
+			if (argCv == null)
+				continue;
+
+			TType declaredParameterType;
+			int iParam;
+			if (! methodBinding.isVarargs() || i < lastParamIdx) {
+				iParam= i;
+				declaredParameterType= fTCModel.createTType(declaredParameterTypes[iParam]);
+			} else { // isVararg() && i >= lastParamIdx
+				iParam= lastParamIdx;
+				declaredParameterType= fTCModel.createTType(declaredParameterTypes[iParam]);
+				if (i == lastParamIdx && canAssignToVararg(
+						fTCModel.createTType(arg.resolveTypeBinding()),
+						(org.eclipse.jdt.internal.corext.refactoring.typeconstraints.types.ArrayType) declaredParameterType)) {
+					//OK: argument will not be packed into an array
+				} else {
+					declaredParameterType= ((org.eclipse.jdt.internal.corext.refactoring.typeconstraints.types.ArrayType) declaredParameterType).getComponentType();
+				}
+			}
+
+			if (declaredParameterType.isTypeVariable()) {
+
+				ConstraintVariable2 methodTypeVariableCv= methodTypeVariables.get(declaredParameterType.getBindingKey());
+				if (methodTypeVariableCv != null) {
+					// e.g. t in "<T> void take(T t, List<T> ts)"
+					fTCModel.createSubtypeConstraint(argCv, methodTypeVariableCv);
+
+				} else {
+					if (createdType != null) {
+						//e.g. Tuple<T1, T2>: constructor Tuple(T1 t1, T2 t2)
+						ConstraintVariable2 createdTypeCv= getConstraintVariable(createdType);
+						ConstraintVariable2 elementCv= fTCModel.getElementVariable(createdTypeCv, (TypeVariable) declaredParameterType);
+						// [arg] <= Elem[createdType]:
+						fTCModel.createSubtypeConstraint(argCv, elementCv);
+					}
+					if (receiver != null) {
+						//e.g. "Collection<E>: boolean add(E o)"
+						ConstraintVariable2 expressionCv= getConstraintVariable(receiver);
+						ConstraintVariable2 elementCv= fTCModel.getElementVariable(expressionCv, (TypeVariable) declaredParameterType);
+
+						//	//TypeVariableConstraintVariable2 typeVariableCv= fTCModel.makeTypeVariableVariable(declaredParameterType);
+						//				ConstraintVariable2 elementCv= fTCModel.makeElementVariable(expressionCv, typeVariableCv);
+						//TODO: Somebody must connect typeVariableCv to corresponding typeVariableCVs of supertypes.
+						//- Do only once for binaries.
+						//- Do when passing for sources.
+						//- Keep a flag in CV whether done?
+						//- Do in one pass over all TypeVarCvs at the end?
+
+						// [arg] <= Elem[receiver]:
+						fTCModel.createSubtypeConstraint(argCv, elementCv);
+					} else {
+						//TODO: ???
+					}
+				}
+			} else if (declaredParameterType.isParameterizedType()) {
+				TType[] typeArguments= ((ParameterizedType) declaredParameterType).getTypeArguments();
+				TypeVariable[] typeParameters= ((GenericType) declaredParameterType.getTypeDeclaration()).getTypeParameters();
+				for (int ta= 0; ta < typeArguments.length; ta++) {
+					TType typeArgument= typeArguments[ta];
+					CollectionElementVariable2 argElementCv= fTCModel.getElementVariable(argCv, typeParameters[ta]);
+					if (typeArgument.isWildcardType()) {
+						// Elem[arg] <= Elem[receiver]
+						WildcardType wildcardTypeArgument= (WildcardType) typeArgument;
+						TType bound= wildcardTypeArgument.getBound();
+						if (bound != null && bound.isTypeVariable()) {
+							ConstraintVariable2 methodTypeVariableCv= methodTypeVariables.get(bound.getBindingKey());
+							if (methodTypeVariableCv != null) {
+								//e.g. in Collections: <T ..> T min(Collection<? extends T> coll):
+								createWildcardConstraint(wildcardTypeArgument, argElementCv, methodTypeVariableCv);
+							} else {
+								if (createdType != null) {
+									ConstraintVariable2 createdTypeCv= getConstraintVariable(createdType);
+									CollectionElementVariable2 elementCv= fTCModel.getElementVariable(createdTypeCv, typeParameters[ta]);
+									createWildcardConstraint(wildcardTypeArgument, argElementCv, elementCv);
+								}
+								if (receiver != null) {
+									//e.g. Collection<E>: boolean addAll(Collection<? extends E> c)
+									ConstraintVariable2 expressionCv= getConstraintVariable(receiver);
+									CollectionElementVariable2 elementCv= fTCModel.getElementVariable(expressionCv, typeParameters[ta]);
+									createWildcardConstraint(wildcardTypeArgument, argElementCv, elementCv);
+								} else {
+									//TODO: ???
+								}
+							}
+
+						} else {
+							//TODO
+						}
+
+					} else if (typeArgument.isTypeVariable()) {
+						ConstraintVariable2 methodTypeVariableCv= methodTypeVariables.get(typeArgument.getBindingKey());
+						if (methodTypeVariableCv != null) {
+							//e.g. in Collections: <T> List<T> synchronizedList(List<T> list)
+							fTCModel.createEqualsConstraint(argElementCv, methodTypeVariableCv);
+						} else {
+							if (createdType != null) {
+								ConstraintVariable2 createdTypeCv= getConstraintVariable(createdType);
+								ConstraintVariable2 elementCv= fTCModel.getElementVariable(createdTypeCv, (TypeVariable) typeArgument);
+								fTCModel.createEqualsConstraint(argElementCv, elementCv);
+							}
+							if (receiver != null) {
+								ConstraintVariable2 expressionCv= getConstraintVariable(receiver);
+								ConstraintVariable2 elementCv= fTCModel.getElementVariable(expressionCv, (TypeVariable) typeArgument);
+								fTCModel.createEqualsConstraint(argElementCv, elementCv);
+							} else {
+								//TODO: ???
+							}
+						}
+
+					} else {
+						ImmutableTypeVariable2 typeArgumentCv= fTCModel.makeImmutableTypeVariable(typeArgument);
+						fTCModel.createEqualsConstraint(argElementCv, typeArgumentCv);
+					}
+				}
+
+			} else if (declaredParameterType.isArrayType()) {
+				//TODO: check methodBinding.isVarargs() !
+				TType declaredElementType= ((org.eclipse.jdt.internal.corext.refactoring.typeconstraints.types.ArrayType) declaredParameterType).getElementType();
+				if (declaredElementType.isTypeVariable()) {
+					ConstraintVariable2 methodTypeVariableCv= methodTypeVariables.get(declaredElementType.getBindingKey());
+					if (methodTypeVariableCv != null) {
+						ArrayElementVariable2 argElementCv= fTCModel.getArrayElementVariable(argCv);
+						//e.g. in Arrays: <T> List<T> asList(T... a): //<T> List<T> asList(T[] a)
+						fTCModel.createEqualsConstraint(argElementCv, methodTypeVariableCv);
+					} else {
+						//TODO: receiver, createdType
+					}
+				} else {
+					//TODO
+				}
+
+			} else { //TODO: not else, but always? Other kinds of type references?
+				if (! InferTypeArgumentsTCModel.isAGenericType(declaredParameterType))
+					continue;
+				ParameterTypeVariable2 parameterTypeCv= fTCModel.makeParameterTypeVariable(methodBinding, iParam);
+				// Elem[param] =^= Elem[arg]
+				fTCModel.createElementEqualsConstraints(parameterTypeCv, argCv);
+			}
+		}
+	}
+

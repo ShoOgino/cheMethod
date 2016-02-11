@@ -1,0 +1,85 @@
+	private static boolean getJoinOrIfStatementsProposals(IInvocationContext context, ASTNode covering, ArrayList<ASTNode> coveredNodes, Collection<ICommandAccess> resultingCollections) {
+		Operator orOperator= InfixExpression.Operator.CONDITIONAL_OR;
+		if (coveredNodes.size() < 2)
+			return false;
+		// check that all covered nodes are IfStatement's with same 'then' statement and without 'else'
+		String commonThenSource= null;
+		for (Iterator<ASTNode> iter= coveredNodes.iterator(); iter.hasNext();) {
+			ASTNode node= iter.next();
+			if (!(node instanceof IfStatement))
+				return false;
+			//
+			IfStatement ifStatement= (IfStatement) node;
+			if (ifStatement.getElseStatement() != null)
+				return false;
+			//
+			Statement thenStatement= ifStatement.getThenStatement();
+			try {
+				String thenSource= context.getCompilationUnit().getBuffer().getText(thenStatement.getStartPosition(), thenStatement.getLength());
+				if (commonThenSource == null) {
+					commonThenSource= thenSource;
+				} else {
+					if (!commonThenSource.equals(thenSource))
+						return false;
+				}
+			} catch (Throwable e) {
+				return false;
+			}
+		}
+		if (resultingCollections == null) {
+			return true;
+		}
+		//
+		final AST ast= covering.getAST();
+		final ASTRewrite rewrite= ASTRewrite.create(ast);
+		// prepare OR'ed condition
+		InfixExpression condition= null;
+		boolean hasRightOperand= false;
+		Statement thenStatement= null;
+		for (Iterator<ASTNode> iter= coveredNodes.iterator(); iter.hasNext();) {
+			IfStatement ifStatement= (IfStatement) iter.next();
+			if (thenStatement == null)
+				thenStatement= (Statement) rewrite.createCopyTarget(ifStatement.getThenStatement());
+			if (condition == null) {
+				condition= ast.newInfixExpression();
+				condition.setOperator(orOperator);
+				condition.setLeftOperand(getParenthesizedExpressionIfNeeded(ast, rewrite, ifStatement.getExpression(), condition, InfixExpression.LEFT_OPERAND_PROPERTY));
+			} else if (!hasRightOperand) {
+				condition.setRightOperand(getParenthesizedExpressionIfNeeded(ast, rewrite, ifStatement.getExpression(), condition, InfixExpression.RIGHT_OPERAND_PROPERTY));
+				hasRightOperand= true;
+			} else {
+				InfixExpression newCondition= ast.newInfixExpression();
+				newCondition.setOperator(orOperator);
+				newCondition.setLeftOperand(condition);
+				newCondition.setRightOperand(getParenthesizedExpressionIfNeeded(ast, rewrite, ifStatement.getExpression(), condition, InfixExpression.RIGHT_OPERAND_PROPERTY));
+				condition= newCondition;
+			}
+		}
+		// prepare new IfStatement with OR'ed condition
+		IfStatement newIf= ast.newIfStatement();
+		newIf.setExpression(condition);
+		newIf.setThenStatement(thenStatement);
+		//
+		ListRewrite listRewriter= null;
+		for (Iterator<ASTNode> iter= coveredNodes.iterator(); iter.hasNext();) {
+			IfStatement ifStatement= (IfStatement) iter.next();
+			if (listRewriter == null) {
+				Block sourceBlock= (Block) ifStatement.getParent();
+				//int insertIndex = sourceBlock.statements().indexOf(ifStatement);
+				listRewriter= rewrite.getListRewrite(sourceBlock, (ChildListPropertyDescriptor) ifStatement.getLocationInParent());
+			}
+			if (newIf != null) {
+				listRewriter.replace(ifStatement, newIf, null);
+				newIf= null;
+			} else {
+				listRewriter.remove(ifStatement, null);
+			}
+		}
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_joinWithOr_description;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.JOIN_IF_STATEMENTS_WITH_OR, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

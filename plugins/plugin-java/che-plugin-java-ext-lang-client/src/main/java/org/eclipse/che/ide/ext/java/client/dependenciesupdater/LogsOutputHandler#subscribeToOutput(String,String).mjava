@@ -12,28 +12,30 @@
 
         channelParameters.put(channel, ChannelParameters.of(console, new LinkedList<String>()));
 
+        outputHandler = new SubscriptionHandler<String>(new StringUnmarshallerWS()) {
+            @Override
+            protected void onMessageReceived(String logs) {
+                List<String> lines = StringUtils.split(logs, "\n");
+
+                channelParameters.get(channel).addAllLines(lines);
+
+                if (channelParameters.get(channel).isOutputEnded()) {
+                    flushBuffer(channel);
+
+                    return;
+                }
+
+                printOutput(channel);
+            }
+
+            @Override
+            protected void onErrorReceived(Throwable exception) {
+                Log.error(getClass(), exception);
+            }
+        };
+
         try {
-            messageBus.subscribe(channel, new SubscriptionHandler<String>(new StringUnmarshallerWS()) {
-                @Override
-                protected void onMessageReceived(String logs) {
-                    List<String> lines = StringUtils.split(logs, "\n");
-
-                    channelParameters.get(channel).addAllLines(lines);
-
-                    if (channelParameters.get(channel).isOutputEnded()) {
-                        flushBuffer(channel);
-
-                        return;
-                    }
-
-                    printOutput(channel);
-                }
-
-                @Override
-                protected void onErrorReceived(Throwable exception) {
-                    Log.error(getClass(), exception);
-                }
-            });
+            messageBus.subscribe(channel, outputHandler);
         } catch (WebSocketException e) {
             e.printStackTrace();
         }

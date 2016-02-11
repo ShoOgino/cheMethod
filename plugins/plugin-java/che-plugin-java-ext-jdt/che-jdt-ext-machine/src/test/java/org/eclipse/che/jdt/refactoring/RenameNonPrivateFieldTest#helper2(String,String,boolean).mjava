@@ -1,0 +1,56 @@
+	private void helper2(String fieldName, String newFieldName, boolean createDelegates) throws Exception {
+		ParticipantTesting.reset();
+		ICompilationUnit cu = createCUfromTestFile(getPackageP(), "A");
+		IType classA = getType(cu, "A");
+		IField field = classA.getField(fieldName);
+		boolean isEnum= JdtFlags.isEnum(field);
+		String id= isEnum ? IJavaRefactorings.RENAME_ENUM_CONSTANT : IJavaRefactorings.RENAME_FIELD;
+		RenameJavaElementDescriptor descriptor= RefactoringSignatureDescriptorFactory.createRenameJavaElementDescriptor(id);
+		descriptor.setJavaElement(field);
+		descriptor.setNewName(newFieldName);
+		descriptor.setUpdateReferences(fUpdateReferences);
+		descriptor.setUpdateTextualOccurrences(fUpdateTextualMatches);
+		if (!isEnum) {
+			descriptor.setRenameGetters(fRenameGetter);
+			descriptor.setRenameSetters(fRenameSetter);
+			descriptor.setKeepOriginal(createDelegates);
+			descriptor.setDeprecateDelegate(true);
+		}
+		RenameRefactoring refactoring= (RenameRefactoring) createRefactoring(descriptor);
+		RenameFieldProcessor processor= (RenameFieldProcessor) refactoring.getProcessor();
+
+		List elements= new ArrayList();
+		elements.add(field);
+		List args= new ArrayList();
+		args.add(new RenameArguments(newFieldName, fUpdateReferences));
+		if (fRenameGetter) {
+			elements.add(processor.getGetter());
+			args.add(new RenameArguments(processor.getNewGetterName(), fUpdateReferences));
+		}
+		if (fRenameSetter) {
+			elements.add(processor.getSetter());
+			args.add(new RenameArguments(processor.getNewSetterName(), fUpdateReferences));
+		}
+		String[] renameHandles= ParticipantTesting.createHandles(elements.toArray());
+
+		RefactoringStatus result= performRefactoring(refactoring);
+		assertEquals("was supposed to pass", null, result);
+		assertEqualLines("invalid renaming", getFileContents(getOutputTestFileName("A")), cu.getSource());
+
+		ParticipantTesting.testRename(
+				renameHandles,
+				(RenameArguments[]) args.toArray(new RenameArguments[args.size()]));
+
+		assertTrue("anythingToUndo", RefactoringCore.getUndoManager().anythingToUndo());
+		assertTrue("! anythingToRedo", !RefactoringCore.getUndoManager().anythingToRedo());
+
+		RefactoringCore.getUndoManager().performUndo(null, new NullProgressMonitor());
+		assertEqualLines("invalid undo", getFileContents(getInputTestFileName("A")), cu.getSource());
+
+		assertTrue("! anythingToUndo", !RefactoringCore.getUndoManager().anythingToUndo());
+		assertTrue("anythingToRedo", RefactoringCore.getUndoManager().anythingToRedo());
+
+		RefactoringCore.getUndoManager().performRedo(null, new NullProgressMonitor());
+		assertEqualLines("invalid redo", getFileContents(getOutputTestFileName("A")), cu.getSource());
+	}
+

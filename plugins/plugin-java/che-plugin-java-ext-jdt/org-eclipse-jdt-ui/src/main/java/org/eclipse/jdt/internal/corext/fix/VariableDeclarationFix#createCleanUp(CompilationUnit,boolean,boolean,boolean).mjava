@@ -1,0 +1,22 @@
+	public static ICleanUpFix createCleanUp(CompilationUnit compilationUnit,
+											boolean addFinalFields, boolean addFinalParameters, boolean addFinalLocals) {
+
+		if (!addFinalFields && !addFinalParameters && !addFinalLocals)
+			return null;
+
+		HashMap<IBinding, List<SimpleName>> writtenNames = new HashMap<IBinding, List<SimpleName>>();
+		WrittenNamesFinder finder = new WrittenNamesFinder(writtenNames);
+		compilationUnit.accept(finder);
+
+		List<ModifierChangeOperation> operations = new ArrayList<ModifierChangeOperation>();
+		VariableDeclarationFinder visitor =
+				new VariableDeclarationFinder(addFinalFields, addFinalParameters, addFinalLocals, operations, writtenNames);
+		compilationUnit.accept(visitor);
+
+		if (operations.isEmpty())
+			return null;
+
+		return new VariableDeclarationFix(FixMessages.VariableDeclarationFix_add_final_change_name, compilationUnit,
+										  operations.toArray(new CompilationUnitRewriteOperation[operations.size()]));
+	}
+

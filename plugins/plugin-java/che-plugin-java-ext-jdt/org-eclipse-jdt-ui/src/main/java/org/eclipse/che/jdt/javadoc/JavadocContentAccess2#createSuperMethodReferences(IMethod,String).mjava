@@ -1,0 +1,52 @@
+    private static StringBuffer createSuperMethodReferences(final IMethod method, String urlPrefix) throws JavaModelException {
+		IType type = method.getDeclaringType();
+		ITypeHierarchy hierarchy = SuperTypeHierarchyCache.getTypeHierarchy(type);
+		final MethodOverrideTester tester = SuperTypeHierarchyCache.getMethodOverrideTester(type);
+
+		final ArrayList<IMethod> superInterfaceMethods = new ArrayList<IMethod>();
+		final IMethod[] superClassMethod = {null};
+		new InheritDocVisitor() {
+			@Override
+			public Object visit(IType currType) throws JavaModelException {
+				IMethod overridden = tester.findOverriddenMethodInType(currType, method);
+				if (overridden == null)
+					return InheritDocVisitor.CONTINUE;
+
+				if (currType.isInterface())
+					superInterfaceMethods.add(overridden);
+				else
+					superClassMethod[0] = overridden;
+
+				return STOP_BRANCH;
+			}
+		}.visitInheritDoc(type, hierarchy);
+
+		boolean hasSuperInterfaceMethods = superInterfaceMethods.size() != 0;
+		if (!hasSuperInterfaceMethods && superClassMethod[0] == null)
+			return null;
+
+		StringBuffer buf = new StringBuffer();
+		buf.append("<div>"); //$NON-NLS-1$
+		if (hasSuperInterfaceMethods) {
+			buf.append("<b>"); //$NON-NLS-1$
+			buf.append(JavaDocMessages.JavaDoc2HTMLTextReader_specified_by_section);
+			buf.append("</b> "); //$NON-NLS-1$
+			for (Iterator<IMethod> iter = superInterfaceMethods.iterator(); iter.hasNext(); ) {
+				IMethod overridden = iter.next();
+				buf.append(createMethodInTypeLinks(overridden, urlPrefix));
+				if (iter.hasNext())
+					buf.append(JavaElementLabels.COMMA_STRING);
+			}
+		}
+		if (superClassMethod[0] != null) {
+			if (hasSuperInterfaceMethods)
+				buf.append(JavaElementLabels.COMMA_STRING);
+			buf.append("<b>"); //$NON-NLS-1$
+			buf.append(JavaDocMessages.JavaDoc2HTMLTextReader_overrides_section);
+			buf.append("</b> "); //$NON-NLS-1$
+			buf.append(createMethodInTypeLinks(superClassMethod[0], urlPrefix));
+		}
+		buf.append("</div>"); //$NON-NLS-1$
+		return buf;
+    }
+

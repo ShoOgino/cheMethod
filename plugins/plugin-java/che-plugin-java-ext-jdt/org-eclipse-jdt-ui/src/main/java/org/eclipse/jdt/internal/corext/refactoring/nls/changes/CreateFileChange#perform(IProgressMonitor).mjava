@@ -1,0 +1,44 @@
+	@Override
+	public Change perform(IProgressMonitor pm) throws CoreException, OperationCanceledException {
+
+		InputStream is= null;
+		try {
+			pm.beginTask(NLSChangesMessages.createFile_creating_resource, 3);
+
+			initializeEncoding();
+			IFile file= getOldFile(new SubProgressMonitor(pm, 1));
+			/*
+			if (file.exists()) {
+				CompositeChange composite= new CompositeChange(getName());
+				composite.add(new DeleteFileChange(file));
+				composite.add(new CreateFileChange(fPath, fSource, fEncoding, fStampToRestore, fExplicitEncoding));
+				pm.worked(1);
+				return composite.perform(new SubProgressMonitor(pm, 1));
+			} else { */
+			try {
+				is= new ByteArrayInputStream(fSource.getBytes(fEncoding));
+				file.create(is, false, new SubProgressMonitor(pm, 1));
+				if (fStampToRestore != IResource.NULL_STAMP) {
+					file.revertModificationStamp(fStampToRestore);
+				}
+				if (fExplicitEncoding) {
+					file.setCharset(fEncoding, new SubProgressMonitor(pm, 1));
+				} else {
+					pm.worked(1);
+				}
+				return new DeleteResourceChange(file.getFullPath(), true);
+			} catch (UnsupportedEncodingException e) {
+				throw new JavaModelException(e, IJavaModelStatusConstants.IO_EXCEPTION);
+			}
+		} finally {
+			try {
+				if (is != null)
+					is.close();
+			} catch (IOException ioe) {
+				throw new JavaModelException(ioe, IJavaModelStatusConstants.IO_EXCEPTION);
+			} finally {
+				pm.done();
+			}
+		}
+	}
+

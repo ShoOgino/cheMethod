@@ -1,0 +1,60 @@
+	public static void addChangeSenderTypeProposals(IInvocationContext context, Expression nodeToCast, ITypeBinding castTypeBinding, boolean isAssignedNode, int relevance, Collection<ICommandAccess> proposals) throws
+																																																				  JavaModelException {
+		IBinding callerBinding= Bindings.resolveExpressionBinding(nodeToCast, false);
+
+		ICompilationUnit cu= context.getCompilationUnit();
+		CompilationUnit astRoot= context.getASTRoot();
+
+		ICompilationUnit targetCu= null;
+		ITypeBinding declaringType= null;
+		IBinding callerBindingDecl= callerBinding;
+		if (callerBinding instanceof IVariableBinding) {
+			IVariableBinding variableBinding= (IVariableBinding) callerBinding;
+
+			if (variableBinding.isEnumConstant()) {
+				return;
+			}
+			if (!variableBinding.isField()) {
+				targetCu= cu;
+			} else {
+				callerBindingDecl= variableBinding.getVariableDeclaration();
+				ITypeBinding declaringClass= variableBinding.getDeclaringClass();
+				if (declaringClass == null) {
+					return; // array length
+				}
+				declaringType= declaringClass.getTypeDeclaration();
+			}
+		} else if (callerBinding instanceof IMethodBinding) {
+			IMethodBinding methodBinding= (IMethodBinding) callerBinding;
+			if (!methodBinding.isConstructor()) {
+				declaringType= methodBinding.getDeclaringClass().getTypeDeclaration();
+				callerBindingDecl= methodBinding.getMethodDeclaration();
+			}
+		} else if (callerBinding instanceof ITypeBinding && nodeToCast.getLocationInParent() == SingleMemberAnnotation.TYPE_NAME_PROPERTY) {
+			declaringType= (ITypeBinding) callerBinding;
+			callerBindingDecl= Bindings.findMethodInType(declaringType, "value", (String[])null); //$NON-NLS-1$
+			if (callerBindingDecl == null) {
+				return;
+			}
+		}
+
+		if (declaringType != null && declaringType.isFromSource()) {
+			targetCu= ASTResolving.findCompilationUnitForBinding(cu, astRoot, declaringType);
+		}
+		if (targetCu != null && ASTResolving.isUseableTypeInContext(castTypeBinding, callerBindingDecl, false)) {
+			proposals.add(new TypeChangeCorrectionProposal(targetCu, callerBindingDecl, astRoot, castTypeBinding, isAssignedNode, relevance));
+		}
+
+		// add interface to resulting type
+		if (!isAssignedNode) {
+			ITypeBinding nodeType= nodeToCast.resolveTypeBinding();
+			if (castTypeBinding.isInterface() && nodeType != null && nodeType.isClass() && !nodeType.isAnonymous() && nodeType.isFromSource()) {
+				ITypeBinding typeDecl= nodeType.getTypeDeclaration();
+				ICompilationUnit nodeCu= ASTResolving.findCompilationUnitForBinding(cu, astRoot, typeDecl);
+				if (nodeCu != null && ASTResolving.isUseableTypeInContext(castTypeBinding, typeDecl, true)) {
+					proposals.add(new ImplementInterfaceProposal(nodeCu, typeDecl, astRoot, castTypeBinding, relevance - 1));
+				}
+			}
+		}
+	}
+

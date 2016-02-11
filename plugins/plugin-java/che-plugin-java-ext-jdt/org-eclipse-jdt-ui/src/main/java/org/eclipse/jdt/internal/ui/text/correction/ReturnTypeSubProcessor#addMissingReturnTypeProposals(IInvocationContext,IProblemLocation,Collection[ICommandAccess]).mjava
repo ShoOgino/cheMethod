@@ -1,0 +1,78 @@
+	public static void addMissingReturnTypeProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		CompilationUnit astRoot= context.getASTRoot();
+		ASTNode selectedNode= problem.getCoveringNode(astRoot);
+		if (selectedNode == null) {
+			return;
+		}
+		BodyDeclaration decl= ASTResolving.findParentBodyDeclaration(selectedNode);
+		if (decl instanceof MethodDeclaration) {
+			MethodDeclaration methodDeclaration= (MethodDeclaration) decl;
+
+			ReturnStatementCollector eval= new ReturnStatementCollector();
+			decl.accept(eval);
+
+			AST ast= astRoot.getAST();
+
+			ITypeBinding typeBinding= eval.getTypeBinding(decl.getAST());
+			typeBinding= Bindings.normalizeTypeBinding(typeBinding);
+			if (typeBinding == null) {
+				typeBinding= ast.resolveWellKnownType("void"); //$NON-NLS-1$
+			}
+			if (typeBinding.isWildcardType()) {
+				typeBinding= ASTResolving.normalizeWildcardType(typeBinding, true, ast);
+			}
+
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+
+			String label= Messages.format(CorrectionMessages.ReturnTypeSubProcessor_missingreturntype_description,
+										  BindingLabelProvider.getBindingLabel(typeBinding, BindingLabelProvider.DEFAULT_TEXTFLAGS));
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			LinkedCorrectionProposal
+					proposal= new LinkedCorrectionProposal(label, cu, rewrite, IProposalRelevance.MISSING_RETURN_TYPE, image);
+
+			ImportRewrite imports= proposal.createImportRewrite(astRoot);
+			ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(decl, imports);
+			Type type= imports.addImport(typeBinding, ast, importRewriteContext);
+
+			rewrite.set(methodDeclaration, MethodDeclaration.RETURN_TYPE2_PROPERTY, type, null);
+			rewrite.set(methodDeclaration, MethodDeclaration.CONSTRUCTOR_PROPERTY, Boolean.FALSE, null);
+
+			Javadoc javadoc= methodDeclaration.getJavadoc();
+			if (javadoc != null && typeBinding != null) {
+				TagElement newTag= ast.newTagElement();
+				newTag.setTagName(TagElement.TAG_RETURN);
+				TextElement commentStart= ast.newTextElement();
+				newTag.fragments().add(commentStart);
+
+				JavadocTagsSubProcessor.insertTag(rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY), newTag, null);
+				proposal.addLinkedPosition(rewrite.track(commentStart), false, "comment_start"); //$NON-NLS-1$
+			}
+
+			String key= "return_type"; //$NON-NLS-1$
+			proposal.addLinkedPosition(rewrite.track(type), true, key);
+			if (typeBinding != null) {
+				ITypeBinding[] bindings= ASTResolving.getRelaxingTypes(ast, typeBinding);
+				for (int i= 0; i < bindings.length; i++) {
+					proposal.addLinkedPositionProposal(key, bindings[i]);
+				}
+			}
+
+			proposals.add(proposal);
+
+			// change to constructor
+			ASTNode parentType= ASTResolving.findParentType(decl);
+			if (parentType instanceof AbstractTypeDeclaration) {
+				boolean isInterface= parentType instanceof TypeDeclaration && ((TypeDeclaration) parentType).isInterface();
+				if (!isInterface) {
+					String constructorName= ((AbstractTypeDeclaration) parentType).getName().getIdentifier();
+					ASTNode nameNode= methodDeclaration.getName();
+					label= Messages.format(CorrectionMessages.ReturnTypeSubProcessor_wrongconstructorname_description,
+										   BasicElementLabels.getJavaElementName(constructorName));
+					proposals.add(new ReplaceCorrectionProposal(label, cu, nameNode.getStartPosition(), nameNode.getLength(), constructorName, IProposalRelevance.CHANGE_TO_CONSTRUCTOR));
+				}
+			}
+		}
+	}
+

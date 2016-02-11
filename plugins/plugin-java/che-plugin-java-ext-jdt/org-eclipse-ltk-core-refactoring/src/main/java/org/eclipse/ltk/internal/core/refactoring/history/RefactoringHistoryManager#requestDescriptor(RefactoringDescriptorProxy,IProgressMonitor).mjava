@@ -1,0 +1,49 @@
+	/**
+	 * Requests the resolved refactoring descriptor associated with the given
+	 * proxy.
+	 *
+	 * @param proxy
+	 *            the refactoring descriptor proxy
+	 * @param monitor
+	 *            the progress monitor to use
+	 * @return the associated refactoring descriptor, or <code>null</code>
+	 */
+	RefactoringDescriptor requestDescriptor(final RefactoringDescriptorProxy proxy, final IProgressMonitor monitor) {
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_resolving_information, 2);
+			final long stamp= proxy.getTimeStamp();
+			if (stamp >= 0) {
+				InputStream input= null;
+				try {
+					final IFileStore folder= fHistoryStore.getFileStore(stampToPath(stamp));
+					final IFileStore file= folder.getChild(RefactoringHistoryService.NAME_HISTORY_FILE);
+					if (file.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists()) {
+						input= new BufferedInputStream(file.openInputStream(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)));
+						final RefactoringSessionDescriptor descriptor= getCachedSession(file, fProjectName, input);
+						if (descriptor != null) {
+							final RefactoringDescriptor[] descriptors= descriptor.getRefactorings();
+							for (int index= 0; index < descriptors.length; index++) {
+								final RefactoringDescriptor refactoringDescriptor= descriptors[index];
+								if (refactoringDescriptor.getTimeStamp() == stamp) {
+									return refactoringDescriptor;
+								}
+							}
+						}
+					}
+				} catch (CoreException exception) {
+					RefactoringCorePlugin.log(exception);
+				} finally {
+					try {
+						if (input != null)
+							input.close();
+					} catch (IOException exception) {
+						RefactoringCorePlugin.log(exception);
+					}
+				}
+			}
+		} finally {
+			monitor.done();
+		}
+		return null;
+	}
+

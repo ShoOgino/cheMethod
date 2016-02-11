@@ -1,0 +1,39 @@
+	/**
+	 * Creates a pattern element from the pattern string which is either a reg-ex expression or in
+	 * our old 'StringMatcher' format.
+	 * 
+	 * @param pattern The search pattern
+	 * @param isRegex <code>true</code> if the passed string already is a reg-ex pattern
+	 * @param isStringMatcher <code>true</code> if the passed string is in the StringMatcher format.
+	 * @param isCaseSensitive Set to <code>true</code> to create a case insensitive pattern
+	 * @param isWholeWord <code>true</code> to create a pattern that requires a word boundary at the
+	 *            beginning and the end.
+	 * @return The created pattern
+	 * @throws PatternSyntaxException if "\R" is at an illegal position
+	 */
+	public static Pattern createPattern(String pattern, boolean isRegex, boolean isStringMatcher, boolean isCaseSensitive, boolean isWholeWord) throws PatternSyntaxException {
+		if (isRegex) {
+			pattern= substituteLinebreak(pattern);
+			Assert.isTrue(!isWholeWord, "isWholeWord unsupported together with isRegex"); //$NON-NLS-1$
+		} else {
+			int len= pattern.length();
+			StringBuffer buffer= new StringBuffer(len + 10);
+			// don't add a word boundary if the search text does not start with
+			// a word char. (this works around a user input error).
+			if (isWholeWord && len > 0 && isWordChar(pattern.charAt(0))) {
+				buffer.append("\\b"); //$NON-NLS-1$
+			}
+			appendAsRegEx(isStringMatcher, pattern, buffer);
+			if (isWholeWord && len > 0 && isWordChar(pattern.charAt(len - 1))) {
+				buffer.append("\\b"); //$NON-NLS-1$
+			}
+			pattern= buffer.toString();
+		}
+
+		int regexOptions= Pattern.MULTILINE;
+		if (!isCaseSensitive) {
+			regexOptions|= Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+		}
+		return Pattern.compile(pattern, regexOptions);
+	}
+

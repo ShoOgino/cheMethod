@@ -1,0 +1,75 @@
+    /**
+     * Computes the type argument proposals for this type proposals. If there is
+     * an expected type binding that is a super type of the proposed type, the
+     * wildcard type arguments of the proposed type that can be mapped through
+     * to type the arguments of the expected type binding are bound accordingly.
+     * <p>
+     * For type arguments that cannot be mapped to arguments in the expected
+     * type, or if there is no expected type, the upper bound of the type
+     * argument is proposed.
+     * </p>
+     * <p>
+     * The argument proposals have their <code>isAmbiguos</code> flag set to
+     * <code>false</code> if the argument can be mapped to a non-wildcard type
+     * argument in the expected type, otherwise the proposal is ambiguous.
+     * </p>
+     *
+     * @return the type argument proposals for the proposed type
+     * @throws org.eclipse.jdt.core.JavaModelException if accessing the java model fails
+     */
+    private TypeArgumentProposal[] computeTypeArgumentProposals() throws JavaModelException {
+        if (fTypeArgumentProposals == null) {
+
+            IType type = (IType)getJavaElement();
+            if (type == null)
+                return new TypeArgumentProposal[0];
+
+            ITypeParameter[] parameters = type.getTypeParameters();
+            if (parameters.length == 0)
+                return new TypeArgumentProposal[0];
+
+            TypeArgumentProposal[] arguments = new TypeArgumentProposal[parameters.length];
+
+            ITypeBinding expectedTypeBinding = getExpectedType();
+            if (expectedTypeBinding != null && expectedTypeBinding.isParameterizedType()) {
+                // in this case, the type arguments we propose need to be compatible
+                // with the corresponding type parameters to declared type
+
+                IType expectedType = (IType)expectedTypeBinding.getJavaElement();
+
+                IType[] path = computeInheritancePath(type, expectedType);
+                if (path == null)
+                    // proposed type does not inherit from expected type
+                    // the user might be looking for an inner type of proposed type
+                    // to instantiate -> do not add any type arguments
+                    return new TypeArgumentProposal[0];
+
+                int[] indices = new int[parameters.length];
+                for (int paramIdx = 0; paramIdx < parameters.length; paramIdx++) {
+                    indices[paramIdx] = mapTypeParameterIndex(path, path.length - 1, paramIdx);
+                }
+
+                // for type arguments that are mapped through to the expected type's
+                // parameters, take the arguments of the expected type
+                ITypeBinding[] typeArguments = expectedTypeBinding.getTypeArguments();
+                for (int paramIdx = 0; paramIdx < parameters.length; paramIdx++) {
+                    if (indices[paramIdx] != -1) {
+                        // type argument is mapped through
+                        ITypeBinding binding = typeArguments[indices[paramIdx]];
+                        arguments[paramIdx] = computeTypeProposal(binding, parameters[paramIdx]);
+                    }
+                }
+            }
+
+            // for type arguments that are not mapped through to the expected type,
+            // take the lower bound of the type parameter
+            for (int i = 0; i < arguments.length; i++) {
+                if (arguments[i] == null) {
+                    arguments[i] = computeTypeProposal(parameters[i]);
+                }
+            }
+            fTypeArgumentProposals = arguments;
+        }
+        return fTypeArgumentProposals;
+    }
+

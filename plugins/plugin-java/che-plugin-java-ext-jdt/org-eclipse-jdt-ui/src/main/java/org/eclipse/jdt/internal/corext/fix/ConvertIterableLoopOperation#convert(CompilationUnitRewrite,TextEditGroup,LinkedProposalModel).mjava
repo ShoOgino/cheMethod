@@ -1,0 +1,116 @@
+	@Override
+	protected Statement convert(CompilationUnitRewrite cuRewrite, final TextEditGroup group, final LinkedProposalModel positionGroups)
+			throws CoreException {
+		final AST ast = cuRewrite.getAST();
+		final ASTRewrite astRewrite = cuRewrite.getASTRewrite();
+		final ImportRewrite importRewrite = cuRewrite.getImportRewrite();
+		final ImportRemover remover = cuRewrite.getImportRemover();
+
+		fEnhancedForLoop = ast.newEnhancedForStatement();
+		String[] names = getVariableNameProposals();
+
+		String name;
+		if (fElementVariable != null) {
+			name = fElementVariable.getName();
+		} else {
+			name = names[0];
+		}
+		final LinkedProposalPositionGroup pg = positionGroups.getPositionGroup(name, true);
+		if (fElementVariable != null)
+			pg.addProposal(name, null, 10);
+		for (int i = 0; i < names.length; i++) {
+			pg.addProposal(names[i], null, 10);
+		}
+
+		final Statement body = getForStatement().getBody();
+		if (body != null) {
+			final ListRewrite list;
+			if (body instanceof Block) {
+				list = astRewrite.getListRewrite(body, Block.STATEMENTS_PROPERTY);
+				for (final Iterator<Expression> iterator = fOccurrences.iterator(); iterator.hasNext(); ) {
+					final Statement parent = (Statement)ASTNodes.getParent(iterator.next(), Statement.class);
+					if (parent != null && list.getRewrittenList().contains(parent)) {
+						list.remove(parent, null);
+						remover.registerRemovedNode(parent);
+					}
+				}
+			} else {
+				list= null;
+			}
+			final String text= name;
+			body.accept(new ASTVisitor() {
+
+				private boolean replace(final Expression expression) {
+					final SimpleName node= ast.newSimpleName(text);
+					astRewrite.replace(expression, node, group);
+					remover.registerRemovedNode(expression);
+					pg.addPosition(astRewrite.track(node), false);
+					return false;
+				}
+
+				@Override
+				public final boolean visit(final MethodInvocation node) {
+					final IMethodBinding binding= node.resolveMethodBinding();
+					if (binding != null && (binding.getName().equals("next") || binding.getName().equals("nextElement"))) { //$NON-NLS-1$ //$NON-NLS-2$
+
+						final Expression expression= node.getExpression();
+						if (expression instanceof Name) {
+							final IBinding result= ((Name)expression).resolveBinding();
+							if (result != null && result.equals(fIteratorVariable))
+								return replace(node);
+						} else if (expression instanceof FieldAccess) {
+							final IBinding result= ((FieldAccess)expression).resolveFieldBinding();
+							if (result != null && result.equals(fIteratorVariable))
+								return replace(node);
+						}
+					}
+					return super.visit(node);
+				}
+
+				@Override
+				public final boolean visit(final SimpleName node) {
+					if (fElementVariable != null) {
+						final IBinding binding= node.resolveBinding();
+						if (binding != null && binding.equals(fElementVariable)) {
+							final Statement parent= (Statement)ASTNodes.getParent(node, Statement.class);
+							if (parent != null && (list == null || list.getRewrittenList().contains(parent)))
+								pg.addPosition(astRewrite.track(node), false);
+						}
+					}
+					return false;
+				}
+			});
+
+			fEnhancedForLoop.setBody(getBody(cuRewrite, group, positionGroups));
+		}
+		final SingleVariableDeclaration declaration= ast.newSingleVariableDeclaration();
+		final SimpleName simple= ast.newSimpleName(name);
+		pg.addPosition(astRewrite.track(simple), true);
+		declaration.setName(simple);
+		final ITypeBinding elementType= getElementType(fIteratorVariable.getType());
+		declaration.setType(importType(elementType, getForStatement(), importRewrite, getRoot()));
+		if (fMakeFinal) {
+			ModifierRewrite.create(astRewrite, declaration).setModifiers(Modifier.FINAL, 0, group);
+		}
+		remover.registerAddedImport(elementType.getQualifiedName());
+		fEnhancedForLoop.setParameter(declaration);
+		fEnhancedForLoop.setExpression(getExpression(astRewrite));
+
+		for (Iterator<Expression> iterator= getForStatement().initializers().iterator(); iterator.hasNext();) {
+			ASTNode node= iterator.next();
+			if (node instanceof VariableDeclarationExpression) {
+				VariableDeclarationExpression variableDeclarationExpression= (VariableDeclarationExpression) node;
+				remover.registerRemovedNode(variableDeclarationExpression.getType());
+			} else {
+				remover.registerRemovedNode(node);
+			}
+		}
+
+		for (Iterator<Expression> iterator= getForStatement().updaters().iterator(); iterator.hasNext();) {
+			ASTNode node= iterator.next();
+			remover.registerRemovedNode(node);
+		}
+
+		return fEnhancedForLoop;
+	}
+

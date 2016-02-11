@@ -1,0 +1,49 @@
+    /**
+     * Creates a new compilation unit AST.
+     *
+     * @param input the Java element for which to create the AST
+     * @param progressMonitor the progress monitor
+     * @return AST
+     */
+    public static CompilationUnit createAST(final ITypeRoot input, final IProgressMonitor progressMonitor) {
+        if (!hasSource(input))
+            return null;
+
+        if (progressMonitor != null && progressMonitor.isCanceled())
+            return null;
+
+        final CheASTParser parser = CheASTParser.newParser(SHARED_AST_LEVEL);
+        parser.setResolveBindings(true);
+        parser.setStatementsRecovery(SHARED_AST_STATEMENT_RECOVERY);
+        parser.setBindingsRecovery(SHARED_BINDING_RECOVERY);
+        parser.setSource(input);
+
+        if (progressMonitor != null && progressMonitor.isCanceled())
+            return null;
+
+        final CompilationUnit root[]= new CompilationUnit[1];
+
+        SafeRunner.run(new ISafeRunnable() {
+            public void run() {
+                try {
+                    if (progressMonitor != null && progressMonitor.isCanceled())
+                        return;
+                    if (DEBUG)
+                        System.err.println(getThreadName() + " - " + DEBUG_PREFIX + "creating AST for: " +
+                                           input.getElementName()); //$NON-NLS-1$ //$NON-NLS-2$
+                    root[0] = (CompilationUnit)parser.createAST(progressMonitor);
+
+                    //mark as unmodifiable
+                    ASTNodes.setFlagsToAST(root[0], ASTNode.PROTECT);
+                } catch (OperationCanceledException ex) {
+                    return;
+                }
+            }
+
+            public void handleException(Throwable ex) {
+                LOG.error(ex.getMessage(), ex);
+            }
+        });
+        return root[0];
+    }
+

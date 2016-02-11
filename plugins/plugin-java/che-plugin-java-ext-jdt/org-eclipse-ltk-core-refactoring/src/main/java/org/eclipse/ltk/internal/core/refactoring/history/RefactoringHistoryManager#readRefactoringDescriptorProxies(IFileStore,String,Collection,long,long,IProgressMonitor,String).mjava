@@ -1,0 +1,64 @@
+	/**
+	 * Reads refactoring descriptor proxies.
+	 *
+	 * @param store
+	 *            the file store to read
+	 * @param project
+	 *            the name of the project, or <code>null</code> for the
+	 *            workspace
+	 * @param collection
+	 *            the collection of proxies to fill in
+	 * @param start
+	 *            the start time stamp, inclusive
+	 * @param end
+	 *            the end time stamp, inclusive
+	 * @param monitor
+	 *            the progress monitor to use
+	 * @param task
+	 *            the task label to use
+	 * @throws CoreException
+	 *             if an error occurs
+	 */
+	private static void readRefactoringDescriptorProxies(final IFileStore store, final String project, final Collection collection, final long start, final long end, final IProgressMonitor monitor, final String task) throws CoreException {
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_retrieving_history, 22);
+			final IFileInfo info= store.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 2, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+			if (!info.isDirectory() && info.exists() && store.getName().equalsIgnoreCase(RefactoringHistoryService.NAME_INDEX_FILE)) {
+				InputStream stream= null;
+				try {
+					stream= store.openInputStream(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+					final RefactoringDescriptorProxy[] proxies= readRefactoringDescriptorProxies(stream, project, start, end);
+					for (int index= 0; index < proxies.length; index++)
+						collection.add(proxies[index]);
+					monitor.worked(1);
+				} catch (IOException exception) {
+					throw createCoreException(exception);
+				} finally {
+					monitor.worked(1);
+					if (stream != null) {
+						try {
+							stream.close();
+						} catch (IOException exception) {
+							// Do nothing
+						}
+					}
+					monitor.worked(1);
+				}
+			} else
+				monitor.worked(4);
+			if (monitor.isCanceled())
+				throw new OperationCanceledException();
+			final IFileStore[] stores= store.childStores(EFS.NONE, new SubProgressMonitor(monitor, 2, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+			final IProgressMonitor subMonitor= new SubProgressMonitor(monitor, 12);
+			try {
+				subMonitor.beginTask(task, stores.length);
+				for (int index= 0; index < stores.length; index++)
+					readRefactoringDescriptorProxies(stores[index], project, collection, start, end, new SubProgressMonitor(subMonitor, 1), task);
+			} finally {
+				subMonitor.done();
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

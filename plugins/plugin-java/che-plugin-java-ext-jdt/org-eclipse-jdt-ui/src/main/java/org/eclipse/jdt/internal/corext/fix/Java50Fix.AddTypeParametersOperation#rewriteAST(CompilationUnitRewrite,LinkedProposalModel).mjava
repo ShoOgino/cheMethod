@@ -1,0 +1,39 @@
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public void rewriteAST(CompilationUnitRewrite cuRewrite, LinkedProposalModel positionGroups) throws CoreException {
+			InferTypeArgumentsTCModel model = new InferTypeArgumentsTCModel();
+			InferTypeArgumentsConstraintCreator creator = new InferTypeArgumentsConstraintCreator(model, true);
+
+			CompilationUnit root = cuRewrite.getRoot();
+			root.accept(creator);
+
+			InferTypeArgumentsConstraintsSolver solver = new InferTypeArgumentsConstraintsSolver(model);
+			InferTypeArgumentsUpdate update = solver.solveConstraints(new NullProgressMonitor());
+			solver = null; //free caches
+
+			ParameterizedType[] nodes = InferTypeArgumentsRefactoring.inferArguments(fTypes, update, model, cuRewrite);
+			if (nodes.length == 0)
+				return;
+
+			ASTRewrite astRewrite = cuRewrite.getASTRewrite();
+			for (int i = 0; i < nodes.length; i++) {
+				ParameterizedType type = nodes[i];
+				List<Type> args = type.typeArguments();
+				int j = 0;
+				for (Iterator<Type> iter = args.iterator(); iter.hasNext(); ) {
+					LinkedProposalPositionGroup group = new LinkedProposalPositionGroup("G" + i + "_" + j); //$NON-NLS-1$ //$NON-NLS-2$
+					Type argType = iter.next();
+					if (!positionGroups.hasLinkedPositions()) {
+						group.addPosition(astRewrite.track(argType), true);
+					} else {
+						group.addPosition(astRewrite.track(argType), false);
+					}
+					positionGroups.addPositionGroup(group);
+					j++;
+				}
+			}
+			positionGroups.setEndPosition(astRewrite.track(nodes[0]));
+		}
+

@@ -1,0 +1,31 @@
+	public void copy(IPackageFragment pack, CopyArguments javaArgs, CopyArguments resourceArgs) throws CoreException {
+		add(pack, javaArgs, null);
+		ResourceMapping mapping = JavaElementResourceMapping.create(pack);
+		if (mapping != null) {
+			add(mapping, resourceArgs, null);
+		}
+		IPackageFragmentRoot javaDestination = (IPackageFragmentRoot)javaArgs.getDestination();
+		if (javaDestination.getResource() == null)
+			return;
+		IPackageFragment newPack = javaDestination.getPackageFragment(pack.getElementName());
+		// Here we have a special case. When we copy a package into the same source
+		// folder than the user will choose an "unused" name at the end which will
+		// lead to the fact that we can copy the pack. Unfortunately we don't know
+		// the new name yet, so we use the current package name.
+		if (!pack.hasSubpackages() && (!newPack.exists() || pack.equals(newPack))) {
+			// we can do a simple move
+			IContainer resourceDestination= newPack.getResource().getParent();
+			createIncludingParents(resourceDestination);
+			getResourceModifications().addCopyDelta(pack.getResource(), resourceArgs);
+		} else {
+			IContainer resourceDestination= (IContainer) newPack.getResource();
+			createIncludingParents(resourceDestination);
+			CopyArguments arguments= new CopyArguments(resourceDestination, resourceArgs.getExecutionLog());
+			IResource[] resourcesToCopy= collectResourcesOfInterest(pack);
+			for (int i= 0; i < resourcesToCopy.length; i++) {
+				IResource toCopy= resourcesToCopy[i];
+				getResourceModifications().addCopyDelta(toCopy, arguments);
+			}
+		}
+	}
+

@@ -1,0 +1,65 @@
+	private static boolean getJoinIfListInIfElseIfProposals(IInvocationContext context, ASTNode covering, ArrayList<ASTNode> coveredNodes, Collection<ICommandAccess> resultingCollections) {
+		if (coveredNodes.isEmpty()) {
+			return false;
+		}
+		// check that we have more than one covered statement
+		if (coveredNodes.size() < 2) {
+			return false;
+		}
+		// check that all selected nodes are 'if' statements with only 'then' statement
+		for (Iterator<ASTNode> iter= coveredNodes.iterator(); iter.hasNext();) {
+			ASTNode node= iter.next();
+			if (!(node instanceof IfStatement)) {
+				return false;
+			}
+			IfStatement ifStatement= (IfStatement) node;
+			if (ifStatement.getElseStatement() != null) {
+				return false;
+			}
+		}
+		//  we could produce quick assist
+		if (resultingCollections == null) {
+			return true;
+		}
+		//
+		final AST ast= covering.getAST();
+		final ASTRewrite rewrite= ASTRewrite.create(ast);
+		//
+		IfStatement firstIfStatement= (IfStatement) coveredNodes.get(0);
+		IfStatement firstNewIfStatement= null;
+		//
+		IfStatement prevIfStatement= null;
+		for (Iterator<ASTNode> iter= coveredNodes.iterator(); iter.hasNext();) {
+			IfStatement ifStatement= (IfStatement) iter.next();
+			// prepare new 'if' statement
+			IfStatement newIfStatement= ast.newIfStatement();
+			newIfStatement.setExpression((Expression) rewrite.createMoveTarget(ifStatement.getExpression()));
+			// prepare 'then' statement and convert into block if needed
+			Statement thenStatement= (Statement) rewrite.createMoveTarget(ifStatement.getThenStatement());
+			if (ifStatement.getThenStatement() instanceof IfStatement) {
+				IfStatement ifBodyStatement= (IfStatement) ifStatement.getThenStatement();
+				if (ifBodyStatement.getElseStatement() == null) {
+					Block thenBlock= ast.newBlock();
+					thenBlock.statements().add(thenStatement);
+					thenStatement= thenBlock;
+				}
+			}
+			newIfStatement.setThenStatement(thenStatement);
+			//
+			if (prevIfStatement != null) {
+				prevIfStatement.setElseStatement(newIfStatement);
+				rewrite.remove(ifStatement, null);
+			} else {
+				firstNewIfStatement= newIfStatement;
+			}
+			prevIfStatement= newIfStatement;
+		}
+		rewrite.replace(firstIfStatement, firstNewIfStatement, null);
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_joinIfSequence;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.JOIN_IF_SEQUENCE, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

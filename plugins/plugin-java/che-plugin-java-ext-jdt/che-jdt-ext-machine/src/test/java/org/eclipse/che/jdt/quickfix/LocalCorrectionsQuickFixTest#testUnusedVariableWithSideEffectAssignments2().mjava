@@ -1,0 +1,54 @@
+    @Test
+	public void testUnusedVariableWithSideEffectAssignments2() throws Exception {
+		// https://bugs.eclipse.org/421717
+		Hashtable hashtable= JavaCore.getOptions();
+		hashtable.put(JavaCore.COMPILER_PB_UNUSED_LOCAL, JavaCore.ERROR);
+		JavaCore.setOptions(hashtable);
+	
+		IPackageFragment pack1= fSourceFolder.createPackageFragment("pack", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    void foo(int a) {\n");
+		buf.append("        int f= 1 + a-- + (int) Math.ceil(a);\n");
+		buf.append("        f= -a;\n");
+		buf.append("        f= ~a;\n");
+		buf.append("        f= a++;\n");
+		buf.append("        f= Math.abs(a);\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+	
+		CompilationUnit astRoot= getASTRoot(cu);
+		ArrayList proposals= collectCorrections(cu, astRoot);
+	
+		assertCorrectLabels(proposals);
+		assertNumberOfProposals(proposals, 2);
+	
+		String[] expected= new String[2];
+		buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    void foo(int a) {\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[0]= buf.toString();
+	
+		buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    void foo(int a) {\n");
+		buf.append("        a--;\n");
+		buf.append("        Math.ceil(a);\n");
+		buf.append("        a++;\n");
+		buf.append("        Math.abs(a);\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[1]= buf.toString();
+	
+		assertExpectedExistInProposals(proposals, expected);
+	}
+

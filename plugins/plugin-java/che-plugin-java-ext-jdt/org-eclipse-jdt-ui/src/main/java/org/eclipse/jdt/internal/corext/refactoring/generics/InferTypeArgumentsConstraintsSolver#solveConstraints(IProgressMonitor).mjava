@@ -1,0 +1,52 @@
+	public InferTypeArgumentsUpdate solveConstraints(IProgressMonitor pm) {
+		pm.beginTask("", 2); //$NON-NLS-1$
+		fUpdate = new InferTypeArgumentsUpdate();
+
+		ConstraintVariable2[] allConstraintVariables = fTCModel.getAllConstraintVariables();
+		if (allConstraintVariables.length == 0)
+			return fUpdate;
+
+		fTypeSetEnvironment = new TypeSetEnvironment(fTCModel.getTypeEnvironment());
+		ParametricStructureComputer parametricStructureComputer = new ParametricStructureComputer(allConstraintVariables, fTCModel);
+		Collection<CollectionElementVariable2> newVars = parametricStructureComputer.createElemConstraintVariables();
+
+		ArrayList<ConstraintVariable2> newAllConstraintVariables = new ArrayList<ConstraintVariable2>();
+		newAllConstraintVariables.addAll(Arrays.asList(allConstraintVariables));
+		newAllConstraintVariables.addAll(newVars);
+		allConstraintVariables = newAllConstraintVariables.toArray(new ConstraintVariable2[newAllConstraintVariables.size()]);
+
+
+		//loop over all TypeEquivalenceSets and unify the elements from the fElemStructureEnv with the existing TypeEquivalenceSets
+		HashSet<TypeEquivalenceSet> allTypeEquivalenceSets = new HashSet<TypeEquivalenceSet>();
+		for (int i = 0; i < allConstraintVariables.length; i++) {
+			TypeEquivalenceSet typeEquivalenceSet = allConstraintVariables[i].getTypeEquivalenceSet();
+			if (typeEquivalenceSet != null)
+				allTypeEquivalenceSets.add(typeEquivalenceSet);
+		}
+		for (Iterator<TypeEquivalenceSet> iter = allTypeEquivalenceSets.iterator(); iter.hasNext(); ) {
+			TypeEquivalenceSet typeEquivalenceSet = iter.next();
+			ConstraintVariable2[] contributingVariables = typeEquivalenceSet.getContributingVariables();
+			for (int i = 0; i < contributingVariables.length; i++) {
+				for (int j = i + 1; j < contributingVariables.length; j++) {
+					ConstraintVariable2 first = contributingVariables[i];
+					ConstraintVariable2 second = contributingVariables[j];
+					fTCModel.createElementEqualsConstraints(first, second); // recursively
+				}
+			}
+		}
+		ITypeConstraint2[] allTypeConstraints = fTCModel.getAllTypeConstraints();
+		for (int i = 0; i < allTypeConstraints.length; i++) {
+			ITypeConstraint2 typeConstraint = allTypeConstraints[i];
+			fTCModel.createElementEqualsConstraints(typeConstraint.getLeft(), typeConstraint.getRight());
+		}
+
+		initializeTypeEstimates(allConstraintVariables);
+		if (pm.isCanceled())
+			throw new OperationCanceledException();
+		fWorkList.addAll(Arrays.asList(allConstraintVariables));
+		runSolver(new SubProgressMonitor(pm, 1));
+		chooseTypes(allConstraintVariables, new SubProgressMonitor(pm, 1));
+		findCastsToRemove(fTCModel.getCastVariables());
+		return fUpdate;
+	}
+

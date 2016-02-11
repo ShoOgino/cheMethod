@@ -1,0 +1,41 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.jdt.internal.corext.refactoring.typeconstraints.typesets.TypeSet#lowerBound()
+	 */
+	@Override
+	public TypeSet lowerBound() {
+		if (fMembers.size() == 1)
+			return new SingletonTypeSet(fMembers.iterator().next(), getTypeSetEnvironment());
+
+		EnumeratedTypeSet result= new EnumeratedTypeSet(getTypeSetEnvironment());
+
+		// Add to result each element of fMembers that has no proper subtype in fMembers
+		result.fMembers.addAll(fMembers);
+
+		for(Iterator<TType> iter= fMembers.iterator(); iter.hasNext(); ) {
+			TType t= iter.next();
+
+			// java.lang.Object is only in the lower bound if fMembers consists
+			// of only java.lang.Object, but that case is handled above.
+			if (t.equals(getJavaLangObject())) {
+				result.fMembers.remove(t);
+				continue;
+			}
+
+			if (t instanceof ArrayType) {
+				ArrayType at= (ArrayType) t;
+				int numDims= at.getDimensions();
+				for(Iterator<TType> superIter= TTypes.getAllSuperTypesIterator(at.getElementType()); superIter.hasNext(); ) {
+					result.fMembers.remove(TTypes.createArrayType(superIter.next(), numDims));
+				}
+			} else {
+				for (Iterator<TType> iterator= TTypes.getAllSuperTypesIterator(t); iterator.hasNext();) {
+					result.fMembers.remove(iterator.next());
+				}
+			}
+		}
+		if (result.size() > 0)
+			return result;
+		else
+			return getTypeSetEnvironment().getEmptyTypeSet();
+	}
+

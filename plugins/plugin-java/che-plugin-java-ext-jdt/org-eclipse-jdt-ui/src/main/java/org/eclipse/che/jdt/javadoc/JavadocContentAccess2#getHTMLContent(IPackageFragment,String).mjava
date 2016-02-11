@@ -1,0 +1,82 @@
+    /**
+     * Returns the Javadoc for a package which could be present in package.html, package-info.java
+     * or from an attached Javadoc.
+     *
+     * @param packageFragment the package which is requesting for the document
+     * @param urlPrefix
+     * @return the document content in HTML format or <code>null</code> if there is no associated
+     *         Javadoc
+     * @throws CoreException if the Java element does not exists or an exception occurs while
+     *             accessing the file containing the package Javadoc
+     * @since 3.9
+     */
+    public static String getHTMLContent(IPackageFragment packageFragment, String urlPrefix) throws CoreException {
+        IPackageFragmentRoot root = (IPackageFragmentRoot)packageFragment.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
+
+        //1==> Handle the case when the documentation is present in package-info.java or package-info.class file
+        ITypeRoot packageInfo;
+        boolean isBinary = root.getKind() == IPackageFragmentRoot.K_BINARY;
+        if (isBinary) {
+            packageInfo = packageFragment.getClassFile(JavaModelUtil.PACKAGE_INFO_CLASS);
+        } else {
+            packageInfo = packageFragment.getCompilationUnit(JavaModelUtil.PACKAGE_INFO_JAVA);
+        }
+        if (packageInfo != null && packageInfo.exists()) {
+            String cuSource = packageInfo.getSource();
+            //the source can be null for some of the class files
+            if (cuSource != null) {
+                Javadoc packageJavadocNode = getPackageJavadocNode(packageFragment, cuSource);
+                if (packageJavadocNode != null) {
+                    IJavaElement element;
+                    if (isBinary) {
+                        element = ((IClassFile)packageInfo).getType();
+                    } else {
+                        element = packageInfo.getParent(); // parent is the IPackageFragment
+                    }
+                    return new JavadocContentAccess2(element, packageJavadocNode, cuSource, urlPrefix).toHTML();
+                }
+            }
+        }
+
+        // 2==> Handle the case when the documentation is done in package.html file. The file can be either in normal source folder or
+        // coming from a jar file
+        else {
+            Object[] nonJavaResources = packageFragment.getNonJavaResources();
+            // 2.1 ==>If the package.html file is present in the source or directly in the binary jar
+            for (Object nonJavaResource : nonJavaResources) {
+                if (nonJavaResource instanceof IFile) {
+                    IFile iFile = (IFile)nonJavaResource;
+                    if (iFile.exists() && JavaModelUtil.PACKAGE_HTML.equals(iFile.getName())) {
+                        return getIFileContent(iFile);
+                    }
+                }
+            }
+
+            // 2.2==>The file is present in a binary container
+            if (isBinary) {
+                for (Object nonJavaResource : nonJavaResources) {
+                    // The content is from an external binary class folder
+                    if (nonJavaResource instanceof IJarEntryResource) {
+                        IJarEntryResource jarEntryResource = (IJarEntryResource)nonJavaResource;
+                        String encoding = getSourceAttachmentEncoding(root);
+                        if (JavaModelUtil.PACKAGE_HTML.equals(jarEntryResource.getName()) && jarEntryResource.isFile()) {
+                            return getHTMLContent(jarEntryResource, encoding);
+                        }
+                    }
+                }
+                //2.3 ==>The file is present in the source attachment path.
+                String contents = getHTMLContentFromAttachedSource(root, packageFragment, urlPrefix);
+                if (contents != null)
+                    return contents;
+            }
+        }
+
+        //3==> Handle the case when the documentation is coming from the attached Javadoc
+        if ((root.isArchive() || root.isExternal())) {
+            return packageFragment.getAttachedJavadoc(null);
+
+        }
+
+        return null;
+    }
+

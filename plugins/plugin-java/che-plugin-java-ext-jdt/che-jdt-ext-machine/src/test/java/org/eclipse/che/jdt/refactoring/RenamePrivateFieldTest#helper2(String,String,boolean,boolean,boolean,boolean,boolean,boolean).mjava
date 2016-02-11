@@ -1,0 +1,59 @@
+    private void helper2(String fieldName, String newFieldName, boolean updateReferences, boolean updateTextualMatches,
+                         boolean renameGetter, boolean renameSetter,
+                         boolean expectedGetterRenameEnabled, boolean expectedSetterRenameEnabled) throws Exception {
+        ParticipantTesting.reset();
+        ICompilationUnit cu = createCUfromTestFile(getPackageP(), "A");
+        IType classA = getType(cu, "A");
+        IField field = classA.getField(fieldName);
+        RenameJavaElementDescriptor descriptor =
+                RefactoringSignatureDescriptorFactory.createRenameJavaElementDescriptor(IJavaRefactorings.RENAME_FIELD);
+        descriptor.setJavaElement(field);
+        descriptor.setNewName(newFieldName);
+        descriptor.setUpdateReferences(updateReferences);
+        descriptor.setUpdateTextualOccurrences(updateTextualMatches);
+        descriptor.setRenameGetters(renameGetter);
+        descriptor.setRenameSetters(renameSetter);
+
+        RenameRefactoring refactoring = (RenameRefactoring)createRefactoring(descriptor);
+        RenameFieldProcessor processor = (RenameFieldProcessor)refactoring.getProcessor();
+        assertEquals("getter rename enabled", expectedGetterRenameEnabled, processor.canEnableGetterRenaming() == null);
+        assertEquals("setter rename enabled", expectedSetterRenameEnabled, processor.canEnableSetterRenaming() == null);
+
+        String newGetterName = processor.getNewGetterName();
+        String newSetterName = processor.getNewSetterName();
+
+        List elements = new ArrayList();
+        elements.add(field);
+        List args = new ArrayList();
+        args.add(new RenameArguments(newFieldName, updateReferences));
+        if (renameGetter && expectedGetterRenameEnabled) {
+            elements.add(processor.getGetter());
+            args.add(new RenameArguments(newGetterName, updateReferences));
+        }
+        if (renameSetter && expectedSetterRenameEnabled) {
+            elements.add(processor.getSetter());
+            args.add(new RenameArguments(newSetterName, updateReferences));
+        }
+        String[] renameHandles = ParticipantTesting.createHandles(elements.toArray());
+
+        RefactoringStatus result = performRefactoring(refactoring);
+        assertEquals("was supposed to pass", null, result);
+        assertEqualLines("invalid renaming", getFileContents(getOutputTestFileName("A")), cu.getSource());
+
+        ParticipantTesting.testRename(
+                renameHandles,
+                (RenameArguments[])args.toArray(new RenameArguments[args.size()]));
+
+        assertTrue("anythingToUndo", RefactoringCore.getUndoManager().anythingToUndo());
+        assertTrue("! anythingToRedo", !RefactoringCore.getUndoManager().anythingToRedo());
+
+        RefactoringCore.getUndoManager().performUndo(null, new NullProgressMonitor());
+        assertEqualLines("invalid undo", getFileContents(getInputTestFileName("A")), cu.getSource());
+
+        assertTrue("! anythingToUndo", !RefactoringCore.getUndoManager().anythingToUndo());
+        assertTrue("anythingToRedo", RefactoringCore.getUndoManager().anythingToRedo());
+
+        RefactoringCore.getUndoManager().performRedo(null, new NullProgressMonitor());
+        assertEqualLines("invalid redo", getFileContents(getOutputTestFileName("A")), cu.getSource());
+    }
+

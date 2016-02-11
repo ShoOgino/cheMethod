@@ -1,0 +1,102 @@
+	public static void addMissingHashCodeProposals(IInvocationContext context, IProblemLocation problem,
+												   Collection<ICommandAccess> proposals) {
+		final ICompilationUnit cu = context.getCompilationUnit();
+
+		CompilationUnit astRoot = context.getASTRoot();
+		ASTNode selectedNode = problem.getCoveringNode(astRoot);
+		if (!(selectedNode instanceof Name)) {
+			return;
+		}
+
+		AbstractTypeDeclaration typeDeclaration = null;
+		StructuralPropertyDescriptor locationInParent = selectedNode.getLocationInParent();
+		if (locationInParent != TypeDeclaration.NAME_PROPERTY && locationInParent != EnumDeclaration.NAME_PROPERTY) {
+			return;
+		}
+
+		typeDeclaration = (AbstractTypeDeclaration)selectedNode.getParent();
+
+		ITypeBinding binding = typeDeclaration.resolveBinding();
+		if (binding == null || binding.getSuperclass() == null) {
+			return;
+		}
+		final IType type = (IType)binding.getJavaElement();
+
+		boolean hasInstanceFields = false;
+		IVariableBinding[] declaredFields = binding.getDeclaredFields();
+		for (int i = 0; i < declaredFields.length; i++) {
+			if (!Modifier.isStatic(declaredFields[i].getModifiers())) {
+				hasInstanceFields = true;
+				break;
+			}
+		}
+		if (hasInstanceFields) {
+			//Generate hashCode() and equals()... proposal
+			String label = CorrectionMessages.LocalCorrectionsSubProcessor_generate_hashCode_equals_description;
+			Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			ChangeCorrectionProposal proposal =
+					new ChangeCorrectionProposal(label, null, IProposalRelevance.GENERATE_HASHCODE_AND_EQUALS, image) {
+						@Override
+						public void apply(IDocument document) {
+//							IEditorInput input = new FileEditorInput((IFile)cu.getResource());
+//							IWorkbenchPage p = JavaPlugin.getActivePage();
+//							if (p == null)
+//								return;
+//
+//							IEditorPart part = p.findEditor(input);
+//							if (!(part instanceof JavaEditor))
+//								return;
+//
+//							IEditorSite site = ((JavaEditor)part).getEditorSite();
+//							GenerateHashCodeEqualsAction action = new GenerateHashCodeEqualsAction(site);
+//							action.run(new StructuredSelection(type));
+							throw new UnsupportedOperationException(); // should never happened
+						}
+
+						@Override
+						public Object getAdditionalProposalInfo(IProgressMonitor monitor) {
+							return CorrectionMessages.LocalCorrectionsSubProcessor_generate_hashCode_equals_additional_info;
+						}
+
+						@Override
+						public String getActionId() {
+							return "javaGenerateHashCodeEquals";
+						}
+					};
+			proposals.add(proposal);
+		}
+
+
+		//Override hashCode() proposal
+		IMethodBinding superHashCode = Bindings.findMethodInHierarchy(binding, "hashCode", new ITypeBinding[0]); //$NON-NLS-1$
+		if (superHashCode == null) {
+			return;
+		}
+
+		String label = CorrectionMessages.LocalCorrectionsSubProcessor_override_hashCode_description;
+		Image image = JavaPluginImages.get(JavaPluginImages.DESC_MISC_PUBLIC);
+
+		ASTRewrite rewrite = ASTRewrite.create(astRoot.getAST());
+		LinkedCorrectionProposal proposal2 = new LinkedCorrectionProposal(label, cu, rewrite, IProposalRelevance.OVERRIDE_HASHCODE, image);
+		ImportRewrite importRewrite = proposal2.createImportRewrite(astRoot);
+
+		String typeQualifiedName = type.getTypeQualifiedName('.');
+		final CodeGenerationSettings settings = JavaPreferencesSettings.getCodeGenerationSettings(cu.getJavaProject());
+
+		try {
+			ImportRewriteContext importContext = new ContextSensitiveImportRewriteContext(astRoot, problem.getOffset(), importRewrite);
+			MethodDeclaration hashCode = StubUtility2
+					.createImplementationStub(cu, rewrite, importRewrite, importContext, superHashCode, typeQualifiedName, settings,
+											  false);
+			BodyDeclarationRewrite.create(rewrite, typeDeclaration).insert(hashCode, null);
+
+			proposal2.setEndPosition(rewrite.track(hashCode));
+
+		} catch (CoreException e) {
+			JavaPlugin.log(e);
+		}
+
+
+		proposals.add(proposal2);
+	}
+

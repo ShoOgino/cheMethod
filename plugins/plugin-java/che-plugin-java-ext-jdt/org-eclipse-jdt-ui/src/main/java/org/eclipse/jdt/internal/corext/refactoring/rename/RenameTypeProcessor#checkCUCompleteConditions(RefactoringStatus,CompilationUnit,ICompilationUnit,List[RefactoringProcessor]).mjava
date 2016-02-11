@@ -1,0 +1,30 @@
+	private void checkCUCompleteConditions(final RefactoringStatus status, CompilationUnit currentResolvedCU, ICompilationUnit currentCU, List<RefactoringProcessor> processors) throws CoreException {
+
+		// check local variable conditions
+		List<RefactoringProcessor> locals= getProcessorsOfType(processors, RenameLocalVariableProcessor.class);
+		if (!locals.isEmpty()) {
+			RenameAnalyzeUtil.LocalAnalyzePackage[] analyzePackages= new RenameAnalyzeUtil.LocalAnalyzePackage[locals.size()];
+			TextChangeManager manager= new TextChangeManager();
+			int current= 0;
+			TextChange textChange= manager.get(currentCU);
+			textChange.setKeepPreviewEdits(true);
+			for (Iterator<RefactoringProcessor> iterator= locals.iterator(); iterator.hasNext();) {
+				RenameLocalVariableProcessor localProcessor= (RenameLocalVariableProcessor) iterator.next();
+				RenameAnalyzeUtil.LocalAnalyzePackage analyzePackage= localProcessor.getLocalAnalyzePackage();
+				analyzePackages[current]= analyzePackage;
+				for (int i= 0; i < analyzePackage.fOccurenceEdits.length; i++) {
+					TextChangeCompatibility.addTextEdit(textChange, "", analyzePackage.fOccurenceEdits[i], GroupCategorySet.NONE); //$NON-NLS-1$
+				}
+				current++;
+			}
+			status.merge(RenameAnalyzeUtil.analyzeLocalRenames(analyzePackages, textChange, currentResolvedCU, false));
+		}
+
+		/*
+		 * There is room for performance improvement here: One could move
+		 * shadowing analyzes out of the field and method processors and perform
+		 * it here, thus saving on working copy creation. Drawback is increased
+		 * heap consumption.
+		 */
+	}
+

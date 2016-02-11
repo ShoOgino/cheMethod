@@ -1,0 +1,54 @@
+	public static void addMethodRequiresBodyProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ICompilationUnit cu= context.getCompilationUnit();
+		AST ast= context.getASTRoot().getAST();
+
+		ASTNode selectedNode= problem.getCoveringNode(context.getASTRoot());
+		if (!(selectedNode instanceof MethodDeclaration)) {
+			return;
+		}
+		MethodDeclaration decl=  (MethodDeclaration) selectedNode;
+		Modifier modifierNode;
+		{
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+
+			modifierNode= removeModifier(decl, rewrite, Modifier.ABSTRACT);
+
+			Block body= ast.newBlock();
+			rewrite.set(decl, MethodDeclaration.BODY_PROPERTY, body, null);
+
+
+			if (!decl.isConstructor()) {
+				Type returnType= decl.getReturnType2();
+				if (returnType != null) {
+					Expression expression= ASTNodeFactory.newDefaultExpression(ast, returnType, decl.getExtraDimensions());
+					if (expression != null) {
+						ReturnStatement returnStatement= ast.newReturnStatement();
+						returnStatement.setExpression(expression);
+						body.statements().add(returnStatement);
+					}
+				}
+			}
+
+			String label= CorrectionMessages.ModifierCorrectionSubProcessor_addmissingbody_description;
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			ASTRewriteCorrectionProposal
+					proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.ADD_MISSING_BODY, image);
+
+			proposals.add(proposal);
+		}
+
+		IMethodBinding binding= decl.resolveBinding();
+		if (modifierNode == null && binding != null) {
+			String label= Messages
+					.format(CorrectionMessages.ModifierCorrectionSubProcessor_changemodifiertoabstract_description, getMethodLabel(binding));
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			int included= binding.getDeclaringClass().isInterface() ? Modifier.NONE : Modifier.ABSTRACT;
+			int excluded= Modifier.STATIC | Modifier.DEFAULT;
+			ModifierChangeCorrectionProposal
+					proposal= new ModifierChangeCorrectionProposal(label, cu, binding, decl, included, excluded, IProposalRelevance.ADD_ABSTRACT_MODIFIER, image);
+
+			proposals.add(proposal);
+		}
+
+	}
+

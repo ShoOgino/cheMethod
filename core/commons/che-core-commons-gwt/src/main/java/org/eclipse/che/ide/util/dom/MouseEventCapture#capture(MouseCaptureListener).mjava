@@ -1,0 +1,39 @@
+    /**
+     * Capture happens on a per listener instance basis. We throw the
+     * CaptureListener on the top of the capture stack and then provide a handle
+     * to an object that can be used to
+     *
+     * @param listener
+     */
+    public static void capture(final MouseCaptureListener listener) {
+
+        // Make sure to release the previous capture owner.
+        if (captureOwner != null) {
+            captureOwner.release();
+        }
+
+        // Lazily initialize event hookups (this should be below the release above
+        // since the above in turn clears the capture hookups)
+        if (mouseRemovers.isEmpty()) {
+            registerEventCaptureHookups();
+        }
+
+        captureOwner = listener;
+        listener.setCaptureReleaser(new CaptureReleaser() {
+            @Override
+            public void release() {
+                // nuke the reference to this releaser in the listener (which should
+                // still be the capture owner).
+                listener.setCaptureReleaser(null);
+                // nuke the captureOwner
+                captureOwner = null;
+
+                // Release the event listeners.
+                for (int i = 0, n = mouseRemovers.size(); i < n; i++) {
+                    mouseRemovers.get(i).remove();
+                }
+                mouseRemovers.clear();
+            }
+        });
+    }
+

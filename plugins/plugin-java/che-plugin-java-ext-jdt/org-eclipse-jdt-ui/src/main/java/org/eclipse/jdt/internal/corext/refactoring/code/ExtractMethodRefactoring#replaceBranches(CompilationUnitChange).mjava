@@ -1,0 +1,82 @@
+	private void replaceBranches(final CompilationUnitChange result) {
+		ASTNode[] selectedNodes= fAnalyzer.getSelectedNodes();
+		for (int i= 0; i < selectedNodes.length; i++) {
+			ASTNode astNode= selectedNodes[i];
+			astNode.accept(new ASTVisitor() {
+				private LinkedList<String> fOpenLoopLabels= new LinkedList<String>();
+
+				private void registerLoopLabel(Statement node) {
+					String identifier;
+					if (node.getParent() instanceof LabeledStatement) {
+						LabeledStatement labeledStatement= (LabeledStatement)node.getParent();
+						identifier= labeledStatement.getLabel().getIdentifier();
+					} else {
+						identifier= null;
+					}
+					fOpenLoopLabels.add(identifier);
+				}
+				
+				@Override
+				public boolean visit(ForStatement node) {
+					registerLoopLabel(node);
+					return super.visit(node);
+				}
+
+				@Override
+				public void endVisit(ForStatement node) {
+					fOpenLoopLabels.removeLast();
+				}
+
+				@Override
+				public boolean visit(WhileStatement node) {
+					registerLoopLabel(node);
+					return super.visit(node);
+				}
+
+				@Override
+				public void endVisit(WhileStatement node) {
+					fOpenLoopLabels.removeLast();
+				}
+
+				@Override
+				public boolean visit(EnhancedForStatement node) {
+					registerLoopLabel(node);
+					return super.visit(node);
+				}
+
+				@Override
+				public void endVisit(EnhancedForStatement node) {
+					fOpenLoopLabels.removeLast();
+				}
+
+				@Override
+				public boolean visit(DoStatement node) {
+					registerLoopLabel(node);
+					return super.visit(node);
+				}
+
+				@Override
+				public void endVisit(DoStatement node) {
+					fOpenLoopLabels.removeLast();
+				}
+
+				@Override
+				public void endVisit(ContinueStatement node) {
+					final SimpleName label= node.getLabel();
+					if (fOpenLoopLabels.isEmpty() || (label != null && !fOpenLoopLabels.contains(label.getIdentifier()))) {
+						TextEditGroup description= new TextEditGroup(RefactoringCoreMessages.ExtractMethodRefactoring_replace_continue);
+						result.addTextEditGroup(description);
+
+						ReturnStatement rs= fAST.newReturnStatement();
+						IVariableBinding returnValue= fAnalyzer.getReturnValue();
+						if (returnValue != null) {
+							rs.setExpression(fAST.newSimpleName(getName(returnValue)));
+						}
+
+						fRewriter.replace(node, rs, description);
+					}
+				}
+			});
+		}
+	}
+

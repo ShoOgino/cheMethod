@@ -1,0 +1,47 @@
+	/*
+	 * @see org.eclipse.ltk.core.refactoring.TextChange#performEdits(org.eclipse.jface.text.IDocument)
+	 * @since 3.5
+	 */
+	protected UndoEdit performEdits(final IDocument document) throws BadLocationException, MalformedTreeException {
+		if (! fBuffer.isSynchronizationContextRequested()) {
+			return super.performEdits(document);
+		}
+		
+		ITextFileBufferManager fileBufferManager= FileBuffers.getTextFileBufferManager();
+		
+		/** The lock for waiting for computation in the UI thread to complete. */
+		final Lock completionLock= new Lock();
+		final UndoEdit[] result= new UndoEdit[1];
+		final BadLocationException[] exception= new BadLocationException[1];
+		Runnable runnable= new Runnable() {
+			public void run() {
+				synchronized (completionLock) {
+					try {
+						result[0]= TextFileChange.super.performEdits(document);
+					} catch (BadLocationException e) {
+						exception[0]= e;
+					} finally {
+						completionLock.fDone= true;
+						completionLock.notifyAll();
+					}
+				}
+			}
+		};
+		
+		synchronized (completionLock) {
+			fileBufferManager.execute(runnable);
+			while (! completionLock.fDone) {
+				try {
+					completionLock.wait(500);
+				} catch (InterruptedException x) {
+				}
+			}
+		}
+		
+		if (exception[0] != null) {
+			throw exception[0];
+		}
+		
+		return result[0];
+	}
+

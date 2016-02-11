@@ -1,0 +1,31 @@
+	/**
+	 * Creates and a delta representing a deleted resource, and adds it to the provided
+	 * parent delta.
+	 * @param parentDelta The parent of the deletion delta to create
+	 * @param resource The deleted resource to create a delta for
+	 */
+	private ProposedResourceDelta buildDeleteDelta(ProposedResourceDelta parentDelta, IResource resource) {
+		//start with the existing delta for this resource, if any, to preserve other flags
+		ProposedResourceDelta delta = parentDelta.getChild(resource.getName());
+		if (delta == null) {
+			delta = new ProposedResourceDelta(resource);
+			parentDelta.add(delta);
+		}
+		delta.setKind(IResourceDelta.REMOVED);
+		if (resource.getType() == IResource.FILE)
+			return delta;
+		//recurse to build deletion deltas for children
+		try {
+			IResource[] members = ((IContainer)resource).members();
+			int childCount = members.length;
+			if (childCount > 0) {
+				ProposedResourceDelta[] childDeltas = new ProposedResourceDelta[childCount];
+				for (int i = 0; i < childCount; i++)
+					childDeltas[i] = buildDeleteDelta(delta, members[i]);
+			}
+		} catch (CoreException e) {
+			//don't need to create deletion deltas for children of inaccessible resources
+		}
+		return delta;
+	}
+

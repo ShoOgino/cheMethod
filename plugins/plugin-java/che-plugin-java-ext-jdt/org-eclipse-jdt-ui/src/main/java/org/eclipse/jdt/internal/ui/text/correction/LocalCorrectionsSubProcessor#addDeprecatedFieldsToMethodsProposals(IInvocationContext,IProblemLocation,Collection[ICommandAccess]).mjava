@@ -1,0 +1,66 @@
+	public static void addDeprecatedFieldsToMethodsProposals(IInvocationContext context, IProblemLocation problem,
+															 Collection<ICommandAccess> proposals) {
+		ASTNode selectedNode = problem.getCoveringNode(context.getASTRoot());
+		if (selectedNode instanceof Name) {
+			IBinding binding = ((Name)selectedNode).resolveBinding();
+			if (binding instanceof IVariableBinding) {
+				IVariableBinding variableBinding = (IVariableBinding)binding;
+				if (variableBinding.isField()) {
+					String qualifiedName = variableBinding.getDeclaringClass().getTypeDeclaration().getQualifiedName();
+					String fieldName = variableBinding.getName();
+					String[] methodName = getMethod(JavaModelUtil.concatenateName(qualifiedName, fieldName));
+					if (methodName != null) {
+						AST ast = selectedNode.getAST();
+						ASTRewrite astRewrite = ASTRewrite.create(ast);
+						ImportRewrite importRewrite = StubUtility.createImportRewrite(context.getASTRoot(), true);
+
+						MethodInvocation method = ast.newMethodInvocation();
+						String qfn = importRewrite.addImport(methodName[0]);
+						method.setExpression(ast.newName(qfn));
+						method.setName(ast.newSimpleName(methodName[1]));
+						ASTNode parent = selectedNode.getParent();
+						ICompilationUnit cu = context.getCompilationUnit();
+						// add explicit type arguments if necessary (for 1.8 and later, we're optimistic that inference just works):
+						if (Invocations.isInvocationWithArguments(parent) && !JavaModelUtil.is18OrHigher(cu.getJavaProject())) {
+							IMethodBinding methodBinding = Invocations.resolveBinding(parent);
+							if (methodBinding != null) {
+								ITypeBinding[] parameterTypes = methodBinding.getParameterTypes();
+								int i = Invocations.getArguments(parent).indexOf(selectedNode);
+								if (parameterTypes.length >= i && parameterTypes[i].isParameterizedType()) {
+									ITypeBinding[] typeArguments = parameterTypes[i].getTypeArguments();
+									for (int j = 0; j < typeArguments.length; j++) {
+										ITypeBinding typeArgument = typeArguments[j];
+										typeArgument = Bindings.normalizeForDeclarationUse(typeArgument, ast);
+										if (!TypeRules.isJavaLangObject(typeArgument)) {
+											// add all type arguments if at least one is found to be necessary:
+											List<Type> typeArgumentsList = method.typeArguments();
+											for (int k = 0; k < typeArguments.length; k++) {
+												typeArgument = typeArguments[k];
+												typeArgument = Bindings.normalizeForDeclarationUse(typeArgument, ast);
+												typeArgumentsList.add(importRewrite.addImport(typeArgument, ast));
+											}
+											break;
+										}
+									}
+								}
+							}
+						}
+
+						astRewrite.replace(selectedNode, method, null);
+
+						String label =
+								Messages.format(CorrectionMessages.LocalCorrectionsSubProcessor_replacefieldaccesswithmethod_description,
+												BasicElementLabels.getJavaElementName(ASTNodes.asString(method)));
+						Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+						ASTRewriteCorrectionProposal proposal =
+								new ASTRewriteCorrectionProposal(label, cu, astRewrite, IProposalRelevance
+										.REPLACE_FIELD_ACCESS_WITH_METHOD,
+																 image);
+						proposal.setImportRewrite(importRewrite);
+						proposals.add(proposal);
+					}
+				}
+			}
+		}
+	}
+

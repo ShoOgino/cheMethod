@@ -1,0 +1,55 @@
+	private static ToStaticAccessOperation[] createToStaticAccessOperations(CompilationUnit astRoot, HashMap<ASTNode, Block> createdBlocks,
+																			IProblemLocation problem, boolean conservative) {
+		ASTNode selectedNode = problem.getCoveringNode(astRoot);
+		if (selectedNode == null) {
+			return null;
+		}
+
+		Expression qualifier = null;
+		IBinding accessBinding = null;
+
+		if (selectedNode instanceof SimpleName) {
+			selectedNode = selectedNode.getParent();
+		}
+		if (selectedNode instanceof QualifiedName) {
+			QualifiedName name = (QualifiedName)selectedNode;
+			qualifier = name.getQualifier();
+			accessBinding = name.resolveBinding();
+		} else if (selectedNode instanceof MethodInvocation) {
+			MethodInvocation methodInvocation = (MethodInvocation)selectedNode;
+			qualifier = methodInvocation.getExpression();
+			accessBinding = methodInvocation.getName().resolveBinding();
+		} else if (selectedNode instanceof FieldAccess) {
+			FieldAccess fieldAccess = (FieldAccess)selectedNode;
+			qualifier = fieldAccess.getExpression();
+			accessBinding = fieldAccess.getName().resolveBinding();
+		}
+
+		if (accessBinding != null && qualifier != null) {
+			if (conservative && ASTResolving.findParentStatement(qualifier) == null)
+				return null;
+
+			ToStaticAccessOperation declaring = null;
+			ITypeBinding declaringTypeBinding = getDeclaringTypeBinding(accessBinding);
+			if (declaringTypeBinding != null) {
+				declaringTypeBinding = declaringTypeBinding.getTypeDeclaration(); // use generic to avoid any type arguments
+
+				declaring = new ToStaticAccessOperation(declaringTypeBinding, qualifier, createdBlocks);
+			}
+			ToStaticAccessOperation instance = null;
+			ITypeBinding instanceTypeBinding = Bindings.normalizeTypeBinding(qualifier.resolveTypeBinding());
+			if (instanceTypeBinding != null) {
+				instanceTypeBinding = instanceTypeBinding.getTypeDeclaration();  // use generic to avoid any type arguments
+				if (instanceTypeBinding.getTypeDeclaration() != declaringTypeBinding) {
+					instance = new ToStaticAccessOperation(instanceTypeBinding, qualifier, createdBlocks);
+				}
+			}
+			if (declaring != null && instance != null) {
+				return new ToStaticAccessOperation[]{declaring, instance};
+			} else {
+				return new ToStaticAccessOperation[]{declaring};
+			}
+		}
+		return null;
+	}
+

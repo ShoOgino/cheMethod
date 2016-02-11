@@ -1,0 +1,92 @@
+	/**
+	 * Removes refactoring descriptors from the managed history.
+	 * <p>
+	 * All refactoring descriptors must be from the history entry denoted by the
+	 * specified path.
+	 * </p>
+	 *
+	 * @param proxies
+	 *            the refactoring descriptors
+	 * @param path
+	 *            the path of the history entry
+	 * @param monitor
+	 *            the progress monitor to use
+	 * @param task
+	 *            the task label to use
+	 * @throws CoreException
+	 *             if an error occurs
+	 */
+	private void removeRefactoringDescriptors(final RefactoringDescriptorProxy[] proxies, final IPath path, final IProgressMonitor monitor, final String task) throws CoreException {
+		try {
+			monitor.beginTask(task, 5);
+			final IFileStore folder= fHistoryStore.getFileStore(path);
+			final IFileStore index= folder.getChild(RefactoringHistoryService.NAME_INDEX_FILE);
+			if (index.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists()) {
+				final Set resultingProxies= new HashSet(64);
+				readRefactoringDescriptorProxies(index, null, resultingProxies, 0, Long.MAX_VALUE, new SubProgressMonitor(monitor, 1), task);
+				if (resultingProxies.size() == proxies.length)
+					removeIndexTree(folder, new SubProgressMonitor(monitor, 1), task);
+				else {
+					final IFileStore history= folder.getChild(RefactoringHistoryService.NAME_HISTORY_FILE);
+					if (history.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists()) {
+						InputStream input= null;
+						Document document= null;
+						try {
+							input= new BufferedInputStream(history.openInputStream(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)));
+							document= getCachedDocument(path, input);
+						} catch (ParserConfigurationException exception) {
+							throw createCoreException(exception);
+						} catch (IOException exception) {
+							throw createCoreException(exception);
+						} catch (SAXException exception) {
+							throw createCoreException(exception);
+						} finally {
+							if (input != null) {
+								try {
+									input.close();
+								} catch (IOException exception) {
+									// Do nothing
+								}
+							}
+						}
+						final Set removedNodes= new HashSet(proxies.length);
+						final NodeList list= document.getElementsByTagName(IRefactoringSerializationConstants.ELEMENT_REFACTORING);
+						final int length= list.getLength();
+						for (int offset= 0; offset < length; offset++) {
+							final Node node= list.item(offset);
+							final NamedNodeMap attributes= node.getAttributes();
+							if (attributes != null) {
+								final Node item= attributes.getNamedItem(IRefactoringSerializationConstants.ATTRIBUTE_STAMP);
+								if (item != null) {
+									final String value= item.getNodeValue();
+									if (value != null) {
+										for (int current= 0; current < proxies.length; current++) {
+											final RefactoringDescriptorProxy proxy= proxies[current];
+											final long stamp= proxy.getTimeStamp();
+											if (value.equals(String.valueOf(stamp))) {
+												resultingProxies.remove(new DefaultRefactoringDescriptorProxy(proxy.getDescription(), proxy.getProject(), stamp));
+												removedNodes.add(node);
+											}
+										}
+									}
+								}
+							}
+						}
+						for (final Iterator iterator= removedNodes.iterator(); iterator.hasNext();) {
+							final Node node= (Node) iterator.next();
+							node.getParentNode().removeChild(node);
+						}
+						try {
+							writeIndexEntry(index, (RefactoringDescriptorProxy[]) resultingProxies.toArray(new RefactoringDescriptorProxy[resultingProxies.size()]), EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL), task);
+							writeHistoryEntry(history, document, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL), task);
+						} catch (IOException exception) {
+							throw createCoreException(exception);
+						}
+					}
+				}
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

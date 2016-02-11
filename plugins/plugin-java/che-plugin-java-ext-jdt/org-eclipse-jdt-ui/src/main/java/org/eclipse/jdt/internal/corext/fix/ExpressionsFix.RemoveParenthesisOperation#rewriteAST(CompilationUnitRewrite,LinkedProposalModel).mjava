@@ -1,0 +1,31 @@
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public void rewriteAST(CompilationUnitRewrite cuRewrite, LinkedProposalModel model) throws CoreException {
+			TextEditGroup group = createTextEditGroup(FixMessages.ExpressionsFix_removeUnnecessaryParentheses_description, cuRewrite);
+
+			ASTRewrite rewrite = cuRewrite.getASTRewrite();
+			rewrite.setTargetSourceRangeComputer(new NoCommentSourceRangeComputer());
+
+			while (fExpressions.size() > 0) {
+				ParenthesizedExpression parenthesizedExpression = fExpressions.iterator().next();
+				fExpressions.remove(parenthesizedExpression);
+				ParenthesizedExpression down = parenthesizedExpression;
+				while (fExpressions.contains(down.getExpression())) {
+					down = (ParenthesizedExpression)down.getExpression();
+					fExpressions.remove(down);
+				}
+
+				ASTNode move = rewrite.createMoveTarget(down.getExpression());
+
+				ParenthesizedExpression top = parenthesizedExpression;
+				while (fExpressions.contains(top.getParent())) {
+					top = (ParenthesizedExpression)top.getParent();
+					fExpressions.remove(top);
+				}
+
+				rewrite.replace(top, move, group);
+			}
+		}
+

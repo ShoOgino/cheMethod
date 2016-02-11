@@ -1,0 +1,42 @@
+	private RefactoringStatus updateTargetVisibility(IProgressMonitor monitor) throws JavaModelException, CoreException {
+
+		RefactoringStatus result= new RefactoringStatus();
+
+		// Adjust the visibility of the method and of the referenced type. Note that
+		// the target method may not be in the target type; and in this case, the type
+		// of the target method does not need a visibility adjustment.
+
+		// This method is called after all other changes have been
+		// created. Changes induced by this method will be attached to those changes.
+
+		result.merge(adjustVisibility((IType) fIntermediaryFirstParameterType.getJavaElement(), fIntermediaryType, monitor));
+		if (result.hasError())
+			return result; // binary
+
+		ModifierKeyword neededVisibility= getNeededVisibility(fTargetMethod, fIntermediaryType);
+		if (neededVisibility != null) {
+
+			result.merge(adjustVisibility(fTargetMethod, neededVisibility,  monitor));
+			if (result.hasError())
+				return result; // binary
+
+			// Need to adjust the overridden methods of the target method.
+			ITypeHierarchy hierarchy= fTargetMethod.getDeclaringType().newTypeHierarchy(null);
+			MethodOverrideTester tester= new MethodOverrideTester(fTargetMethod.getDeclaringType(), hierarchy);
+			IType[] subtypes= hierarchy.getAllSubtypes(fTargetMethod.getDeclaringType());
+			for (int i= 0; i < subtypes.length; i++) {
+				IMethod method= tester.findOverridingMethodInType(subtypes[i], fTargetMethod);
+				if (method != null && method.exists()) {
+					result.merge(adjustVisibility(method, neededVisibility, monitor));
+					if (monitor.isCanceled())
+						throw new OperationCanceledException();
+
+					if (result.hasError())
+						return result; // binary
+				}
+			}
+		}
+
+		return result;
+	}
+

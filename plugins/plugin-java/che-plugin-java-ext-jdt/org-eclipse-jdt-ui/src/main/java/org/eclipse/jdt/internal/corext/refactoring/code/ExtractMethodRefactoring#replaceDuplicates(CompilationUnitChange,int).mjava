@@ -1,0 +1,33 @@
+	private void replaceDuplicates(CompilationUnitChange result, int modifiers) {
+		int numberOf= getNumberOfDuplicates();
+		if (numberOf == 0 || !fReplaceDuplicates)
+			return;
+		String label= null;
+		if (numberOf == 1)
+			label= Messages.format(RefactoringCoreMessages.ExtractMethodRefactoring_duplicates_single,
+								   BasicElementLabels.getJavaElementName(fMethodName));
+		else
+			label= Messages.format(RefactoringCoreMessages.ExtractMethodRefactoring_duplicates_multi,
+								   BasicElementLabels.getJavaElementName(fMethodName));
+
+		TextEditGroup description= new TextEditGroup(label);
+		result.addTextEditGroup(description);
+
+		for (int d= 0; d < fDuplicates.length; d++) {
+			SnippetFinder.Match duplicate= fDuplicates[d];
+			if (!duplicate.isInvalidNode()) {
+				if (isDestinationReachable(duplicate.getEnclosingMethod())) {
+					ASTNode[] callNodes= createCallNodes(duplicate, modifiers);
+					ASTNode[] duplicateNodes= duplicate.getNodes();
+					for (int i= 0; i < duplicateNodes.length; i++) {
+						ASTNode parent= duplicateNodes[i].getParent();
+						if (parent instanceof ParenthesizedExpression) {
+							duplicateNodes[i]= parent;
+						}
+					}
+					new StatementRewrite(fRewriter, duplicateNodes).replace(callNodes, description);
+				}
+			}
+		}
+	}
+

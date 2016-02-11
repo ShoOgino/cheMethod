@@ -1,0 +1,78 @@
+	private static boolean getPickOutStringProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		// we work with String's
+		if (!(node instanceof StringLiteral)) {
+			return false;
+		}
+		// user should select part of String
+		int selectionPos= context.getSelectionOffset();
+		int selectionLen= context.getSelectionLength();
+		if (selectionLen == 0) {
+			return false;
+		}
+		int valueStart= node.getStartPosition() + 1;
+		int valueEnd= node.getStartPosition() + node.getLength() - 1;
+
+		// selection must be inside node and the quotes and not contain the full value
+		if (selectionPos < valueStart || selectionPos + selectionLen > valueEnd || valueEnd - valueStart == selectionLen) {
+			return false;
+		}
+
+		// prepare string parts positions
+		StringLiteral stringLiteral= (StringLiteral) node;
+		String stringValue= stringLiteral.getEscapedValue();
+
+		int firstPos= selectionPos - node.getStartPosition();
+		int secondPos= firstPos + selectionLen;
+
+
+		// prepare new string literals
+
+		AST ast= node.getAST();
+		StringLiteral leftLiteral= ast.newStringLiteral();
+		StringLiteral centerLiteral= ast.newStringLiteral();
+		StringLiteral rightLiteral= ast.newStringLiteral();
+		try {
+			leftLiteral.setEscapedValue('"' + stringValue.substring(1, firstPos) + '"');
+			centerLiteral.setEscapedValue('"' + stringValue.substring(firstPos, secondPos) + '"');
+			rightLiteral.setEscapedValue('"' + stringValue.substring(secondPos, stringValue.length() - 1) + '"');
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
+		if (resultingCollections == null) {
+			return true;
+		}
+
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+
+		// prepare new expression instead of StringLiteral
+		InfixExpression expression= ast.newInfixExpression();
+		expression.setOperator(InfixExpression.Operator.PLUS);
+		if (firstPos != 1) {
+			expression.setLeftOperand(leftLiteral);
+		}
+
+
+		if (firstPos == 1) {
+			expression.setLeftOperand(centerLiteral);
+		} else {
+			expression.setRightOperand(centerLiteral);
+		}
+
+		if (secondPos < stringValue.length() - 1) {
+			if (firstPos == 1) {
+				expression.setRightOperand(rightLiteral);
+			} else {
+				expression.extendedOperands().add(rightLiteral);
+			}
+		}
+		// use new expression instead of old StirngLiteral
+		rewrite.replace(stringLiteral, expression, null);
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_pickSelectedString;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.PICK_SELECTED_STRING, image);
+		proposal.addLinkedPosition(rewrite.track(centerLiteral), true, "CENTER_STRING"); //$NON-NLS-1$
+		resultingCollections.add(proposal);
+		return true;
+	}
+

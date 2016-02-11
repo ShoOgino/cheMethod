@@ -1,0 +1,143 @@
+	private static boolean getConvertSwitchToIfProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections, boolean preserveNPE) {
+		final AST ast= covering.getAST();
+		final ASTRewrite rewrite= ASTRewrite.create(ast);
+		final ImportRewrite importRewrite= StubUtility.createImportRewrite(context.getASTRoot(), true);
+		//
+		SwitchStatement switchStatement= (SwitchStatement) covering;
+		ITypeBinding expressionType= switchStatement.getExpression().resolveTypeBinding();
+		boolean isStringsInSwitch= expressionType != null && "java.lang.String".equals(expressionType.getQualifiedName()); //$NON-NLS-1$
+
+		if (!isStringsInSwitch && preserveNPE)
+			return false;
+
+		IfStatement firstIfStatement= null;
+		IfStatement currentIfStatement= null;
+		Block currentBlock= null;
+		boolean hasStopAsLastExecutableStatement= false;
+		Block defaultBlock= null;
+		Expression currentCondition= null;
+		boolean defaultFound= false;
+
+		ArrayList<Block> allBlocks= new ArrayList<Block>();
+		ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(ASTResolving.findParentBodyDeclaration(covering), importRewrite);
+
+		Expression switchExpression= switchStatement.getExpression();
+		Name varName;
+		VariableDeclarationStatement variableDeclarationStatement= null;
+		if (switchExpression instanceof Name) {
+			varName= (Name) switchExpression;
+		} else {
+			// Switch expression could have side effects, see bug 252040
+			VariableDeclarationFragment variableDeclarationFragment= ast.newVariableDeclarationFragment();
+			String[] varNames= StubUtility
+					.getVariableNameSuggestions(NamingConventions.VK_LOCAL, context.getCompilationUnit().getJavaProject(), expressionType,
+												switchExpression, null);
+			varName= ast.newSimpleName(varNames[0]);
+			variableDeclarationFragment.setName((SimpleName) varName);
+			variableDeclarationFragment.setStructuralProperty(VariableDeclarationFragment.INITIALIZER_PROPERTY, rewrite.createCopyTarget(switchExpression));
+
+			variableDeclarationStatement= ast.newVariableDeclarationStatement(variableDeclarationFragment);
+			Type type= importRewrite.addImport(expressionType, ast, importRewriteContext);
+			variableDeclarationStatement.setType(type);
+		}
+
+		for (Iterator<Statement> iter= switchStatement.statements().iterator(); iter.hasNext();) {
+			Statement statement= iter.next();
+			if (statement instanceof SwitchCase) {
+				SwitchCase switchCase= (SwitchCase) statement;
+				// special case: pass through
+				if (currentBlock != null) {
+					if (!hasStopAsLastExecutableStatement) {
+						return false;
+					}
+					currentBlock= null;
+				}
+
+				if (defaultFound) {
+					// This gets too complicated. We only support 'default' as last SwitchCase.
+					return false;
+				}
+				if (switchCase.isDefault()) {
+					defaultFound= true;
+				}
+				// prepare condition (is null for 'default')
+				Expression switchCaseCondition= createSwitchCaseCondition(ast, rewrite, importRewrite, importRewriteContext, varName, switchCase, isStringsInSwitch, preserveNPE);
+				if (currentCondition == null) {
+					currentCondition= switchCaseCondition;
+				} else {
+					InfixExpression condition= ast.newInfixExpression();
+					condition.setOperator(InfixExpression.Operator.CONDITIONAL_OR);
+					condition.setLeftOperand(currentCondition);
+					if (switchCaseCondition == null)
+						switchCaseCondition= ast.newBooleanLiteral(true);
+					condition.setRightOperand(switchCaseCondition);
+					currentCondition= condition;
+				}
+			} else {
+				// ensure that current block exists as 'then' statement of 'if'
+				if (currentBlock == null) {
+					if (currentCondition != null) {
+						IfStatement ifStatement;
+						if (firstIfStatement == null) {
+							firstIfStatement= ast.newIfStatement();
+							ifStatement= firstIfStatement;
+						} else {
+							ifStatement= ast.newIfStatement();
+							currentIfStatement.setElseStatement(ifStatement);
+						}
+						currentIfStatement= ifStatement;
+						ifStatement.setExpression(currentCondition);
+						currentCondition= null;
+						currentBlock= ast.newBlock();
+						ifStatement.setThenStatement(currentBlock);
+						allBlocks.add(currentBlock);
+					} else {
+						// case for default:
+						defaultBlock= ast.newBlock();
+						currentBlock= defaultBlock;
+						allBlocks.add(currentBlock);
+						// delay adding of default block
+					}
+				}
+				if (statement instanceof BreakStatement) {
+					currentBlock= null;
+				} else {
+					// add current statement in current block
+
+					hasStopAsLastExecutableStatement= hasStopAsLastExecutableStatement(statement);
+					Statement copyStatement= copyStatementExceptBreak(ast, rewrite, statement);
+
+					currentBlock.statements().add(copyStatement);
+				}
+			}
+		}
+		// check, may be we have delayed default block
+		if (defaultBlock != null) {
+			currentIfStatement.setElseStatement(defaultBlock);
+		}
+		// remove unnecessary blocks in blocks
+		for (int i= 0; i < allBlocks.size(); i++) {
+			Block block= allBlocks.get(i);
+			List<Statement> statements= block.statements();
+			if (statements.size() == 1 && statements.get(0) instanceof Block) {
+				Block innerBlock= (Block) statements.remove(0);
+				block.getParent().setStructuralProperty(block.getLocationInParent(), innerBlock);
+			}
+		}
+
+		if (variableDeclarationStatement == null) {
+			// replace 'switch' with single if-else-if statement
+			rewrite.replace(switchStatement, firstIfStatement, null);
+		} else {
+			new StatementRewrite(rewrite, new ASTNode[] { switchStatement }).replace(new ASTNode[] { variableDeclarationStatement, firstIfStatement }, null);
+		}
+
+		// add correction proposal
+		String source= ASTNodes.asString(switchExpression).replaceAll("\r\n?|\n", " "); //$NON-NLS-1$ //$NON-NLS-2$
+		String label= preserveNPE ? Messages.format(CorrectionMessages.AdvancedQuickAssistProcessor_convertSwitchToIf_preserveNPE, source) : CorrectionMessages.AdvancedQuickAssistProcessor_convertSwitchToIf;
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.CONVERT_SWITCH_TO_IF_ELSE);
+		proposal.setImportRewrite(importRewrite);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

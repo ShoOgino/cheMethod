@@ -1,0 +1,61 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.ltk.core.refactoring.participants.RefactoringProcessor#checkFinalConditions(org.eclipse.core.runtime.IProgressMonitor, org.eclipse.ltk.core.refactoring.participants.CheckConditionsContext)
+	 */
+	public RefactoringStatus checkFinalConditions(IProgressMonitor pm, CheckConditionsContext context) throws CoreException, OperationCanceledException {
+		pm.beginTask("", 1); //$NON-NLS-1$
+		try {
+			RefactoringStatus result= new RefactoringStatus();
+
+			for (int i= 0; i < fResources.length; i++) {
+				IResource resource= fResources[i];
+				if (!resource.isSynchronized(IResource.DEPTH_INFINITE)) {
+					String pathLabel= BasicElementLabels.getPathLabel(resource.getFullPath(), false);
+					
+					String locationLabel= null;
+					IPath location= resource.getLocation();
+					if (location != null) {
+						locationLabel= BasicElementLabels.getPathLabel(location, true);
+					} else {
+						URI uri= resource.getLocationURI();
+						if (uri != null) {
+							locationLabel= BasicElementLabels.getURLPart(uri.toString());
+						}
+					}
+
+					String warning;
+					if (resource instanceof IFile) {
+						if (locationLabel != null) {
+							warning= Messages.format(RefactoringCoreMessages.DeleteResourcesProcessor_warning_out_of_sync_file_loc, new Object[] { pathLabel, locationLabel });
+						} else {
+							warning= Messages.format(RefactoringCoreMessages.DeleteResourcesProcessor_warning_out_of_sync_file, pathLabel);
+						}
+					} else {
+						if (locationLabel != null) {
+							warning= Messages.format(RefactoringCoreMessages.DeleteResourcesProcessor_warning_out_of_sync_container_loc, new Object[] { pathLabel, locationLabel });
+						} else {
+							warning= Messages.format(RefactoringCoreMessages.DeleteResourcesProcessor_warning_out_of_sync_container, pathLabel);
+						}
+					}
+					result.addWarning(warning);
+				}
+			}
+
+			checkDirtyResources(result);
+			
+			ResourceChangeChecker checker= (ResourceChangeChecker) context.getChecker(ResourceChangeChecker.class);
+			IResourceChangeDescriptionFactory deltaFactory= checker.getDeltaFactory();
+			for (int i= 0; i < fResources.length; i++) {
+				if (fResources[i].isPhantom()) {
+					result.addFatalError(Messages.format(RefactoringCoreMessages.DeleteResourcesProcessor_delete_error_phantom, BasicElementLabels.getPathLabel(fResources[i].getFullPath(), false)));
+				} else if (fDeleteContents && Resources.isReadOnly(fResources[i])) {
+					result.addFatalError(Messages.format(RefactoringCoreMessages.DeleteResourcesProcessor_delete_error_read_only, BasicElementLabels.getPathLabel(fResources[i].getFullPath(), false)));
+				} else {
+					deltaFactory.delete(fResources[i]);
+				}
+			}
+			return result;
+		} finally {
+			pm.done();
+		}
+	}
+

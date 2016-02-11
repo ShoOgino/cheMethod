@@ -1,0 +1,31 @@
+	public static void addUnnecessaryInstanceofProposal(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ASTNode selectedNode= problem.getCoveringNode(context.getASTRoot());
+
+		ASTNode curr= selectedNode;
+		while (curr instanceof ParenthesizedExpression) {
+			curr= ((ParenthesizedExpression) curr).getExpression();
+		}
+
+		if (curr instanceof InstanceofExpression) {
+			AST ast= curr.getAST();
+
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+
+			InstanceofExpression inst= (InstanceofExpression) curr;
+
+			InfixExpression expression= ast.newInfixExpression();
+			expression.setLeftOperand((Expression) rewrite.createCopyTarget(inst.getLeftOperand()));
+			expression.setOperator(InfixExpression.Operator.NOT_EQUALS);
+			expression.setRightOperand(ast.newNullLiteral());
+
+			rewrite.replace(inst, expression, null);
+
+			String label= CorrectionMessages.LocalCorrectionsSubProcessor_unnecessaryinstanceof_description;
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			ASTRewriteCorrectionProposal
+					proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.UNNECESSARY_INSTANCEOF, image);
+			proposals.add(proposal);
+		}
+
+	}
+

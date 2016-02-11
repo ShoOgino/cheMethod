@@ -1,0 +1,40 @@
+	public void rename(IPackageFragment rootPackage, RenameArguments args, boolean renameSubPackages) throws CoreException {
+		add(rootPackage, args, null);
+		IPackageFragment[] allSubPackages= null;
+		if (renameSubPackages) {
+			allSubPackages= getSubpackages(rootPackage);
+			for (int i= 0; i < allSubPackages.length; i++) {
+				IPackageFragment pack= allSubPackages[i];
+				RenameArguments subArgs= new RenameArguments(
+					getNewPackageName(rootPackage, args.getNewName(), pack.getElementName()),
+					args.getUpdateReferences());
+				add(pack, subArgs, null);
+			}
+		}
+		IContainer container= (IContainer)rootPackage.getResource();
+		if (container == null)
+			return;
+		IContainer target= (IContainer) ((IPackageFragmentRoot)rootPackage.getParent()).
+			getPackageFragment(args.getNewName()).getResource();
+		if ((!rootPackage.hasSubpackages() || renameSubPackages) && canMove(container, target)) {
+			createIncludingParents(target.getParent());
+			if (container.getParent().equals(target.getParent())) {
+				getResourceModifications().addRename(container, new RenameArguments(target.getName(), args.getUpdateReferences()));
+			} else {
+				// This is a little tricky. The problem is that the refactoring participants
+				// don't support a generic move like the resource API does. So for the delta
+				// we generate one move, however for the participants we have to generate single
+				// moves and deletes.
+				try {
+					getResourceModifications().ignoreForDelta();
+					addAllResourceModifications(rootPackage, args, renameSubPackages, allSubPackages);
+				} finally {
+					getResourceModifications().trackForDelta();
+				}
+				getResourceModifications().addDelta(new ResourceModifications.MoveDescription(container, target.getFullPath()));
+			}
+		} else {
+			addAllResourceModifications(rootPackage, args, renameSubPackages, allSubPackages);
+		}
+	}
+

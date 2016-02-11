@@ -1,0 +1,28 @@
+	private void helper2(String parameterName, String newParameterName, String typeName, String methodName, String[] methodSignature, boolean references) throws Exception {
+		ParticipantTesting.reset();
+		ICompilationUnit cu= createCUfromTestFile(getPackageP(), "A");
+		IType declaringType= getType(cu, typeName);
+		IMethod[] declaringMethods= getMethods(declaringType, new String[] { methodName}, new String[][] { methodSignature});
+		ITypeParameter typeParameter= declaringMethods[0].getTypeParameter(parameterName);
+		RenameTypeParameterProcessor processor= new RenameTypeParameterProcessor(typeParameter);
+		RenameRefactoring refactoring= new RenameRefactoring(processor);
+		processor.setNewElementName(newParameterName);
+		processor.setUpdateReferences(references);
+
+		RefactoringStatus result= performRefactoring(refactoring);
+		assertEquals("was supposed to pass", null, result);
+		assertEqualLines("invalid renaming", getFileContents(getOutputTestFileName("A")), cu.getSource());
+
+		assertTrue("anythingToUndo", RefactoringCore.getUndoManager().anythingToUndo());
+		assertTrue("! anythingToRedo", !RefactoringCore.getUndoManager().anythingToRedo());
+
+		RefactoringCore.getUndoManager().performUndo(null, new NullProgressMonitor());
+		assertEqualLines("invalid undo", getFileContents(getInputTestFileName("A")), cu.getSource());
+
+		assertTrue("! anythingToUndo", !RefactoringCore.getUndoManager().anythingToUndo());
+		assertTrue("anythingToRedo", RefactoringCore.getUndoManager().anythingToRedo());
+
+		RefactoringCore.getUndoManager().performRedo(null, new NullProgressMonitor());
+		assertEqualLines("invalid redo", getFileContents(getOutputTestFileName("A")), cu.getSource());
+	}
+

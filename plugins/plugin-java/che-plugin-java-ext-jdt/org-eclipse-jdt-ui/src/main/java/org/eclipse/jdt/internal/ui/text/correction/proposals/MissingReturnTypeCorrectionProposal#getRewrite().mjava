@@ -1,0 +1,68 @@
+	/*(non-Javadoc)
+	 * @see org.eclipse.jdt.internal.ui.text.correction.ASTRewriteCorrectionProposal#getRewrite()
+	 */
+	@Override
+	protected ASTRewrite getRewrite() {
+		AST ast = getAST();
+
+		ITypeBinding returnBinding = getReturnTypeBinding();
+
+		if (fExistingReturn != null) {
+			ASTRewrite rewrite = ASTRewrite.create(ast);
+
+			Expression expression = evaluateReturnExpressions(ast, returnBinding, fExistingReturn.getStartPosition());
+			if (expression != null) {
+				rewrite.set(fExistingReturn, ReturnStatement.EXPRESSION_PROPERTY, expression, null);
+
+				addLinkedPosition(rewrite.track(expression), true, RETURN_EXPRESSION_KEY);
+			}
+			return rewrite;
+		} else {
+			ASTRewrite rewrite = ASTRewrite.create(ast);
+
+			ASTNode body = getBody();
+			// For lambda the body can be a block or an expression.
+			if (body instanceof Block) {
+				Block block = (Block)body;
+				List<Statement> statements = block.statements();
+				int nStatements = statements.size();
+				ASTNode lastStatement = null;
+				if (nStatements > 0) {
+					lastStatement = statements.get(nStatements - 1);
+				}
+
+				if (returnBinding != null && lastStatement instanceof ExpressionStatement &&
+					lastStatement.getNodeType() != ASTNode.ASSIGNMENT) {
+					Expression expression = ((ExpressionStatement)lastStatement).getExpression();
+					ITypeBinding binding= expression.resolveTypeBinding();
+					if (binding != null && binding.isAssignmentCompatible(returnBinding)) {
+						Expression placeHolder= (Expression) rewrite.createMoveTarget(expression);
+
+						ReturnStatement returnStatement= ast.newReturnStatement();
+						returnStatement.setExpression(placeHolder);
+
+						rewrite.replace(lastStatement, returnStatement, null);
+						return rewrite;
+					}
+				}
+
+				int offset;
+				if (lastStatement == null) {
+					offset= block.getStartPosition() + 1;
+				} else {
+					offset= lastStatement.getStartPosition() + lastStatement.getLength();
+				}
+
+				ReturnStatement returnStatement= ast.newReturnStatement();
+				Expression expression= evaluateReturnExpressions(ast, returnBinding, offset);
+
+				returnStatement.setExpression(expression);
+
+				rewrite.getListRewrite(block, Block.STATEMENTS_PROPERTY).insertLast(returnStatement, null);
+
+				addLinkedPosition(rewrite.track(returnStatement.getExpression()), true, RETURN_EXPRESSION_KEY);
+			}
+			return rewrite;
+		}
+	}
+

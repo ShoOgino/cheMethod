@@ -1,0 +1,55 @@
+	public static void getAnnotationMemberProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) throws
+
+																																				CoreException {
+		CompilationUnit astRoot= context.getASTRoot();
+		ICompilationUnit cu= context.getCompilationUnit();
+		ASTNode selectedNode= problem.getCoveringNode(astRoot);
+
+		Annotation annotation;
+		String memberName;
+		if (selectedNode.getLocationInParent() == MemberValuePair.NAME_PROPERTY) {
+			if (selectedNode.getParent().getLocationInParent() != NormalAnnotation.VALUES_PROPERTY) {
+				return;
+			}
+			annotation= (Annotation) selectedNode.getParent().getParent();
+			memberName= ((SimpleName) selectedNode).getIdentifier();
+		} else if (selectedNode.getLocationInParent() == SingleMemberAnnotation.VALUE_PROPERTY) {
+			annotation= (Annotation) selectedNode.getParent();
+			memberName= "value"; //$NON-NLS-1$
+		} else {
+			return;
+		}
+
+		ITypeBinding annotBinding= annotation.resolveTypeBinding();
+		if (annotBinding == null) {
+			return;
+		}
+
+
+		if (annotation instanceof NormalAnnotation) {
+			// similar names
+			IMethodBinding[] otherMembers= annotBinding.getDeclaredMethods();
+			for (int i= 0; i < otherMembers.length; i++) {
+				IMethodBinding binding= otherMembers[i];
+				String curr= binding.getName();
+				int relevance= NameMatcher.isSimilarName(memberName,
+														 curr) ? IProposalRelevance.CHANGE_TO_ATTRIBUTE_SIMILAR_NAME : IProposalRelevance.CHANGE_TO_ATTRIBUTE;
+				String label= Messages
+						.format(CorrectionMessages.UnresolvedElementsSubProcessor_UnresolvedElementsSubProcessor_changetoattribute_description,
+								BasicElementLabels.getJavaElementName(curr));
+				proposals.add(new RenameNodeCorrectionProposal(label, cu, problem.getOffset(), problem.getLength(), curr, relevance));
+			}
+		}
+
+		if (annotBinding.isFromSource()) {
+			ICompilationUnit targetCU= ASTResolving.findCompilationUnitForBinding(cu, astRoot, annotBinding);
+			if (targetCU != null) {
+				String label= Messages
+						.format(CorrectionMessages.UnresolvedElementsSubProcessor_UnresolvedElementsSubProcessor_createattribute_description,
+								BasicElementLabels.getJavaElementName(memberName));
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_MISC_PUBLIC);
+				proposals.add(new NewAnnotationMemberProposal(label, targetCU, selectedNode, annotBinding, IProposalRelevance.CREATE_ATTRIBUTE, image));
+			}
+		}
+	}
+

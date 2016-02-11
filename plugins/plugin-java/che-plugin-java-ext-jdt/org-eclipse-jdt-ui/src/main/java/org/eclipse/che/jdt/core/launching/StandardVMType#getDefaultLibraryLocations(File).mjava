@@ -1,0 +1,63 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.jdt.launching.IVMInstallType#getDefaultLibraryLocations(java.io.File)
+	 */
+	public LibraryLocation[] getDefaultLibraryLocations(File installLocation) {
+		//NOTE: We do not add libraries from the "endorsed" directory explicitly, as
+		//the bootpath contains these entries already (if they exist).
+		// Determine the java executable that corresponds to the specified install location
+		// and use this to generate library information.  If no java executable was found, 
+		// the 'standard' libraries will be returned.
+		List<LibraryLocation> allLibs = fgDefaultLibLocs.get(installLocation.getAbsolutePath());
+		if (allLibs == null) {
+			File javaExecutable = findJavaExecutable(installLocation);
+			LibraryInfo libInfo;
+			if (javaExecutable == null) {
+				libInfo = getDefaultLibraryInfo(installLocation);
+			} else {
+				libInfo = getLibraryInfo(installLocation, javaExecutable);
+			}
+
+			// Add all endorsed libraries - they are first, as they replace
+			allLibs = new ArrayList<LibraryLocation>(gatherAllLibraries(libInfo.getEndorsedDirs()));
+
+			// next is the boot path libraries
+			String[] bootpath = libInfo.getBootpath();
+			List<LibraryLocation> boot = new ArrayList<LibraryLocation>(bootpath.length);
+			URL url = getDefaultJavadocLocation(installLocation);
+			for (int i = 0; i < bootpath.length; i++) {
+				IPath path = new Path(bootpath[i]);
+				File lib = path.toFile();
+				if (lib.exists() && lib.isFile()) {
+					LibraryLocation libraryLocation = new LibraryLocation(path,
+																		  getDefaultSystemLibrarySource(lib),
+																		  getDefaultPackageRootPath(),
+																		  url);
+					boot.add(libraryLocation);
+				}
+			}
+			allLibs.addAll(boot);
+
+			// Add all extension libraries
+			allLibs.addAll(gatherAllLibraries(libInfo.getExtensionDirs()));
+
+			//remove duplicates
+			HashSet<String> set = new HashSet<String>();
+			LibraryLocation lib = null;
+			for (ListIterator<LibraryLocation> liter = allLibs.listIterator(); liter.hasNext(); ) {
+				lib = liter.next();
+				IPath systemLibraryPath = lib.getSystemLibraryPath();
+				String device = systemLibraryPath.getDevice();
+				if (device != null) {
+					// @see Bug 197866 - Installed JRE Wizard creates duplicate system libraries when drive letter is lower case
+					systemLibraryPath = systemLibraryPath.setDevice(device.toUpperCase());
+				}
+				if (!set.add(systemLibraryPath.toOSString())) {
+					//did not add it, duplicate
+					liter.remove();
+				}
+			}
+			fgDefaultLibLocs.put(installLocation.getAbsolutePath(), allLibs);
+		}
+		return allLibs.toArray(new LibraryLocation[allLibs.size()]);
+	}
+

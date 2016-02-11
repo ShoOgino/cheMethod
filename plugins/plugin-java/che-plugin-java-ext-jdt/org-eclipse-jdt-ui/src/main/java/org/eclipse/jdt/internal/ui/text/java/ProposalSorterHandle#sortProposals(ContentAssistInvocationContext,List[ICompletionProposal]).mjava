@@ -1,0 +1,40 @@
+	/**
+	 * Safely computes completion proposals through the described extension. If the extension throws
+	 * an exception or otherwise does not adhere to the contract described in
+	 * {@link AbstractProposalSorter}, the list is returned as is.
+	 *
+	 * @param context the invocation context passed on to the extension
+	 * @param proposals the list of computed completion proposals to be sorted (element type:
+	 *        {@link ICompletionProposal}), must be writable
+	 */
+	public void sortProposals(ContentAssistInvocationContext context, List<ICompletionProposal> proposals) {
+		IStatus status;
+		try {
+			AbstractProposalSorter sorter= getSorter();
+
+			PerformanceStats stats= startMeter(SORT, sorter);
+
+			sorter.beginSorting(context);
+			Collections.sort(proposals, sorter);
+			sorter.endSorting();
+
+			status= stopMeter(stats, SORT);
+
+			// valid result
+			if (status == null)
+				return;
+
+			status= createAPIViolationStatus(SORT);
+
+		} catch (InvalidRegistryObjectException x) {
+			status= createExceptionStatus(x);
+		} catch (CoreException x) {
+			status= createExceptionStatus(x);
+		} catch (RuntimeException x) {
+			status= createExceptionStatus(x);
+		}
+
+		JavaPlugin.log(status);
+		return;
+	}
+

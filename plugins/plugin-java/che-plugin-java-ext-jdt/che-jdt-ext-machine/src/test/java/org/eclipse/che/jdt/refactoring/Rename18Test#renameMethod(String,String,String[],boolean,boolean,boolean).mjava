@@ -1,0 +1,34 @@
+	private void renameMethod(String methodName, String newMethodName, String[] signatures, boolean shouldPass, boolean updateReferences, boolean createDelegate) throws Exception{
+		ICompilationUnit cu= createCUfromTestFile(getPackageP(), "A");
+		IType typeI= getType(cu, "I");
+		IMethod method= typeI.getMethod(methodName, signatures);
+
+		RenameJavaElementDescriptor descriptor= RefactoringSignatureDescriptorFactory.createRenameJavaElementDescriptor(IJavaRefactorings.RENAME_METHOD);
+		descriptor.setJavaElement(method);
+		descriptor.setUpdateReferences(updateReferences);
+		descriptor.setNewName(newMethodName);
+		descriptor.setKeepOriginal(createDelegate);
+		descriptor.setDeprecateDelegate(true);
+
+		assertEquals("was supposed to pass", null, performRefactoring(descriptor));
+		if (!shouldPass){
+			assertTrue("incorrect renaming because of a java model bug", ! getFileContents(getOutputTestFileName("A")).equals(cu.getSource()));
+			return;
+		}
+		assertEqualLines("incorrect renaming", getFileContents(getOutputTestFileName("A")), cu.getSource());
+
+		assertTrue("anythingToUndo", RefactoringCore.getUndoManager().anythingToUndo());
+		assertTrue("! anythingToRedo", !RefactoringCore.getUndoManager().anythingToRedo());
+		//assertEquals("1 to undo", 1, Refactoring.getUndoManager().getRefactoringLog().size());
+
+		RefactoringCore.getUndoManager().performUndo(null, new NullProgressMonitor());
+		assertEqualLines("invalid undo", getFileContents(getInputTestFileName("A")), cu.getSource());
+
+		assertTrue("! anythingToUndo", !RefactoringCore.getUndoManager().anythingToUndo());
+		assertTrue("anythingToRedo", RefactoringCore.getUndoManager().anythingToRedo());
+		//assertEquals("1 to redo", 1, Refactoring.getUndoManager().getRedoStack().size());
+
+		RefactoringCore.getUndoManager().performRedo(null, new NullProgressMonitor());
+		assertEqualLines("invalid redo", getFileContents(getOutputTestFileName("A")), cu.getSource());
+	}
+

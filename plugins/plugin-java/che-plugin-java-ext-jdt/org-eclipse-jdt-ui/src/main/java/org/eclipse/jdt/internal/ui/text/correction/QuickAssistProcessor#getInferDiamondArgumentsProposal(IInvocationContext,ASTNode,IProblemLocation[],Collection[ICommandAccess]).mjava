@@ -1,0 +1,44 @@
+	public static boolean getInferDiamondArgumentsProposal(IInvocationContext context, ASTNode node, IProblemLocation[] locations, Collection<ICommandAccess> resultingCollections) {
+		// don't add if already added as quick fix
+		if (containsMatchingProblem(locations, IProblem.DiamondNotBelow17))
+			return false;
+		ParameterizedType createdType= null;
+
+		if (node instanceof Name) {
+			Name name= ASTNodes.getTopMostName((Name)node);
+			if (name.getLocationInParent() == SimpleType.NAME_PROPERTY ||
+					name.getLocationInParent() == NameQualifiedType.NAME_PROPERTY) {
+				ASTNode type= name.getParent();
+				if (type.getLocationInParent() == ParameterizedType.TYPE_PROPERTY) {
+					createdType= (ParameterizedType) type.getParent();
+					if (createdType.getLocationInParent() != ClassInstanceCreation.TYPE_PROPERTY) {
+						return false;
+					}
+				}
+			}
+		} else if (node instanceof ParameterizedType) {
+			createdType= (ParameterizedType) node;
+			if (createdType.getLocationInParent() != ClassInstanceCreation.TYPE_PROPERTY) {
+				return false;
+			}
+		} else if (node instanceof ClassInstanceCreation) {
+			ClassInstanceCreation creation= (ClassInstanceCreation) node;
+			Type type= creation.getType();
+			if (type instanceof ParameterizedType) {
+				createdType= (ParameterizedType) type;
+			}
+		}
+
+		IProposableFix fix= TypeParametersFix.createInsertInferredTypeArgumentsFix(context.getASTRoot(), createdType);
+		if (fix != null && resultingCollections != null) {
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			int relevance= locations == null ? IProposalRelevance.INSERT_INFERRED_TYPE_ARGUMENTS : IProposalRelevance.INSERT_INFERRED_TYPE_ARGUMENTS_ERROR; // if error -> higher than ReorgCorrectionsSubProcessor.getNeedHigherComplianceProposals()
+			Map<String, String> options= new HashMap<String, String>();
+			options.put(CleanUpConstants.USE_TYPE_ARGUMENTS, CleanUpOptions.TRUE);
+			options.put(CleanUpConstants.INSERT_INFERRED_TYPE_ARGUMENTS, CleanUpOptions.TRUE);
+			FixCorrectionProposal proposal= new FixCorrectionProposal(fix, new TypeParametersCleanUp(options), relevance, image, context);
+			resultingCollections.add(proposal);
+		}
+		return true;
+	}
+

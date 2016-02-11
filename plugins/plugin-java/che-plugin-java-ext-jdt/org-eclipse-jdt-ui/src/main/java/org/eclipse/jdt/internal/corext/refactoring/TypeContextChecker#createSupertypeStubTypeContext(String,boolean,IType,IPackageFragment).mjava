@@ -1,0 +1,36 @@
+	private static StubTypeContext createSupertypeStubTypeContext(String typeName, boolean isInterface, IType enclosingType,
+																  IPackageFragment packageFragment) {
+		StubTypeContext stubTypeContext;
+		String prolog = "class " + typeName + (isInterface ? " implements " : " extends "); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		String epilog = " {} "; //$NON-NLS-1$
+		if (enclosingType != null) {
+			try {
+				ICompilationUnit cu = enclosingType.getCompilationUnit();
+				ISourceRange typeSourceRange = enclosingType.getSourceRange();
+				int focalPosition = typeSourceRange.getOffset() + typeSourceRange.getLength() - 1; // before closing brace
+
+				ASTParser parser = ASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+				parser.setSource(cu);
+				parser.setFocalPosition(focalPosition);
+				CompilationUnit compilationUnit = (CompilationUnit)parser.createAST(null);
+
+				stubTypeContext = createStubTypeContext(cu, compilationUnit, focalPosition);
+				stubTypeContext = new StubTypeContext(stubTypeContext.getCuHandle(),
+													  stubTypeContext.getBeforeString() + prolog,
+													  epilog + stubTypeContext.getAfterString());
+			} catch (CoreException e) {
+				JavaPlugin.log(e);
+				stubTypeContext = new StubTypeContext(null, null, null);
+			}
+
+		} else if (packageFragment != null) {
+			ICompilationUnit cu = packageFragment.getCompilationUnit(JavaTypeCompletionProcessor.DUMMY_CU_NAME);
+			stubTypeContext = new StubTypeContext(cu, "package " + packageFragment.getElementName() + ";" + prolog,
+												  epilog);  //$NON-NLS-1$//$NON-NLS-2$
+
+		} else {
+			stubTypeContext = new StubTypeContext(null, null, null);
+		}
+		return stubTypeContext;
+	}
+

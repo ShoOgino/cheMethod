@@ -1,0 +1,34 @@
+	/**
+	 * Fallback to retrieve a core context and keyword proposals when no collector is available.
+	 * Runs code completion on the cu and collects keyword proposals. {@link #fKeywordProposals} is
+	 * non-<code>null</code> after this call.
+	 *
+	 * @since 3.3
+	 */
+	private void computeKeywordsAndContext() {
+		ICompilationUnit cu= getCompilationUnit();
+		if (cu == null) {
+			if (fKeywordProposals == null)
+				fKeywordProposals= new IJavaCompletionProposal[0];
+			return;
+		}
+
+		CompletionProposalCollector collector= new CompletionProposalCollector(cu, true);
+		collector.setIgnored(CompletionProposal.KEYWORD, false);
+
+		try {
+			cu.codeComplete(getInvocationOffset(), collector);
+			if (fCoreContext == null)
+				fCoreContext= collector.getContext();
+			if (fKeywordProposals == null)
+				fKeywordProposals= collector.getKeywordCompletionProposals();
+			if (fLabelProvider == null)
+				fLabelProvider= collector.getLabelProvider();
+		} catch (JavaModelException x) {
+			if (!x.isDoesNotExist() || cu.getJavaProject() == null || cu.getJavaProject().isOnClasspath(cu))
+				JavaPlugin.log(x);
+			if (fKeywordProposals == null)
+				fKeywordProposals= new IJavaCompletionProposal[0];
+		}
+	}
+

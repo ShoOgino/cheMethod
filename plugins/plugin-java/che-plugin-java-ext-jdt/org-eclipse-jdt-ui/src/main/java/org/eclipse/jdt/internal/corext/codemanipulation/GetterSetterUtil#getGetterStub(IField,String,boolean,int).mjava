@@ -1,0 +1,64 @@
+	/**
+	 * Create a stub for a getter of the given field using getter/setter templates. The resulting code
+	 * has to be formatted and indented.
+	 * @param field The field to create a getter for
+	 * @param getterName The chosen name for the getter
+	 * @param addComments If <code>true</code>, comments will be added.
+	 * @param flags The flags signaling visibility, if static, synchronized or final
+	 * @return Returns the generated stub.
+	 * @throws CoreException when stub creation failed
+	 */
+	public static String getGetterStub(IField field, String getterName, boolean addComments, int flags) throws CoreException {
+		String fieldName= field.getElementName();
+		IType parentType= field.getDeclaringType();
+
+		boolean isStatic= Flags.isStatic(flags);
+		boolean isSync= Flags.isSynchronized(flags);
+		boolean isFinal= Flags.isFinal(flags);
+
+		String typeName= Signature.toString(field.getTypeSignature());
+		String accessorName= StubUtility.getBaseName(field);
+
+		String lineDelim= "\n"; // Use default line delimiter, as generated stub has to be formatted anyway //$NON-NLS-1$
+		StringBuffer buf= new StringBuffer();
+		if (addComments) {
+			String comment= CodeGeneration
+					.getGetterComment(field.getCompilationUnit(), parentType.getTypeQualifiedName('.'), getterName, field.getElementName(),
+									  typeName, accessorName, lineDelim);
+			if (comment != null) {
+				buf.append(comment);
+				buf.append(lineDelim);
+			}
+		}
+
+		buf.append(JdtFlags.getVisibilityString(flags));
+		buf.append(' ');
+		if (isStatic)
+			buf.append("static "); //$NON-NLS-1$
+		if (isSync)
+			buf.append("synchronized "); //$NON-NLS-1$
+		if (isFinal)
+			buf.append("final "); //$NON-NLS-1$
+
+		buf.append(typeName);
+		buf.append(' ');
+		buf.append(getterName);
+		buf.append("() {"); //$NON-NLS-1$
+		buf.append(lineDelim);
+
+		boolean useThis= StubUtility.useThisForFieldAccess(field.getJavaProject());
+		if (useThis && !isStatic) {
+			fieldName= "this." + fieldName; //$NON-NLS-1$
+		}
+
+		String body= CodeGeneration
+				.getGetterMethodBodyContent(field.getCompilationUnit(), parentType.getTypeQualifiedName('.'), getterName, fieldName,
+											lineDelim);
+		if (body != null) {
+			buf.append(body);
+		}
+		buf.append("}"); //$NON-NLS-1$
+		buf.append(lineDelim);
+		return buf.toString();
+	}
+

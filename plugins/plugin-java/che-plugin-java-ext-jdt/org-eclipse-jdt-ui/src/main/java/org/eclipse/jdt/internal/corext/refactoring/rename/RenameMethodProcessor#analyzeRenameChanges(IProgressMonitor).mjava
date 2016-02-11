@@ -1,0 +1,42 @@
+	private RefactoringStatus analyzeRenameChanges(IProgressMonitor pm) throws CoreException {
+		ICompilationUnit[] newDeclarationWCs= null;
+		try {
+			pm.beginTask("", 4); //$NON-NLS-1$
+			RefactoringStatus result= new RefactoringStatus();
+			ICompilationUnit[] declarationCUs= getDeclarationCUs();
+			newDeclarationWCs= RenameAnalyzeUtil.createNewWorkingCopies(declarationCUs,
+					fChangeManager, fWorkingCopyOwner, new SubProgressMonitor(pm, 1));
+
+			IMethod[] wcOldMethods= new IMethod[fMethodsToRename.size()];
+			IMethod[] wcNewMethods= new IMethod[fMethodsToRename.size()];
+			int i= 0;
+			for (Iterator<IMethod> iter= fMethodsToRename.iterator(); iter.hasNext(); i++) {
+				IMethod method= iter.next();
+				ICompilationUnit newCu= RenameAnalyzeUtil.findWorkingCopyForCu(newDeclarationWCs, method.getCompilationUnit());
+				IType typeWc= (IType) JavaModelUtil.findInCompilationUnit(newCu, method.getDeclaringType());
+				if (typeWc == null) {
+					// should not happen
+					i--;
+					wcOldMethods= CollectionsUtil.toArray(Arrays.asList(wcOldMethods).subList(0, wcOldMethods.length - 1), IMethod.class);
+					wcNewMethods= CollectionsUtil.toArray(Arrays.asList(wcNewMethods).subList(0, wcNewMethods.length - 1), IMethod.class);
+					continue;
+				}
+				wcOldMethods[i]= getMethodInWorkingCopy(method, getCurrentElementName(), typeWc);
+				wcNewMethods[i]= getMethodInWorkingCopy(method, getNewElementName(), typeWc);
+			}
+
+//			SearchResultGroup[] newOccurrences= findNewOccurrences(newMethods, newDeclarationWCs, new SubProgressMonitor(pm, 3));
+			SearchResultGroup[] newOccurrences= batchFindNewOccurrences(wcNewMethods, wcOldMethods, newDeclarationWCs, new SubProgressMonitor(pm, 3), result);
+
+			result.merge(RenameAnalyzeUtil.analyzeRenameChanges2(fChangeManager, fOccurrences, newOccurrences, getNewElementName()));
+			return result;
+		} finally{
+			pm.done();
+			if (newDeclarationWCs != null){
+				for (int i= 0; i < newDeclarationWCs.length; i++) {
+					newDeclarationWCs[i].discardWorkingCopy();
+				}
+			}
+		}
+	}
+

@@ -1,0 +1,58 @@
+	public static void getWrongTypeNameProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ICompilationUnit cu= context.getCompilationUnit();
+		boolean isLinked= cu.getResource().isLinked();
+
+		IJavaProject javaProject= cu.getJavaProject();
+		String sourceLevel= javaProject.getOption(JavaCore.COMPILER_SOURCE, true);
+		String compliance= javaProject.getOption(JavaCore.COMPILER_COMPLIANCE, true);
+
+		CompilationUnit root= context.getASTRoot();
+
+		ASTNode coveredNode= problem.getCoveredNode(root);
+		if (!(coveredNode instanceof SimpleName))
+			return;
+
+		ASTNode parentType= coveredNode.getParent();
+		if (!(parentType instanceof AbstractTypeDeclaration))
+			return;
+
+		String currTypeName= ((SimpleName) coveredNode).getIdentifier();
+		String newTypeName= JavaCore.removeJavaLikeExtension(cu.getElementName());
+
+		boolean hasOtherPublicTypeBefore= false;
+
+		boolean found= false;
+		List<AbstractTypeDeclaration> types= root.types();
+		for (int i= 0; i < types.size(); i++) {
+			AbstractTypeDeclaration curr= types.get(i);
+			if (parentType != curr) {
+				if (newTypeName.equals(curr.getName().getIdentifier())) {
+					return;
+				}
+				if (!found && Modifier.isPublic(curr.getModifiers())) {
+					hasOtherPublicTypeBefore= true;
+				}
+			} else {
+				found= true;
+			}
+		}
+		if (!JavaConventions.validateJavaTypeName(newTypeName, sourceLevel, compliance).matches(IStatus.ERROR)) {
+			proposals.add(new CorrectMainTypeNameProposal(cu, context, currTypeName, newTypeName, IProposalRelevance.RENAME_TYPE));
+		}
+
+		if (!hasOtherPublicTypeBefore) {
+			String newCUName= JavaModelUtil.getRenamedCUName(cu, currTypeName);
+			ICompilationUnit newCU= ((IPackageFragment) (cu.getParent())).getCompilationUnit(newCUName);
+			if (!newCU.exists() && !isLinked && !JavaConventions
+					.validateCompilationUnitName(newCUName, sourceLevel, compliance).matches(IStatus.ERROR)) {
+				RenameCompilationUnitChange change= new RenameCompilationUnitChange(cu, newCUName);
+
+				// rename CU
+				String label= Messages.format(CorrectionMessages.ReorgCorrectionsSubProcessor_renamecu_description,
+											  BasicElementLabels.getResourceName(newCUName));
+				proposals.add(new ChangeCorrectionProposal(label, change, IProposalRelevance.RENAME_CU, JavaPluginImages
+						.get(JavaPluginImages.IMG_CORRECTION_RENAME)));
+			}
+		}
+	}
+

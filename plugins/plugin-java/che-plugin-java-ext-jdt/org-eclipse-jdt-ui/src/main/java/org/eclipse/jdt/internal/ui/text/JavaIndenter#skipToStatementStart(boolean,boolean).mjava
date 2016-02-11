@@ -1,0 +1,150 @@
+	/**
+	 * Skips to the start of a statement that ends at the current position.
+	 *
+	 * @param danglingElse whether to indent aligned with the last <code>if</code>
+	 * @param isInBlock whether the current position is inside a block, which limits the search scope to the next scope introducer
+	 * @return the reference offset of the start of the statement
+	 */
+	private int skipToStatementStart(boolean danglingElse, boolean isInBlock) {
+		final int NOTHING= 0;
+		final int READ_PARENS= 1;
+		final int READ_IDENT= 2;
+		int mayBeMethodBody= NOTHING;
+		boolean isTypeBody= false;
+		while (true) {
+			nextToken();
+
+			if (isInBlock) {
+				switch (fToken) {
+					// exit on all block introducers
+					case Symbols.TokenIF:
+					case Symbols.TokenELSE:
+					case Symbols.TokenCATCH:
+					case Symbols.TokenDO:
+					case Symbols.TokenWHILE:
+					case Symbols.TokenFINALLY:
+					case Symbols.TokenFOR:
+					case Symbols.TokenTRY:
+						return fPosition;
+
+					case Symbols.TokenSTATIC:
+						mayBeMethodBody= READ_IDENT; // treat static blocks like methods
+						break;
+
+					case Symbols.TokenSYNCHRONIZED:
+						// if inside a method declaration, use body indentation
+						// else use block indentation.
+						if (mayBeMethodBody != READ_IDENT)
+							return fPosition;
+						break;
+
+					case Symbols.TokenCLASS:
+					case Symbols.TokenINTERFACE:
+					case Symbols.TokenENUM:
+						isTypeBody= true;
+						break;
+
+					case Symbols.TokenSWITCH:
+						fIndent= fPrefs.prefCaseIndent;
+						return fPosition;
+				}
+			}
+
+			switch (fToken) {
+				// scope introduction through: LPAREN, LBRACE, LBRACKET
+				// search stop on SEMICOLON, RBRACE, COLON, EOF
+				// -> the next token is the start of the statement (i.e. previousPos when backward scanning)
+				case Symbols.TokenLPAREN:
+				case Symbols.TokenLBRACE:
+				case Symbols.TokenLBRACKET:
+				case Symbols.TokenSEMICOLON:
+				case Symbols.TokenEOF:
+					if (isInBlock)
+						fIndent= getBlockIndent(mayBeMethodBody == READ_IDENT, isTypeBody);
+					// else: fIndent set by previous calls
+					return fPreviousPos;
+
+				case Symbols.TokenCOLON:
+					int pos= fPreviousPos;
+					if (!isConditional())
+						return pos;
+					break;
+
+				case Symbols.TokenRBRACE:
+					// RBRACE is a little tricky: it can be the end of an array definition, but
+					// usually it is the end of a previous block
+					pos= fPreviousPos; // store state
+					if (skipScope() && looksLikeArrayInitializerIntro()) {
+						continue; // it's an array
+					} else {
+						if (isInBlock)
+							fIndent= getBlockIndent(mayBeMethodBody == READ_IDENT, isTypeBody);
+						return pos; // it's not - do as with all the above
+					}
+
+				// scopes: skip them
+				case Symbols.TokenRPAREN:
+					if (isInBlock)
+						mayBeMethodBody= READ_PARENS;
+					//$FALL-THROUGH$
+				case Symbols.TokenRBRACKET:
+				case Symbols.TokenGREATERTHAN:
+					pos= fPreviousPos;
+					if (skipScope())
+						break;
+					else
+						return pos;
+
+				// IF / ELSE: align the position after the conditional block with the if
+				// so we are ready for an else, except if danglingElse is false
+				// in order for this to work, we must skip an else to its if
+				case Symbols.TokenIF:
+					if (danglingElse)
+						return fPosition;
+					else
+						break;
+				case Symbols.TokenELSE:
+					// skip behind the next if, as we have that one covered
+					pos= fPosition;
+					if (skipNextIF())
+						break;
+					else
+						return pos;
+
+				case Symbols.TokenCATCH:
+				case Symbols.TokenFINALLY:
+					pos= fPosition;
+					if (skipNextTRY())
+						break;
+					else
+						return pos;
+
+				case Symbols.TokenDO:
+					// align the WHILE position with its do
+					return fPosition;
+
+				case Symbols.TokenWHILE:
+					// this one is tricky: while can be the start of a while loop
+					// or the end of a do - while
+					pos= fPosition;
+					if (hasMatchingDo()) {
+						// continue searching from the DO on
+						break;
+					} else {
+						// continue searching from the WHILE on
+						fPosition= pos;
+						break;
+					}
+				case Symbols.TokenIDENT:
+					if (mayBeMethodBody == READ_PARENS)
+						mayBeMethodBody= READ_IDENT;
+					break;
+
+				default:
+					// keep searching
+
+			}
+
+		}
+	}
+

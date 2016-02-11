@@ -1,0 +1,34 @@
+	/*
+	 * @see org.eclipse.jdt.internal.corext.refactoring.base.Refactoring#checkInput(org.eclipse.core.runtime.IProgressMonitor)
+	 */
+	@Override
+	public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
+		try {
+			pm.beginTask(RefactoringCoreMessages.IntroduceFactory_checking_preconditions, 1);
+			RefactoringStatus result= new RefactoringStatus();
+
+			if (fFactoryClassName != null)
+				result.merge(setFactoryClass(fFactoryClassName));
+			if (result.hasFatalError())
+				return result;
+			fArgTypes= fCtorBinding.getParameterTypes();
+			fCtorIsVarArgs= fCtorBinding.isVarargs();
+			fAllCallsTo= findAllCallsTo(fCtorBinding, pm, result);
+			fFormalArgNames= findCtorArgNames();
+
+			ICompilationUnit[]	affectedFiles= collectAffectedUnits(fAllCallsTo);
+			result.merge(Checks.validateModifiesFiles(ResourceUtil.getFiles(affectedFiles), getValidationContext()));
+
+			if (fCallSitesInBinaryUnits)
+				result.merge(RefactoringStatus.createWarningStatus(RefactoringCoreMessages.IntroduceFactory_callSitesInBinaryClass));
+
+			if(Modifier.isAbstract(fCtorBinding.getDeclaringClass().getModifiers())){
+				result.merge(RefactoringStatus.createWarningStatus(RefactoringCoreMessages.IntroduceFactory_abstractClass));
+			}
+
+			return result;
+		} finally {
+			pm.done();
+		}
+	}
+

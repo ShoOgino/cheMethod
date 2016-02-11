@@ -1,0 +1,33 @@
+	/**
+	 * Adds a proposal to correct the name of the SuppressWarning annotation
+	 * @param context the context
+	 * @param problem the problem
+	 * @param proposals the resulting proposals
+	 */
+	public static void addUnknownSuppressWarningProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+
+		ASTNode coveringNode= context.getCoveringNode();
+		if (!(coveringNode instanceof StringLiteral))
+			return;
+
+		AST ast= coveringNode.getAST();
+		StringLiteral literal= (StringLiteral) coveringNode;
+
+		String literalValue= literal.getLiteralValue();
+		String[] allWarningTokens= CorrectionEngine.getAllWarningTokens();
+		for (int i= 0; i < allWarningTokens.length; i++) {
+			String curr= allWarningTokens[i];
+			if (NameMatcher.isSimilarName(literalValue, curr)) {
+				StringLiteral newLiteral= ast.newStringLiteral();
+				newLiteral.setLiteralValue(curr);
+				ASTRewrite rewrite= ASTRewrite.create(ast);
+				rewrite.replace(literal, newLiteral, null);
+				String label= Messages.format(CorrectionMessages.SuppressWarningsSubProcessor_fix_suppress_token_label, new String[]{curr});
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.FIX_SUPPRESS_TOKEN, image);
+				proposals.add(proposal);
+			}
+		}
+		addRemoveUnusedSuppressWarningProposals(context, problem, proposals);
+	}
+

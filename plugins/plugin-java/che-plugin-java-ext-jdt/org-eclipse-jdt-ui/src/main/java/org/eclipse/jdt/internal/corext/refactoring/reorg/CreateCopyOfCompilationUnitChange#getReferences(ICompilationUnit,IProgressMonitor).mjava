@@ -1,0 +1,35 @@
+	private static SearchResultGroup getReferences(final ICompilationUnit copy, IProgressMonitor monitor) throws JavaModelException {
+		final ICompilationUnit[] copies= new ICompilationUnit[] { copy};
+		IJavaSearchScope scope= SearchEngine.createJavaSearchScope(copies);
+		final IType type= copy.findPrimaryType();
+		if (type == null)
+			return null;
+		SearchPattern pattern= createSearchPattern(type);
+		final RefactoringSearchEngine2 engine= new RefactoringSearchEngine2(pattern);
+		engine.setScope(scope);
+		engine.setWorkingCopies(copies);
+		engine.setRequestor(new IRefactoringSearchRequestor() {
+			TypeOccurrenceCollector fTypeOccurrenceCollector= new TypeOccurrenceCollector(type);
+			public SearchMatch acceptSearchMatch(SearchMatch match) {
+				try {
+					return fTypeOccurrenceCollector.acceptSearchMatch2(copy, match);
+				} catch (CoreException e) {
+					JavaPlugin.log(e);
+					return null;
+				}
+			}
+		});
+		
+		engine.searchPattern(monitor);
+		final Object[] results= engine.getResults();
+		// Assert.isTrue(results.length <= 1);
+		// just 1 file or none, but inaccurate matches can play bad here (see
+		// https://bugs.eclipse.org/bugs/show_bug.cgi?id=106127)
+		for (int index= 0; index < results.length; index++) {
+			SearchResultGroup group= (SearchResultGroup) results[index];
+			if (group.getCompilationUnit().equals(copy))
+				return group;
+		}
+		return null;
+	}
+

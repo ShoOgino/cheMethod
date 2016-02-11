@@ -1,0 +1,53 @@
+    /**
+     * Expands a {@link TreeNodeElement} and renders its children if it "needs
+     * to". "Needs to" is defined as whether or not the children have never been
+     * rendered before, or if size of the set of rendered children differs from
+     * the size of children in the underlying model.
+     *
+     * @param treeNode
+     *         the {@link TreeNodeElement} we are expanding.
+     * @param shouldAnimate
+     *         whether to animate the expansion
+     * @param dispatchNodeExpanded
+     *         whether or not to notify listeners of the node
+     *         expansion
+     */
+    private void expandNode(TreeNodeElement<D> treeNode, boolean shouldAnimate, boolean dispatchNodeExpanded) {
+        // This is most likely because someone tried to expand root. Ignore it.
+        if (treeNode == null) {
+            return;
+        }
+
+        NodeDataAdapter<D> dataAdapter = getModel().dataAdapter;
+
+        // Nothing to do here.
+        if (!dataAdapter.hasChildren(treeNode.getData())) {
+            return;
+        }
+
+        // Ensure that the node's children container is birthed.
+        treeNode.ensureChildrenContainer(dataAdapter, getModel().resources.treeCss());
+
+        List<D> children = dataAdapter.getChildren(treeNode.getData());
+
+        // Maybe render it's children if they aren't already rendered.
+        if (treeNode.getChildrenContainer().getChildren().getLength() != children.size()) {
+
+            // Then the model has not been correctly reflected in the UI.
+            // Blank the children and render a single level for each.
+            treeNode.getChildrenContainer().setInnerHTML("");
+            for (int i = 0, n = children.size(); i < n; i++) {
+                renderRecursive(treeNode.getChildrenContainer(), children.get(i), 0);
+            }
+        }
+
+        // Render the node as being opened after the children have been added, so that
+        // AnimationController can correctly measure the height of the child container.
+        treeNode.openNode(dataAdapter, getModel().resources.treeCss(), getModel().animator, shouldAnimate);
+
+        // Notify listeners of the event.
+        if (dispatchNodeExpanded && getModel().externalEventDelegate != null) {
+            getModel().externalEventDelegate.onNodeExpanded(treeNode);
+        }
+    }
+

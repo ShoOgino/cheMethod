@@ -1,0 +1,54 @@
+	/**
+	 * Sets the class on which the generated factory method is to be placed.
+	 * @param fullyQualifiedTypeName an <code>IType</code> referring to an existing class
+	 * @return return the resulting status
+	 */
+	public RefactoringStatus setFactoryClass(String fullyQualifiedTypeName) {
+		IType factoryType;
+
+		try {
+			factoryType= findFactoryClass(fullyQualifiedTypeName);
+			if (factoryType == null)
+				return RefactoringStatus.createErrorStatus(Messages.format(RefactoringCoreMessages.IntroduceFactory_noSuchClass,
+																		   BasicElementLabels.getJavaElementName(fullyQualifiedTypeName)));
+
+			if (factoryType.isAnnotation())
+				return RefactoringStatus.createErrorStatus(RefactoringCoreMessages.IntroduceFactory_cantPutFactoryMethodOnAnnotation);
+			if (factoryType.isInterface())
+				return RefactoringStatus.createErrorStatus(RefactoringCoreMessages.IntroduceFactory_cantPutFactoryMethodOnInterface);
+		} catch (JavaModelException e) {
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceFactory_cantCheckForInterface);
+		}
+
+		ICompilationUnit factoryUnitHandle= factoryType.getCompilationUnit();
+
+		if (factoryType.isBinary())
+			return RefactoringStatus.createErrorStatus(RefactoringCoreMessages.IntroduceFactory_cantPutFactoryInBinaryClass);
+		else {
+			try {
+				if (!fFactoryUnitHandle.equals(factoryUnitHandle)) {
+					fFactoryCU= getASTFor(factoryUnitHandle);
+					fFactoryUnitHandle= factoryUnitHandle;
+				}
+				fFactoryOwningClass= (AbstractTypeDeclaration) ASTNodes
+						.getParent(NodeFinder.perform(fFactoryCU, factoryType.getNameRange()), AbstractTypeDeclaration.class);
+
+				String factoryPkg= factoryType.getPackageFragment().getElementName();
+				String ctorPkg= fCtorOwningClass.resolveBinding().getPackage().getName();
+
+				if (!factoryPkg.equals(ctorPkg))
+					fConstructorVisibility= Modifier.PUBLIC;
+				else if (fFactoryOwningClass != fCtorOwningClass)
+					fConstructorVisibility= 0; // No such thing as Modifier.PACKAGE...
+
+
+				if (fFactoryOwningClass != fCtorOwningClass)
+					fConstructorVisibility= 0; // No such thing as Modifier.PACKAGE...
+
+			} catch (JavaModelException e) {
+				return RefactoringStatus.createFatalErrorStatus(e.getMessage());
+			}
+			return new RefactoringStatus();
+		}
+	}
+

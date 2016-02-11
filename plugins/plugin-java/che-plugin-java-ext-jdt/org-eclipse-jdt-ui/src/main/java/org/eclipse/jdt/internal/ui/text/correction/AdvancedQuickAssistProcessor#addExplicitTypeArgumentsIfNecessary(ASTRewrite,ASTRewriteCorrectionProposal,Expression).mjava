@@ -1,0 +1,36 @@
+	private static void addExplicitTypeArgumentsIfNecessary(ASTRewrite rewrite, ASTRewriteCorrectionProposal proposal, Expression invocation) {
+		if (Invocations.isResolvedTypeInferredFromExpectedType(invocation)) {
+			ITypeBinding[] typeArguments= Invocations.getInferredTypeArguments(invocation);
+			if (typeArguments == null)
+				return;
+
+			ImportRewrite importRewrite= proposal.getImportRewrite();
+			if (importRewrite == null) {
+				importRewrite= proposal.createImportRewrite((CompilationUnit) invocation.getRoot());
+			}
+			ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(invocation, importRewrite);
+
+			AST ast= invocation.getAST();
+			ListRewrite typeArgsRewrite= Invocations.getInferredTypeArgumentsRewrite(rewrite, invocation);
+
+			for (int i= 0; i < typeArguments.length; i++) {
+				Type typeArgumentNode= importRewrite.addImport(typeArguments[i], ast, importRewriteContext);
+				typeArgsRewrite.insertLast(typeArgumentNode, null);
+			}
+
+			if (invocation instanceof MethodInvocation) {
+				MethodInvocation methodInvocation= (MethodInvocation) invocation;
+				Expression expression= methodInvocation.getExpression();
+				if (expression == null) {
+					IMethodBinding methodBinding= methodInvocation.resolveMethodBinding();
+					if (methodBinding != null && Modifier.isStatic(methodBinding.getModifiers())) {
+						expression= ast.newName(importRewrite.addImport(methodBinding.getDeclaringClass().getTypeDeclaration(), importRewriteContext));
+					} else {
+						expression= ast.newThisExpression();
+					}
+					rewrite.set(invocation, MethodInvocation.EXPRESSION_PROPERTY, expression, null);
+				}
+			}
+		}
+	}
+

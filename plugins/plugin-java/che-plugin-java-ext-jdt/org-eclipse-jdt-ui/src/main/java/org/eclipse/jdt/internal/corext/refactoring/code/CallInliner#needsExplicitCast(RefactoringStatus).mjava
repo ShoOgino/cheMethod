@@ -1,0 +1,56 @@
+	/**
+	 * @param status the status
+	 * @return <code>true</code> if explicit cast is needed otherwise <code>false</code>
+	 */
+	private boolean needsExplicitCast(RefactoringStatus status) {
+		// if the return type of the method is the same as the type of the
+		// returned expression then we don't need an explicit cast.
+		if (fSourceProvider.returnTypeMatchesReturnExpressions())
+				return false;
+
+		List<Expression> returnExprs= fSourceProvider.getReturnExpressions();
+		// it is inferred that only methods consisting of a single
+		// return statement can be inlined as parameters in other
+		// method invocations
+		if (returnExprs.size() != 1)
+			return false;
+
+		if (fTargetNode.getLocationInParent() == MethodInvocation.ARGUMENTS_PROPERTY) {
+			MethodInvocation methodInvocation= (MethodInvocation)fTargetNode.getParent();
+			if(methodInvocation.getExpression() == fTargetNode)
+				return false;
+			IMethodBinding method= methodInvocation.resolveMethodBinding();
+			if (method == null) {
+				status.addError(RefactoringCoreMessages.CallInliner_cast_analysis_error,
+					JavaStatusContext.create(fCUnit, methodInvocation));
+				return false;
+			}
+			ITypeBinding[] parameters= method.getParameterTypes();
+			int argumentIndex= methodInvocation.arguments().indexOf(fInvocation);
+
+			ITypeBinding parameterType= returnExprs.get(0).resolveTypeBinding();
+			if (method.isVarargs() && argumentIndex >= parameters.length - 1) {
+				argumentIndex= parameters.length - 1;
+				parameterType= parameterType.createArrayType(1);
+			}
+			parameters[argumentIndex]= parameterType;
+
+			ITypeBinding type= ASTNodes.getReceiverTypeBinding(methodInvocation);
+			TypeBindingVisitor visitor= new AmbiguousMethodAnalyzer(
+				fTypeEnvironment, method, fTypeEnvironment.create(parameters));
+			if(!visitor.visit(type)) {
+				return true;
+			} else if (type.isInterface()) {
+				return !Bindings.visitInterfaces(type, visitor);
+			} else if (Modifier.isAbstract(type.getModifiers())) {
+				return !Bindings.visitHierarchy(type, visitor);
+			} else {
+				// it is not needed to visit interfaces if receiver is a concrete class
+				return !Bindings.visitSuperclasses(type, visitor);
+			}
+		} else {
+			ITypeBinding explicitCast= ASTNodes.getExplicitCast(returnExprs.get(0), (Expression)fTargetNode);
+			return explicitCast != null;
+		}
+	}
+

@@ -1,0 +1,29 @@
+    private void copyArguments(CompilationUnitRewrite rewrite, ClassInstanceCreation newClassCreation) {
+    	Iterator<Expression> iter= ((ClassInstanceCreation) fAnonymousInnerClassNode.getParent()).arguments().iterator();
+    	if (!iter.hasNext())
+    		return;
+
+    	IMethodBinding superConstructorBinding= getSuperConstructorBinding();
+    	ITypeBinding[] parameterTypes= superConstructorBinding.getParameterTypes();
+
+    	List<Expression> arguments= newClassCreation.arguments();
+		ASTRewrite astRewrite= rewrite.getASTRewrite();
+		int last= parameterTypes.length - 1;
+
+		for (int i= 0; i < last; i++) {
+			arguments.add((Expression) astRewrite.createCopyTarget(iter.next()));
+		}
+    	if (superConstructorBinding.isVarargs()) {
+    		AST ast= astRewrite.getAST();
+    		ArrayCreation arrayCreation= ast.newArrayCreation();
+    		arrayCreation.setType((ArrayType) rewrite.getImportRewrite().addImport(parameterTypes[last], ast));
+    		ArrayInitializer initializer= ast.newArrayInitializer();
+    		arrayCreation.setInitializer(initializer);
+    		arguments.add(arrayCreation);
+    		arguments= initializer.expressions();
+    	}
+    	while (iter.hasNext()) {
+    		arguments.add((Expression) astRewrite.createCopyTarget(iter.next()));
+    	}
+    }
+

@@ -1,0 +1,104 @@
+	private static IReorgPolicy createReorgPolicy(boolean copy, IResource[] selectedResources, IJavaElement[] selectedJavaElements)
+			throws JavaModelException {
+		final IReorgPolicy NO;
+		if (copy)
+			NO = new NoCopyPolicy();
+		else
+			NO = new NoMovePolicy();
+
+		ActualSelectionComputer selectionComputer = new ActualSelectionComputer(selectedJavaElements, selectedResources);
+		IResource[] resources = selectionComputer.getActualResourcesToReorg();
+		IJavaElement[] javaElements = selectionComputer.getActualJavaElementsToReorg();
+
+		if (resources.length == 0 && javaElements.length == 0)
+			return NO;
+
+		if (containsNull(resources))
+			return NO;
+
+		if (containsNull(javaElements))
+			return NO;
+
+		if (ReorgUtils.isArchiveOrExternalMember(javaElements) &&
+			ReorgUtils.getElementsOfType(javaElements, IJavaElement.PACKAGE_FRAGMENT_ROOT).size() != javaElements.length)
+			return NO;
+
+		if (ReorgUtils.hasElementsOfType(javaElements, IJavaElement.JAVA_PROJECT))
+			return NO;
+
+		if (ReorgUtils.hasElementsOfType(javaElements, IJavaElement.JAVA_MODEL))
+			return NO;
+
+		if (ReorgUtils.hasElementsOfType(resources, IResource.PROJECT | IResource.ROOT))
+			return NO;
+
+		if (!new ParentChecker(resources, javaElements).haveCommonParent())
+			return NO;
+
+		if (ReorgUtils.hasElementsOfType(javaElements, IJavaElement.PACKAGE_FRAGMENT)) {
+			if (resources.length != 0 || ReorgUtils.hasElementsNotOfType(javaElements, IJavaElement.PACKAGE_FRAGMENT))
+				return NO;
+			if (copy)
+				return new CopyPackagesPolicy(ArrayTypeConverter.toPackageArray(javaElements));
+			else
+				return new MovePackagesPolicy(ArrayTypeConverter.toPackageArray(javaElements));
+		}
+
+		if (ReorgUtils.hasElementsOfType(javaElements, IJavaElement.PACKAGE_FRAGMENT_ROOT)) {
+			if (resources.length != 0 || ReorgUtils.hasElementsNotOfType(javaElements, IJavaElement.PACKAGE_FRAGMENT_ROOT))
+				return NO;
+			if (copy)
+				return new CopyPackageFragmentRootsPolicy(ArrayTypeConverter.toPackageFragmentRootArray(javaElements));
+			else
+				return new MovePackageFragmentRootsPolicy(ArrayTypeConverter.toPackageFragmentRootArray(javaElements));
+		}
+
+		if (ReorgUtils.hasElementsOfType(resources, IResource.FILE | IResource.FOLDER) ||
+			ReorgUtils.hasElementsOfType(javaElements, IJavaElement.COMPILATION_UNIT)) {
+			if (ReorgUtils.hasElementsNotOfType(javaElements, IJavaElement.COMPILATION_UNIT))
+				return NO;
+			if (ReorgUtils.hasElementsNotOfType(resources, IResource.FILE | IResource.FOLDER))
+				return NO;
+			if (copy)
+				return new CopyFilesFoldersAndCusPolicy(ReorgUtils.getFiles(resources), ReorgUtils.getFolders(resources),
+														ArrayTypeConverter.toCuArray(javaElements));
+			else
+				return new MoveFilesFoldersAndCusPolicy(ReorgUtils.getFiles(resources), ReorgUtils.getFolders(resources),
+														ArrayTypeConverter.toCuArray(javaElements));
+		}
+
+		if (hasOnlyMembers(javaElements)) {
+			if (hasAnonymousClassDeclarations(javaElements))
+				return NO;
+
+			if (copy) {
+				return new CopySubCuElementsPolicy(javaElements);
+			} else {
+				List<IJavaElement> members = Arrays.asList(javaElements);
+				return new MoveMembersPolicy(members.toArray(new IMember[members.size()]));
+			}
+		}
+
+		if (hasOnlyImportDeclarations(javaElements)) {
+			if (copy) {
+				return new CopySubCuElementsPolicy(javaElements);
+			} else {
+				List<?> declarations = ReorgUtils.getElementsOfType(javaElements, IJavaElement.IMPORT_DECLARATION);
+				return new MoveImportDeclarationsPolicy(declarations.toArray(new IImportDeclaration[declarations.size()]));
+			}
+		}
+
+		if (copy && hasElementsSmallerThanCuOrClassFile(javaElements)) {
+			if (ReorgUtils.hasElementsOfType(javaElements, IJavaElement.PACKAGE_DECLARATION))
+				return NO;
+
+			if (hasAnonymousClassDeclarations(javaElements))
+				return NO;
+
+			Assert.isTrue(resources.length == 0);
+			return new CopySubCuElementsPolicy(javaElements);
+		}
+
+		return NO;
+	}
+

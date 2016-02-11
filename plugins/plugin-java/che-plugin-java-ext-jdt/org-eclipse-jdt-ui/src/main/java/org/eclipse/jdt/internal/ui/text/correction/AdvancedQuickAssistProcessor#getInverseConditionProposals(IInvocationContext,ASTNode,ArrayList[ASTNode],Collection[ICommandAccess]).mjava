@@ -1,0 +1,33 @@
+	private static boolean getInverseConditionProposals(IInvocationContext context, ASTNode covering, ArrayList<ASTNode> coveredNodes, Collection<ICommandAccess> resultingCollections) {
+		if (coveredNodes.isEmpty()) {
+			return false;
+		}
+		//
+		final AST ast= covering.getAST();
+		final ASTRewrite rewrite= ASTRewrite.create(ast);
+		// check sub-expressions in fully covered nodes
+		boolean hasChanges= false;
+		for (Iterator<ASTNode> iter= coveredNodes.iterator(); iter.hasNext();) {
+			ASTNode covered= iter.next();
+			Expression coveredExpression= getBooleanExpression(covered);
+			if (coveredExpression != null) {
+				Expression inversedExpression= getInversedExpression(rewrite, coveredExpression);
+				rewrite.replace(coveredExpression, inversedExpression, null);
+				hasChanges= true;
+			}
+		}
+		//
+		if (!hasChanges) {
+			return false;
+		}
+		if (resultingCollections == null) {
+			return true;
+		}
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_inverseConditions_description;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVERSE_CONDITIONS, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

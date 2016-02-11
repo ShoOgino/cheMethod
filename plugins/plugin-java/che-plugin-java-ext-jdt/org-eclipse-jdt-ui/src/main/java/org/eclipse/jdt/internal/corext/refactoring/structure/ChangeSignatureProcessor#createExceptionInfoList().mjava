@@ -1,0 +1,27 @@
+	private RefactoringStatus createExceptionInfoList() {
+		if (fExceptionInfos == null || fExceptionInfos.isEmpty()) {
+			fExceptionInfos= new ArrayList<ExceptionInfo>(0);
+			try {
+				ASTNode nameNode= NodeFinder.perform(fBaseCuRewrite.getRoot(), fMethod.getNameRange());
+				if (nameNode == null || !(nameNode instanceof Name) || !(nameNode.getParent() instanceof MethodDeclaration))
+					return null;
+				MethodDeclaration methodDeclaration= (MethodDeclaration) nameNode.getParent();
+				List<Type> exceptions= methodDeclaration.thrownExceptionTypes();
+				List<ExceptionInfo> result= new ArrayList<ExceptionInfo>(exceptions.size());
+				for (int i= 0; i < exceptions.size(); i++) {
+					Type type= exceptions.get(i);
+					ITypeBinding typeBinding= type.resolveBinding();
+					if (typeBinding == null)
+						return RefactoringStatus
+								.createFatalErrorStatus(RefactoringCoreMessages.ChangeSignatureRefactoring_no_exception_binding);
+					IJavaElement element= typeBinding.getJavaElement();
+					result.add(ExceptionInfo.createInfoForOldException(element, typeBinding));
+				}
+				fExceptionInfos= result;
+			} catch (JavaModelException e) {
+				JavaPlugin.log(e);
+			}
+		}
+		return null;
+	}
+

@@ -1,0 +1,33 @@
+	public boolean isDeclaredInScope(IBinding declaration, SimpleName selector, int flags) {
+		try {
+			// special case for switch on enum
+			if (selector.getLocationInParent() == SwitchCase.EXPRESSION_PROPERTY) {
+				ITypeBinding binding = ((SwitchStatement)selector.getParent().getParent()).getExpression().resolveTypeBinding();
+				if (binding != null && binding.isEnum()) {
+					return hasEnumContants(declaration, binding.getTypeDeclaration());
+				}
+			}
+
+			ITypeBinding parentTypeBinding = Bindings.getBindingOfParentTypeContext(selector);
+			if (parentTypeBinding != null) {
+				ITypeBinding binding = getQualifier(selector);
+				SearchRequestor requestor = new SearchRequestor(declaration, parentTypeBinding, flags);
+				if (binding == null) {
+					addLocalDeclarations(selector, flags, requestor);
+					if (requestor.found())
+						return requestor.isVisible();
+					addTypeDeclarations(parentTypeBinding, flags, requestor);
+					if (requestor.found())
+						return requestor.isVisible();
+				} else {
+					addInherited(binding, flags, requestor);
+					if (requestor.found())
+						return requestor.isVisible();
+				}
+			}
+			return false;
+		} finally {
+			clearLists();
+		}
+	}
+

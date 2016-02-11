@@ -1,0 +1,34 @@
+	public static ICleanUpFix createCleanUp(CompilationUnit compilationUnit, IProblemLocation[] problems, boolean addSerialVersionIds) {
+		if (addSerialVersionIds) {
+
+			final ICompilationUnit unit= (ICompilationUnit)compilationUnit.getJavaElement();
+			if (unit == null)
+				return null;
+
+			List<ASTNode> declarationNodes= new ArrayList<ASTNode>();
+			for (int i= 0; i < problems.length; i++) {
+				if (problems[i].getProblemId() == IProblem.MissingSerialVersion) {
+					final SimpleName simpleName= getSelectedName(compilationUnit, problems[i]);
+					if (simpleName != null) {
+						ASTNode declarationNode= getDeclarationNode(simpleName);
+						if (declarationNode != null) {
+							declarationNodes.add(declarationNode);
+						}
+					}
+				}
+			}
+			if (declarationNodes.size() == 0)
+				return null;
+
+			for (Iterator<ASTNode> iter= declarationNodes.iterator(); iter.hasNext();) {
+	            ASTNode declarationNode= iter.next();
+	            ITypeBinding binding= getTypeBinding(declarationNode);
+	            if (fCurrentContext.getSerialVersionId(binding) != null) {
+	            	SerialVersionHashBatchOperation op= new SerialVersionHashBatchOperation(unit, declarationNodes.toArray(new ASTNode[declarationNodes.size()]), fCurrentContext);
+	    			return new PotentialProgrammingProblemsFix(FixMessages.PotentialProgrammingProblemsFix_add_id_change_name, compilationUnit, new CompilationUnitRewriteOperation[] {op});
+	            }
+            }
+		}
+		return null;
+	}
+

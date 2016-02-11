@@ -1,0 +1,43 @@
+	public static ICleanUpFix createCleanUp(CompilationUnit compilationUnit,
+											boolean addThisQualifier,
+											boolean changeNonStaticAccessToStatic,
+											boolean qualifyStaticFieldAccess,
+											boolean changeIndirectStaticAccessToDirect,
+											boolean qualifyMethodAccess,
+											boolean qualifyStaticMethodAccess,
+											boolean removeFieldQualifier,
+											boolean removeMethodQualifier) {
+
+		if (!addThisQualifier && !changeNonStaticAccessToStatic && !qualifyStaticFieldAccess && !changeIndirectStaticAccessToDirect &&
+			!qualifyMethodAccess && !qualifyStaticMethodAccess && !removeFieldQualifier && !removeMethodQualifier)
+			return null;
+
+		List<CompilationUnitRewriteOperation> operations = new ArrayList<CompilationUnitRewriteOperation>();
+		if (addThisQualifier || qualifyStaticFieldAccess || qualifyMethodAccess || qualifyStaticMethodAccess) {
+			CodeStyleVisitor codeStyleVisitor =
+					new CodeStyleVisitor(compilationUnit, addThisQualifier, qualifyStaticFieldAccess, qualifyMethodAccess,
+										 qualifyStaticMethodAccess, operations);
+			compilationUnit.accept(codeStyleVisitor);
+		}
+
+		IProblem[] problems = compilationUnit.getProblems();
+		IProblemLocation[] locations = new IProblemLocation[problems.length];
+		for (int i = 0; i < problems.length; i++) {
+			locations[i] = new ProblemLocation(problems[i]);
+		}
+		addToStaticAccessOperations(compilationUnit, locations, changeNonStaticAccessToStatic, changeIndirectStaticAccessToDirect,
+									operations);
+
+		if (removeFieldQualifier || removeMethodQualifier) {
+			ThisQualifierVisitor visitor =
+					new ThisQualifierVisitor(removeFieldQualifier, removeMethodQualifier, compilationUnit, operations);
+			compilationUnit.accept(visitor);
+		}
+
+		if (operations.isEmpty())
+			return null;
+
+		CompilationUnitRewriteOperation[] operationsArray = operations.toArray(new CompilationUnitRewriteOperation[operations.size()]);
+		return new CodeStyleFix(FixMessages.CodeStyleFix_change_name, compilationUnit, operationsArray);
+	}
+

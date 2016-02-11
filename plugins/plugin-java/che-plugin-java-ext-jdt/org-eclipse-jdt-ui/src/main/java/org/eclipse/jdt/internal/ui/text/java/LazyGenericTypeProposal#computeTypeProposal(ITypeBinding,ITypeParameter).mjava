@@ -1,0 +1,40 @@
+	/**
+	 * Returns a type argument proposal for a given type binding. The proposal is:
+	 * <ul>
+	 * <li>the simple type name for normal types or type variables (unambigous proposal)</li>
+	 * <li>for wildcard types (ambigous proposals):
+	 * <ul>
+	 * <li>the upper bound for wildcards with an upper bound</li>
+	 * <li>the {@linkplain #computeTypeProposal(org.eclipse.jdt.core.ITypeParameter) parameter proposal} for unbounded
+	 * wildcards or wildcards with a lower bound</li>
+	 * </ul>
+	 * </li>
+	 * </ul>
+	 *
+	 * @param binding the type argument binding in the expected type
+	 * @param parameter the type parameter of the inserted type
+	 * @return a type argument proposal for <code>binding</code>
+	 * @throws org.eclipse.jdt.core.JavaModelException if this element does not exist or if an exception occurs while
+	 *             accessing its corresponding resource
+	 * @see #computeTypeProposal(org.eclipse.jdt.core.ITypeParameter)
+	 */
+	private TypeArgumentProposal computeTypeProposal(ITypeBinding binding, ITypeParameter parameter) throws JavaModelException {
+		final String name= Bindings.getTypeQualifiedName(binding);
+		if (binding.isWildcardType()) {
+
+			if (binding.isUpperbound()) {
+				// replace the wildcard ? with the type parameter name to get "E extends Bound" instead of "? extends Bound"
+				String contextName= name.replaceFirst("\\?", parameter.getElementName()); //$NON-NLS-1$
+				// upper bound - the upper bound is the bound itself
+				return new TypeArgumentProposal(binding.getBound().getName(), true, contextName);
+			}
+
+			// no or upper bound - use the type parameter of the inserted type, as it may be more
+			// restrictive (eg. List<?> list= new SerializableList<Serializable>())
+			return computeTypeProposal(parameter);
+		}
+
+		// not a wildcard but a type or type variable - this is unambigously the right thing to insert
+		return new TypeArgumentProposal(name, false, name);
+	}
+

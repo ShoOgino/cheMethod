@@ -1,0 +1,31 @@
+	private TextEditProcessor createTextEditProcessor(IDocument document, int flags, boolean preview) {
+		if (fEdit == null)
+			return new TextEditProcessor(document, new MultiTextEdit(0,0), flags);
+		List excludes= new ArrayList(0);
+		TextEditBasedChangeGroup[] groups= getChangeGroups();
+		for (int index= 0; index < groups.length; index++) {
+			TextEditBasedChangeGroup edit= groups[index];
+			if (!edit.isEnabled()) {
+				excludes.addAll(Arrays.asList(edit.getTextEditGroup().getTextEdits()));
+			}
+		}
+		if (preview) {
+			fCopier= new TextEditCopier(fEdit);
+			TextEdit copiedEdit= fCopier.perform();
+			boolean keep= getKeepPreviewEdits();
+			if (keep)
+				flags= flags | TextEdit.UPDATE_REGIONS;
+			LocalTextEditProcessor result= new LocalTextEditProcessor(document, copiedEdit, flags);
+			result.setExcludes(mapEdits(
+				(TextEdit[])excludes.toArray(new TextEdit[excludes.size()]),
+				fCopier));
+			if (!keep)
+				fCopier= null;
+			return result;
+		} else {
+			LocalTextEditProcessor result= new LocalTextEditProcessor(document, fEdit, flags | TextEdit.UPDATE_REGIONS);
+			result.setExcludes((TextEdit[])excludes.toArray(new TextEdit[excludes.size()]));
+			return result;
+		}
+	}
+

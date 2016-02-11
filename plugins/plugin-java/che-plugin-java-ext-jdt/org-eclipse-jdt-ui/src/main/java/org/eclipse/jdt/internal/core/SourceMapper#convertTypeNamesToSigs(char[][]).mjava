@@ -1,0 +1,66 @@
+    /**
+     * NOT API, public only for access by Unit tests.
+     * Converts these type names to unqualified signatures. This needs to be done in order to be consistent
+     * with the way the source range is retrieved.
+     *
+     * @see org.eclipse.jdt.internal.core.SourceMapper#getUnqualifiedMethodHandle
+     * @see org.eclipse.jdt.core.Signature
+     */
+    public String[] convertTypeNamesToSigs(char[][] typeNames) {
+        if (typeNames == null)
+            return CharOperation.NO_STRINGS;
+        int n = typeNames.length;
+        if (n == 0)
+            return CharOperation.NO_STRINGS;
+        String[] typeSigs = new String[n];
+        for (int i = 0; i < n; ++i) {
+            char[] typeSig = Signature.createCharArrayTypeSignature(typeNames[i], false);
+
+            // transforms signatures that contains a qualification into unqualified signatures
+            // e.g. "QX<+QMap.Entry;>;" becomes "QX<+QEntry;>;"
+            StringBuffer simpleTypeSig = null;
+            int start = 0;
+            int dot = -1;
+            int length = typeSig.length;
+            for (int j = 0; j < length; j++) {
+                switch (typeSig[j]) {
+                    case Signature.C_UNRESOLVED:
+                        if (simpleTypeSig != null)
+                            simpleTypeSig.append(typeSig, start, j - start);
+                        start = j;
+                        break;
+                    case Signature.C_DOT:
+                        dot = j;
+                        break;
+                    case Signature.C_GENERIC_START:
+                        int matchingEnd = findMatchingGenericEnd(typeSig, j + 1);
+                        if (matchingEnd > 0 && matchingEnd + 1 < length && typeSig[matchingEnd + 1] == Signature.C_DOT) {
+                            // found Head<Param>.Tail -> discard everything except Tail
+                            if (simpleTypeSig == null)
+                                simpleTypeSig = new StringBuffer().append(typeSig, 0, start);
+                            simpleTypeSig.append(Signature.C_UNRESOLVED);
+                            start = j = matchingEnd + 2;
+                            break;
+                        }
+                        //$FALL-THROUGH$
+                    case Signature.C_NAME_END:
+                        if (dot > start) {
+                            if (simpleTypeSig == null)
+                                simpleTypeSig = new StringBuffer().append(typeSig, 0, start);
+                            simpleTypeSig.append(Signature.C_UNRESOLVED);
+                            simpleTypeSig.append(typeSig, dot + 1, j - dot - 1);
+                            start = j;
+                        }
+                        break;
+                }
+            }
+            if (simpleTypeSig == null) {
+                typeSigs[i] = new String(typeSig);
+            } else {
+                simpleTypeSig.append(typeSig, start, length - start);
+                typeSigs[i] = simpleTypeSig.toString();
+            }
+        }
+        return typeSigs;
+    }
+

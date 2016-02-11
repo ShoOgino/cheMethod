@@ -1,0 +1,133 @@
+	private static LinkedCorrectionProposal getConvertToStringBufferProposal(IInvocationContext context, AST ast, InfixExpression oldInfixExpression) {
+		String bufferOrBuilderName;
+		ICompilationUnit cu= context.getCompilationUnit();
+		if (JavaModelUtil.is50OrHigher(cu.getJavaProject())) {
+			bufferOrBuilderName= "StringBuilder"; //$NON-NLS-1$
+		} else {
+			bufferOrBuilderName= "StringBuffer"; //$NON-NLS-1$
+		}
+
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+
+		SimpleName existingBuffer= getEnclosingAppendBuffer(oldInfixExpression);
+		
+		String mechanismName= BasicElementLabels
+				.getJavaElementName(existingBuffer == null ? bufferOrBuilderName : existingBuffer.getIdentifier());
+		String label= Messages.format(CorrectionMessages.QuickAssistProcessor_convert_to_string_buffer_description, mechanismName);
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, cu, rewrite, IProposalRelevance.CONVERT_TO_STRING_BUFFER, image);
+		proposal.setCommandId(CONVERT_TO_STRING_BUFFER_ID);
+
+		Statement insertAfter;
+		String bufferName;
+
+		String groupID= "nameId"; //$NON-NLS-1$
+		ListRewrite listRewrite;
+
+		Statement enclosingStatement= ASTResolving.findParentStatement(oldInfixExpression);
+
+		if (existingBuffer != null) {
+			if (ASTNodes.isControlStatementBody(enclosingStatement.getLocationInParent())) {
+				Block newBlock= ast.newBlock();
+				listRewrite= rewrite.getListRewrite(newBlock, Block.STATEMENTS_PROPERTY);
+				insertAfter= null;
+				rewrite.replace(enclosingStatement, newBlock, null);
+			} else {
+				listRewrite= rewrite.getListRewrite(enclosingStatement.getParent(), (ChildListPropertyDescriptor) enclosingStatement.getLocationInParent());
+				insertAfter= enclosingStatement;
+			}
+
+			bufferName= existingBuffer.getIdentifier();
+
+		} else {
+			// create buffer
+			VariableDeclarationFragment frag= ast.newVariableDeclarationFragment();
+			// check if name is already in use and provide alternative
+			List<String> fExcludedVariableNames= Arrays.asList(ASTResolving.getUsedVariableNames(oldInfixExpression));
+
+			SimpleType bufferType= ast.newSimpleType(ast.newName(bufferOrBuilderName));
+			ClassInstanceCreation newBufferExpression= ast.newClassInstanceCreation();
+
+			String[] newBufferNames= StubUtility
+					.getVariableNameSuggestions(NamingConventions.VK_LOCAL, cu.getJavaProject(), bufferOrBuilderName, 0,
+												fExcludedVariableNames, true);
+			bufferName= newBufferNames[0];
+
+			SimpleName bufferNameDeclaration= ast.newSimpleName(bufferName);
+			frag.setName(bufferNameDeclaration);
+
+			proposal.addLinkedPosition(rewrite.track(bufferNameDeclaration), true, groupID);
+			for (int i= 0; i < newBufferNames.length; i++) {
+				proposal.addLinkedPositionProposal(groupID, newBufferNames[i], null);
+			}
+
+
+			newBufferExpression.setType(bufferType);
+			frag.setInitializer(newBufferExpression);
+
+
+			VariableDeclarationStatement bufferDeclaration= ast.newVariableDeclarationStatement(frag);
+			bufferDeclaration.setType(ast.newSimpleType(ast.newName(bufferOrBuilderName)));
+			insertAfter= bufferDeclaration;
+
+			Statement statement= ASTResolving.findParentStatement(oldInfixExpression);
+			if (ASTNodes.isControlStatementBody(statement.getLocationInParent())) {
+				Block newBlock= ast.newBlock();
+				listRewrite= rewrite.getListRewrite(newBlock, Block.STATEMENTS_PROPERTY);
+				listRewrite.insertFirst(bufferDeclaration, null);
+				listRewrite.insertLast(rewrite.createMoveTarget(statement), null);
+				rewrite.replace(statement, newBlock, null);
+			} else {
+				listRewrite= rewrite.getListRewrite(statement.getParent(), (ChildListPropertyDescriptor) statement.getLocationInParent());
+				listRewrite.insertBefore(bufferDeclaration, statement, null);
+			}
+		}
+
+		List<Expression> operands= new ArrayList<Expression>();
+		collectInfixPlusOperands(oldInfixExpression, operands);
+		
+		Statement lastAppend= insertAfter;
+		for (Iterator<Expression> iter= operands.iterator(); iter.hasNext();) {
+			Expression operand= iter.next();
+
+			MethodInvocation appendIncovationExpression= ast.newMethodInvocation();
+			appendIncovationExpression.setName(ast.newSimpleName("append")); //$NON-NLS-1$
+			SimpleName bufferNameReference= ast.newSimpleName(bufferName);
+
+			// If there was an existing name, don't offer to rename it
+			if (existingBuffer == null) {
+				proposal.addLinkedPosition(rewrite.track(bufferNameReference), true, groupID);
+			}
+
+			appendIncovationExpression.setExpression(bufferNameReference);
+			appendIncovationExpression.arguments().add(rewrite.createCopyTarget(operand));
+
+			ExpressionStatement appendExpressionStatement= ast.newExpressionStatement(appendIncovationExpression);
+			if (lastAppend == null) {
+				listRewrite.insertFirst(appendExpressionStatement, null);
+			} else {
+				listRewrite.insertAfter(appendExpressionStatement, lastAppend, null);
+			}
+			lastAppend= appendExpressionStatement;
+		}
+
+		if (existingBuffer != null) {
+			proposal.setEndPosition(rewrite.track(lastAppend));
+			if (insertAfter != null) {
+				rewrite.remove(enclosingStatement, null);
+			}
+		} else {
+			// replace old expression with toString
+			MethodInvocation bufferToString= ast.newMethodInvocation();
+			bufferToString.setName(ast.newSimpleName("toString")); //$NON-NLS-1$
+			SimpleName bufferNameReference= ast.newSimpleName(bufferName);
+			bufferToString.setExpression(bufferNameReference);
+			proposal.addLinkedPosition(rewrite.track(bufferNameReference), true, groupID);
+
+			rewrite.replace(oldInfixExpression, bufferToString, null);
+			proposal.setEndPosition(rewrite.track(bufferToString));
+		}
+
+		return proposal;
+	}
+

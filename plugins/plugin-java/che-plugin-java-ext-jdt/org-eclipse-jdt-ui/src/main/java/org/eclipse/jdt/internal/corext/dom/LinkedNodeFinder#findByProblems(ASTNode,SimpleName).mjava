@@ -1,0 +1,37 @@
+	public static SimpleName[] findByProblems(ASTNode parent, SimpleName nameNode) {
+		ArrayList<SimpleName> res= new ArrayList<SimpleName>();
+
+		ASTNode astRoot = parent.getRoot();
+		if (!(astRoot instanceof CompilationUnit)) {
+			return null;
+		}
+
+		IProblem[] problems= ((CompilationUnit) astRoot).getProblems();
+		int nameNodeKind= getNameNodeProblemKind(problems, nameNode);
+		if (nameNodeKind == 0) { // no problem on node
+			return null;
+		}
+
+		int bodyStart= parent.getStartPosition();
+		int bodyEnd= bodyStart + parent.getLength();
+
+		String name= nameNode.getIdentifier();
+
+		for (int i= 0; i < problems.length; i++) {
+			IProblem curr= problems[i];
+			int probStart= curr.getSourceStart();
+			int probEnd= curr.getSourceEnd() + 1;
+
+			if (probStart > bodyStart && probEnd < bodyEnd) {
+				int currKind= getProblemKind(curr);
+				if ((nameNodeKind & currKind) != 0) {
+					ASTNode node= NodeFinder.perform(parent, probStart, (probEnd - probStart));
+					if (node instanceof SimpleName && name.equals(((SimpleName) node).getIdentifier())) {
+						res.add((SimpleName) node);
+					}
+				}
+			}
+		}
+		return res.toArray(new SimpleName[res.size()]);
+	}
+

@@ -1,0 +1,48 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	public Change perform(IProgressMonitor pm) throws CoreException {
+		if (pm == null)
+			pm= new NullProgressMonitor();
+		ITextFileBufferManager manager= FileBuffers.getTextFileBufferManager();
+		pm.beginTask("", 2); //$NON-NLS-1$
+		ITextFileBuffer buffer= null;
+		try {
+			manager.connect(fFile.getFullPath(), LocationKind.IFILE, new SubProgressMonitor(pm, 1));
+			buffer= manager.getTextFileBuffer(fFile.getFullPath(), LocationKind.IFILE);
+			IDocument document= buffer.getDocument();
+			ContentStamp currentStamp= ContentStamps.get(fFile, document);
+
+			boolean[] setContentStampSuccess= { false };
+			UndoEdit redo= performEdits(buffer, document, setContentStampSuccess);
+
+			if (needsSaving()) {
+				buffer.commit(pm, false);
+				if (!setContentStampSuccess[0]) {
+					// We weren't able to restore document stamp.
+					// Since we save restore the file stamp instead
+					ContentStamps.set(fFile, fContentStampToRestore);
+				}
+			}
+			return createUndoChange(redo, currentStamp);
+		} catch (BadLocationException e) {
+			if (fValidationState == null || !fValidationState.wasDerived())
+				throw Changes.asCoreException(e);
+			else
+				return new NullChange();
+		} catch (MalformedTreeException e) {
+			if (fValidationState == null || !fValidationState.wasDerived())
+				throw Changes.asCoreException(e);
+			else
+				return new NullChange();
+		} catch (CoreException e) {
+			if (fValidationState == null || !fValidationState.wasDerived())
+				throw e;
+			else
+				return new NullChange();
+		} finally {
+			if (buffer != null)
+				manager.disconnect(fFile.getFullPath(), LocationKind.IFILE, new SubProgressMonitor(pm, 1));
+		}
+	}
+

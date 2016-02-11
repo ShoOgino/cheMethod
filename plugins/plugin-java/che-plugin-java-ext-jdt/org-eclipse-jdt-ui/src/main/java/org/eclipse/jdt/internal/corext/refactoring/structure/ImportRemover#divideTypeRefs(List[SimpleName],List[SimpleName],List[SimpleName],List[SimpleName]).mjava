@@ -1,0 +1,76 @@
+	private void divideTypeRefs(List<SimpleName> importNames, List<SimpleName> staticNames, List<SimpleName> removedRefs,
+								List<SimpleName> unremovedRefs) {
+		final List<int[]> removedStartsEnds = new ArrayList<int[]>();
+		fRoot.accept(new ASTVisitor(true) {
+			int fRemovingStart = -1;
+
+			@Override
+			public void preVisit(ASTNode node) {
+				Object property = node.getProperty(PROPERTY_KEY);
+				if (property == REMOVED) {
+					if (fRemovingStart == -1) {
+						fRemovingStart = node.getStartPosition();
+					} else {
+						/*
+						 * Bug in client code: REMOVED node should not be nested inside another REMOVED node without
+						 * an intermediate RETAINED node.
+						 * Drop REMOVED property to prevent problems later (premature end of REMOVED section).
+						 */
+						node.setProperty(PROPERTY_KEY, null);
+					}
+				} else if (property == RETAINED) {
+					if (fRemovingStart != -1) {
+						removedStartsEnds.add(new int[]{fRemovingStart, node.getStartPosition()});
+						fRemovingStart = -1;
+					} else {
+						/*
+						 * Bug in client code: RETAINED node should not be nested inside another RETAINED node without
+						 * an intermediate REMOVED node and must have an enclosing REMOVED node.
+						 * Drop RETAINED property to prevent problems later (premature restart of REMOVED section).
+						 */
+						node.setProperty(PROPERTY_KEY, null);
+					}
+				}
+				super.preVisit(node);
+			}
+
+			@Override
+			public void postVisit(ASTNode node) {
+				Object property = node.getProperty(PROPERTY_KEY);
+				if (property == RETAINED) {
+					int end = node.getStartPosition() + node.getLength();
+					fRemovingStart = end;
+				} else if (property == REMOVED) {
+					if (fRemovingStart != -1) {
+						int end = node.getStartPosition() + node.getLength();
+						removedStartsEnds.add(new int[]{fRemovingStart, end});
+						fRemovingStart = -1;
+					}
+				}
+				super.postVisit(node);
+			}
+		});
+
+		for (Iterator<SimpleName> iterator = importNames.iterator(); iterator.hasNext(); ) {
+			SimpleName name = iterator.next();
+			if (isInRemoved(name, removedStartsEnds))
+				removedRefs.add(name);
+			else
+				unremovedRefs.add(name);
+		}
+		for (Iterator<SimpleName> iterator = staticNames.iterator(); iterator.hasNext(); ) {
+			SimpleName name = iterator.next();
+			if (isInRemoved(name, removedStartsEnds))
+				removedRefs.add(name);
+			else
+				unremovedRefs.add(name);
+		}
+		for (Iterator<ImportDeclaration> iterator = fInlinedStaticImports.iterator(); iterator.hasNext(); ) {
+			ImportDeclaration importDecl = iterator.next();
+			Name name = importDecl.getName();
+			if (name instanceof QualifiedName)
+				name = ((QualifiedName)name).getName();
+			removedRefs.add((SimpleName)name);
+		}
+	}
+

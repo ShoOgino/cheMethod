@@ -1,0 +1,49 @@
+    private boolean expandPathRecursive(D expandedParentNode, List<String> pathToExpand, boolean dispatchNodeExpanded) {
+        if (expandedParentNode == null) {
+            return false;
+        }
+
+        NodeDataAdapter<D> dataAdapter = getModel().dataAdapter;
+        D previousParentNode = expandedParentNode;
+
+        for (int pathIndex = 0; pathIndex < pathToExpand.size(); ++pathIndex) {
+            if (!getModel().dataAdapter.hasChildren(previousParentNode)) {
+                // Consider this path expanded, even if some path components are left.
+                return true;
+            }
+
+            // The root is already expanded by default. So we really want to recur the
+            // child that matches the first component.
+            List<D> children = getModel().dataAdapter.getChildren(previousParentNode);
+            previousParentNode = null;
+
+            for (int i = 0, n = children.size(); i < n; ++i) {
+                D child = children.get(i);
+                if (dataAdapter.getNodeId(child).equals(pathToExpand.get(pathIndex))) {
+
+                    // We have a match. Look up the rendered element. The parent should
+                    // already be expanded, so this must exist.
+                    TreeNodeElement<D> renderedNode = dataAdapter.getRenderedTreeNode(child);
+
+                    assert (renderedNode != null);
+
+                    // If this node is not open, then we open it.
+                    if (!renderedNode.isOpen()) {
+                        expandNode(renderedNode, false, dispatchNodeExpanded);
+                    }
+
+                    // Continue to expand the remainder of the path.
+                    previousParentNode = child;
+                    break;
+                }
+            }
+
+            if (previousParentNode == null) {
+                // The path was only partially expanded.
+                return false;
+            }
+        }
+
+        return true;
+    }
+

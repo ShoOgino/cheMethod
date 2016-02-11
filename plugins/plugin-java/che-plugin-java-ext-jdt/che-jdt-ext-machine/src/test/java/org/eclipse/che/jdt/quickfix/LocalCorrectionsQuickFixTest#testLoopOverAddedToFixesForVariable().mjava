@@ -1,0 +1,67 @@
+	/**
+	 * Tests if the quick fix to loop over a variable name is added correctly. The complete
+	 * functionality of the for loop generation is tested in {@link AssistQuickFixTest}
+	 * 
+	 * @throws Exception
+	 */
+    @Test
+	public void testLoopOverAddedToFixesForVariable() throws Exception {
+		if (BUG_434188)
+			return;
+		if (BUG_430818)
+			return;
+		
+		IPackageFragment pack1= fSourceFolder.createPackageFragment("test1", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("import java.util.Collection;\n");
+		buf.append("public class E {\n");
+		buf.append("    void foo(Collection<String> collection) {\n");
+		buf.append("        collection\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+
+		Map saveOptions= fJProject1.getOptions(false);
+		Map newOptions= new HashMap(saveOptions);
+		newOptions.put(DefaultCodeFormatterConstants.FORMATTER_PUT_EMPTY_STATEMENT_ON_NEW_LINE, "true");
+		try {
+			fJProject1.setOptions(newOptions);
+			List proposals= collectCorrections(cu, getASTRoot(cu), 3, null);
+
+			assertNumberOfProposals(proposals, 2);
+			assertCorrectLabels(proposals);
+
+			String[] expected= new String[2];
+			buf= new StringBuffer();
+			buf.append("package test1;\n");
+			buf.append("import java.util.Collection;\n");
+			buf.append("public class E {\n");
+			buf.append("    void foo(Collection<String> collection) {\n");
+			buf.append("        for (String string : collection) {\n");
+			buf.append("            \n");
+			buf.append("        }\n");
+			buf.append("    }\n");
+			buf.append("}\n");
+			expected[0]= buf.toString();
+
+			buf= new StringBuffer();
+			buf.append("package test1;\n");
+			buf.append("import java.util.Collection;\n");
+			buf.append("import java.util.Iterator;\n");
+			buf.append("public class E {\n");
+			buf.append("    void foo(Collection<String> collection) {\n");
+			buf.append("        for (Iterator<String> iterator = collection.iterator(); iterator.hasNext();) {\n");
+			buf.append("            String string = iterator.next();\n");
+			buf.append("            \n");
+			buf.append("        }\n");
+			buf.append("    }\n");
+			buf.append("}\n");
+			expected[1]= buf.toString();
+
+			assertExpectedExistInProposals(proposals, expected);
+		} finally {
+			fJProject1.setOptions(saveOptions);
+		}
+	}
+

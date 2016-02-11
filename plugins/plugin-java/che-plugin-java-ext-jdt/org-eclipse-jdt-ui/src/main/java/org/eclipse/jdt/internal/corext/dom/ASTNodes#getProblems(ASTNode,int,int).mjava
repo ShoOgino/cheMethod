@@ -1,0 +1,36 @@
+    public static IProblem[] getProblems(ASTNode node, int scope, int severity) {
+        ASTNode root = node.getRoot();
+        if (!(root instanceof CompilationUnit))
+            return EMPTY_PROBLEMS;
+        IProblem[] problems = ((CompilationUnit)root).getProblems();
+        if (root == node)
+            return problems;
+        final int iterations = computeIterations(scope);
+        List<IProblem> result = new ArrayList<IProblem>(5);
+        for (int i = 0; i < problems.length; i++) {
+            IProblem problem = problems[i];
+            boolean consider = false;
+            if ((severity & PROBLEMS) == PROBLEMS)
+                consider = true;
+            else if ((severity & WARNING) != 0)
+                consider = problem.isWarning();
+            else if ((severity & ERROR) != 0)
+                consider = problem.isError();
+            if (consider) {
+                ASTNode temp = node;
+                int count = iterations;
+                do {
+                    int nodeOffset = temp.getStartPosition();
+                    int problemOffset = problem.getSourceStart();
+                    if (nodeOffset <= problemOffset && problemOffset < nodeOffset + temp.getLength()) {
+                        result.add(problem);
+                        count = 0;
+                    } else {
+                        count--;
+                    }
+                } while ((temp = temp.getParent()) != null && count > 0);
+            }
+        }
+        return result.toArray(new IProblem[result.size()]);
+    }
+

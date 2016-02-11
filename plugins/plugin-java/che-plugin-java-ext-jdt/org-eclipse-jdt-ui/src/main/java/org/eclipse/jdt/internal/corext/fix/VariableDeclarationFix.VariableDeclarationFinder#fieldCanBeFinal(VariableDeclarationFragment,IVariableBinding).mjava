@@ -1,0 +1,71 @@
+		private boolean fieldCanBeFinal(VariableDeclarationFragment fragment, IVariableBinding binding) {
+			if (Modifier.isStatic(((FieldDeclaration)fragment.getParent()).getModifiers()))
+				return false;
+
+			if (!fWrittenVariables.containsKey(binding)) {
+				//variable is not written
+				if (fragment.getInitializer() == null) {//variable is not initialized
+					return false;
+				} else {
+					return true;
+				}
+			}
+
+			if (fragment.getInitializer() != null)//variable is initialized and written
+				return false;
+
+			ITypeBinding declaringClass = binding.getDeclaringClass();
+			if (declaringClass == null)
+				return false;
+
+			List<SimpleName> writes = fWrittenVariables.get(binding);
+			if (!isWrittenInTypeConstructors(writes, declaringClass))
+				return false;
+
+			HashSet<IMethodBinding> writingConstructorBindings = new HashSet<IMethodBinding>();
+			ArrayList<MethodDeclaration> writingConstructors = new ArrayList<MethodDeclaration>();
+			for (int i= 0; i < writes.size(); i++) {
+	            SimpleName name= writes.get(i);
+	            MethodDeclaration constructor= getWritingConstructor(name);
+	            if (writingConstructors.contains(constructor))//variable is written twice or more in constructor
+	            	return false;
+
+	            if (canReturn(constructor))
+	            	return false;
+
+	            writingConstructors.add(constructor);
+	            IMethodBinding constructorBinding= constructor.resolveBinding();
+	            if (constructorBinding == null)
+	            	return false;
+
+				writingConstructorBindings.add(constructorBinding);
+            }
+
+			for (int i= 0; i < writingConstructors.size(); i++) {
+	            MethodDeclaration constructor= writingConstructors.get(i);
+	            if (callsWritingConstructor(constructor, writingConstructorBindings))//writing constructor calls other writing constructor
+	            	return false;
+            }
+
+			MethodDeclaration constructor= writingConstructors.get(0);
+			TypeDeclaration typeDecl= (TypeDeclaration)ASTNodes.getParent(constructor, TypeDeclaration.class);
+			if (typeDecl == null)
+				return false;
+
+			MethodDeclaration[] methods= typeDecl.getMethods();
+			for (int i= 0; i < methods.length; i++) {
+	            if (methods[i].isConstructor()) {
+	            	IMethodBinding methodBinding= methods[i].resolveBinding();
+	            	if (methodBinding == null)
+	            		return false;
+
+	            	if (!writingConstructorBindings.contains(methodBinding)) {
+	            		if (!callsWritingConstructor(methods[i], writingConstructorBindings))//non writing constructor does not call a writing constructor
+	            			return false;
+	            	}
+	            }
+            }
+
+	        return true;
+        }
+

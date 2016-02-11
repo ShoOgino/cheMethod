@@ -1,0 +1,41 @@
+    /**
+     * Evaluates all children of a given {@link IFolder}. Clients can override this method.
+     * @param folder The folder to evaluate the children for.
+     * @return The children of the given folder.
+     * @exception CoreException if the folder does not exist.
+     *
+     * @since 3.3
+     */
+    protected Object[] getFolderContent(IFolder folder) throws CoreException {
+        IResource[] members = folder.members();
+        IJavaProject javaProject = JavaCore.create(folder.getProject());
+        if (javaProject == null || !javaProject.exists())
+            return members;
+        boolean isFolderOnClasspath = javaProject.isOnClasspath(folder);
+        List<IResource> nonJavaResources = new ArrayList<IResource>();
+        // Can be on classpath but as a member of non-java resource folder
+        for (int i = 0; i < members.length; i++) {
+            IResource member = members[i];
+            // A resource can also be a java element
+            // in the case of exclusion and inclusion filters.
+            // We therefore exclude Java elements from the list
+            // of non-Java resources.
+            if (isFolderOnClasspath) {
+                if (javaProject.findPackageFragmentRoot(member.getFullPath()) == null) {
+                    nonJavaResources.add(member);
+                }
+            } else if (!javaProject.isOnClasspath(member)) {
+                nonJavaResources.add(member);
+            } else {
+                IJavaElement element = JavaCore.create(member, javaProject);
+                if (element instanceof IPackageFragmentRoot
+                    && javaProject.equals(element.getJavaProject())
+                    && ((IPackageFragmentRoot)element).getKind() != IPackageFragmentRoot.K_SOURCE) {
+                    // don't skip libs and class folders on the classpath of their project
+                    nonJavaResources.add(member);
+                }
+            }
+        }
+        return nonJavaResources.toArray();
+    }
+

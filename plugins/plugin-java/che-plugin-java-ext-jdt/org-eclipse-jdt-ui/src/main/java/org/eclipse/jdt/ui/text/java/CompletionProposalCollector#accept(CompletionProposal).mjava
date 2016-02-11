@@ -1,0 +1,37 @@
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Subclasses may replace, but usually should not need to. Consider
+     * replacing
+     * {@linkplain #createJavaCompletionProposal(org.eclipse.jdt.core.CompletionProposal) createJavaCompletionProposal}
+     * instead.
+     * </p>
+     */
+    @Override
+    public void accept(CompletionProposal proposal) {
+        long start = DEBUG ? System.currentTimeMillis() : 0;
+        try {
+            if (isFiltered(proposal))
+                return;
+
+            if (proposal.getKind() == CompletionProposal.POTENTIAL_METHOD_DECLARATION) {
+                acceptPotentialMethodDeclaration(proposal);
+            } else {
+                IJavaCompletionProposal javaProposal= createJavaCompletionProposal(proposal);
+				if (javaProposal != null) {
+					fJavaProposals.add(javaProposal);
+					if (proposal.getKind() == CompletionProposal.KEYWORD)
+						fKeywords.add(javaProposal);
+				}
+			}
+		} catch (IllegalArgumentException e) {
+			// all signature processing method may throw IAEs
+			// https://bugs.eclipse.org/bugs/show_bug.cgi?id=84657
+			// don't abort, but log and show all the valid proposals
+			JavaPlugin.log(new Status(IStatus.ERROR, JavaPlugin.getPluginId(), IStatus.OK,
+                                      "Exception when processing proposal for: " + String.valueOf(proposal.getCompletion()), e)); //$NON-NLS-1$
+		}
+
+		if (DEBUG) fUITime += System.currentTimeMillis() - start;
+	}
+

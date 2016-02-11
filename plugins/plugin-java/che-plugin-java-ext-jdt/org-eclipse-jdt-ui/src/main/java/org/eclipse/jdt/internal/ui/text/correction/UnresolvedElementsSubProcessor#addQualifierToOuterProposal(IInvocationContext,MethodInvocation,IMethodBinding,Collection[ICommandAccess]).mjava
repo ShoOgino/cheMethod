@@ -1,0 +1,46 @@
+	private static void addQualifierToOuterProposal(IInvocationContext context, MethodInvocation invocationNode, IMethodBinding binding, Collection<ICommandAccess> proposals) {
+		ITypeBinding declaringType= binding.getDeclaringClass();
+		ITypeBinding parentType= Bindings.getBindingOfParentType(invocationNode);
+		ITypeBinding currType= parentType;
+
+		boolean isInstanceMethod= !Modifier.isStatic(binding.getModifiers());
+
+		while (currType != null && !Bindings.isSuperType(declaringType, currType)) {
+			if (isInstanceMethod && Modifier.isStatic(currType.getModifiers())) {
+				return;
+			}
+			currType= currType.getDeclaringClass();
+		}
+		if (currType == null || currType == parentType) {
+			return;
+		}
+
+		ASTRewrite rewrite= ASTRewrite.create(invocationNode.getAST());
+
+		String label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_changetoouter_description,
+									  ASTResolving.getTypeSignature(currType));
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal
+				proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.QUALIFY_WITH_ENCLOSING_TYPE, image);
+
+		ImportRewrite imports= proposal.createImportRewrite(context.getASTRoot());
+		ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(invocationNode, imports);
+		AST ast= invocationNode.getAST();
+
+		String qualifier= imports.addImport(currType, importRewriteContext);
+		Name name= ASTNodeFactory.newName(ast, qualifier);
+
+		Expression newExpression;
+		if (isInstanceMethod) {
+			ThisExpression expr= ast.newThisExpression();
+			expr.setQualifier(name);
+			newExpression= expr;
+		} else {
+			newExpression= name;
+		}
+
+		rewrite.set(invocationNode, MethodInvocation.EXPRESSION_PROPERTY, newExpression, null);
+
+		proposals.add(proposal);
+	}
+

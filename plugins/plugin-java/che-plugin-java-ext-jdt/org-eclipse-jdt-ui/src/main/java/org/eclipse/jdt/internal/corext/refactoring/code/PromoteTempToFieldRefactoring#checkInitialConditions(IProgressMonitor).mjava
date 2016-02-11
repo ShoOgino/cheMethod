@@ -1,0 +1,41 @@
+	/*
+     * @see org.eclipse.jdt.internal.corext.refactoring.base.Refactoring#checkActivation(org.eclipse.core.runtime.IProgressMonitor)
+     */
+	@Override
+	public RefactoringStatus checkInitialConditions(IProgressMonitor pm) throws CoreException {
+		RefactoringStatus result = Checks.validateModifiesFiles(
+				ResourceUtil.getFiles(new ICompilationUnit[]{fCu}),
+				getValidationContext());
+		if (result.hasFatalError())
+			return result;
+
+		initAST(pm);
+
+		if (fTempDeclarationNode == null)
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.PromoteTempToFieldRefactoring_select_declaration);
+
+		if (!Checks.isDeclaredIn(fTempDeclarationNode, MethodDeclaration.class))
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages
+																	.PromoteTempToFieldRefactoring_only_declared_in_methods);
+
+		if (isMethodParameter())
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.PromoteTempToFieldRefactoring_method_parameters);
+
+		if (isTempAnExceptionInCatchBlock())
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.PromoteTempToFieldRefactoring_exceptions);
+
+		ASTNode declaringType= ASTResolving.findParentType(fTempDeclarationNode);
+		if (declaringType instanceof TypeDeclaration && ((TypeDeclaration) declaringType).isInterface())
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.PromoteTempToFieldRefactoring_interface_methods);
+		
+		result.merge(checkTempTypeForLocalTypeUsage());
+		if (result.hasFatalError())
+		    return result;
+
+		checkTempInitializerForLocalTypeUsage();
+
+		if (!fSelfInitializing)
+			initializeDefaults();
+		return result;
+	}
+

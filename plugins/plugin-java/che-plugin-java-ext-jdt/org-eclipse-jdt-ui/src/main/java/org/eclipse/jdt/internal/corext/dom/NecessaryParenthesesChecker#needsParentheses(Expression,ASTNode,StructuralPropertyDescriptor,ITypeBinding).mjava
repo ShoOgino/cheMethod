@@ -1,0 +1,57 @@
+	/**
+	 * Does the <code>expression</code> need parentheses when inserted into <code>parent</code> at
+	 * <code>locationInParent</code> ?
+	 *
+	 * @param expression the expression
+	 * @param parent the parent node
+	 * @param locationInParent location of expression in the parent
+	 * @param leftOperandType the type of the left operand in <code>parent</code> if
+	 *            <code>parent</code> is an infix expression with no bindings and
+	 *            <code>expression</code> is the right operand in it, <code>null</code> otherwise
+	 * @return <code>true</code> if <code>expression</code> needs parentheses, <code>false</code>
+	 *         otherwise.
+	 *
+	 * @since 3.9
+	 */
+	private static boolean needsParentheses(Expression expression, ASTNode parent, StructuralPropertyDescriptor locationInParent, ITypeBinding leftOperandType) {
+		if (!expressionTypeNeedsParentheses(expression))
+			return false;
+
+		if (!locationNeedsParentheses(locationInParent)) {
+			return false;
+		}
+
+		if (parent instanceof Expression) {
+			Expression parentExpression= (Expression)parent;
+
+			if (expression instanceof PrefixExpression) { // see bug 405096
+				return needsParenthesesForPrefixExpression(parentExpression, ((PrefixExpression) expression).getOperator());
+			}
+
+			int expressionPrecedence= OperatorPrecedence.getExpressionPrecedence(expression);
+			int parentPrecedence= OperatorPrecedence.getExpressionPrecedence(parentExpression);
+
+			if (expressionPrecedence > parentPrecedence)
+				//(opEx) opParent and opEx binds more -> parentheses not needed
+				return false;
+
+			if (expressionPrecedence < parentPrecedence)
+				//(opEx) opParent and opEx binds less -> parentheses needed
+				return true;
+
+			//(opEx) opParent binds equal
+
+			if (parentExpression instanceof InfixExpression) {
+				return needsParenthesesInInfixExpression(expression, (InfixExpression) parentExpression, locationInParent, leftOperandType);
+			}
+
+			if (parentExpression instanceof ConditionalExpression && locationInParent == ConditionalExpression.EXPRESSION_PROPERTY) {
+				return true;
+			}
+
+			return false;
+		}
+
+		return true;
+	}
+

@@ -1,0 +1,50 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.jdt.internal.corext.refactoring.typeconstraints.IConstraintVariableFactory#makeExpressionVariable(org.eclipse.jdt
+	 * .core.dom.Expression, org.eclipse.jdt.internal.corext.refactoring.typeconstraints.IContext)
+	 */
+	public ConstraintVariable makeExpressionOrTypeVariable(Expression expression,
+														   IContext context) {
+		IBinding binding = ExpressionVariable.resolveBinding(expression);
+
+		if (binding instanceof ITypeBinding) {
+			ICompilationUnit cu = ASTCreator.getCu(expression);
+			Assert.isNotNull(cu);
+			CompilationUnitRange range = new CompilationUnitRange(cu, expression);
+			return makeTypeVariable((ITypeBinding)getKey(binding), expression.toString(), range);
+		}
+
+		if (ASTNodes.isLiteral(expression)) {
+			Integer nodeType = new Integer(expression.getNodeType());
+			if (!fLiteralMap.containsKey(nodeType)) {
+				fLiteralMap.put(nodeType, new ExpressionVariable(expression));
+				if (REPORT) nrCreated++;
+			} else {
+				if (REPORT) nrRetrieved++;
+			}
+			if (REPORT) dumpConstraintStats();
+			return fLiteralMap.get(nodeType);
+		}
+
+		// For ExpressionVariables, there are two cases. If the expression has a binding
+		// we use that as the key. Otherwise, we use the CompilationUnitRange. See
+		// also ExpressionVariable.equals()
+		ExpressionVariable ev;
+		Object key;
+		if (binding != null) {
+			key = getKey(binding);
+		} else {
+			key = new CompilationUnitRange(ASTCreator.getCu(expression), expression);
+		}
+		ev = fExpressionMap.get(key);
+
+		if (ev != null) {
+			if (REPORT) nrRetrieved++;
+		} else {
+			ev = new ExpressionVariable(expression);
+			fExpressionMap.put(key, ev);
+			if (REPORT) nrCreated++;
+			if (REPORT) dumpConstraintStats();
+		}
+		return ev;
+	}
+

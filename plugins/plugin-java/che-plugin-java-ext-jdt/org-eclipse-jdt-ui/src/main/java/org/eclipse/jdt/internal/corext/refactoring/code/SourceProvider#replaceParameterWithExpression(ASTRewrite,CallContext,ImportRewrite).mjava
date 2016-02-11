@@ -1,0 +1,46 @@
+	private void replaceParameterWithExpression(ASTRewrite rewriter, CallContext context, ImportRewrite importRewrite) throws
+																													   CoreException {
+		Expression[] arguments= context.arguments;
+		try {
+			ITextFileBuffer buffer= RefactoringFileBuffers.acquire(context.compilationUnit);
+			for (int i= 0; i < arguments.length; i++) {
+				Expression expression= arguments[i];
+				String expressionString= null;
+				if (expression instanceof SimpleName) {
+					expressionString= ((SimpleName)expression).getIdentifier();
+				} else {
+					try {
+						expressionString= buffer.getDocument().get(expression.getStartPosition(), expression.getLength());
+					} catch (BadLocationException exception) {
+						JavaPlugin.log(exception);
+						continue;
+					}
+				}
+				ParameterData parameter= getParameterData(i);
+				List<SimpleName> references= parameter.references();
+				for (Iterator<SimpleName> iter= references.iterator(); iter.hasNext();) {
+					ASTNode element= iter.next();
+					Expression newExpression= (Expression)rewriter.createStringPlaceholder(expressionString, expression.getNodeType());
+					AST ast= rewriter.getAST();
+					ITypeBinding explicitCast= ASTNodes.getExplicitCast(expression, (Expression)element);
+					if (explicitCast != null) {
+						CastExpression cast= ast.newCastExpression();
+						if (NecessaryParenthesesChecker.needsParentheses(expression, cast, CastExpression.EXPRESSION_PROPERTY)) {
+							newExpression= createParenthesizedExpression(newExpression, ast);
+						}
+						cast.setExpression(newExpression);
+						ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(expression, importRewrite);
+						cast.setType(importRewrite.addImport(explicitCast, ast, importRewriteContext));
+						expression= newExpression= cast;
+					}
+					if (NecessaryParenthesesChecker.needsParentheses(expression, element.getParent(), element.getLocationInParent())) {
+						newExpression= createParenthesizedExpression(newExpression, ast);
+					}
+					rewriter.replace(element, newExpression, null);
+				}
+			}
+		} finally {
+			RefactoringFileBuffers.release(context.compilationUnit);
+		}
+	}
+

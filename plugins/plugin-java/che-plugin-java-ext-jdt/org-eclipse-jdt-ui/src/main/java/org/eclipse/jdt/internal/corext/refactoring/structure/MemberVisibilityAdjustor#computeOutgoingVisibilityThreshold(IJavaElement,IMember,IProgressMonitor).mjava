@@ -1,0 +1,110 @@
+	/**
+	 * Computes the visibility threshold for the referenced element.
+	 *
+	 * @param referencing the referencing element
+	 * @param referenced the referenced element
+	 * @param monitor the progress monitor to use
+	 * @return the visibility keyword corresponding to the threshold, or <code>null</code> for default visibility
+	 * @throws JavaModelException if the java elements could not be accessed
+	 */
+	private ModifierKeyword computeOutgoingVisibilityThreshold(final IJavaElement referencing, final IMember referenced, final IProgressMonitor monitor) throws
+																																						 JavaModelException {
+		Assert.isTrue(referencing instanceof ICompilationUnit || referencing instanceof IType || referencing instanceof IPackageFragment);
+		Assert.isTrue(referenced instanceof IType || referenced instanceof IField || referenced instanceof IMethod);
+		ModifierKeyword keyword= ModifierKeyword.PUBLIC_KEYWORD;
+		try {
+			monitor.beginTask("", 1); //$NON-NLS-1$
+			monitor.setTaskName(RefactoringCoreMessages.MemberVisibilityAdjustor_checking);
+			final int referencingType= referencing.getElementType();
+			final int referencedType= referenced.getElementType();
+			switch (referencedType) {
+				case IJavaElement.TYPE: {
+					final IType typeReferenced= (IType) referenced;
+					switch (referencingType) {
+						case IJavaElement.COMPILATION_UNIT: {
+							final ICompilationUnit unit= (ICompilationUnit) referencing;
+							final ICompilationUnit referencedUnit= typeReferenced.getCompilationUnit();
+							if (referencedUnit != null && referencedUnit.equals(unit))
+								keyword= ModifierKeyword.PRIVATE_KEYWORD;
+							else if (referencedUnit != null && referencedUnit.getParent().equals(unit.getParent()))
+								keyword= null;
+							break;
+						}
+						case IJavaElement.TYPE: {
+							keyword= thresholdTypeToType((IType) referencing, typeReferenced, monitor);
+							break;
+						}
+						case IJavaElement.PACKAGE_FRAGMENT: {
+							final IPackageFragment fragment= (IPackageFragment) referencing;
+							if (typeReferenced.getPackageFragment().equals(fragment))
+								keyword= null;
+							break;
+						}
+						default:
+							Assert.isTrue(false);
+					}
+					break;
+				}
+				case IJavaElement.FIELD: {
+					final IField fieldReferenced= (IField) referenced;
+					final ICompilationUnit referencedUnit= fieldReferenced.getCompilationUnit();
+					switch (referencingType) {
+						case IJavaElement.COMPILATION_UNIT: {
+							final ICompilationUnit unit= (ICompilationUnit) referencing;
+							if (referencedUnit != null && referencedUnit.equals(unit))
+								keyword= ModifierKeyword.PRIVATE_KEYWORD;
+							else if (referencedUnit != null && referencedUnit.getParent().equals(unit.getParent()))
+								keyword= null;
+							break;
+						}
+						case IJavaElement.TYPE: {
+							keyword= thresholdTypeToField((IType) referencing, fieldReferenced, monitor);
+							break;
+						}
+						case IJavaElement.PACKAGE_FRAGMENT: {
+							final IPackageFragment fragment= (IPackageFragment) referencing;
+							if (fieldReferenced.getDeclaringType().getPackageFragment().equals(fragment))
+								keyword= null;
+							break;
+						}
+						default:
+							Assert.isTrue(false);
+					}
+					break;
+				}
+				case IJavaElement.METHOD: {
+					final IMethod methodReferenced= (IMethod) referenced;
+					final ICompilationUnit referencedUnit= methodReferenced.getCompilationUnit();
+					switch (referencingType) {
+						case IJavaElement.COMPILATION_UNIT: {
+							final ICompilationUnit unit= (ICompilationUnit) referencing;
+							if (referencedUnit != null && referencedUnit.equals(unit))
+								keyword= ModifierKeyword.PRIVATE_KEYWORD;
+							else if (referencedUnit != null && referencedUnit.getParent().equals(unit.getParent()))
+								keyword= null;
+							break;
+						}
+						case IJavaElement.TYPE: {
+							keyword= thresholdTypeToMethod((IType) referencing, methodReferenced, monitor);
+							break;
+						}
+						case IJavaElement.PACKAGE_FRAGMENT: {
+							final IPackageFragment fragment= (IPackageFragment) referencing;
+							if (methodReferenced.getDeclaringType().getPackageFragment().equals(fragment))
+								keyword= null;
+							break;
+						}
+						default:
+							Assert.isTrue(false);
+					}
+					break;
+				}
+				default:
+					Assert.isTrue(false);
+			}
+		} finally {
+			monitor.done();
+		}
+		return keyword;
+	}
+

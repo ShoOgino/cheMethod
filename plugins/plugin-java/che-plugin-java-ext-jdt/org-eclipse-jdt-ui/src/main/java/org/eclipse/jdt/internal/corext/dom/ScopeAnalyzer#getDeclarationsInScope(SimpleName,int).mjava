@@ -1,0 +1,30 @@
+	public IBinding[] getDeclarationsInScope(SimpleName selector, int flags) {
+		try {
+			// special case for switch on enum
+			if (selector.getLocationInParent() == SwitchCase.EXPRESSION_PROPERTY) {
+				ITypeBinding binding= ((SwitchStatement) selector.getParent().getParent()).getExpression().resolveTypeBinding();
+				if (binding != null && binding.isEnum()) {
+					return getEnumContants(binding);
+				}
+			}
+
+			ITypeBinding parentTypeBinding= Bindings.getBindingOfParentType(selector);
+			if (parentTypeBinding != null) {
+				ITypeBinding binding= getQualifier(selector);
+				DefaultBindingRequestor requestor= new DefaultBindingRequestor(parentTypeBinding, flags);
+				if (binding == null) {
+					addLocalDeclarations(selector, flags, requestor);
+					addTypeDeclarations(parentTypeBinding, flags, requestor);
+				} else {
+					addInherited(binding, flags, requestor);
+				}
+
+				List<IBinding> result= requestor.getResult();
+				return result.toArray(new IBinding[result.size()]);
+			}
+			return NO_BINDING;
+		} finally {
+			clearLists();
+		}
+	}
+

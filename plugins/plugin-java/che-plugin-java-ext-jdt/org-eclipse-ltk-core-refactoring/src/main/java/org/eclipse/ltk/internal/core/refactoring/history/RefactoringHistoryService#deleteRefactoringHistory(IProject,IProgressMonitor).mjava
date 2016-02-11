@@ -1,0 +1,51 @@
+	/**
+	 * Deletes the refactoring history of a project. Refactorings associated
+	 * with the workspace are not deleted.
+	 * <p>
+	 * If a refactoring history is deleted, all files stored in the hidden
+	 * refactoring history folder of the project folder are removed. If no
+	 * shared refactoring history is enabled, the refactoring history
+	 * information is removed from the internal workspace refactoring history.
+	 * </p>
+	 *
+	 * @param project
+	 *            the project to delete its history
+	 * @param monitor
+	 *            the progress monitor to use, or <code>null</code>
+	 * @throws CoreException
+	 *             if an error occurs while deleting the refactoring history.
+	 *             Reasons include:
+	 *             <ul>
+	 *             <li>An I/O error occurs while deleting the refactoring
+	 *             history.</li>
+	 *             </ul>
+	 */
+	public void deleteRefactoringHistory(final IProject project, IProgressMonitor monitor) throws CoreException {
+		Assert.isNotNull(project);
+		if (monitor == null)
+			monitor= new NullProgressMonitor();
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_deleting_refactorings, 100);
+			final String name= project.getName();
+			final IFileStore stateStore= EFS.getLocalFileSystem().getStore(RefactoringCorePlugin.getDefault().getStateLocation());
+			if (name.equals(NAME_WORKSPACE_PROJECT)) {
+				final IFileStore metaStore= stateStore.getChild(NAME_HISTORY_FOLDER).getChild(name);
+				metaStore.delete(EFS.NONE, new SubProgressMonitor(monitor, 100));
+			} else {
+				final URI uri= project.getLocationURI();
+				if (uri != null && project.isAccessible()) {
+					try {
+						final IFileStore metaStore= stateStore.getChild(NAME_HISTORY_FOLDER).getChild(name);
+						metaStore.delete(EFS.NONE, new SubProgressMonitor(monitor, 20));
+						final IFileStore projectStore= EFS.getStore(uri).getChild(NAME_HISTORY_FOLDER);
+						projectStore.delete(EFS.NONE, new SubProgressMonitor(monitor, 20));
+					} finally {
+						project.refreshLocal(IResource.DEPTH_INFINITE, new SubProgressMonitor(monitor, 60));
+					}
+				}
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

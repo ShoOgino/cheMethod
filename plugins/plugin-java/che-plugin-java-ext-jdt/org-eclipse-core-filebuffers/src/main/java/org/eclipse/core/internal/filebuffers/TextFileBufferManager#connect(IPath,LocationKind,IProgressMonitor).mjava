@@ -1,0 +1,40 @@
+	/*
+	 * @see org.eclipse.core.filebuffers.IFileBufferManager#connect(org.eclipse.core.runtime.IPath, org.eclipse.core.filebuffers.IFileBufferManager.LocationKind, org.eclipse.core.runtime.IProgressMonitor)
+	 * @since 3.3
+	 */
+	public void connect(IPath location, LocationKind locationKind, IProgressMonitor monitor) throws CoreException {
+		Assert.isNotNull(location);
+		if (locationKind == LocationKind.NORMALIZE)
+			location= normalizeLocation(location);
+
+		AbstractFileBuffer fileBuffer= null;
+		synchronized (fFilesBuffers) {
+			fileBuffer= internalGetFileBuffer(location);
+			if (fileBuffer != null)  {
+				fileBuffer.connect();
+				return;
+			}
+		}
+
+		fileBuffer= createFileBuffer(location, locationKind);
+		if (fileBuffer == null)
+			throw new CoreException(new Status(IStatus.ERROR, FileBuffersPlugin.PLUGIN_ID, IFileBufferStatusCodes.CREATION_FAILED, FileBuffersMessages.FileBufferManager_error_canNotCreateFilebuffer, null));
+
+		fileBuffer.create(location, monitor);
+
+		synchronized (fFilesBuffers) {
+			AbstractFileBuffer oldFileBuffer= internalGetFileBuffer(location);
+			if (oldFileBuffer != null) {
+				fileBuffer.disconnect();
+				fileBuffer.dispose();
+				oldFileBuffer.connect();
+				return;
+			}
+			fileBuffer.connect();
+			fFilesBuffers.put(location, fileBuffer);
+		}
+
+		// Do notification outside synchronized block
+		fireBufferCreated(fileBuffer);
+	}
+

@@ -1,0 +1,41 @@
+	/**
+	 * Checks
+	 * <ul>
+	 * <li>whether the given infix expression is the argument of a StringBuilder#append() or
+	 * StringBuffer#append() invocation, and</li>
+	 * <li>the append method is called on a simple variable, and</li>
+	 * <li>the invocation occurs in a statement (not as nested expression)</li>
+	 * </ul>
+	 *
+	 * @param infixExpression the infix expression
+	 * @return the name of the variable we were appending to, or <code>null</code> if not matching
+	 */
+	private static SimpleName getEnclosingAppendBuffer(InfixExpression infixExpression) {
+		if (infixExpression.getLocationInParent() == MethodInvocation.ARGUMENTS_PROPERTY) {
+			MethodInvocation methodInvocation= (MethodInvocation)infixExpression.getParent();
+
+			// ..not in an expression.. (e.g. not sb.append("high" + 5).append(6);)
+			if (methodInvocation.getParent() instanceof Statement) {
+
+				// ..of a function called append:
+				if ("append".equals(methodInvocation.getName().getIdentifier())) { //$NON-NLS-1$
+					Expression expression= methodInvocation.getExpression();
+
+					// ..and the append is being called on a Simple object:
+					if (expression instanceof SimpleName) {
+						IBinding binding= ((SimpleName)expression).resolveBinding();
+						if (binding instanceof IVariableBinding) {
+							String typeName= ((IVariableBinding)binding).getType().getQualifiedName();
+	
+							// And the object's type is a StringBuilder or StringBuffer:
+							if ("java.lang.StringBuilder".equals(typeName) || "java.lang.StringBuffer".equals(typeName)) { //$NON-NLS-1$ //$NON-NLS-2$
+								return (SimpleName)expression;
+							}
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+

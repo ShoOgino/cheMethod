@@ -1,0 +1,37 @@
+	public static String[] getVariableNameSuggestions(int variableKind, IJavaProject project, ITypeBinding expectedType, Expression assignedExpression, Collection<String> excluded) {
+		LinkedHashSet<String> res= new LinkedHashSet<String>(); // avoid duplicates but keep order
+
+		if (assignedExpression != null) {
+			String nameFromExpression= getBaseNameFromExpression(project, assignedExpression, variableKind);
+			if (nameFromExpression != null) {
+				add(getVariableNameSuggestions(variableKind, project, nameFromExpression, 0, excluded, false), res); // pass 0 as dimension, base name already contains plural.
+			}
+
+			String nameFromParent= getBaseNameFromLocationInParent(assignedExpression);
+			if (nameFromParent != null) {
+				add(getVariableNameSuggestions(variableKind, project, nameFromParent, 0, excluded, false), res); // pass 0 as dimension, base name already contains plural.
+			}
+		}
+		if (expectedType != null) {
+			expectedType= Bindings.normalizeTypeBinding(expectedType);
+			if (expectedType != null) {
+				int dim= 0;
+				if (expectedType.isArray()) {
+					dim= expectedType.getDimensions();
+					expectedType= expectedType.getElementType();
+				}
+				if (expectedType.isParameterizedType()) {
+					expectedType= expectedType.getTypeDeclaration();
+				}
+				String typeName= expectedType.getName();
+				if (typeName.length() > 0) {
+					add(getVariableNameSuggestions(variableKind, project, typeName, dim, excluded, false), res);
+				}
+			}
+		}
+		if (res.isEmpty()) {
+			return getDefaultVariableNameSuggestions(variableKind, excluded);
+		}
+		return res.toArray(new String[res.size()]);
+	}
+

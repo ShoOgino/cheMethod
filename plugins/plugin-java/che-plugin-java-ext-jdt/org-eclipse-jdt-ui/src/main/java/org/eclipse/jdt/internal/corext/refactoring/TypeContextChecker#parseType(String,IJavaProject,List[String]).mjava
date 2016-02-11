@@ -1,0 +1,37 @@
+	private static Type parseType(String typeString, IJavaProject javaProject, List<String> problemsCollector) {
+		if ("".equals(typeString.trim())) //speed up for a common case //$NON-NLS-1$
+			return null;
+		if (!typeString.trim().equals(typeString))
+			return null;
+
+		StringBuffer cuBuff = new StringBuffer();
+		cuBuff.append("interface A{"); //$NON-NLS-1$
+		int offset = cuBuff.length();
+		cuBuff.append(typeString).append(" m();}"); //$NON-NLS-1$
+
+		ASTParser p = ASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+		p.setSource(cuBuff.toString().toCharArray());
+		p.setProject(javaProject);
+		CompilationUnit cu = (CompilationUnit)p.createAST(null);
+		Selection selection = Selection.createFromStartLength(offset, typeString.length());
+		SelectionAnalyzer analyzer = new SelectionAnalyzer(selection, false);
+		cu.accept(analyzer);
+		ASTNode selected = analyzer.getFirstSelectedNode();
+		if (!(selected instanceof Type))
+			return null;
+		Type type = (Type)selected;
+		if (MethodTypesSyntaxChecker.isVoidArrayType(type))
+			return null;
+		IProblem[] problems = ASTNodes.getProblems(type, ASTNodes.NODE_ONLY, ASTNodes.PROBLEMS);
+		if (problems.length > 0) {
+			for (int i = 0; i < problems.length; i++)
+				problemsCollector.add(problems[i].getMessage());
+		}
+
+		String typeNodeRange = cuBuff.substring(type.getStartPosition(), ASTNodes.getExclusiveEnd(type));
+		if (typeString.equals(typeNodeRange))
+			return type;
+		else
+			return null;
+	}
+

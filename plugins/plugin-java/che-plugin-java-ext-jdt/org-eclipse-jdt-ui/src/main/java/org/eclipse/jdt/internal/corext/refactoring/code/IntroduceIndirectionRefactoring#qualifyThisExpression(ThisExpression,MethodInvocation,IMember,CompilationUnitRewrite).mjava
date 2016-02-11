@@ -1,0 +1,68 @@
+	/**
+	 * Attempts to qualify a "this" expression for a method invocation with an appropriate qualifier.
+	 * The invoked method is analyzed according to the following specs:
+	 *
+	 * 'this' must be qualified iff method is declared in an enclosing type or a supertype of an enclosing type
+	 *
+	 * 1) The method is declared somewhere outside of the cu of the invocation
+	 *      1a) inside a supertype of the current type
+	 *      1b) inside a supertype of an enclosing type
+	 * 2) The method is declared inside of the cu of the invocation
+	 * 		2a) inside the type of the invocation
+	 * 		2b) outside the type of the invocation
+	 *
+	 * In case of 1a) and 2b), qualify with the enclosing type.
+	 * @param expr a {@link ThisExpression}
+	 * @param originalInvocation the original method invocation
+	 * @param enclosing the enclosing member of the original method invocation
+	 * @param unitRewriter the rewrite
+	 * @return resulting status
+	 *
+	 */
+	private RefactoringStatus qualifyThisExpression(ThisExpression expr, MethodInvocation originalInvocation, IMember enclosing, CompilationUnitRewrite unitRewriter) {
+
+		RefactoringStatus status= new RefactoringStatus();
+
+		IMethodBinding methodBinding= originalInvocation.resolveMethodBinding();
+		MethodDeclaration methodDeclaration= (MethodDeclaration) ASTNodes.findDeclaration(methodBinding, originalInvocation.getRoot());
+
+		ITypeBinding currentTypeBinding= null;
+		if (methodDeclaration != null) {
+			// Case 1) : Declaring type is inside this cu => use its name if it's declared in an enclosing type
+			if (ASTNodes.isParent(originalInvocation, methodDeclaration.getParent()))
+				currentTypeBinding= methodBinding.getDeclaringClass();
+			else
+				currentTypeBinding= ASTNodes.getEnclosingType(originalInvocation);
+		} else {
+			// Case 2) : Declaring type is outside of this cu => find subclass in this cu
+			ASTNode currentTypeDeclaration= getEnclosingTypeDeclaration(originalInvocation);
+			currentTypeBinding= ASTNodes.getEnclosingType(currentTypeDeclaration);
+			while (currentTypeDeclaration != null && (
+					Bindings.findMethodInHierarchy(currentTypeBinding, methodBinding.getName(), methodBinding.getParameterTypes()) == null)) {
+				currentTypeDeclaration= getEnclosingTypeDeclaration(currentTypeDeclaration.getParent());
+				currentTypeBinding= ASTNodes.getEnclosingType(currentTypeDeclaration);
+			}
+		}
+
+		if (currentTypeBinding == null) {
+			status.merge(createWarningAboutCall(enclosing, originalInvocation, RefactoringCoreMessages.IntroduceIndirectionRefactoring_call_warning_declaring_type_not_found));
+			return status;
+		}
+
+		currentTypeBinding= currentTypeBinding.getTypeDeclaration();
+
+		ITypeBinding typeOfCall= ASTNodes.getEnclosingType(originalInvocation);
+		if (!typeOfCall.equals(currentTypeBinding)) {
+			if (currentTypeBinding.isAnonymous()) {
+				// Cannot qualify, see bug 115277
+				status.merge(createWarningAboutCall(enclosing, originalInvocation, RefactoringCoreMessages.IntroduceIndirectionRefactoring_call_warning_anonymous_cannot_qualify));
+			} else {
+				expr.setQualifier(unitRewriter.getAST().newSimpleName(currentTypeBinding.getName()));
+			}
+		} else {
+			// do not qualify, only use "this.".
+		}
+
+		return status;
+	}
+

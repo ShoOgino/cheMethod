@@ -1,0 +1,59 @@
+	public static void addIncompatibleThrowsProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) throws
+																																				  JavaModelException {
+		CompilationUnit astRoot= context.getASTRoot();
+		ASTNode selectedNode= problem.getCoveringNode(astRoot);
+		if (!(selectedNode instanceof MethodDeclaration)) {
+			return;
+		}
+		MethodDeclaration decl= (MethodDeclaration) selectedNode;
+		IMethodBinding methodDeclBinding= decl.resolveBinding();
+		if (methodDeclBinding == null) {
+			return;
+		}
+
+		IMethodBinding overridden= Bindings.findOverriddenMethod(methodDeclBinding, false);
+		if (overridden == null) {
+			return;
+		}
+
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		ITypeBinding[] methodExceptions= methodDeclBinding.getExceptionTypes();
+		ITypeBinding[] definedExceptions= overridden.getExceptionTypes();
+
+		ArrayList<ITypeBinding> undeclaredExceptions= new ArrayList<ITypeBinding>();
+		{
+			ChangeDescription[] changes= new ChangeDescription[methodExceptions.length];
+
+			for (int i= 0; i < methodExceptions.length; i++) {
+				if (!isDeclaredException(methodExceptions[i], definedExceptions)) {
+					changes[i]= new RemoveDescription();
+					undeclaredExceptions.add(methodExceptions[i]);
+				}
+			}
+			String label= Messages.format(CorrectionMessages.TypeMismatchSubProcessor_removeexceptions_description,
+										  BasicElementLabels.getJavaElementName(methodDeclBinding.getName()));
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_REMOVE);
+			proposals.add(new ChangeMethodSignatureProposal(label, cu, astRoot, methodDeclBinding, null, changes, IProposalRelevance.REMOVE_EXCEPTIONS, image));
+		}
+
+		ITypeBinding declaringType= overridden.getDeclaringClass();
+		ICompilationUnit targetCu= null;
+		if (declaringType.isFromSource()) {
+			targetCu= ASTResolving.findCompilationUnitForBinding(cu, astRoot, declaringType);
+		}
+		if (targetCu != null) {
+			ChangeDescription[] changes= new ChangeDescription[definedExceptions.length + undeclaredExceptions.size()];
+
+			for (int i= 0; i < undeclaredExceptions.size(); i++) {
+				changes[i + definedExceptions.length]= new InsertDescription(undeclaredExceptions.get(i), ""); //$NON-NLS-1$
+			}
+			IMethodBinding overriddenDecl= overridden.getMethodDeclaration();
+			String[] args= {  BasicElementLabels.getJavaElementName(declaringType.getName()), BasicElementLabels
+					.getJavaElementName(overridden.getName()) };
+			String label= Messages.format(CorrectionMessages.TypeMismatchSubProcessor_addexceptions_description, args);
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_ADD);
+			proposals.add(new ChangeMethodSignatureProposal(label, targetCu, astRoot, overriddenDecl, null, changes, IProposalRelevance.ADD_EXCEPTIONS, image));
+		}
+	}
+

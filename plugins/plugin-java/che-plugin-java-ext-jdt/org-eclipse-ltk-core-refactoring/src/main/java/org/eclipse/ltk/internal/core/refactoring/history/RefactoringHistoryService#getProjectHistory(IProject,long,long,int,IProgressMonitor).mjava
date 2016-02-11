@@ -1,0 +1,32 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	public RefactoringHistory getProjectHistory(final IProject project, final long start, final long end, final int flags, IProgressMonitor monitor) {
+		Assert.isNotNull(project);
+		Assert.isTrue(project.exists());
+		Assert.isTrue(start >= 0);
+		Assert.isTrue(end >= 0);
+		Assert.isTrue(flags >= RefactoringDescriptor.NONE);
+		if (project.isOpen()) {
+			if (monitor == null)
+				monitor= new NullProgressMonitor();
+			try {
+				monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_retrieving_history, 120);
+				final String name= project.getName();
+				final RefactoringHistoryManager manager= getManager(name);
+				if (manager != null) {
+					RefactoringHistory history= manager.readRefactoringHistory(start, end, new SubProgressMonitor(monitor, 20));
+					if (flags > RefactoringDescriptor.NONE) {
+						final Set set= new HashSet();
+						filterRefactoringDescriptors(history.getDescriptors(), set, false, flags, new SubProgressMonitor(monitor, 100));
+						history= new RefactoringHistoryImplementation((RefactoringDescriptorProxy[]) set.toArray(new RefactoringDescriptorProxy[set.size()]));
+					}
+					return history;
+				}
+			} finally {
+				monitor.done();
+			}
+		}
+		return NO_HISTORY;
+	}
+

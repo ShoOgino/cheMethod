@@ -1,0 +1,49 @@
+	public IStatus search(IFile[] files, IProgressMonitor monitor) {
+		fProgressMonitor = monitor == null ? new NullProgressMonitor() : monitor;
+		fNumberOfScannedFiles = 0;
+		fNumberOfFilesToScan = files.length;
+		fCurrentFile = null;
+
+		Job monitorUpdateJob = new Job(SearchMessages.TextSearchVisitor_progress_updating_job) {
+			private int fLastNumberOfScannedFiles = 0;
+
+			public IStatus run(IProgressMonitor inner) {
+				while (!inner.isCanceled()) {
+					IFile file = fCurrentFile;
+					if (file != null) {
+						String fileName = file.getName();
+						Object[] args = {fileName, new Integer(fNumberOfScannedFiles), new Integer(fNumberOfFilesToScan)};
+						fProgressMonitor.subTask(Messages.format(SearchMessages.TextSearchVisitor_scanning, args));
+						int steps = fNumberOfScannedFiles - fLastNumberOfScannedFiles;
+						fProgressMonitor.worked(steps);
+						fLastNumberOfScannedFiles += steps;
+					}
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						return Status.OK_STATUS;
+					}
+				}
+				return Status.OK_STATUS;
+			}
+		};
+
+		try {
+			String taskName = fMatcher == null ? SearchMessages.TextSearchVisitor_filesearch_task_label : Messages
+					.format(SearchMessages.TextSearchVisitor_textsearch_task_label, fMatcher.pattern().pattern());
+			fProgressMonitor.beginTask(taskName, fNumberOfFilesToScan);
+			monitorUpdateJob.setSystem(true);
+			monitorUpdateJob.schedule();
+			try {
+				fCollector.beginReporting();
+				processFiles(files);
+				return fStatus;
+			} finally {
+				monitorUpdateJob.cancel();
+			}
+		} finally {
+			fProgressMonitor.done();
+			fCollector.endReporting();
+		}
+	}
+

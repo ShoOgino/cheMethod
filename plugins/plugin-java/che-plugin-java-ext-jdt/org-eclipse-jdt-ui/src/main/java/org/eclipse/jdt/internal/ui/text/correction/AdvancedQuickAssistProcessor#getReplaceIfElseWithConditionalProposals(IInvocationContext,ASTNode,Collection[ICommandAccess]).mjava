@@ -1,0 +1,110 @@
+	private static boolean getReplaceIfElseWithConditionalProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		if (!(node instanceof IfStatement)) {
+			return false;
+		}
+		IfStatement ifStatement= (IfStatement) node;
+		Statement thenStatement= getSingleStatement(ifStatement.getThenStatement());
+		Statement elseStatement= getSingleStatement(ifStatement.getElseStatement());
+		if (thenStatement == null || elseStatement == null) {
+			return false;
+		}
+		Expression assigned= null;
+		Expression thenExpression= null;
+		Expression elseExpression= null;
+
+		ITypeBinding exprBinding= null;
+		if (thenStatement instanceof ReturnStatement && elseStatement instanceof ReturnStatement) {
+			thenExpression= ((ReturnStatement) thenStatement).getExpression();
+			elseExpression= ((ReturnStatement) elseStatement).getExpression();
+			MethodDeclaration declaration= ASTResolving.findParentMethodDeclaration(node);
+			if (declaration == null || declaration.isConstructor()) {
+				return false;
+			}
+			exprBinding= declaration.getReturnType2().resolveBinding();
+		} else if (thenStatement instanceof ExpressionStatement && elseStatement instanceof ExpressionStatement) {
+			Expression inner1= ((ExpressionStatement) thenStatement).getExpression();
+			Expression inner2= ((ExpressionStatement) elseStatement).getExpression();
+			if (inner1 instanceof Assignment && inner2 instanceof Assignment) {
+				Assignment assign1= (Assignment) inner1;
+				Assignment assign2= (Assignment) inner2;
+				Expression left1= assign1.getLeftHandSide();
+				Expression left2= assign2.getLeftHandSide();
+				if (left1 instanceof Name && left2 instanceof Name && assign1.getOperator() == assign2.getOperator()) {
+					IBinding bind1= ((Name) left1).resolveBinding();
+					IBinding bind2= ((Name) left2).resolveBinding();
+					if (bind1 == bind2 && bind1 instanceof IVariableBinding) {
+						assigned= left1;
+						exprBinding= ((IVariableBinding) bind1).getType();
+						thenExpression= assign1.getRightHandSide();
+						elseExpression= assign2.getRightHandSide();
+					}
+				}
+			}
+		}
+		if (thenExpression == null || elseExpression == null) {
+			return false;
+		}
+
+		//  we could produce quick assist
+		if (resultingCollections == null) {
+			return true;
+		}
+		//
+		AST ast= node.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		TightSourceRangeComputer sourceRangeComputer= new TightSourceRangeComputer();
+		sourceRangeComputer.addTightSourceNode(ifStatement);
+		rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
+
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_replaceIfWithConditional;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REPLACE_IF_ELSE_WITH_CONDITIONAL, image);
+
+
+		// prepare conditional expression
+		ConditionalExpression conditionalExpression= ast.newConditionalExpression();
+		Expression conditionCopy= (Expression) rewrite.createCopyTarget(ifStatement.getExpression());
+		conditionalExpression.setExpression(conditionCopy);
+		Expression thenCopy= (Expression) rewrite.createCopyTarget(thenExpression);
+		Expression elseCopy= (Expression) rewrite.createCopyTarget(elseExpression);
+
+
+		IJavaProject project= context.getCompilationUnit().getJavaProject();
+		if (!JavaModelUtil.is50OrHigher(project)) {
+			ITypeBinding thenBinding= thenExpression.resolveTypeBinding();
+			ITypeBinding elseBinding= elseExpression.resolveTypeBinding();
+			if (thenBinding != null && elseBinding != null && exprBinding != null && !elseBinding.isAssignmentCompatible(thenBinding)) {
+				CastExpression castException= ast.newCastExpression();
+				ImportRewrite importRewrite= proposal.createImportRewrite(context.getASTRoot());
+				ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(node, importRewrite);
+				castException.setType(importRewrite.addImport(exprBinding, ast, importRewriteContext));
+				castException.setExpression(elseCopy);
+				elseCopy= castException;
+			}
+		} else if (JavaModelUtil.is17OrHigher(project)) {
+			addExplicitTypeArgumentsIfNecessary(rewrite, proposal, thenExpression);
+			addExplicitTypeArgumentsIfNecessary(rewrite, proposal, elseExpression);
+		}
+		conditionalExpression.setThenExpression(thenCopy);
+		conditionalExpression.setElseExpression(elseCopy);
+
+		// replace 'if' statement with conditional expression
+		if (assigned == null) {
+			ReturnStatement returnStatement= ast.newReturnStatement();
+			returnStatement.setExpression(conditionalExpression);
+			rewrite.replace(ifStatement, returnStatement, null);
+		} else {
+			Assignment assignment= ast.newAssignment();
+			assignment.setLeftHandSide((Expression) rewrite.createCopyTarget(assigned));
+			assignment.setRightHandSide(conditionalExpression);
+			assignment.setOperator(((Assignment) assigned.getParent()).getOperator());
+
+			ExpressionStatement expressionStatement= ast.newExpressionStatement(assignment);
+			rewrite.replace(ifStatement, expressionStatement, null);
+		}
+
+		// add correction proposal
+		resultingCollections.add(proposal);
+		return true;
+	}
+

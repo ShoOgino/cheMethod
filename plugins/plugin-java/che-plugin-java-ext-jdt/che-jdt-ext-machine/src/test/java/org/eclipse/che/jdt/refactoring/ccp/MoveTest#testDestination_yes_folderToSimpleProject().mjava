@@ -1,0 +1,35 @@
+    @Test
+	public void testDestination_yes_folderToSimpleProject() throws Exception{
+		ParticipantTesting.reset();
+		IProject superFolder= RefactoringTestSetup.getProject().getProject();
+		IFolder folder= superFolder.getFolder("folder");
+		folder.create(true, true, null);
+
+		IProject simpleProject= ResourcesPlugin.getWorkspace().getRoot().getProject("mySImpleProject");
+		simpleProject.create(null);
+		simpleProject.open(null);
+
+		try {
+			IJavaElement[] javaElements= {};
+			IResource[] resources= {folder};
+			String[] handles= ParticipantTesting.createHandles(new Object[] {folder});
+			JavaMoveProcessor ref= verifyEnabled(resources, javaElements, createReorgQueries());
+
+			Object destination= simpleProject;
+			verifyValidDestination(ref, destination);
+
+			assertTrue("folder does not exist before", folder.exists());
+			RefactoringStatus status= performRefactoring(ref, true);
+			assertEquals(null, status);
+			assertTrue("folder not moved", ! folder.exists());
+			IFolder newFolder= simpleProject.getFolder(folder.getName());
+			assertTrue("new folder does not exist after", newFolder.exists());
+			ParticipantTesting.testMove(
+					handles,
+					new MoveArguments[] {
+							new MoveArguments(simpleProject, ref.getUpdateReferences())});
+		} finally {
+			JavaProjectHelper.delete(simpleProject);
+		}
+	}
+

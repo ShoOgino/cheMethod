@@ -1,0 +1,134 @@
+		/**
+		 * Interprets the escaped character <code>ch</code> at offset <code>i</code>
+		 * of the <code>replaceText</code> and appends the interpretation to <code>buf</code>.
+		 *
+		 * @param ch the escaped character
+		 * @param i the offset
+		 * @param buf the output buffer
+		 * @param replaceText the original replace pattern
+		 * @param foundText the found pattern to be replaced
+		 * @return the new offset
+		 * @since 3.4
+		 */
+		private int interpretReplaceEscape(final char ch, int i, StringBuffer buf, String replaceText, String foundText) {
+			int length= replaceText.length();
+			switch (ch) {
+				case 'r':
+					buf.append('\r');
+					break;
+				case 'n':
+					buf.append('\n');
+					break;
+				case 't':
+					buf.append('\t');
+					break;
+				case 'f':
+					buf.append('\f');
+					break;
+				case 'a':
+					buf.append('\u0007');
+					break;
+				case 'e':
+					buf.append('\u001B');
+					break;
+				case 'R': //see http://www.unicode.org/unicode/reports/tr18/#Line_Boundaries
+					buf.append(fLineDelim);
+					break;
+				/*
+				 * \0 for octal is not supported in replace string, since it
+				 * would conflict with capturing group \0, etc.
+				 */
+				case '0':
+					buf.append('$').append(ch);
+					/*
+					 * See explanation in "Feature in java.util.regex.Matcher#replaceFirst(String)"
+					 * in interpretReplaceEscape(String) above.
+					 */
+					if (i + 1 < length) {
+						char ch1= replaceText.charAt(i + 1);
+						if ('0' <= ch1 && ch1 <= '9') {
+							buf.append('\\');
+						}
+					}
+					break;
+
+				case '1':
+				case '2':
+				case '3':
+				case '4':
+				case '5':
+				case '6':
+				case '7':
+				case '8':
+				case '9':
+					buf.append('$').append(ch);
+					break;
+
+				case 'c':
+					if (i + 1 < length) {
+						char ch1= replaceText.charAt(i + 1);
+						interpretRetainCase(buf, (char)(ch1 ^ 64));
+						i++;
+					} else {
+						String msg= SearchMessages.PatternConstructor_error_escape_sequence;
+						throw new PatternSyntaxException(msg, replaceText, i);
+					}
+					break;
+
+				case 'x':
+					if (i + 2 < length) {
+						int parsedInt;
+						try {
+							parsedInt= Integer.parseInt(replaceText.substring(i + 1, i + 3), 16);
+							if (parsedInt < 0)
+								throw new NumberFormatException();
+						} catch (NumberFormatException e) {
+							String msg= SearchMessages.PatternConstructor_error_hex_escape_sequence;
+							throw new PatternSyntaxException(msg, replaceText, i);
+						}
+						interpretRetainCase(buf, (char) parsedInt);
+						i+= 2;
+					} else {
+						String msg= SearchMessages.PatternConstructor_error_hex_escape_sequence;
+						throw new PatternSyntaxException(msg, replaceText, i);
+					}
+					break;
+
+				case 'u':
+					if (i + 4 < length) {
+						int parsedInt;
+						try {
+							parsedInt= Integer.parseInt(replaceText.substring(i + 1, i + 5), 16);
+							if (parsedInt < 0)
+								throw new NumberFormatException();
+						} catch (NumberFormatException e) {
+							String msg= SearchMessages.PatternConstructor_error_unicode_escape_sequence;
+							throw new PatternSyntaxException(msg, replaceText, i);
+						}
+						interpretRetainCase(buf, (char) parsedInt);
+						i+= 4;
+					} else {
+						String msg= SearchMessages.PatternConstructor_error_unicode_escape_sequence;
+						throw new PatternSyntaxException(msg, replaceText, i);
+					}
+					break;
+
+				case 'C':
+					if(foundText.toUpperCase().equals(foundText)) // is whole match upper-case?
+						fRetainCaseMode= RC_UPPER;
+					else if (foundText.toLowerCase().equals(foundText)) // is whole match lower-case?
+						fRetainCaseMode= RC_LOWER;
+					else if(Character.isUpperCase(foundText.charAt(0))) // is first character upper-case?
+						fRetainCaseMode= RC_FIRSTUPPER;
+					else
+						fRetainCaseMode= RC_MIXED;
+					break;
+
+				default:
+					// unknown escape k: append uninterpreted \k
+					buf.append('\\').append(ch);
+					break;
+			}
+			return i;
+		}
+

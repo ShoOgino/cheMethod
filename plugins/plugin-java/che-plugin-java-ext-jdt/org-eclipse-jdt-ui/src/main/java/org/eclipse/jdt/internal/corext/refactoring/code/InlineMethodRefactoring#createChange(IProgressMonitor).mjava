@@ -1,0 +1,50 @@
+	@Override
+	public Change createChange(IProgressMonitor pm) throws CoreException {
+		if (fDeleteSource && fCurrentMode == Mode.INLINE_ALL) {
+			TextChange change= fChangeManager.get((ICompilationUnit) fSourceProvider.getTypeRoot());
+			TextEdit delete= fSourceProvider.getDeleteEdit();
+			TextEditGroup description= new TextEditGroup(
+				RefactoringCoreMessages.InlineMethodRefactoring_edit_delete, new TextEdit[] { delete });
+			TextEdit root= change.getEdit();
+			if (root != null) {
+				// TODO instead of finding the right insert position the call inliner should
+				// reuse the AST & rewriter of the source provide and we should rewrite the
+				// whole AST at the end. However, since recursive calls aren't allowed there
+				// shouldn't be a text edit overlap.
+				// root.addChild(delete);
+				TextChangeCompatibility.insert(root, delete);
+			} else {
+				change.setEdit(delete);
+			}
+			change.addTextEditGroup(description);
+		}
+		final Map<String, String> arguments= new HashMap<String, String>();
+		String project= null;
+		IJavaProject javaProject= fInitialTypeRoot.getJavaProject();
+		if (javaProject != null)
+			project= javaProject.getElementName();
+		int flags= RefactoringDescriptor.STRUCTURAL_CHANGE | JavaRefactoringDescriptor.JAR_REFACTORING | JavaRefactoringDescriptor.JAR_SOURCE_ATTACHMENT;
+		final IMethodBinding binding= fSourceProvider.getDeclaration().resolveBinding();
+		final ITypeBinding declaring= binding.getDeclaringClass();
+		if (!Modifier.isPrivate(binding.getModifiers()))
+			flags|= RefactoringDescriptor.MULTI_CHANGE;
+		final String description= Messages.format(RefactoringCoreMessages.InlineMethodRefactoring_descriptor_description_short,
+												  BasicElementLabels.getJavaElementName(binding.getName()));
+		final String header= Messages.format(RefactoringCoreMessages.InlineMethodRefactoring_descriptor_description, new String[]{
+				BindingLabelProvider.getBindingLabel(binding, JavaElementLabels.ALL_FULLY_QUALIFIED),
+				BindingLabelProvider.getBindingLabel(declaring, JavaElementLabels.ALL_FULLY_QUALIFIED)});
+		final JDTRefactoringDescriptorComment comment= new JDTRefactoringDescriptorComment(project, this, header);
+		comment.addSetting(Messages.format(RefactoringCoreMessages.InlineMethodRefactoring_original_pattern,
+										   BindingLabelProvider.getBindingLabel(binding, JavaElementLabels.ALL_FULLY_QUALIFIED)));
+		if (fDeleteSource)
+			comment.addSetting(RefactoringCoreMessages.InlineMethodRefactoring_remove_method);
+		if (fCurrentMode == Mode.INLINE_ALL)
+			comment.addSetting(RefactoringCoreMessages.InlineMethodRefactoring_replace_references);
+		final InlineMethodDescriptor descriptor= RefactoringSignatureDescriptorFactory.createInlineMethodDescriptor(project, description, comment.asString(), arguments, flags);
+		arguments.put(JavaRefactoringDescriptorUtil.ATTRIBUTE_INPUT, JavaRefactoringDescriptorUtil.elementToHandle(project, fInitialTypeRoot));
+		arguments.put(JavaRefactoringDescriptorUtil.ATTRIBUTE_SELECTION, new Integer(fSelectionStart).toString() + " " + new Integer(fSelectionLength).toString()); //$NON-NLS-1$
+		arguments.put(ATTRIBUTE_DELETE, Boolean.valueOf(fDeleteSource).toString());
+		arguments.put(ATTRIBUTE_MODE, new Integer(fCurrentMode == Mode.INLINE_ALL ? 1 : 0).toString());
+		return new DynamicValidationRefactoringChange(descriptor, RefactoringCoreMessages.InlineMethodRefactoring_edit_inlineCall, fChangeManager.getAllChanges());
+	}
+

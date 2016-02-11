@@ -1,0 +1,75 @@
+	public JavaRefactoringDescriptor createDescriptor() {
+		final Map<String, String> arguments= new HashMap<String, String>();
+		String project= null;
+		IJavaProject javaProject= fMethod.getJavaProject();
+		if (javaProject != null)
+			project= javaProject.getElementName();
+		ChangeMethodSignatureDescriptor descriptor= null;
+		try {
+			final String description= Messages.format(RefactoringCoreMessages.ChangeSignatureRefactoring_descriptor_description_short,
+													  BasicElementLabels.getJavaElementName(fMethod.getElementName()));
+			final String header= Messages.format(RefactoringCoreMessages.ChangeSignatureRefactoring_descriptor_description,
+												 new String[]{getOldMethodSignature(), getNewMethodSignature()});
+			final JDTRefactoringDescriptorComment comment= createComment(project, header);
+			descriptor= RefactoringSignatureDescriptorFactory
+					.createChangeMethodSignatureDescriptor(project, description, comment.asString(), arguments, getDescriptorFlags());
+			arguments.put(JavaRefactoringDescriptorUtil.ATTRIBUTE_INPUT, JavaRefactoringDescriptorUtil.elementToHandle(project, fMethod));
+			arguments.put(JavaRefactoringDescriptorUtil.ATTRIBUTE_NAME, fMethodName);
+			arguments.put(ATTRIBUTE_DELEGATE, Boolean.valueOf(fDelegateUpdating).toString());
+			arguments.put(ATTRIBUTE_DEPRECATE, Boolean.valueOf(fDelegateDeprecation).toString());
+			if (fReturnTypeInfo.isTypeNameChanged())
+				arguments.put(ATTRIBUTE_RETURN, fReturnTypeInfo.getNewTypeName());
+			try {
+				if (!isVisibilitySameAsInitial())
+					arguments.put(ATTRIBUTE_VISIBILITY, new Integer(fVisibility).toString());
+			} catch (JavaModelException exception) {
+				JavaPlugin.log(exception);
+			}
+			int count= 1;
+			for (final Iterator<ParameterInfo> iterator= fParameterInfos.iterator(); iterator.hasNext();) {
+				final ParameterInfo info= iterator.next();
+				final StringBuffer buffer= new StringBuffer(64);
+				if (info.isAdded())
+					buffer.append("{added}"); //$NON-NLS-1$
+				else
+					 buffer.append(info.getOldTypeName());
+				buffer.append(" "); //$NON-NLS-1$
+				if (info.isAdded())
+					buffer.append("{added}"); //$NON-NLS-1$
+				else
+					 buffer.append(info.getOldName());
+				buffer.append(" "); //$NON-NLS-1$
+				buffer.append(info.getOldIndex());
+				buffer.append(" "); //$NON-NLS-1$
+				if (info.isDeleted())
+					buffer.append("{deleted}"); //$NON-NLS-1$
+				else
+					buffer.append(info.getNewTypeName().replaceAll(" ", ""));  //$NON-NLS-1$//$NON-NLS-2$
+				buffer.append(" "); //$NON-NLS-1$
+				if (info.isDeleted())
+					buffer.append("{deleted}"); //$NON-NLS-1$
+				else
+					buffer.append(info.getNewName());
+				buffer.append(" "); //$NON-NLS-1$
+				buffer.append(info.isDeleted());
+				arguments.put(ATTRIBUTE_PARAMETER + count, buffer.toString());
+				final String value= info.getDefaultValue();
+				if (value != null && !"".equals(value)) //$NON-NLS-1$
+					arguments.put(ATTRIBUTE_DEFAULT + count, value);
+				count++;
+			}
+			count= 1;
+			for (final Iterator<ExceptionInfo> iterator= fExceptionInfos.iterator(); iterator.hasNext();) {
+				final ExceptionInfo info= iterator.next();
+				arguments.put(JavaRefactoringDescriptorUtil.ATTRIBUTE_ELEMENT + count, JavaRefactoringDescriptorUtil
+						.elementToHandle(project, info.getElement()));
+				arguments.put(ATTRIBUTE_KIND + count, new Integer(info.getKind()).toString());
+				count++;
+			}
+		} catch (JavaModelException exception) {
+			JavaPlugin.log(exception);
+			return null;
+		}
+		return descriptor;
+	}
+

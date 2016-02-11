@@ -1,0 +1,44 @@
+	//TODO: throw CoreException
+	public static ICompilationUnit[] findAffectedCompilationUnits(SearchPattern pattern,
+			IJavaSearchScope scope, final IProgressMonitor pm, RefactoringStatus status, final boolean tolerateInAccurateMatches) throws
+																																  JavaModelException {
+
+		boolean hasNonCuMatches= false;
+
+		class ResourceSearchRequestor extends SearchRequestor {
+			boolean hasPotentialMatches= false ;
+			Set<IResource> resources = new HashSet<IResource>(5);
+			private IResource fLastResource;
+
+			@Override
+			public void acceptSearchMatch(SearchMatch match) {
+				if (!tolerateInAccurateMatches && match.getAccuracy() == SearchMatch.A_INACCURATE) {
+					hasPotentialMatches = true;
+				}
+				if (fLastResource != match.getResource()) {
+					fLastResource = match.getResource();
+					resources.add(fLastResource);
+				}
+			}
+		}
+		ResourceSearchRequestor requestor = new ResourceSearchRequestor();
+		try {
+			new SearchEngine().search(pattern, SearchUtils.getDefaultSearchParticipants(), scope, requestor, pm);
+		} catch (CoreException e) {
+			throw new JavaModelException(e);
+		}
+
+		List<IJavaElement> result = new ArrayList<IJavaElement>(requestor.resources.size());
+		for (Iterator<IResource> iter = requestor.resources.iterator(); iter.hasNext(); ) {
+			IResource resource = iter.next();
+			IJavaElement element = JavaCore.create(resource);
+			if (element instanceof ICompilationUnit) {
+				result.add(element);
+			} else {
+				hasNonCuMatches = true;
+			}
+		}
+		addStatusErrors(status, requestor.hasPotentialMatches, hasNonCuMatches);
+		return result.toArray(new ICompilationUnit[result.size()]);
+	}
+

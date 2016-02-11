@@ -1,0 +1,44 @@
+		private void extractQualifier(Expression qualifier, CompilationUnitRewrite cuRewrite, TextEditGroup group) {
+			Statement statement = ASTResolving.findParentStatement(qualifier);
+			if (statement == null)
+				return;
+
+			ASTRewrite astRewrite = cuRewrite.getASTRewrite();
+			AST ast = cuRewrite.getAST();
+
+			Expression expression = (Expression)astRewrite.createMoveTarget(qualifier);
+			ExpressionStatement newStatement = ast.newExpressionStatement(expression);
+
+			if (statement.getParent() instanceof Block) {
+				Block block = (Block)statement.getParent();
+				ListRewrite listRewrite = astRewrite.getListRewrite(block, Block.STATEMENTS_PROPERTY);
+
+				listRewrite.insertBefore(newStatement, statement, group);
+			} else {
+				Block block;
+				if (fCreatedBlocks.containsKey(statement.getParent())) {
+					block = fCreatedBlocks.get(statement.getParent());
+				} else {
+					block = ast.newBlock();
+				}
+
+				ListRewrite listRewrite = astRewrite.getListRewrite(block, Block.STATEMENTS_PROPERTY);
+
+				ASTNode lastStatement;
+				if (!fCreatedBlocks.containsKey(statement.getParent())) {
+					fCreatedBlocks.put(statement.getParent(), block);
+
+					lastStatement = astRewrite.createMoveTarget(statement);
+					listRewrite.insertLast(lastStatement, group);
+
+					ASTNode parent = statement.getParent();
+					astRewrite.set(parent, statement.getLocationInParent(), block, group);
+				} else {
+					List<?> rewrittenList = listRewrite.getRewrittenList();
+					lastStatement = (ASTNode)rewrittenList.get(rewrittenList.size() - 1);
+				}
+
+				listRewrite.insertBefore(newStatement, lastStatement, group);
+			}
+		}
+

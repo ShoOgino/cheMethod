@@ -1,0 +1,50 @@
+	/**
+	 * {@inheritDoc}
+	 * <p>
+	 * May be replaced or extended by subclasses.
+	 * </p>
+	 */
+	public ITypedRegion getPartition(int offset) {
+		checkInitialization();
+
+		try {
+
+			Position[] category = getPositions();
+
+			if (category == null || category.length == 0)
+				return new TypedRegion(0, fDocument.getLength(), IDocument.DEFAULT_CONTENT_TYPE);
+
+			int index= fDocument.computeIndexInCategory(fPositionCategory, offset);
+
+			if (index < category.length) {
+
+				TypedPosition next= (TypedPosition) category[index];
+
+				if (offset == next.offset)
+					return new TypedRegion(next.getOffset(), next.getLength(), next.getType());
+
+				if (index == 0)
+					return new TypedRegion(0, next.offset, IDocument.DEFAULT_CONTENT_TYPE);
+
+				TypedPosition previous= (TypedPosition) category[index - 1];
+				if (previous.includes(offset))
+					return new TypedRegion(previous.getOffset(), previous.getLength(), previous.getType());
+
+				int endOffset= previous.getOffset() + previous.getLength();
+				return new TypedRegion(endOffset, next.getOffset() - endOffset, IDocument.DEFAULT_CONTENT_TYPE);
+			}
+
+			TypedPosition previous= (TypedPosition) category[category.length - 1];
+			if (previous.includes(offset))
+				return new TypedRegion(previous.getOffset(), previous.getLength(), previous.getType());
+
+			int endOffset= previous.getOffset() + previous.getLength();
+			return new TypedRegion(endOffset, fDocument.getLength() - endOffset, IDocument.DEFAULT_CONTENT_TYPE);
+
+		} catch (BadPositionCategoryException x) {
+		} catch (BadLocationException x) {
+		}
+
+		return new TypedRegion(0, fDocument.getLength(), IDocument.DEFAULT_CONTENT_TYPE);
+	}
+

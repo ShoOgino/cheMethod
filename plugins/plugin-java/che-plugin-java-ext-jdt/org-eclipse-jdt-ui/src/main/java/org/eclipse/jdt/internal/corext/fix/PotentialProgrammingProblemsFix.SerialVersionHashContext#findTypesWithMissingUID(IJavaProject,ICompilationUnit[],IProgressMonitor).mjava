@@ -1,0 +1,40 @@
+		private IType[] findTypesWithMissingUID(IJavaProject project, ICompilationUnit[] compilationUnits, IProgressMonitor monitor)
+				throws CoreException {
+			try {
+				monitor.beginTask("", compilationUnits.length); //$NON-NLS-1$
+
+				IType serializable = project.findType(SERIALIZABLE_NAME);
+
+				List<IType> types = new ArrayList<IType>();
+
+				if (compilationUnits.length > 500) {
+					//500 is a guess. Building the type hierarchy on serializable is very expensive
+					//depending on how many subtypes exit in the project.
+
+					HashSet<ICompilationUnit> cus = new HashSet<ICompilationUnit>();
+					for (int i = 0; i < compilationUnits.length; i++) {
+						cus.add(compilationUnits[i]);
+					}
+
+					monitor.subTask(Messages.format(FixMessages.Java50Fix_SerialVersion_CalculateHierarchy_description,
+													SERIALIZABLE_NAME));
+					ITypeHierarchy hierarchy1 =
+							serializable.newTypeHierarchy(project, new SubProgressMonitor(monitor, compilationUnits.length));
+					IType[] allSubtypes1 = hierarchy1.getAllSubtypes(serializable);
+					addTypes(allSubtypes1, cus, types);
+				} else {
+					monitor.subTask(FixMessages.Java50Fix_InitializeSerialVersionId_subtask_description);
+                    for (int i= 0; i < compilationUnits.length; i++) {
+                    	collectChildrenWithMissingSerialVersionId(compilationUnits[i].getChildren(), serializable, types);
+                    	if (monitor.isCanceled())
+                    		throw new OperationCanceledException();
+                    	monitor.worked(1);
+                    }
+				}
+
+				return types.toArray(new IType[types.size()]);
+			} finally {
+				monitor.done();
+			}
+		}
+

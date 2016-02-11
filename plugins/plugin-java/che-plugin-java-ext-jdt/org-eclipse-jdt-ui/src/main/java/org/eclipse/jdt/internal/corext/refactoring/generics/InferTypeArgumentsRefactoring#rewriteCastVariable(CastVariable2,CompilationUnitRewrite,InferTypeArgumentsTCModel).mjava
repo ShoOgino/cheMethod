@@ -1,0 +1,29 @@
+	private static ASTNode rewriteCastVariable(CastVariable2 castCv, CompilationUnitRewrite rewrite, InferTypeArgumentsTCModel tCModel) {//, List positionGroups) {
+		ASTNode node= castCv.getRange().getNode(rewrite.getRoot());
+
+		ConstraintVariable2 expressionVariable= castCv.getExpressionVariable();
+		ConstraintVariable2 methodReceiverCv= tCModel.getMethodReceiverCv(expressionVariable);
+		if (methodReceiverCv != null) {
+			TType chosenReceiverType= InferTypeArgumentsConstraintsSolver.getChosenType(methodReceiverCv);
+			if (chosenReceiverType == null)
+				return null;
+			else if (! InferTypeArgumentsTCModel.isAGenericType(chosenReceiverType))
+				return null;
+			else if (hasUnboundElement(methodReceiverCv, tCModel))
+				return null;
+		}
+
+		CastExpression castExpression= (CastExpression) node;
+		Expression expression= castExpression.getExpression();
+		ASTNode nodeToReplace;
+		if (castExpression.getParent() instanceof ParenthesizedExpression)
+			nodeToReplace= castExpression.getParent();
+		else
+			nodeToReplace= castExpression;
+
+		Expression newExpression= (Expression) rewrite.getASTRewrite().createMoveTarget(expression);
+		rewrite.getASTRewrite().replace(nodeToReplace, newExpression, rewrite.createGroupDescription(RefactoringCoreMessages.InferTypeArgumentsRefactoring_removeCast));
+		rewrite.getImportRemover().registerRemovedNode(nodeToReplace);
+		return newExpression;
+	}
+

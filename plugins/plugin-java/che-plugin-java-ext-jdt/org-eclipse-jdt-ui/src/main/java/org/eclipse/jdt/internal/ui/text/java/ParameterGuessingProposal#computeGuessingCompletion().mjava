@@ -1,0 +1,57 @@
+	/**
+	 * Creates the completion string. Offsets and Lengths are set to the offsets and lengths of the
+	 * parameters.
+	 *
+	 * @return the completion string
+	 * @throws org.eclipse.jdt.core.JavaModelException if parameter guessing failed
+	 */
+	private String computeGuessingCompletion() throws JavaModelException {
+
+		StringBuffer buffer= new StringBuffer();
+		appendMethodNameReplacement(buffer);
+
+		FormatterPrefs prefs= getFormatterPrefs();
+
+		setCursorPosition(buffer.length());
+
+		if (prefs.afterOpeningParen)
+			buffer.append(SPACE);
+
+		char[][] parameterNames= fProposal.findParameterNames(null);
+
+		fChoices= guessParameters(parameterNames);
+		int count= fChoices.length;
+		int replacementOffset= getReplacementOffset();
+
+		for (int i= 0; i < count; i++) {
+			if (i != 0) {
+				if (prefs.beforeComma)
+					buffer.append(SPACE);
+				buffer.append(COMMA);
+				if (prefs.afterComma)
+					buffer.append(SPACE);
+			}
+
+			ICompletionProposal proposal= fChoices[i][0];
+			String argument= proposal.getDisplayString();
+
+			Position position= fPositions[i];
+			position.setOffset(replacementOffset + buffer.length());
+			position.setLength(argument.length());
+
+			if (proposal instanceof JavaCompletionProposal) // handle the "unknown" case where we only insert a proposal.
+				((JavaCompletionProposal) proposal).setReplacementOffset(replacementOffset + buffer.length());
+			buffer.append(argument);
+		}
+
+		if (prefs.beforeClosingParen)
+			buffer.append(SPACE);
+
+		buffer.append(RPAREN);
+
+		if (canAutomaticallyAppendSemicolon())
+			buffer.append(SEMICOLON);
+
+		return buffer.toString();
+	}
+

@@ -1,0 +1,41 @@
+    @Test
+    @Ignore
+    public void testHierarchical02() throws Exception {
+        if (BUG_PACKAGE_CANT_BE_RENAMED_TO_A_PACKAGE_THAT_ALREADY_EXISTS) {
+            printTestDisabledMessage("package can't be renamed to a package that already exists.");
+            return;
+        }
+        fRenameSubpackages = true;
+
+        PackageRename rename =
+                new PackageRename(new String[]{"my", "my.a", "my.b", "your"}, new String[][]{{"MyA"}, {"ATest"}, {"B"}, {"Y"}}, "your");
+        IPackageFragment thisPackage = rename.fPackages[0];
+        IPath srcPath = thisPackage.getParent().getPath();
+        IFolder target = ResourcesPlugin.getWorkspace().getRoot().getFolder(srcPath.append("your"));
+
+        ParticipantTesting.reset();
+        String[] createHandles = ParticipantTesting.createHandles(target.getFolder("a"), target.getFolder("b"));
+        String[] deleteHandles = ParticipantTesting.createHandles(thisPackage.getResource());
+        String[] moveHandles = ParticipantTesting.createHandles(new Object[]{
+                rename.fCus[0][0].getResource(),
+                rename.fCus[1][0].getResource(),
+                rename.fCus[2][0].getResource(),
+        });
+        String[] renameHandles = ParticipantTesting.createHandles(JavaElementUtil.getPackageAndSubpackages(thisPackage));
+
+        rename.execute();
+
+        ParticipantTesting.testCreate(createHandles);
+        ParticipantTesting.testDelete(deleteHandles);
+        ParticipantTesting.testMove(moveHandles, new MoveArguments[]{
+                new MoveArguments(target, true),
+                new MoveArguments(target.getFolder("a"), true),
+                new MoveArguments(target.getFolder("b"), true),
+        });
+        ParticipantTesting.testRename(renameHandles, new RenameArguments[]{
+                new RenameArguments(rename.getNewPackageName(rename.fPackageNames[0]), true),
+                new RenameArguments(rename.getNewPackageName(rename.fPackageNames[1]), true),
+                new RenameArguments(rename.getNewPackageName(rename.fPackageNames[2]), true),
+        });
+    }
+

@@ -1,0 +1,57 @@
+	/**
+	 * Creates a display label for the given method proposal. The display label
+	 * consists of:
+	 * <ul>
+	 *   <li>the method name</li>
+	 *   <li>the parameter list (see {@link #createParameterList(org.eclipse.jdt.core.CompletionProposal)})</li>
+	 *   <li>the upper bound of the return type (see {@link SignatureUtil#getUpperBound(String)})</li>
+	 *   <li>the raw simple name of the declaring type</li>
+	 * </ul>
+	 * <p>
+	 * Examples:
+	 * For the <code>get(int)</code> method of a variable of type <code>List<? extends Number></code>, the following
+	 * display name is returned: <code>get(int index)  Number - List</code>.<br>
+	 * For the <code>add(E)</code> method of a variable of type <code>List<? super Number></code>, the following
+	 * display name is returned: <code>add(Number o)  void - List</code>.<br>
+	 * </p>
+	 *
+	 * @param methodProposal the method proposal to display
+	 * @return the display label for the given method proposal
+	 */
+	StyledString createMethodProposalLabel(CompletionProposal methodProposal) {
+		StyledString nameBuffer= new StyledString();
+
+		// method name
+		nameBuffer.append(methodProposal.getName());
+
+		// parameters
+		nameBuffer.append('(');
+		appendUnboundedParameterList(nameBuffer, methodProposal);
+		nameBuffer.append(')');
+
+		// return type
+		if (!methodProposal.isConstructor()) {
+			// TODO remove SignatureUtil.fix83600 call when bugs are fixed
+			char[] returnType= createTypeDisplayName(SignatureUtil.getUpperBound(
+                    Signature.getReturnType(SignatureUtil.fix83600(methodProposal.getSignature()))));
+			nameBuffer.append(RETURN_TYPE_SEPARATOR);
+			nameBuffer.append(returnType);
+		}
+
+		// declaring type
+		nameBuffer.append(QUALIFIER_SEPARATOR, StyledString.QUALIFIER_STYLER);
+		String declaringType= extractDeclaringTypeFQN(methodProposal);
+
+		if (methodProposal.getRequiredProposals() != null) {
+			String qualifier= Signature.getQualifier(declaringType);
+			if (qualifier.length() > 0) {
+				nameBuffer.append(qualifier, StyledString.QUALIFIER_STYLER);
+				nameBuffer.append('.', StyledString.QUALIFIER_STYLER);
+			}
+		}
+
+		declaringType= Signature.getSimpleName(declaringType);
+		nameBuffer.append(declaringType, StyledString.QUALIFIER_STYLER);
+		return Strings.markJavaElementLabelLTR(nameBuffer);
+	}
+

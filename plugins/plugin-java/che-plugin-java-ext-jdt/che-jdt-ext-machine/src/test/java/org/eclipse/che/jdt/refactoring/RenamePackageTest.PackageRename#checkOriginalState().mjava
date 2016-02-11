@@ -1,0 +1,36 @@
+        public void checkOriginalState() throws Exception {
+            IJavaElement[] rootChildren = getRoot().getChildren();
+            ArrayList existingPacks = new ArrayList();
+            for (int i = 0; i < rootChildren.length; i++) {
+                existingPacks.add(rootChildren[i].getElementName());
+            }
+            assertEqualSets(Arrays.asList(fPackageNames), existingPacks);
+
+            for (int i = 0; i < fPackageFileNames.length; i++) {
+                String packageName = fPackageNames[i];
+                String packagePath = packageName.replace('.', '/') + "/";
+                IPackageFragment pack = getRoot().getPackageFragment(packageName);
+
+                IJavaElement[] packChildren = pack.getChildren();
+                ArrayList existingCUs = new ArrayList();
+                for (int j = 0; j < packChildren.length; j++) {
+                    String cuName = packChildren[j].getElementName();
+                    existingCUs.add(cuName.substring(0, cuName.length() - 5));
+                }
+                assertEqualSets(Arrays.asList(fPackageFileNames[i]), existingCUs);
+
+                for (int j = 0; j < fPackageFileNames[i].length; j++) {
+                    String expected;
+                    if (fTestWithDummyFiles) {
+                        expected = getDummyContents(packageName, fPackageFileNames[i][j]);
+                    } else {
+                        expected = getFileContents(getInputTestFileName(fPackageFileNames[i][j], packagePath));
+                    }
+                    ICompilationUnit cu = pack.getCompilationUnit(fPackageFileNames[i][j] + ".java");
+                    String actual = cu.getSource();
+                    assertEqualLines("invalid undo in file " + cu.getElementName(), expected, actual);
+                }
+            }
+
+        }
+

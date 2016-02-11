@@ -1,0 +1,47 @@
+	public static void addMissingReturnStatementProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		ASTNode selectedNode= problem.getCoveringNode(context.getASTRoot());
+		if (selectedNode == null) {
+			return;
+		}
+		ReturnStatement existingStatement= (selectedNode instanceof ReturnStatement) ? (ReturnStatement) selectedNode : null;
+		// Lambda Expression can be in a MethodDeclaration or a Field Declaration
+		if (selectedNode instanceof LambdaExpression) {
+			MissingReturnTypeInLambdaCorrectionProposal
+					proposal= new MissingReturnTypeInLambdaCorrectionProposal(cu, (LambdaExpression) selectedNode, existingStatement,
+					IProposalRelevance.MISSING_RETURN_TYPE);
+			proposals.add(proposal);
+		} else {
+			BodyDeclaration decl= ASTResolving.findParentBodyDeclaration(selectedNode);
+			if (decl instanceof MethodDeclaration) {
+				MethodDeclaration methodDecl= (MethodDeclaration) decl;
+				Block block= methodDecl.getBody();
+				if (block == null) {
+					return;
+				}
+				proposals.add(new MissingReturnTypeCorrectionProposal(cu, methodDecl, existingStatement, IProposalRelevance.MISSING_RETURN_TYPE));
+
+				Type returnType= methodDecl.getReturnType2();
+				if (returnType != null && !"void".equals(ASTNodes.asString(returnType))) { //$NON-NLS-1$
+					AST ast= methodDecl.getAST();
+					ASTRewrite rewrite= ASTRewrite.create(ast);
+					rewrite.replace(returnType, ast.newPrimitiveType(PrimitiveType.VOID), null);
+					Javadoc javadoc= methodDecl.getJavadoc();
+					if (javadoc != null) {
+						TagElement tagElement= JavadocTagsSubProcessor.findTag(javadoc, TagElement.TAG_RETURN, null);
+						if (tagElement != null) {
+							rewrite.remove(tagElement, null);
+						}
+					}
+
+					String label= CorrectionMessages.ReturnTypeSubProcessor_changetovoid_description;
+					Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+					ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.CHANGE_RETURN_TYPE_TO_VOID, image);
+
+					proposals.add(proposal);
+				}
+			}
+		}
+	}
+

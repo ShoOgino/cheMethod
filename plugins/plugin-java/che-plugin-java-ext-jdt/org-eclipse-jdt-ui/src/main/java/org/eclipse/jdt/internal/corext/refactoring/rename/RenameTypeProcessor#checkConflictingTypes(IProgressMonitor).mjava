@@ -1,0 +1,47 @@
+	private RefactoringStatus checkConflictingTypes(IProgressMonitor pm) throws CoreException {
+		RefactoringStatus result= new RefactoringStatus();
+		IJavaSearchScope scope= RefactoringScopeFactory.create(fType);
+		SearchPattern pattern= SearchPattern.createPattern(getNewElementName(),
+				IJavaSearchConstants.TYPE, IJavaSearchConstants.ALL_OCCURRENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+		ICompilationUnit[] cusWithReferencesToConflictingTypes= RefactoringSearchEngine.findAffectedCompilationUnits(pattern, scope, pm, result);
+		if (cusWithReferencesToConflictingTypes.length == 0)
+			return result;
+		ICompilationUnit[] 	cusWithReferencesToRenamedType= getCus(fReferences);
+
+		Set<ICompilationUnit> conflicts= getIntersection(cusWithReferencesToRenamedType, cusWithReferencesToConflictingTypes);
+		if (cusWithReferencesToConflictingTypes.length > 0) {
+			cus: for (ICompilationUnit cu : cusWithReferencesToConflictingTypes) {
+				String packageName= fType.getPackageFragment().getElementName();
+				if (((IPackageFragment) cu.getParent()).getElementName().equals(packageName)) {
+					boolean hasOnDemandImport= false;
+					IImportDeclaration[] imports= cu.getImports();
+					for (IImportDeclaration importDecl : imports) {
+						if (importDecl.isOnDemand()) {
+							hasOnDemandImport= true;
+						} else {
+							String importName= importDecl.getElementName();
+							int packageLength= importName.length() - getNewElementName().length() - 1;
+							if (packageLength > 0
+									&& importName.endsWith(getNewElementName())
+									&& importName.charAt(packageLength) == '.') {
+								continue cus; // explicit import from another package => no problem
+							}
+						}
+					}
+					if (hasOnDemandImport) {
+						// the renamed type in the same package will shadow the *-imported type
+						conflicts.add(cu);
+					}
+				}
+			}
+		}
+		
+		for (ICompilationUnit conflict : conflicts) {
+			RefactoringStatusContext context= JavaStatusContext.create(conflict);
+			String message= Messages.format(RefactoringCoreMessages.RenameTypeRefactoring_another_type,
+				new String[] { getNewElementLabel(), BasicElementLabels.getFileName(conflict)});
+			result.addError(message, context);
+		}
+		return result;
+	}
+

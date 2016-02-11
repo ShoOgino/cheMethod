@@ -1,0 +1,49 @@
+	private static boolean getInverseIfContinueIntoIfThenInLoopsProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
+		if (!(covering instanceof IfStatement)) {
+			return false;
+		}
+		IfStatement ifStatement= (IfStatement) covering;
+		if (ifStatement.getElseStatement() != null) {
+			return false;
+		}
+		// check that 'then' is 'continue'
+		if (!(ifStatement.getThenStatement() instanceof ContinueStatement)) {
+			return false;
+		}
+		// check that 'if' statement is statement in block that is body of loop
+		Block loopBlock= null;
+		if (ifStatement.getParent() instanceof Block && ifStatement.getParent().getParent() instanceof ForStatement) {
+			loopBlock= (Block) ifStatement.getParent();
+		} else if (ifStatement.getParent() instanceof Block && ifStatement.getParent().getParent() instanceof WhileStatement) {
+			loopBlock= (Block) ifStatement.getParent();
+		} else {
+			return false;
+		}
+		if (resultingCollections == null) {
+			return true;
+		}
+		//
+		AST ast= covering.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		// create inverted 'if' statement
+		Expression inversedExpression= getInversedExpression(rewrite, ifStatement.getExpression());
+		IfStatement newIf= ast.newIfStatement();
+		newIf.setExpression(inversedExpression);
+		// prepare 'then' for new 'if'
+		Block thenBlock= ast.newBlock();
+		int ifIndex= loopBlock.statements().indexOf(ifStatement);
+		for (int i= ifIndex + 1; i < loopBlock.statements().size(); i++) {
+			Statement statement= (Statement) loopBlock.statements().get(i);
+			thenBlock.statements().add(rewrite.createMoveTarget(statement));
+		}
+		newIf.setThenStatement(thenBlock);
+		// replace 'if' statement in loop
+		rewrite.replace(ifStatement, newIf, null);
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_inverseIfContinue_description;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVERSE_IF_CONTINUE, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

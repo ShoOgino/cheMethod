@@ -1,0 +1,100 @@
+    /*
+     * Generic processing for a removed element:<ul>
+     * <li>Close the element, removing its structure from the cache
+     * <li>Remove the element from its parent's cache of children
+     * <li>Add a REMOVED entry in the delta
+     * </ul>
+     * Delta argument could be null if processing an external JAR change
+     */
+    private void elementRemoved(Openable element, IResourceDelta delta, RootInfo rootInfo) {
+
+        int elementType = element.getElementType();
+        if (delta == null || (delta.getFlags() & IResourceDelta.MOVED_TO) == 0) {
+            // regular element removal
+            if (isPrimaryWorkingCopy(element, elementType)) {
+                // filter out changes to primary compilation unit in working copy mode
+                // just report a change to the resource (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=59500)
+                currentDelta().changed(element, IJavaElementDelta.F_PRIMARY_RESOURCE);
+            } else {
+                close(element);
+                removeFromParentInfo(element);
+                currentDelta().removed(element);
+            }
+        } else {
+            // element is moved
+            close(element);
+            removeFromParentInfo(element);
+            IPath movedToPath = delta.getMovedToPath();
+            IResource res = delta.getResource();
+            IResource movedToRes;
+//            movedToRes = movedToPath.toFile();
+			switch (res.getType()) {
+				case IResource.PROJECT:
+					movedToRes = res.getWorkspace().getRoot().getProject(movedToPath.lastSegment());
+					break;
+				case IResource.FOLDER:
+					movedToRes = res.getWorkspace().getRoot().getFolder(movedToPath);
+					break;
+				case IResource.FILE:
+					movedToRes = res.getWorkspace().getRoot().getFile(movedToPath);
+					break;
+				default:
+					return;
+			}
+
+            // find the element type of the moved from element
+            IPath rootPath = externalPath(movedToRes);
+            RootInfo movedToInfo = enclosingRootInfo(rootPath, IResourceDelta.ADDED);
+            int movedToType =
+                    elementType(
+                            movedToRes,
+                            IResourceDelta.ADDED,
+                            element.getParent().getElementType(),
+                            movedToInfo);
+
+            // reset current element as it might be inside a nested root (popUntilPrefixOf() may use the outer root)
+            this.currentElement = null;
+
+            // create the moved To element
+            Openable movedToElement =
+                    elementType != IJavaElement.JAVA_PROJECT && movedToType == IJavaElement.JAVA_PROJECT ?
+                    null : // outside classpath
+                    createElement(movedToRes, movedToType, movedToInfo);
+            if (movedToElement == null) {
+                // moved outside classpath
+                currentDelta().removed(element);
+            } else {
+                currentDelta().movedFrom(element, movedToElement);
+            }
+        }
+
+        switch (elementType) {
+            case IJavaElement.JAVA_MODEL:
+                this.manager.indexManager.reset();
+                break;
+            case IJavaElement.JAVA_PROJECT:
+                this.state.updateRoots(element.getPath(), delta, this);
+                //TODO: this is quick fix for https://jira.codenvycorp.com/browse/IDEX-4221
+                //we do it because we need clear cache for deleted project but we don't know how do it right way
+                //so we clean all cache totally 
+                this.state.roots.clear();
+                // remember that the project's cache must be reset
+                this.projectCachesToReset.add(element);
+
+                break;
+            case IJavaElement.PACKAGE_FRAGMENT_ROOT:
+                JavaProject project = (JavaProject)element.getJavaProject();
+
+                // remember that the project's cache must be reset
+                this.projectCachesToReset.add(project);
+
+                break;
+            case IJavaElement.PACKAGE_FRAGMENT:
+                // reset package fragment cache
+                project = (JavaProject)element.getJavaProject();
+                this.projectCachesToReset.add(project);
+
+                break;
+        }
+    }
+

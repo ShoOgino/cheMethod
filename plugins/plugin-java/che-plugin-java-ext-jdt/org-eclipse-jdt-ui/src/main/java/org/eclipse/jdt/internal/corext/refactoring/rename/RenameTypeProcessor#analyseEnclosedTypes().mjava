@@ -1,0 +1,42 @@
+	private RefactoringStatus analyseEnclosedTypes() throws CoreException {
+		final ISourceRange typeRange= fType.getSourceRange();
+		final RefactoringStatus result= new RefactoringStatus();
+		CompilationUnit cuNode= new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(fType.getCompilationUnit(), false);
+		cuNode.accept(new ASTVisitor(){
+
+			@Override
+			public boolean visit(TypeDeclaration node){ // enums and annotations can't be local
+				if (node.getStartPosition() <= typeRange.getOffset())
+					return true;
+				if (node.getStartPosition() > typeRange.getOffset() + typeRange.getLength())
+					return true;
+
+				if (getNewElementName().equals(node.getName().getIdentifier())){
+					RefactoringStatusContext	context= JavaStatusContext.create(fType.getCompilationUnit(), node);
+					String msg= null;
+					if (node.isLocalTypeDeclaration()){
+						msg= Messages.format(RefactoringCoreMessages.RenameTypeRefactoring_local_type,
+									new String[]{JavaElementUtil.createSignature(fType), getNewElementLabel()});
+					}
+					else if (node.isMemberTypeDeclaration()){
+						msg= Messages.format(RefactoringCoreMessages.RenameTypeRefactoring_member_type,
+								new String[]{JavaElementUtil.createSignature(fType), getNewElementLabel()});
+					}
+					if (msg != null)
+						result.addError(msg, context);
+				}
+
+				MethodDeclaration[] methods= node.getMethods();
+				for (int i= 0; i < methods.length; i++) {
+					if (Modifier.isNative(methods[i].getModifiers())){
+						RefactoringStatusContext	context= JavaStatusContext.create(fType.getCompilationUnit(), methods[i]);
+						String msg= Messages.format(RefactoringCoreMessages.RenameTypeRefactoring_enclosed_type_native, BasicElementLabels.getJavaElementName(node.getName().getIdentifier()));
+						result.addWarning(msg, context);
+					}
+				}
+				return true;
+			}
+		});
+		return result;
+	}
+

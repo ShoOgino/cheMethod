@@ -1,0 +1,48 @@
+	/**
+	 * Removes the refactoring history index tree spanned by the specified file
+	 * store.
+	 *
+	 * @param store
+	 *            the file store spanning the history index tree
+	 * @param monitor
+	 *            the progress monitor to use
+	 * @param task
+	 *            the task label to use
+	 * @throws CoreException
+	 *             if an error occurs while removing the index tree
+	 */
+	private static void removeIndexTree(final IFileStore store, final IProgressMonitor monitor, final String task) throws CoreException {
+		try {
+			monitor.beginTask(task, 16);
+			final IFileInfo info= store.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+			if (info.isDirectory()) {
+				if (info.getName().equalsIgnoreCase(RefactoringHistoryService.NAME_HISTORY_FOLDER))
+					return;
+				final IFileStore[] stores= store.childStores(EFS.NONE, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+				final IProgressMonitor subMonitor= new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL);
+				try {
+					subMonitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_updating_history, stores.length);
+					for (int index= 0; index < stores.length; index++) {
+						final IFileInfo current= stores[index].fetchInfo(EFS.NONE, new SubProgressMonitor(subMonitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+						if (current.isDirectory()) {
+							final char[] characters= stores[index].getName().toCharArray();
+							for (int offset= 0; offset < characters.length; offset++) {
+								if (Character.isDigit(characters[offset]))
+									return;
+								else
+									continue;
+							}
+						}
+					}
+				} finally {
+					subMonitor.done();
+				}
+			}
+			final IFileStore parent= store.getParent();
+			store.delete(0, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+			removeIndexTree(parent, new SubProgressMonitor(monitor, 12, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL), task);
+		} finally {
+			monitor.done();
+		}
+	}
+

@@ -1,0 +1,29 @@
+    private RefactoringStatus checkClashesInConstructors() {
+		Assert.isTrue(fInitializeIn == INITIALIZE_IN_CONSTRUCTOR);
+		Assert.isTrue(!isDeclaredInAnonymousClass());
+		final AbstractTypeDeclaration declaration= (AbstractTypeDeclaration) getMethodDeclaration().getParent();
+		if (declaration instanceof TypeDeclaration) {
+			MethodDeclaration[] methods= ((TypeDeclaration) declaration).getMethods();
+			for (int i= 0; i < methods.length; i++) {
+				MethodDeclaration method= methods[i];
+				if (!method.isConstructor())
+					continue;
+				NameCollector nameCollector= new NameCollector(method) {
+					@Override
+					protected boolean visitNode(ASTNode node) {
+						return true;
+					}
+				};
+				method.accept(nameCollector);
+				List<String> names= nameCollector.getNames();
+				if (names.contains(fFieldName)) {
+					String[] keys= { BasicElementLabels.getJavaElementName(fFieldName), BindingLabelProvider
+							.getBindingLabel(method.resolveBinding(), JavaElementLabels.ALL_FULLY_QUALIFIED)};
+					String msg= Messages.format(RefactoringCoreMessages.PromoteTempToFieldRefactoring_Name_conflict, keys);
+					return RefactoringStatus.createFatalErrorStatus(msg);
+				}
+			}
+		}
+		return null;
+	}
+

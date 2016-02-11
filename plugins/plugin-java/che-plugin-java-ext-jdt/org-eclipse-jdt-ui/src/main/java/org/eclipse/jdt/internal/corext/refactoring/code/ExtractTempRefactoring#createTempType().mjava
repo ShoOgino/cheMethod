@@ -1,0 +1,39 @@
+	private Type createTempType() throws CoreException {
+		Expression expression= getSelectedExpression().getAssociatedExpression();
+
+		Type resultingType= null;
+		ITypeBinding typeBinding= expression.resolveTypeBinding();
+
+		ASTRewrite rewrite= fCURewrite.getASTRewrite();
+		AST ast= rewrite.getAST();
+
+		if (expression instanceof ClassInstanceCreation && (typeBinding == null || typeBinding.getTypeArguments().length == 0)) {
+			resultingType= (Type) rewrite.createCopyTarget(((ClassInstanceCreation) expression).getType());
+		} else if (expression instanceof CastExpression) {
+			resultingType= (Type) rewrite.createCopyTarget(((CastExpression) expression).getType());
+		} else {
+			if (typeBinding == null) {
+				typeBinding= ASTResolving.guessBindingForReference(expression);
+			}
+			if (typeBinding != null) {
+				typeBinding= Bindings.normalizeForDeclarationUse(typeBinding, ast);
+				ImportRewrite importRewrite= fCURewrite.getImportRewrite();
+				ImportRewriteContext context= new ContextSensitiveImportRewriteContext(expression, importRewrite);
+				resultingType= importRewrite.addImport(typeBinding, ast, context);
+			} else {
+				resultingType= ast.newSimpleType(ast.newSimpleName("Object")); //$NON-NLS-1$
+			}
+		}
+		if (fLinkedProposalModel != null) {
+			LinkedProposalPositionGroup typeGroup= fLinkedProposalModel.getPositionGroup(KEY_TYPE, true);
+			typeGroup.addPosition(rewrite.track(resultingType), false);
+			if (typeBinding != null) {
+				ITypeBinding[] relaxingTypes= ASTResolving.getNarrowingTypes(ast, typeBinding);
+				for (int i= 0; i < relaxingTypes.length; i++) {
+					typeGroup.addProposal(relaxingTypes[i], fCURewrite.getCu(), relaxingTypes.length - i);
+				}
+			}
+		}
+		return resultingType;
+	}
+

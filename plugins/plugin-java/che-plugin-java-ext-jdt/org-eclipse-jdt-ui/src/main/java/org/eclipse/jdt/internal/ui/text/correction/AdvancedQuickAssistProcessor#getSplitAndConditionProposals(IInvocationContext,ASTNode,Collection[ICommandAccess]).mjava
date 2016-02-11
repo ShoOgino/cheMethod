@@ -1,0 +1,71 @@
+	public static boolean getSplitAndConditionProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		Operator andOperator= InfixExpression.Operator.CONDITIONAL_AND;
+		// check that user invokes quick assist on infix expression
+		if (!(node instanceof InfixExpression)) {
+			return false;
+		}
+		InfixExpression infixExpression= (InfixExpression) node;
+		if (infixExpression.getOperator() != andOperator) {
+			return false;
+		}
+		int offset= isOperatorSelected(infixExpression, context.getSelectionOffset(), context.getSelectionLength());
+		if (offset == -1) {
+			return false;
+		}
+
+		// check that infix expression belongs to IfStatement
+		Statement statement= ASTResolving.findParentStatement(node);
+		if (!(statement instanceof IfStatement)) {
+			return false;
+		}
+		IfStatement ifStatement= (IfStatement) statement;
+
+		// check that infix expression is part of first level && condition of IfStatement
+		InfixExpression topInfixExpression= infixExpression;
+		while (topInfixExpression.getParent() instanceof InfixExpression && ((InfixExpression) topInfixExpression.getParent()).getOperator() == andOperator) {
+			topInfixExpression= (InfixExpression) topInfixExpression.getParent();
+		}
+		if (ifStatement.getExpression() != topInfixExpression) {
+			return false;
+		}
+		//
+		if (resultingCollections == null) {
+			return true;
+		}
+		AST ast= ifStatement.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+
+		// prepare left and right conditions
+		Expression[] newOperands= { null, null };
+		breakInfixOperationAtOperation(rewrite, topInfixExpression, andOperator, offset, true, newOperands);
+
+		Expression leftCondition= newOperands[0];
+		Expression rightCondition= newOperands[1];
+
+		// replace conditions in outer IfStatement
+		rewrite.set(ifStatement, IfStatement.EXPRESSION_PROPERTY, leftCondition, null);
+
+		// prepare inner IfStatement
+		IfStatement innerIf= ast.newIfStatement();
+
+		innerIf.setExpression(rightCondition);
+		innerIf.setThenStatement((Statement) rewrite.createMoveTarget(ifStatement.getThenStatement()));
+		Block innerBlock= ast.newBlock();
+		innerBlock.statements().add(innerIf);
+
+		Statement elseStatement= ifStatement.getElseStatement();
+		if (elseStatement != null) {
+			innerIf.setElseStatement((Statement) rewrite.createCopyTarget(elseStatement));
+		}
+
+		// replace outer thenStatement
+		rewrite.replace(ifStatement.getThenStatement(), innerBlock, null);
+
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_splitAndCondition_description;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.SPLIT_AND_CONDITION, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

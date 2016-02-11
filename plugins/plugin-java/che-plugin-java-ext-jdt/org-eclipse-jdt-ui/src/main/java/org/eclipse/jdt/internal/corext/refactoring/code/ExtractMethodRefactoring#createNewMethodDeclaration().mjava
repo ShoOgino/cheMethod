@@ -1,0 +1,66 @@
+	private MethodDeclaration createNewMethodDeclaration() {
+		MethodDeclaration result= fAST.newMethodDeclaration();
+
+		int modifiers= fVisibility;
+		BodyDeclaration enclosingBodyDeclaration= fAnalyzer.getEnclosingBodyDeclaration();
+		boolean isDestinationInterface= isDestinationInterface();
+		if (isDestinationInterface && !(enclosingBodyDeclaration instanceof MethodDeclaration &&
+				enclosingBodyDeclaration.getParent() == fDestination &&
+				Modifier.isPublic(enclosingBodyDeclaration.getModifiers()))) {
+			modifiers= Modifier.NONE;
+		}
+
+		boolean shouldBeStatic= false;
+		ASTNode currentParent= enclosingBodyDeclaration;
+		do {
+			if (currentParent instanceof BodyDeclaration) {
+				shouldBeStatic= shouldBeStatic || JdtFlags.isStatic((BodyDeclaration) currentParent);
+			}
+			currentParent= currentParent.getParent();
+		} while (!shouldBeStatic && currentParent != null && currentParent != fDestination);
+
+		if (shouldBeStatic || fAnalyzer.getForceStatic() || forceStatic()) {
+			modifiers|= Modifier.STATIC;
+		} else if (isDestinationInterface) {
+			modifiers|= Modifier.DEFAULT;
+		}
+
+		ITypeBinding[] typeVariables= computeLocalTypeVariables(modifiers);
+		List<TypeParameter> typeParameters= result.typeParameters();
+		for (int i= 0; i < typeVariables.length; i++) {
+			TypeParameter parameter= fAST.newTypeParameter();
+			parameter.setName(fAST.newSimpleName(typeVariables[i].getName()));
+			ITypeBinding[] bounds= typeVariables[i].getTypeBounds();
+			for (int j= 0; j < bounds.length; j++)
+				if (!"java.lang.Object".equals(bounds[j].getQualifiedName())) //$NON-NLS-1$
+					parameter.typeBounds().add(fImportRewriter.addImport(bounds[j], fAST));
+			typeParameters.add(parameter);
+		}
+
+		result.modifiers().addAll(ASTNodeFactory.newModifiers(fAST, modifiers));
+		result.setReturnType2((Type)ASTNode.copySubtree(fAST, fAnalyzer.getReturnType()));
+		result.setName(fAST.newSimpleName(fMethodName));
+		
+		ImportRewriteContext context= new ContextSensitiveImportRewriteContext(enclosingBodyDeclaration, fImportRewriter);
+
+		List<SingleVariableDeclaration> parameters= result.parameters();
+		for (int i= 0; i < fParameterInfos.size(); i++) {
+			ParameterInfo info= fParameterInfos.get(i);
+			VariableDeclaration infoDecl= getVariableDeclaration(info);
+			SingleVariableDeclaration parameter= fAST.newSingleVariableDeclaration();
+			parameter.modifiers().addAll(ASTNodeFactory.newModifiers(fAST, ASTNodes.getModifiers(infoDecl)));
+			parameter.setType(ASTNodeFactory.newType(fAST, infoDecl, fImportRewriter, context));
+			parameter.setName(fAST.newSimpleName(info.getNewName()));
+			parameter.setVarargs(info.isNewVarargs());
+			parameters.add(parameter);
+		}
+
+		List<Type> exceptions= result.thrownExceptionTypes();
+		ITypeBinding[] exceptionTypes= fAnalyzer.getExceptions(fThrowRuntimeExceptions);
+		for (int i= 0; i < exceptionTypes.length; i++) {
+			ITypeBinding exceptionType= exceptionTypes[i];
+			exceptions.add(fImportRewriter.addImport(exceptionType, fAST, context));
+		}
+		return result;
+	}
+

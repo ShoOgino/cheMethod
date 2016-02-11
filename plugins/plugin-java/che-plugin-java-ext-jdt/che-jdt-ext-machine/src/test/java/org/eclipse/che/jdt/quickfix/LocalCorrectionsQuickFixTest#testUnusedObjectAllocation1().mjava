@@ -1,0 +1,97 @@
+    @Test
+	public void testUnusedObjectAllocation1() throws Exception {
+		Hashtable options= JavaCore.getOptions();
+		options.put(JavaCore.COMPILER_PB_UNUSED_OBJECT_ALLOCATION, JavaCore.WARNING);
+		JavaCore.setOptions(options);
+		
+		IPackageFragment pack1= fSourceFolder.createPackageFragment("test1", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    public Object foo() {\n");
+		buf.append("        if (Boolean.TRUE) {\n");
+		buf.append("            /*a*/new Object()/*b*/;/*c*/\n");
+		buf.append("        }\n");
+		buf.append("        return null;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+		
+		CompilationUnit astRoot= getASTRoot(cu);
+		ArrayList proposals= collectCorrections(cu, astRoot);
+		
+		assertCorrectLabels(proposals);
+		assertNumberOfProposals(proposals, 5);
+		
+		String[] expected= new String[5];
+		buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    public Object foo() {\n");
+		buf.append("        if (Boolean.TRUE) {\n");
+		buf.append("            /*a*/return new Object()/*b*/;/*c*/\n");
+		buf.append("        }\n");
+		buf.append("        return null;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[0]= buf.toString();
+		
+		buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    public Object foo() {\n");
+		buf.append("        if (Boolean.TRUE) {\n");
+		buf.append("        }\n");
+		buf.append("        return null;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[1]= buf.toString();
+		
+		buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    @SuppressWarnings(\"unused\")\n");
+		buf.append("    public Object foo() {\n");
+		buf.append("        if (Boolean.TRUE) {\n");
+		buf.append("            /*a*/new Object()/*b*/;/*c*/\n");
+		buf.append("        }\n");
+		buf.append("        return null;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[2]= buf.toString();
+		
+		buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    public Object foo() {\n");
+		buf.append("        if (Boolean.TRUE) {\n");
+		buf.append("            /*a*/Object object = new Object()/*b*/;/*c*/\n");
+		buf.append("        }\n");
+		buf.append("        return null;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[3]= buf.toString();
+		
+		buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("\n");
+		buf.append("public class E {\n");
+		buf.append("    private Object object;\n");
+		buf.append("\n");
+		buf.append("    public Object foo() {\n");
+		buf.append("        if (Boolean.TRUE) {\n");
+		buf.append("            /*a*/object = new Object()/*b*/;/*c*/\n");
+		buf.append("        }\n");
+		buf.append("        return null;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[4]= buf.toString();
+		
+		assertExpectedExistInProposals(proposals, expected);
+	}
+

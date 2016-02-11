@@ -1,0 +1,28 @@
+	private SingleVariableDeclaration createParameterDeclaration(String parameterName, VariableDeclarationFragment fragement, Expression arrayAccess, ForStatement statement, ImportRewrite importRewrite, ASTRewrite rewrite, TextEditGroup group, LinkedProposalPositionGroup pg, boolean makeFinal) {
+		CompilationUnit compilationUnit= (CompilationUnit)arrayAccess.getRoot();
+		AST ast= compilationUnit.getAST();
+
+		SingleVariableDeclaration result= ast.newSingleVariableDeclaration();
+
+		SimpleName name= ast.newSimpleName(parameterName);
+		pg.addPosition(rewrite.track(name), true);
+		result.setName(name);
+
+		ITypeBinding arrayTypeBinding= arrayAccess.resolveTypeBinding();
+		Type type= importType(arrayTypeBinding.getElementType(), statement, importRewrite, compilationUnit);
+		if (arrayTypeBinding.getDimensions() != 1) {
+			type= ast.newArrayType(type, arrayTypeBinding.getDimensions() - 1);
+		}
+		result.setType(type);
+
+		if (fragement != null) {
+			VariableDeclarationStatement declaration= (VariableDeclarationStatement)fragement.getParent();
+			ModifierRewrite.create(rewrite, result).copyAllModifiers(declaration, group);
+		}
+		if (makeFinal && (fragement == null || ASTNodes.findModifierNode(Modifier.FINAL, ASTNodes.getModifiers(fragement)) == null)) {
+			ModifierRewrite.create(rewrite, result).setModifiers(Modifier.FINAL, 0, group);
+		}
+
+		return result;
+	}
+

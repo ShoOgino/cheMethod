@@ -1,0 +1,64 @@
+        public boolean visit(ITypeBinding type) {
+            IMethodBinding[] methods = type.getDeclaredMethods();
+            for (int i = 0; i < methods.length; i++) {
+                IMethodBinding candidate = methods[i];
+                if (candidate.getMethodDeclaration() == fOriginalMethod.getMethodDeclaration()) {
+                    continue;
+                }
+                ITypeBinding candidateDeclaringType = candidate.getDeclaringClass();
+                if (fDeclaringType != candidateDeclaringType) {
+                    int modifiers = candidate.getModifiers();
+                    if (candidateDeclaringType.isInterface() && Modifier.isStatic(modifiers)) {
+                        continue;
+                    }
+                    if (Modifier.isPrivate(modifiers)) {
+                        continue;
+                    }
+                }
+                if (fOriginalMethod.getName().equals(candidate.getName()) && !fOriginalMethod.overrides(candidate)) {
+                    ITypeBinding[] originalParameterTypes = fOriginalMethod.getParameterTypes();
+                    ITypeBinding[] candidateParameterTypes = candidate.getParameterTypes();
+
+                    boolean couldBeAmbiguous;
+                    if (originalParameterTypes.length == candidateParameterTypes.length) {
+                        couldBeAmbiguous = true;
+                    } else if (fOriginalMethod.isVarargs() || candidate.isVarargs()) {
+                        int candidateMinArgumentCount = candidateParameterTypes.length;
+                        if (candidate.isVarargs())
+                            candidateMinArgumentCount--;
+                        couldBeAmbiguous = fArgumentCount >= candidateMinArgumentCount;
+                    } else {
+                        couldBeAmbiguous = false;
+                    }
+                    if (couldBeAmbiguous) {
+                        ITypeBinding parameterType = ASTResolving.getParameterTypeBinding(candidate, fArgIndex);
+                        if (parameterType != null && parameterType.getFunctionalInterfaceMethod() != null) {
+                            if (!fExpressionIsExplicitlyTyped) {
+								/* According to JLS8 15.12.2.2, implicitly typed lambda expressions are not "pertinent to applicability"
+								 * and hence potentially applicable methods are always "applicable by strict invocation",
+								 * regardless of whether argument expressions are compatible with the method's parameter types or not.
+								 * If there are multiple such methods, 15.12.2.5 results in an ambiguous method invocation.
+								 */
+                                return false;
+                            }
+							/* Explicitly typed lambda expressions are pertinent to applicability, and hence
+							 * compatibility with the corresponding method parameter type is checked. And since this check
+							 * separates functional interface methods by their void-compatibility state, functional interfaces
+							 * with a different void compatibility are not applicable any more and hence can't cause
+							 * an ambiguous method invocation.
+							 */
+                            ITypeBinding origParamType = ASTResolving.getParameterTypeBinding(fOriginalMethod, fArgIndex);
+                            boolean originalIsVoidCompatible =
+                                    Bindings.isVoidType(origParamType.getFunctionalInterfaceMethod().getReturnType());
+                            boolean candidateIsVoidCompatible =
+                                    Bindings.isVoidType(parameterType.getFunctionalInterfaceMethod().getReturnType());
+                            if (originalIsVoidCompatible == candidateIsVoidCompatible) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+

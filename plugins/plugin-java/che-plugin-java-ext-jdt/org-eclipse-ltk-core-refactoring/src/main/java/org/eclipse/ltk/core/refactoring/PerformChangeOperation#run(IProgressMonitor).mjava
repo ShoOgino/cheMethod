@@ -1,0 +1,32 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	public void run(IProgressMonitor pm) throws CoreException {
+		if (pm == null)
+			pm= new NullProgressMonitor();
+		try {
+			fChangeExecuted= false;
+			if (createChange()) {
+				pm.beginTask("", 4); //$NON-NLS-1$
+				pm.subTask(""); //$NON-NLS-1$
+				fCreateChangeOperation.run(new SubProgressMonitor(pm, 3));
+				// Check for cancellation before executing the change, since canceling
+				// during change execution is not supported
+				// (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=187265 ):
+				if (pm.isCanceled())
+					throw new OperationCanceledException();
+
+				fChange= fCreateChangeOperation.getChange();
+				if (fChange != null) {
+					executeChange(new SubProgressMonitor(pm, 1));
+				} else {
+					pm.worked(1);
+				}
+			} else {
+				executeChange(pm);
+			}
+		} finally {
+			pm.done();
+		}
+	}
+

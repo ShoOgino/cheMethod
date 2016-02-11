@@ -1,0 +1,52 @@
+	public static void getAssignmentHasNoEffectProposals(IInvocationContext context, IProblemLocation problem,
+														 Collection<ICommandAccess> proposals) {
+		CompilationUnit root = context.getASTRoot();
+		ASTNode selectedNode = problem.getCoveringNode(root);
+		if (!(selectedNode instanceof Assignment)) {
+			return;
+		}
+		ASTNode assignedNode = ((Assignment)selectedNode).getLeftHandSide();
+		ASTNode assignExpression = ((Assignment)selectedNode).getRightHandSide();
+		if (!(assignedNode instanceof SimpleName) && !(assignExpression instanceof SimpleName)) {
+			return;
+		}
+
+		IBinding binding = (assignedNode instanceof SimpleName) ? ((SimpleName)assignedNode).resolveBinding()
+																: ((SimpleName)assignExpression).resolveBinding();
+		if (!(binding instanceof IVariableBinding)) {
+			return;
+		}
+		ITypeBinding typeBinding = Bindings.getBindingOfParentType(selectedNode);
+		if (typeBinding == null) {
+			return;
+		}
+		IVariableBinding fieldBinding = Bindings.findFieldInHierarchy(typeBinding, binding.getName());
+		if (fieldBinding == null || fieldBinding.getDeclaringClass() != typeBinding && Modifier.isPrivate(fieldBinding.getModifiers())) {
+			return;
+		}
+
+		if (binding != fieldBinding) {
+			if (assignedNode instanceof SimpleName) {
+				String label = CorrectionMessages.LocalCorrectionsSubProcessor_qualify_left_hand_side_description;
+				proposals.add(createNoSideEffectProposal(context, (SimpleName)assignedNode, fieldBinding, label,
+														 IProposalRelevance.QUALIFY_LHS));
+			}
+			if (assignExpression instanceof SimpleName) {
+				String label = CorrectionMessages.LocalCorrectionsSubProcessor_qualify_right_hand_side_description;
+				proposals.add(createNoSideEffectProposal(context, (SimpleName)assignExpression, fieldBinding, label,
+														 IProposalRelevance.QUALIFY_RHS));
+			}
+		}
+
+		if (binding == fieldBinding && ASTResolving.findParentBodyDeclaration(selectedNode) instanceof MethodDeclaration) {
+			SimpleName simpleName = (SimpleName)((assignedNode instanceof SimpleName) ? assignedNode : assignExpression);
+			String label = Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_createparameter_description,
+										   BasicElementLabels.getJavaElementName(simpleName.getIdentifier()));
+			Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_LOCAL);
+			proposals.add(new NewVariableCorrectionProposal(label, context.getCompilationUnit(), NewVariableCorrectionProposal.PARAM,
+															simpleName, null, IProposalRelevance.CREATE_PARAMETER, image));
+		}
+
+
+	}
+

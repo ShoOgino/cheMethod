@@ -1,0 +1,101 @@
+    /*
+     * @see org.eclipse.jface.text.contentassist.ICompletionProposalExtension#apply(org.eclipse.jface.text.IDocument, char, int)
+     */
+    public void apply(IDocument document, char trigger, int offset) {
+
+        if (isSupportingRequiredProposals()) {
+            CompletionProposal coreProposal = ((MemberProposalInfo)getProposalInfo()).fProposal;
+            CompletionProposal[] requiredProposals = coreProposal.getRequiredProposals();
+            for (int i = 0; requiredProposals != null && i < requiredProposals.length; i++) {
+                int oldLen = document.getLength();
+                if (requiredProposals[i].getKind() == CompletionProposal.TYPE_REF) {
+                    LazyJavaCompletionProposal proposal = createRequiredTypeCompletionProposal(requiredProposals[i], fInvocationContext);
+                    proposal.apply(document);
+                    setReplacementOffset(getReplacementOffset() + document.getLength() - oldLen);
+                } else if (requiredProposals[i].getKind() == CompletionProposal.TYPE_IMPORT) {
+                    ImportCompletionProposal proposal =
+                            new ImportCompletionProposal(requiredProposals[i], fInvocationContext, coreProposal.getKind());
+                    proposal.setReplacementOffset(getReplacementOffset());
+                    proposal.apply(document);
+                    setReplacementOffset(getReplacementOffset() + document.getLength() - oldLen);
+                } else if (requiredProposals[i].getKind() == CompletionProposal.METHOD_IMPORT) {
+                    ImportCompletionProposal proposal =
+                            new ImportCompletionProposal(requiredProposals[i], fInvocationContext, coreProposal.getKind());
+                    proposal.setReplacementOffset(getReplacementOffset());
+                    proposal.apply(document);
+                    setReplacementOffset(getReplacementOffset() + document.getLength() - oldLen);
+                } else if (requiredProposals[i].getKind() == CompletionProposal.FIELD_IMPORT) {
+                    ImportCompletionProposal proposal =
+                            new ImportCompletionProposal(requiredProposals[i], fInvocationContext, coreProposal.getKind());
+                    proposal.setReplacementOffset(getReplacementOffset());
+                    proposal.apply(document);
+                    setReplacementOffset(getReplacementOffset() + document.getLength() - oldLen);
+                } else {
+					/*
+					 * In 3.3 we only support the above required proposals, see
+					 * CompletionProposal#getRequiredProposals()
+					 */
+                    Assert.isTrue(false);
+                }
+            }
+        }
+
+        try {
+            boolean isSmartTrigger = isSmartTrigger(trigger);
+
+            String replacement;
+            if (isSmartTrigger || trigger == (char)0) {
+                int referenceOffset = getReplacementOffset() + getReplacementLength();
+                replacement = getReplacementString();
+                //add ; to the replacement string if replacement string do not end with a semicolon and the document do not already have
+                // a ; at the reference offset.
+                if (trigger == ';' && replacement.charAt(replacement.length() - 1) != ';' &&
+                    (referenceOffset >= document.getLength() || document.getChar(referenceOffset) != ';')) {
+                    replacement = replacement + ";"; //$NON-NLS-1$
+                    setReplacementString(replacement);
+                }
+            } else {
+                StringBuffer buffer = new StringBuffer(getReplacementString());
+
+                // fix for PR #5533. Assumes that no eating takes place.
+                if ((getCursorPosition() > 0 && getCursorPosition() <= buffer.length() &&
+                     buffer.charAt(getCursorPosition() - 1) != trigger)) {
+                    // insert trigger ';' for methods with parameter at the end of the replacement string and not at the cursor position.
+                    int length = getReplacementString().length();
+                    if (trigger == ';' && getCursorPosition() != length) {
+                        if (buffer.charAt(length - 1) != trigger) {
+                            buffer.insert(length, trigger);
+                        }
+                    } else {
+                        buffer.insert(getCursorPosition(), trigger);
+                        setCursorPosition(getCursorPosition() + 1);
+                    }
+                }
+
+                replacement = buffer.toString();
+                setReplacementString(replacement);
+            }
+
+            // reference position just at the end of the document change.
+            int referenceOffset = getReplacementOffset() + getReplacementLength();
+            final ReferenceTracker referenceTracker = new ReferenceTracker();
+            referenceTracker.preReplace(document, referenceOffset);
+
+            replace(document, getReplacementOffset(), getReplacementLength(), replacement);
+
+            referenceOffset = referenceTracker.postReplace(document);
+            setReplacementOffset(referenceOffset - (replacement == null ? 0 : replacement.length()));
+
+            // PR 47097
+            if (isSmartTrigger) {
+                // avoid inserting redundant semicolon when smart insert is enabled.
+                if (!(trigger == ';' && (replacement.endsWith(";") || document.getChar(referenceOffset) == ';'))) { //$NON-NLS-1$
+                    handleSmartTrigger(document, trigger, referenceOffset);
+                }
+            }
+
+        } catch (BadLocationException x) {
+            // ignore
+        }
+    }
+

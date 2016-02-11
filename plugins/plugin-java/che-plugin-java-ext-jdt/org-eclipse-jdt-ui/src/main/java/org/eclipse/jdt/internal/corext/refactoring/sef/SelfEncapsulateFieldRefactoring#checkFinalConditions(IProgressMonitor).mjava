@@ -1,0 +1,84 @@
+	@Override
+	public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
+		pm.beginTask(NO_NAME, 12);
+		pm.setTaskName(RefactoringCoreMessages.SelfEncapsulateField_checking_preconditions);
+
+		RefactoringStatus result = new RefactoringStatus();
+		fRewriter = ASTRewrite.create(fRoot.getAST());
+		fChangeManager.clear();
+
+		boolean usingLocalGetter = isUsingLocalGetter();
+		boolean usingLocalSetter = isUsingLocalSetter();
+		result.merge(checkMethodNames(usingLocalGetter, usingLocalSetter));
+		pm.worked(1);
+		if (result.hasFatalError())
+			return result;
+		pm.setTaskName(RefactoringCoreMessages.SelfEncapsulateField_searching_for_cunits);
+		final SubProgressMonitor subPm= new SubProgressMonitor(pm, 5);
+		ICompilationUnit[] affectedCUs= RefactoringSearchEngine.findAffectedCompilationUnits(
+				SearchPattern.createPattern(fField, IJavaSearchConstants.REFERENCES),
+				RefactoringScopeFactory.create(fField, fConsiderVisibility),
+				subPm,
+				result, true);
+
+		checkInHierarchy(result, usingLocalGetter, usingLocalSetter);
+		if (result.hasFatalError())
+			return result;
+
+		pm.setTaskName(RefactoringCoreMessages.SelfEncapsulateField_analyzing);
+		IProgressMonitor sub= new SubProgressMonitor(pm, 5);
+		sub.beginTask(NO_NAME, affectedCUs.length);
+		IVariableBinding fieldIdentifier= fFieldDeclaration.resolveBinding();
+		ITypeBinding declaringClass=
+			((AbstractTypeDeclaration)ASTNodes.getParent(fFieldDeclaration, AbstractTypeDeclaration.class)).resolveBinding();
+		List<TextEditGroup> ownerDescriptions= new ArrayList<TextEditGroup>();
+		ICompilationUnit owner= fField.getCompilationUnit();
+		fImportRewrite= StubUtility.createImportRewrite(fRoot, true);
+
+		for (int i= 0; i < affectedCUs.length; i++) {
+			ICompilationUnit unit= affectedCUs[i];
+			sub.subTask(BasicElementLabels.getFileName(unit));
+			CompilationUnit root= null;
+			ASTRewrite rewriter= null;
+			ImportRewrite importRewrite;
+			List<TextEditGroup> descriptions;
+			if (owner.equals(unit)) {
+				root= fRoot;
+				rewriter= fRewriter;
+				importRewrite= fImportRewrite;
+				descriptions= ownerDescriptions;
+			} else {
+				root= new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(unit, true);
+				rewriter= ASTRewrite.create(root.getAST());
+				descriptions= new ArrayList<TextEditGroup>();
+				importRewrite= StubUtility.createImportRewrite(root, true);
+			}
+			checkCompileErrors(result, root, unit);
+			AccessAnalyzer analyzer= new AccessAnalyzer(this, unit, fieldIdentifier, declaringClass, rewriter, importRewrite);
+			root.accept(analyzer);
+			result.merge(analyzer.getStatus());
+			if (!fSetterMustReturnValue)
+				fSetterMustReturnValue= analyzer.getSetterMustReturnValue();
+			if (result.hasFatalError()) {
+				fChangeManager.clear();
+				return result;
+			}
+			descriptions.addAll(analyzer.getGroupDescriptions());
+			if (!owner.equals(unit))
+				createEdits(unit, rewriter, descriptions, importRewrite);
+			sub.worked(1);
+			if (pm.isCanceled())
+				throw new OperationCanceledException();
+		}
+		ownerDescriptions.addAll(addGetterSetterChanges(fRoot, fRewriter, owner.findRecommendedLineSeparator(),usingLocalSetter, usingLocalGetter));
+		createEdits(owner, fRewriter, ownerDescriptions, fImportRewrite);
+
+		sub.done();
+		IFile[] filesToBeModified= ResourceUtil.getFiles(fChangeManager.getAllCompilationUnits());
+		result.merge(Checks.validateModifiesFiles(filesToBeModified, getValidationContext()));
+		if (result.hasFatalError())
+			return result;
+		ResourceChangeChecker.checkFilesToBeChanged(filesToBeModified, new SubProgressMonitor(pm, 1));
+		return result;
+	}
+

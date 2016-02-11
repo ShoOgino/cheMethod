@@ -1,0 +1,25 @@
+	private static void replaceCast(CastExpression castExpression, Expression replacement, ASTRewrite rewrite, TextEditGroup group) {
+		boolean castEnclosedInNecessaryParentheses = castExpression.getParent() instanceof ParenthesizedExpression
+													 && NecessaryParenthesesChecker
+															 .needsParentheses(castExpression, castExpression.getParent().getParent(),
+																			   castExpression.getParent().getLocationInParent());
+
+		ASTNode toReplace = castEnclosedInNecessaryParentheses ? castExpression.getParent() : castExpression;
+		ASTNode move;
+		if (NecessaryParenthesesChecker.needsParentheses(replacement, toReplace.getParent(), toReplace.getLocationInParent())) {
+			if (replacement.getParent() instanceof ParenthesizedExpression) {
+				move = rewrite.createMoveTarget(replacement.getParent());
+			} else if (castEnclosedInNecessaryParentheses) {
+				toReplace = castExpression;
+				move = rewrite.createMoveTarget(replacement);
+			} else {
+				ParenthesizedExpression parentheses = replacement.getAST().newParenthesizedExpression();
+				parentheses.setExpression((Expression)rewrite.createMoveTarget(replacement));
+				move = parentheses;
+			}
+		} else {
+			move = rewrite.createMoveTarget(replacement);
+		}
+		rewrite.replace(toReplace, move, group);
+	}
+

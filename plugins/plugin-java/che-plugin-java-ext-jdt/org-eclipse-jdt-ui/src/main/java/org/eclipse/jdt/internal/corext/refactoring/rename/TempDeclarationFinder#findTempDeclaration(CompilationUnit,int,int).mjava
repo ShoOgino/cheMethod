@@ -1,0 +1,35 @@
+	/**
+	 * @return <code>null</code> if the selection is invalid or does not cover a temp
+	 * declaration or reference.
+	 */
+	public static VariableDeclaration findTempDeclaration(CompilationUnit cu, int selectionOffset, int selectionLength) {
+		TempSelectionAnalyzer analyzer= new TempSelectionAnalyzer(selectionOffset, selectionLength);
+		cu.accept(analyzer);
+
+		ASTNode[] selected= analyzer.getSelectedNodes();
+		if (selected == null || selected.length != 1)
+			return null;
+
+		ASTNode selectedNode= selected[0];
+		if (selectedNode instanceof VariableDeclaration)
+			return (VariableDeclaration)selectedNode;
+
+		if (selectedNode instanceof Name){
+			Name reference= (Name)selectedNode;
+			IBinding binding= reference.resolveBinding();
+			if (binding == null)
+				return null;
+			ASTNode declaringNode= cu.findDeclaringNode(binding);
+			if (declaringNode instanceof VariableDeclaration)
+				return (VariableDeclaration)declaringNode;
+			else
+				return null;
+		} else if (selectedNode instanceof VariableDeclarationStatement){
+			VariableDeclarationStatement vds= (VariableDeclarationStatement)selectedNode;
+			if (vds.fragments().size() != 1)
+				return null;
+			return (VariableDeclaration)vds.fragments().get(0);
+		}
+		return null;
+	}
+

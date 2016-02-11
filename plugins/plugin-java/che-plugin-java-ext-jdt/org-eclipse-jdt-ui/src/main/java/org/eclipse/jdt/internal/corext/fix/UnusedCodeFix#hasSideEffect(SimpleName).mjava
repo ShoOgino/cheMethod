@@ -1,0 +1,30 @@
+	private static boolean hasSideEffect(SimpleName reference) {
+		ASTNode parent = reference.getParent();
+		while (parent instanceof QualifiedName) {
+			parent = parent.getParent();
+		}
+		if (parent instanceof FieldAccess) {
+			parent = parent.getParent();
+		}
+
+		ASTNode node = null;
+		int nameParentType = parent.getNodeType();
+		if (nameParentType == ASTNode.ASSIGNMENT) {
+			Assignment assignment = (Assignment)parent;
+			node = assignment.getRightHandSide();
+		} else if (nameParentType == ASTNode.SINGLE_VARIABLE_DECLARATION) {
+			SingleVariableDeclaration decl = (SingleVariableDeclaration)parent;
+			node = decl.getInitializer();
+			if (node == null)
+				return false;
+		} else if (nameParentType == ASTNode.VARIABLE_DECLARATION_FRAGMENT) {
+			node = parent;
+		} else {
+			return false;
+		}
+
+		ArrayList<Expression> sideEffects = new ArrayList<Expression>();
+		node.accept(new SideEffectFinder(sideEffects));
+		return sideEffects.size() > 0;
+	}
+

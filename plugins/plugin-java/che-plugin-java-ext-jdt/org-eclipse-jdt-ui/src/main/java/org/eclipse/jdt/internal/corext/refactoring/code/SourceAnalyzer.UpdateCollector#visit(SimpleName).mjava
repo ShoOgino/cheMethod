@@ -1,0 +1,37 @@
+		@Override
+		public boolean visit(SimpleName node) {
+			addReferencesToName(node);
+			IBinding binding= node.resolveBinding();
+			if (binding instanceof ITypeBinding) {
+				ITypeBinding type= (ITypeBinding)binding;
+				if (type.isTypeVariable()) {
+					addTypeVariableReference(type, node);
+				}
+			} else if (binding instanceof IVariableBinding) {
+				IVariableBinding vb= (IVariableBinding)binding;
+				if (vb.isField() && ! isStaticallyImported(node)) {
+					Name topName= ASTNodes.getTopMostName(node);
+					if (node == topName || node == ASTNodes.getLeftMostSimpleName(topName)) {
+						StructuralPropertyDescriptor location= node.getLocationInParent();
+						if (location != SingleVariableDeclaration.NAME_PROPERTY
+							&& location != VariableDeclarationFragment.NAME_PROPERTY) {
+							fImplicitReceivers.add(node);
+						}
+					}
+				} else if (!vb.isField()) {
+					// we have a local. Check if it is a parameter.
+					ParameterData data= fParameters.get(binding);
+					if (data != null) {
+						ASTNode parent= node.getParent();
+						if (parent instanceof Expression) {
+							int precedence= OperatorPrecedence.getExpressionPrecedence((Expression)parent);
+							if (precedence != Integer.MAX_VALUE) {
+								data.setOperatorPrecedence(precedence);
+							}
+						}
+					}
+				}
+			}
+			return true;
+		}
+

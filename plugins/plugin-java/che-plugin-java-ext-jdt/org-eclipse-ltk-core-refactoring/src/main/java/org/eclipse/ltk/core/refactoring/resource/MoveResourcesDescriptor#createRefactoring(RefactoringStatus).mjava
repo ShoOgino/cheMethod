@@ -1,0 +1,51 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.ltk.core.refactoring.RefactoringDescriptor#createRefactoring(org.eclipse.ltk.core.refactoring.RefactoringStatus)
+	 */
+	public Refactoring createRefactoring(RefactoringStatus status) throws CoreException {
+		IWorkspaceRoot root= ResourcesPlugin.getWorkspace().getRoot();
+
+		IPath destinationPath= getDestinationPath();
+		if (destinationPath == null) {
+			status.addFatalError(RefactoringCoreMessages.MoveResourcesDescriptor_error_destination_not_set);
+			return null;
+		}
+
+		IResource destination= root.findMember(destinationPath);
+		if (!(destination instanceof IFolder || destination instanceof IProject) || !destination.exists()) {
+			status.addFatalError(Messages.format(RefactoringCoreMessages.MoveResourcesDescriptor_error_destination_not_exists, BasicElementLabels.getPathLabel(destinationPath, false)));
+			return null;
+		}
+
+
+		IPath[] paths= getResourcePathsToMove();
+		if (paths == null) {
+			status.addFatalError(RefactoringCoreMessages.MoveResourcesDescriptor_error_moved_not_set);
+			return null;
+		}
+
+		IResource[] resources= new IResource[paths.length];
+		for (int i= 0; i < paths.length; i++) {
+			IPath path= paths[i];
+			if (path == null) {
+				status.addFatalError(RefactoringCoreMessages.MoveResourcesDescriptor_error_moved_contains_null);
+				return null;
+			}
+			IResource resource= root.findMember(path);
+			if (resource == null || !resource.exists()) {
+				status.addFatalError(Messages.format(RefactoringCoreMessages.MoveResourcesDescriptor_error_moved_not_exists, BasicElementLabels.getPathLabel(path, false)));
+				return null;
+			}
+			if (!(resource instanceof IFile || resource instanceof IFolder)) {
+				status.addFatalError(Messages.format(RefactoringCoreMessages.MoveResourcesDescriptor_error_moved_not_file_or_folder, BasicElementLabels.getPathLabel(path, false)));
+				return null;
+			}
+			resources[i]= resource;
+		}
+
+		MoveResourcesProcessor processor= new MoveResourcesProcessor(resources);
+		processor.setDestination((IContainer) destination);
+		processor.setUpdateReferences(isUpdateReferences());
+
+		return new MoveRefactoring(processor);
+	}
+

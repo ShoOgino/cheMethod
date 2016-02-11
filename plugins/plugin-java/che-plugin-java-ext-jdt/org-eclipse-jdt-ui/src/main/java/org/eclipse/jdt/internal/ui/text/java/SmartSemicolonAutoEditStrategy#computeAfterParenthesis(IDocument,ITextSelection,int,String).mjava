@@ -1,0 +1,52 @@
+	/**
+	 * Computes an insert position for an opening brace if <code>offset</code> maps to a position in
+	 * <code>document</code> with a expression in parenthesis that will take a block after the closing parenthesis.
+	 *
+	 * @param document the document being modified
+	 * @param line the current line under investigation
+	 * @param offset the offset of the caret position, relative to the line start.
+	 * @param partitioning the document partitioning
+	 * @return an insert position relative to the line start if <code>line</code> contains a parenthesized expression that can be followed by a block, -1 otherwise
+	 */
+	private static int computeAfterParenthesis(IDocument document, ITextSelection line, int offset, String partitioning) {
+		// find the opening parenthesis for every closing parenthesis on the current line after offset
+		// return the position behind the closing parenthesis if it looks like a method declaration
+		// or an expression for an if, while, for, catch statement
+		int pos= offset + line.getOffset();
+		int length= line.getOffset() + line.getLength();
+		int scanTo= scanForward(document, pos, partitioning, length, '}');
+		if (scanTo == -1)
+			scanTo= length;
+
+		int closingParen= findClosingParenToLeft(document, pos, partitioning) - 1;
+
+		while (true) {
+			int startScan= closingParen + 1;
+			closingParen= scanForward(document, startScan, partitioning, scanTo, ')');
+			if (closingParen == -1)
+				break;
+
+			int openingParen= findOpeningParenMatch(document, closingParen, partitioning);
+
+			// no way an expression at the beginning of the document can mean anything
+			if (openingParen < 1)
+				break;
+
+			// only select insert positions for parenthesis currently embracing the caret
+			if (openingParen > pos)
+				continue;
+
+			if (looksLikeAnonymousClassDef(document, openingParen - 1, partitioning))
+				return closingParen + 1 - line.getOffset();
+
+			if (looksLikeIfWhileForCatch(document, openingParen - 1, partitioning))
+				return closingParen + 1 - line.getOffset();
+
+			if (looksLikeMethodDecl(document, openingParen - 1, partitioning))
+				return closingParen + 1 - line.getOffset();
+
+		}
+
+		return -1;
+	}
+

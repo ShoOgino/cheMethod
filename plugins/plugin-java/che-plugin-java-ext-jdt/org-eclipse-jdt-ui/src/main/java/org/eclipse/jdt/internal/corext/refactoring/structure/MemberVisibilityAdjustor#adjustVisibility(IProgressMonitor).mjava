@@ -1,0 +1,46 @@
+	/**
+	 * Adjusts the visibilities of the referenced and referencing elements.
+	 *
+	 * @param monitor the progress monitor to use
+	 * @throws JavaModelException if an error occurs during search
+	 */
+	public final void adjustVisibility(final IProgressMonitor monitor) throws JavaModelException {
+		try {
+			monitor.beginTask("", 7); //$NON-NLS-1$
+			monitor.setTaskName(RefactoringCoreMessages.MemberVisibilityAdjustor_checking);
+			final RefactoringSearchEngine2 engine = new RefactoringSearchEngine2(
+					SearchPattern.createPattern(fReferenced, IJavaSearchConstants.REFERENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE));
+			engine.setScope(fScope);
+			engine.setStatus(fStatus);
+			engine.setOwner(fOwner);
+			if (fIncoming) {
+				// check calls to the referenced (moved) element, adjust element
+				// visibility if necessary.
+				engine.searchPattern(new SubProgressMonitor(monitor, 1));
+				adjustIncomingVisibility((SearchResultGroup[])engine.getResults(), new SubProgressMonitor(monitor, 1));
+				engine.clearResults();
+				// If the moved element is a type: Adjust visibility of members
+				// of the type if they are accessed outside of the moved type
+				if (fReferenced instanceof IType) {
+					final IType type = (IType)fReferenced;
+					adjustMemberVisibility(type, new SubProgressMonitor(monitor, 1));
+				}
+			}
+			if (fOutgoing) {
+				/*
+				 * Search for the types, fields, and methods which
+				 * are called/acted upon inside the referenced element (the one
+				 * to be moved) and assure that they are also visible from
+				 * within the referencing element (the destination type (or
+				 * package if move to new type)).
+				 */
+				engine.searchReferencedTypes(fReferenced, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+				engine.searchReferencedFields(fReferenced, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+				engine.searchReferencedMethods(fReferenced, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+				adjustOutgoingVisibility((SearchResultGroup[])engine.getResults(), new SubProgressMonitor(monitor, 1));
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

@@ -1,0 +1,31 @@
+    @Test
+	public void testDestination_yes_cuToRoot() throws Exception{
+		ParticipantTesting.reset();
+		String newSource= "package p;class A{void foo(){}class Inner{}}";
+		String oldSource= "package p;class A{void foo(){}class Inner{}}";
+		ICompilationUnit cu1= getPackageP().createCompilationUnit("A.java", oldSource, false, new NullProgressMonitor());
+		IPackageFragmentRoot destination= JavaProjectHelper.addSourceContainer(getRoot().getJavaProject(), "src2");
+		IJavaElement[] javaElements= { cu1};
+		IResource[] resources= {};
+		String[] handles= ParticipantTesting.createHandles(new Object[] {cu1, cu1.getTypes()[0], cu1.getResource()});
+		JavaMoveProcessor ref= verifyEnabled(resources, javaElements, createReorgQueries());
+
+		verifyValidDestination(ref, destination);
+
+		assertTrue("source file does not exist before moving", cu1.exists());
+		RefactoringStatus status= performRefactoring(ref, true);
+		assertEquals(null, status);
+		assertTrue("source file exists after moving", ! cu1.exists());
+		ICompilationUnit newCu= destination.getPackageFragment("p").getCompilationUnit(cu1.getElementName());
+		assertTrue("new file does not exist after moving", newCu.exists());
+		assertEqualLines("source differs", newSource, newCu.getSource());
+
+		ParticipantTesting.testMove(
+				handles,
+				new MoveArguments[] {
+						new MoveArguments(destination.getPackageFragment("p"), ref.getUpdateReferences()),
+						new MoveArguments(destination.getPackageFragment("p"), ref.getUpdateReferences()),
+						new MoveArguments(destination.getPackageFragment("p").getResource(), ref.getUpdateReferences()) });
+
+	}
+

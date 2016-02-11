@@ -1,0 +1,42 @@
+    @Test
+    @Ignore
+    public void testHierarchicalToSuperpackage() throws Exception {
+        fRenameSubpackages = true;
+
+        PackageRename rename = new PackageRename(
+                new String[]{"a.b", "a.b.b", "a", "p"},
+                new String[][]{{"B"}, {"BB"}, {}},
+                "a",
+                true
+        );
+        IPackageFragment thisPackage = rename.fPackages[0];
+        IFolder src = (IFolder)getRoot().getResource();
+        IFolder a = src.getFolder("a");
+        IFolder ab = src.getFolder("a/b");
+        IFolder abb = src.getFolder("a/b/b");
+
+        ParticipantTesting.reset();
+
+        String[] createHandles = {};
+        String[] deleteHandles = {};
+        String[] moveHandles = ParticipantTesting.createHandles(ab.getFile("B.java"), abb.getFile("BB.java"));
+        String[] renameHandles = ParticipantTesting.createHandles(JavaElementUtil.getPackageAndSubpackages(thisPackage));
+
+        rename.createAndPerform(RefactoringStatus.OK);
+        rename.checkExpectedState();
+
+        ParticipantTesting.testCreate(createHandles);
+        ParticipantTesting.testDelete(deleteHandles);
+        ParticipantTesting.testMove(moveHandles, new MoveArguments[]{
+                new MoveArguments(a, true),
+                new MoveArguments(ab, true),
+        });
+        ParticipantTesting.testRename(renameHandles, new RenameArguments[]{
+                new RenameArguments("a", true),
+                new RenameArguments("a.b", true),
+        });
+
+        performUndo();
+        rename.checkOriginalState();
+    }
+

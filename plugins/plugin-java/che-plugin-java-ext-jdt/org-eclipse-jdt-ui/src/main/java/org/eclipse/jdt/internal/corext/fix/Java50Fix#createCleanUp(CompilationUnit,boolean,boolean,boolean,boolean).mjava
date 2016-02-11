@@ -1,0 +1,44 @@
+	public static ICleanUpFix createCleanUp(CompilationUnit compilationUnit,
+											boolean addOverrideAnnotation,
+											boolean addOverrideInterfaceAnnotation,
+											boolean addDeprecatedAnnotation,
+											boolean rawTypeReference) {
+
+		ICompilationUnit cu = (ICompilationUnit)compilationUnit.getJavaElement();
+		if (!JavaModelUtil.is50OrHigher(cu.getJavaProject()))
+			return null;
+
+		if (!addOverrideAnnotation && !addDeprecatedAnnotation && !rawTypeReference)
+			return null;
+
+		List<CompilationUnitRewriteOperation> operations = new ArrayList<CompilationUnitRewriteOperation>();
+
+		IProblem[] problems = compilationUnit.getProblems();
+		IProblemLocation[] locations= new IProblemLocation[problems.length];
+		for (int i= 0; i < problems.length; i++) {
+			locations[i]= new ProblemLocation(problems[i]);
+		}
+
+		if (addOverrideAnnotation)
+			createAddOverrideAnnotationOperations(compilationUnit, addOverrideInterfaceAnnotation, locations, operations);
+
+		if (addDeprecatedAnnotation)
+			createAddDeprecatedAnnotationOperations(compilationUnit, locations, operations);
+
+		if (rawTypeReference)
+			createRawTypeReferenceOperations(compilationUnit, locations, operations);
+
+		if (operations.size() == 0)
+			return null;
+
+		String fixName;
+		if (rawTypeReference) {
+			fixName= FixMessages.Java50Fix_add_type_parameters_change_name;
+		} else {
+			fixName= FixMessages.Java50Fix_add_annotations_change_name;
+		}
+
+		CompilationUnitRewriteOperation[] operationsArray= operations.toArray(new CompilationUnitRewriteOperation[operations.size()]);
+		return new Java50Fix(fixName, compilationUnit, operationsArray);
+	}
+

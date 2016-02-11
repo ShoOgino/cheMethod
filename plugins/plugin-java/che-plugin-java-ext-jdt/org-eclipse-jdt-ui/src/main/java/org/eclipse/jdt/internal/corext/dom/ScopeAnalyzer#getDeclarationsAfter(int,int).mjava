@@ -1,0 +1,26 @@
+	public IBinding[] getDeclarationsAfter(int offset, int flags) {
+		try {
+			org.eclipse.jdt.core.dom.NodeFinder finder = new org.eclipse.jdt.core.dom.NodeFinder(fRoot, offset, 0);
+			ASTNode node = finder.getCoveringNode();
+			if (node == null) {
+				return null;
+			}
+
+			ASTNode declaration = ASTResolving.findParentStatement(node);
+			while (declaration instanceof Statement && declaration.getNodeType() != ASTNode.BLOCK) {
+				declaration = declaration.getParent();
+			}
+
+			if (declaration instanceof Block) {
+				DefaultBindingRequestor requestor = new DefaultBindingRequestor();
+				DeclarationsAfterVisitor visitor = new DeclarationsAfterVisitor(node.getStartPosition(), flags, requestor);
+				declaration.accept(visitor);
+				List<IBinding> result = requestor.getResult();
+				return result.toArray(new IBinding[result.size()]);
+			}
+			return NO_BINDING;
+		} finally {
+			clearLists();
+		}
+	}
+

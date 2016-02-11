@@ -1,0 +1,53 @@
+    @Test
+	public void testTypeMismatchForParameterizedType2() throws Exception {
+		IPackageFragment pack1= fSourceFolder.createPackageFragment("test1", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("import java.util.*;\n");
+		buf.append("public class E {\n");
+		buf.append("    public void foo() {\n");
+		buf.append("        List<Integer> list= new ArrayList<Number>();\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+		
+		CompilationUnit astRoot= getASTRoot(cu);
+		ArrayList proposals= collectCorrections(cu, astRoot);
+		assertNumberOfProposals(proposals, 1);
+		
+		CUCorrectionProposal proposal= (CUCorrectionProposal) proposals.get(0);
+		String preview1= getPreviewContent(proposal);
+		
+		buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("import java.util.*;\n");
+		buf.append("public class E {\n");
+		buf.append("    public void foo() {\n");
+		buf.append("        List<Number> list= new ArrayList<Number>();\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		String expected1= buf.toString();
+		
+		assertEqualStringsIgnoreOrder(new String[] { preview1 }, new String[] { expected1 });
+		
+		Accessor accessor= new Accessor(proposal, TypeChangeCorrectionProposal.class);
+		ITypeBinding[] typeProposals= (ITypeBinding[]) accessor.get("fTypeProposals");
+		String[] typeNames= new String[typeProposals.length];
+		for (int i= 0; i < typeNames.length; i++) {
+			typeNames[i]= BindingLabelProvider.getBindingLabel(typeProposals[i], JavaElementLabels.T_TYPE_PARAMETERS | JavaElementLabels.T_FULLY_QUALIFIED);
+		}
+		String[] expectedNames= new String[] {
+				"java.util.List<Number>",
+				"java.util.ArrayList<Number>",
+				"java.util.Collection<Number>",
+				"java.lang.Iterable<Number>",
+				"java.util.RandomAccess",
+				"java.lang.Cloneable",
+				"java.io.Serializable",
+				"java.util.AbstractList<Number>",
+				"java.util.AbstractCollection<Number>",
+				"java.lang.Object",
+		};
+		assertArrayEquals(expectedNames, typeNames);
+	}
+

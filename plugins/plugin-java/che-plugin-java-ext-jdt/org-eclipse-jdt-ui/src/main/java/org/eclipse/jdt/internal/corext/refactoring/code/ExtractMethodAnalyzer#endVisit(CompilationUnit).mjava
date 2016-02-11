@@ -1,0 +1,72 @@
+	@Override
+	public void endVisit(CompilationUnit node) {
+		RefactoringStatus status= getStatus();
+		superCall: {
+			if (status.hasFatalError())
+				break superCall;
+			if (!hasSelectedNodes()) {
+				ASTNode coveringNode= getLastCoveringNode();
+				if (coveringNode instanceof Block && coveringNode.getParent() instanceof MethodDeclaration) {
+					MethodDeclaration methodDecl= (MethodDeclaration)coveringNode.getParent();
+					Message[] messages= ASTNodes.getMessages(methodDecl, ASTNodes.NODE_ONLY);
+					if (messages.length > 0) {
+						status.addFatalError(Messages.format(
+								RefactoringCoreMessages.ExtractMethodAnalyzer_compile_errors,
+								BasicElementLabels.getJavaElementName(methodDecl.getName().getIdentifier())), JavaStatusContext.create(fCUnit, methodDecl));
+						break superCall;
+					}
+				}
+				status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_invalid_selection);
+				break superCall;
+			}
+			fEnclosingBodyDeclaration= (BodyDeclaration)ASTNodes.getParent(getFirstSelectedNode(), BodyDeclaration.class);
+			if (fEnclosingBodyDeclaration == null ||
+					(fEnclosingBodyDeclaration.getNodeType() != ASTNode.METHOD_DECLARATION &&
+					 fEnclosingBodyDeclaration.getNodeType() != ASTNode.FIELD_DECLARATION &&
+					 fEnclosingBodyDeclaration.getNodeType() != ASTNode.INITIALIZER)) {
+				status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_invalid_selection);
+				break superCall;
+			} else if (ASTNodes.getEnclosingType(fEnclosingBodyDeclaration) == null) {
+				status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_compile_errors_no_parent_binding);
+				break superCall;
+			} else if (fEnclosingBodyDeclaration.getNodeType() == ASTNode.METHOD_DECLARATION) {
+				fEnclosingMethodBinding= ((MethodDeclaration)fEnclosingBodyDeclaration).resolveBinding();
+			}
+			if (!isSingleExpressionOrStatementSet()) {
+				status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_single_expression_or_set);
+				break superCall;
+			}
+			if (isExpressionSelected()) {
+				ASTNode expression= getFirstSelectedNode();
+				if (expression instanceof Name) {
+					Name name= (Name)expression;
+					if (name.resolveBinding() instanceof ITypeBinding) {
+						status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_extract_type_reference);
+						break superCall;
+					}
+					if (name.resolveBinding() instanceof IMethodBinding) {
+						status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_extract_method_name_reference);
+						break superCall;
+					}
+					if (name.resolveBinding() instanceof IVariableBinding) {
+						StructuralPropertyDescriptor locationInParent= name.getLocationInParent();
+						if (locationInParent == QualifiedName.NAME_PROPERTY || (locationInParent == FieldAccess.NAME_PROPERTY && !(((FieldAccess) name.getParent()).getExpression() instanceof ThisExpression)))  {
+							status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_extract_part_of_qualified_name);
+							break superCall;
+						}
+					}
+					if (name.isSimpleName() && ((SimpleName)name).isDeclaration()) {
+						status.addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_extract_name_in_declaration);
+						break superCall;
+					}
+				}
+				fForceStatic=
+					ASTNodes.getParent(expression, ASTNode.SUPER_CONSTRUCTOR_INVOCATION) != null ||
+					ASTNodes.getParent(expression, ASTNode.CONSTRUCTOR_INVOCATION) != null;
+			}
+			status.merge(LocalTypeAnalyzer.perform(fEnclosingBodyDeclaration, getSelection()));
+			computeLastStatementSelected();
+		}
+		super.endVisit(node);
+	}
+

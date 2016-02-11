@@ -1,0 +1,37 @@
+    @Test
+	public void testDestination_yes_cuToFolder() throws Exception{
+		ParticipantTesting.reset();
+		ICompilationUnit cu1= getPackageP().createCompilationUnit("A.java", "package p;class A{void foo(){}class Inner{}}", false, new NullProgressMonitor());
+		IProject superFolder= RefactoringTestSetup.getProject().getProject();
+		IFolder folder= superFolder.getFolder("folder");
+		folder.create(true, true, null);
+
+		IJavaElement[] javaElements= { cu1};
+		IResource[] resources= {};
+		String[] handles= ParticipantTesting.createHandles(new Object[] {cu1, cu1.getTypes()[0], cu1.getResource()});
+		JavaMoveProcessor ref= verifyEnabled(resources, javaElements, createReorgQueries());
+
+		Object destination= folder;
+		verifyValidDestination(ref, destination);
+
+		assertTrue("source file does not exist before", cu1.exists());
+		String expectedSource= cu1.getSource();
+
+		RefactoringStatus status= performRefactoring(ref, true);
+		assertEquals(null, status);
+
+		assertTrue("source file not moved", ! cu1.getResource().exists());
+
+		IFile newFile= folder.getFile(cu1.getElementName());
+		assertTrue("new file does not exist after", newFile.exists());
+
+		assertEqualLines("source compare failed", expectedSource, getContents(newFile));
+
+		ParticipantTesting.testMove(
+				handles,
+				new MoveArguments[] {
+						new MoveArguments(destination, ref.getUpdateReferences()),
+						new MoveArguments(destination, ref.getUpdateReferences()),
+						new MoveArguments(folder, ref.getUpdateReferences())});
+	}
+

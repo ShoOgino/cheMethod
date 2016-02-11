@@ -1,0 +1,80 @@
+	/**
+	 * {@inheritDoc}
+	 * <p>
+	 * The composite change sends <code>perform</code> to all its <em>enabled</em>
+	 * children. If one of the children throws an exception the remaining children
+	 * will not receive the <code>perform</code> call. In this case the method <code>
+	 * getUndoUntilException</code> can be used to get an undo object containing the
+	 * undo objects of all executed children.
+	 * </p>
+	 * <p>
+	 * Client are allowed to extend this method.
+	 * </p>
+	 */
+	public Change perform(IProgressMonitor pm) throws CoreException {
+		fUndoUntilException= null;
+		List undos= new ArrayList(fChanges.size());
+		pm.beginTask("", fChanges.size()); //$NON-NLS-1$
+		pm.setTaskName(RefactoringCoreMessages.CompositeChange_performingChangesTask_name);
+		Change change= null;
+		boolean canceled= false;
+		try {
+			for (Iterator iter= fChanges.iterator(); iter.hasNext();) {
+				change= (Change)iter.next();
+				if (canceled && !internalProcessOnCancel(change))
+					continue;
+
+				if (change.isEnabled()) {
+					Change undoChange= null;
+					try {
+						undoChange= change.perform(new SubProgressMonitor(pm, 1));
+					} catch(OperationCanceledException e) {
+						canceled= true;
+						if (!internalContinueOnCancel())
+							throw e;
+						undos= null;
+					}
+					if (undos != null) {
+						if (undoChange == null) {
+							undos= null;
+						} else {
+							undos.add(undoChange);
+						}
+					}
+				}
+				// remove the change from the list of children to give
+				// the garbage collector the change to collect the change. This
+				// ensures that the memory consumption doesn't go up when
+				// producing the undo change tree.
+				iter.remove();
+				// Make sure we dispose the change since it will now longer be
+				// in the list of children when call CompositeChange#dispose()
+				final Change changeToDispose= change;
+				SafeRunner.run(new ISafeRunnable() {
+					public void run() throws Exception {
+						changeToDispose.dispose();
+					}
+					public void handleException(Throwable exception) {
+						RefactoringCorePlugin.log(exception);
+					}
+				});
+			}
+			if (canceled)
+				throw new OperationCanceledException();
+			if (undos != null) {
+				Collections.reverse(undos);
+				return createUndoChange((Change[]) undos.toArray(new Change[undos.size()]));
+			} else {
+				return null;
+			}
+		} catch (CoreException e) {
+			handleUndos(change, undos);
+			internalHandleException(change, e);
+			throw e;
+		} catch (RuntimeException e) {
+			handleUndos(change, undos);
+			internalHandleException(change, e);
+			throw e;
+		}
+	}
+

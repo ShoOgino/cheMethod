@@ -1,0 +1,24 @@
+	private IType[] searchForOuterTypesOfReferences(IMethod[] newNameMethods, IProgressMonitor pm) throws CoreException {
+		final Set<IType> outerTypesOfReferences= new HashSet<IType>();
+		SearchPattern pattern= RefactoringSearchEngine.createOrPattern(newNameMethods, IJavaSearchConstants.REFERENCES);
+		IJavaSearchScope scope= createRefactoringScope(getMethod());
+		SearchRequestor requestor= new SearchRequestor() {
+			@Override
+			public void acceptSearchMatch(SearchMatch match) throws CoreException {
+				Object element= match.getElement();
+				if (!(element instanceof IMember))
+					return; // e.g. an IImportDeclaration for a static method import
+				IMember member= (IMember) element;
+				IType declaring= member.getDeclaringType();
+				if (declaring == null)
+					return;
+				IType outer= declaring.getDeclaringType();
+				if (outer != null)
+					outerTypesOfReferences.add(declaring);
+			}
+		};
+		new SearchEngine().search(pattern, SearchUtils.getDefaultSearchParticipants(),
+				scope, requestor, pm);
+		return outerTypesOfReferences.toArray(new IType[outerTypesOfReferences.size()]);
+	}
+

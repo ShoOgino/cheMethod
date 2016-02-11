@@ -1,0 +1,47 @@
+	/*
+	 * @see org.eclipse.jface.text.contentassist.ICompletionProposalComputer#computeCompletionProposals(org.eclipse.jface.text.contentassist.TextContentAssistInvocationContext, org.eclipse.core.runtime.IProgressMonitor)
+	 */
+	public List<ICompletionProposal> computeCompletionProposals(ContentAssistInvocationContext context, IProgressMonitor monitor) {
+		if (!(context instanceof JavaContentAssistInvocationContext))
+			return Collections.emptyList();
+
+		JavaContentAssistInvocationContext javaContext= (JavaContentAssistInvocationContext) context;
+		ICompilationUnit unit= javaContext.getCompilationUnit();
+		if (unit == null)
+			return Collections.emptyList();
+
+		fEngine= computeCompletionEngine(javaContext);
+		if (fEngine == null)
+			return Collections.emptyList();
+
+		fEngine.reset();
+		fEngine.complete(javaContext.getViewer(), javaContext.getInvocationOffset(), unit);
+
+		TemplateProposal[] templateProposals= fEngine.getResults();
+		List<ICompletionProposal> result= new ArrayList<ICompletionProposal>(Arrays.asList(templateProposals));
+
+		IJavaCompletionProposal[] keyWordResults= javaContext.getKeywordProposals();
+		if (keyWordResults.length == 0)
+			return result;
+
+		/* Update relevance of template proposals that match with a keyword
+		 * give those templates slightly more relevance than the keyword to
+		 * sort them first.
+		 */
+		for (int k= 0; k < templateProposals.length; k++) {
+			TemplateProposal curr= templateProposals[k];
+			String name= curr.getTemplate().getPattern();
+			for (int i= 0; i < keyWordResults.length; i++) {
+				String keyword= keyWordResults[i].getDisplayString();
+				if (name.startsWith(keyword)) {
+					String content= curr.getTemplate().getPattern();
+					if (content.startsWith(keyword)) {
+						curr.setRelevance(keyWordResults[i].getRelevance() + 1);
+						break;
+					}
+				}
+			}
+		}
+		return result;
+	}
+

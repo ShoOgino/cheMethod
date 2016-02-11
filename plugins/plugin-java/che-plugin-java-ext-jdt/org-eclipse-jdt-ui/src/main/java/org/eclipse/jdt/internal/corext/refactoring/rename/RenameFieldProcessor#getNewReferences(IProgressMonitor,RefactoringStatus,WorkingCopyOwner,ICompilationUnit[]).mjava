@@ -1,0 +1,30 @@
+	private SearchResultGroup[] getNewReferences(IProgressMonitor pm, RefactoringStatus status, WorkingCopyOwner owner, ICompilationUnit[] newWorkingCopies) throws CoreException {
+		pm.beginTask("", 2); //$NON-NLS-1$
+		ICompilationUnit declaringCuWorkingCopy= RenameAnalyzeUtil.findWorkingCopyForCu(newWorkingCopies, fField.getCompilationUnit());
+		if (declaringCuWorkingCopy == null)
+			return new SearchResultGroup[0];
+
+		IField field= getFieldInWorkingCopy(declaringCuWorkingCopy, getNewElementName());
+		if (field == null || ! field.exists())
+			return new SearchResultGroup[0];
+
+		CollectingSearchRequestor requestor= null;
+		if (fDelegateUpdating && RefactoringAvailabilityTester.isDelegateCreationAvailable(getField())) {
+			// There will be two new matches inside the delegate (the invocation
+			// and the javadoc) which are OK and must not be reported.
+			final IField oldField= getFieldInWorkingCopy(declaringCuWorkingCopy, getCurrentElementName());
+			requestor= new CollectingSearchRequestor() {
+				@Override
+				public void acceptSearchMatch(SearchMatch match) throws CoreException {
+					if (!oldField.equals(match.getElement()))
+						super.acceptSearchMatch(match);
+				}
+			};
+		} else
+			requestor= new CollectingSearchRequestor();
+
+		SearchPattern newPattern= SearchPattern.createPattern(field, IJavaSearchConstants.REFERENCES);
+		IJavaSearchScope scope= RefactoringScopeFactory.create(fField, true, true);
+		return RefactoringSearchEngine.search(newPattern, owner, scope, requestor, new SubProgressMonitor(pm, 1), status);
+	}
+

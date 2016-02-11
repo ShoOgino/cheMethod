@@ -1,0 +1,35 @@
+		private void handleVariable(SimpleName node, IVariableBinding varbinding) {
+			if (!varbinding.isField())
+				return;
+
+			if (varbinding.isEnumConstant())
+				return;
+
+			ITypeBinding declaringClass = varbinding.getDeclaringClass();
+			if (Modifier.isStatic(varbinding.getModifiers())) {
+				if (fFindUnqualifiedStaticAccesses) {
+					Initializer initializer = (Initializer)ASTNodes.getParent(node, Initializer.class);
+					//Do not qualify assignments to static final fields in static initializers (would result in compile error)
+					StructuralPropertyDescriptor parentDescription = node.getLocationInParent();
+					if (initializer != null && Modifier.isStatic(initializer.getModifiers())
+							&& Modifier.isFinal(varbinding.getModifiers()) && parentDescription == Assignment.LEFT_HAND_SIDE_PROPERTY)
+						return;
+
+					//Do not qualify static fields if defined inside an anonymous class
+					if (declaringClass.isAnonymous())
+						return;
+
+					fResult.add(new AddStaticQualifierOperation(declaringClass, node));
+				}
+			} else if (fFindUnqualifiedAccesses){
+				String qualifier= getThisExpressionQualifier(declaringClass, fImportRewrite, node);
+				if (qualifier == null)
+					return;
+
+				if (qualifier.length() == 0)
+					qualifier= null;
+
+				fResult.add(new AddThisQualifierOperation(qualifier, node));
+			}
+		}
+

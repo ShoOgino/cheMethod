@@ -1,0 +1,34 @@
+	private void addMissingAtributes(ITypeBinding binding, ListRewrite listRewriter) {
+		Set<String> implementedAttribs = new HashSet<String>();
+		if (fAnnotation instanceof NormalAnnotation) {
+			List<MemberValuePair> list = ((NormalAnnotation)fAnnotation).values();
+			for (int i = 0; i < list.size(); i++) {
+				MemberValuePair curr = list.get(i);
+				implementedAttribs.add(curr.getName().getIdentifier());
+			}
+		} else if (fAnnotation instanceof SingleMemberAnnotation) {
+			implementedAttribs.add("value"); //$NON-NLS-1$
+		}
+		ASTRewrite rewriter = listRewriter.getASTRewrite();
+		AST ast = rewriter.getAST();
+		ImportRewriteContext context = null;
+		ASTNode bodyDeclaration = ASTResolving.findParentBodyDeclaration(listRewriter.getParent());
+		if (bodyDeclaration != null) {
+			context= new ContextSensitiveImportRewriteContext(bodyDeclaration, getImportRewrite());
+		}
+
+		IMethodBinding[] declaredMethods= binding.getDeclaredMethods();
+		for (int i= 0; i < declaredMethods.length; i++) {
+			IMethodBinding curr= declaredMethods[i];
+			if (!implementedAttribs.contains(curr.getName()) && curr.getDefaultValue() == null) {
+				MemberValuePair pair= ast.newMemberValuePair();
+				pair.setName(ast.newSimpleName(curr.getName()));
+				pair.setValue(newDefaultExpression(ast, curr.getReturnType(), context));
+				listRewriter.insertLast(pair, null);
+
+				addLinkedPosition(rewriter.track(pair.getName()), false, "val_name_" + i); //$NON-NLS-1$
+				addLinkedPosition(rewriter.track(pair.getValue()), false, "val_type_" + i); //$NON-NLS-1$
+			}
+		}
+	}
+

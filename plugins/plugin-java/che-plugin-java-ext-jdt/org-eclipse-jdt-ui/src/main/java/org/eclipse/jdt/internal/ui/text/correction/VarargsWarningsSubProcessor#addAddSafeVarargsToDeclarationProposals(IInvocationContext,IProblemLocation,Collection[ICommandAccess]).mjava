@@ -1,0 +1,34 @@
+	public static void addAddSafeVarargsToDeclarationProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		if (!JavaModelUtil.is17OrHigher(context.getCompilationUnit().getJavaProject()))
+			return;
+
+		ASTNode coveringNode= problem.getCoveringNode(context.getASTRoot());
+		IMethodBinding methodBinding;
+		if (coveringNode instanceof MethodInvocation) {
+			methodBinding= ((MethodInvocation) coveringNode).resolveMethodBinding();
+		} else if (coveringNode instanceof ClassInstanceCreation) {
+			methodBinding= ((ClassInstanceCreation) coveringNode).resolveConstructorBinding();
+		} else {
+			return;
+		}
+		if (methodBinding == null)
+			return;
+		
+		String label= Messages
+				.format(CorrectionMessages.VarargsWarningsSubProcessor_add_safevarargs_to_method_label, methodBinding.getName());
+
+		ITypeBinding declaringType= methodBinding.getDeclaringClass();
+		CompilationUnit astRoot= (CompilationUnit) coveringNode.getRoot();
+		if (declaringType != null && declaringType.isFromSource()) {
+			try {
+				ICompilationUnit targetCu= ASTResolving.findCompilationUnitForBinding(context.getCompilationUnit(), astRoot, declaringType);
+				if (targetCu != null) {
+					AddSafeVarargsProposal proposal= new AddSafeVarargsProposal(label, targetCu, null, methodBinding.getMethodDeclaration(), IProposalRelevance.ADD_SAFEVARARGS);
+					proposals.add(proposal);
+				}
+			} catch (JavaModelException e) {
+				return;
+			}
+		}
+	}
+

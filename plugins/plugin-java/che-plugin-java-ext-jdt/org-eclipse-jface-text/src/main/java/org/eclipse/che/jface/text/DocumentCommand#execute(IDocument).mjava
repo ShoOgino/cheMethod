@@ -1,0 +1,43 @@
+	/**
+	 * Executes the document commands on a document.
+	 *
+	 * @param document the document on which to execute the commands
+	 * @throws BadLocationException in case access to the given document fails
+	 * @since 2.1
+	 */
+	void execute(IDocument document) throws BadLocationException {
+
+		if (length == 0 && text == null && fCommands.size() == 0)
+			return;
+
+		DefaultPositionUpdater updater= new DefaultPositionUpdater(getCategory());
+		Position caretPosition= null;
+		try {
+			if (updateCaret()) {
+				document.addPositionCategory(getCategory());
+				document.addPositionUpdater(updater);
+				caretPosition= new Position(caretOffset);
+				document.addPosition(getCategory(), caretPosition);
+			}
+
+			final Command originalCommand= new Command(offset, length, text, owner);
+			for (final Iterator iterator= new CommandIterator(fCommands, originalCommand, false); iterator.hasNext(); )
+				((Command) iterator.next()).execute(document);
+
+		} catch (BadLocationException e) {
+			// ignore
+		} catch (BadPositionCategoryException e) {
+			// ignore
+		} finally {
+			if (updateCaret()) {
+				document.removePositionUpdater(updater);
+				try {
+					document.removePositionCategory(getCategory());
+				} catch (BadPositionCategoryException e) {
+					Assert.isTrue(false);
+				}
+				caretOffset= caretPosition.getOffset();
+			}
+		}
+	}
+

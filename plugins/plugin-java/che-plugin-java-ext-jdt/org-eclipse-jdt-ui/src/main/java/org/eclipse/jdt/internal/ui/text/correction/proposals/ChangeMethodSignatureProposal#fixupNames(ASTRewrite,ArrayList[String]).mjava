@@ -1,0 +1,58 @@
+	private void fixupNames(ASTRewrite rewrite, ArrayList<String> usedNames) {
+		AST ast= rewrite.getAST();
+		// set names for new parameters
+		for (int i= 0; i < fParameterChanges.length; i++) {
+			ChangeDescription curr= fParameterChanges[i];
+			if (curr instanceof ModifyDescription) {
+				ModifyDescription desc= (ModifyDescription) curr;
+
+				String typeKey= getParamTypeGroupId(i);
+				String nameKey= getParamNameGroupId(i);
+
+				// collect name suggestions
+				String favourite= null;
+				String[] excludedNames= usedNames.toArray(new String[usedNames.size()]);
+
+				String suggestedName= desc.name;
+				if (suggestedName != null) {
+					favourite= StubUtility.suggestArgumentName(getCompilationUnit().getJavaProject(), suggestedName, excludedNames);
+					addLinkedPositionProposal(nameKey, favourite, null);
+				}
+
+				if (desc instanceof EditDescription) {
+					addLinkedPositionProposal(nameKey, ((EditDescription)desc).orginalName, null);
+				}
+
+				Type type= desc.resultingParamType;
+				String[] suggestedNames= StubUtility.getArgumentNameSuggestions(getCompilationUnit().getJavaProject(), type, excludedNames);
+				for (int k= 0; k < suggestedNames.length; k++) {
+					addLinkedPositionProposal(nameKey, suggestedNames[k], null);
+				}
+				if (favourite == null) {
+					favourite= suggestedNames[0];
+				}
+				usedNames.add(favourite);
+
+				SimpleName[] names= desc.resultingParamName;
+				for (int j= 0; j < names.length; j++) {
+					names[j].setIdentifier(favourite);
+					addLinkedPosition(rewrite.track(names[j]), false, nameKey);
+				}
+
+				addLinkedPosition(rewrite.track(desc.resultingParamType), true, typeKey);
+
+				// collect type suggestions
+				ITypeBinding[] bindings= ASTResolving.getRelaxingTypes(ast, desc.type);
+				for (int k= 0; k < bindings.length; k++) {
+					addLinkedPositionProposal(typeKey, bindings[k]);
+				}
+
+				SimpleName tagArg= desc.resultingTagArg;
+				if (tagArg != null) {
+					tagArg.setIdentifier(favourite);
+					addLinkedPosition(rewrite.track(tagArg), false, nameKey);
+				}
+			}
+		}
+	}
+

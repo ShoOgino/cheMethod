@@ -1,0 +1,32 @@
+	private static void addNewFieldProposals(ICompilationUnit cu, CompilationUnit astRoot, ITypeBinding binding, ITypeBinding declaringTypeBinding, SimpleName simpleName, boolean isWriteAccess, Collection<ICommandAccess> proposals) throws
+																																																										JavaModelException {
+		// new variables
+		ICompilationUnit targetCU;
+		ITypeBinding senderDeclBinding;
+		if (binding != null) {
+			senderDeclBinding= binding.getTypeDeclaration();
+			targetCU= ASTResolving.findCompilationUnitForBinding(cu, astRoot, senderDeclBinding);
+		} else { // binding is null for accesses without qualifier
+			senderDeclBinding= declaringTypeBinding;
+			targetCU= cu;
+		}
+
+		if (!senderDeclBinding.isFromSource() || targetCU == null) {
+			return;
+		}
+
+		boolean mustBeConst= ASTResolving.isInsideModifiers(simpleName);
+
+		addNewFieldForType(targetCU, binding, senderDeclBinding, simpleName, isWriteAccess, mustBeConst, proposals);
+
+		if (binding == null && senderDeclBinding.isNested()) {
+			ASTNode anonymDecl= astRoot.findDeclaringNode(senderDeclBinding);
+			if (anonymDecl != null) {
+				ITypeBinding bind= Bindings.getBindingOfParentType(anonymDecl.getParent());
+				if (!bind.isAnonymous()) {
+					addNewFieldForType(targetCU, bind, bind, simpleName, isWriteAccess, mustBeConst, proposals);
+				}
+			}
+		}
+	}
+

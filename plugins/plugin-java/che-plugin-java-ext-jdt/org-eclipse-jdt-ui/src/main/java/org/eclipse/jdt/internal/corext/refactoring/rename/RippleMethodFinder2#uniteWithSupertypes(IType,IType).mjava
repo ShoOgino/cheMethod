@@ -1,0 +1,24 @@
+	private void uniteWithSupertypes(IType anchor, IType type) throws JavaModelException {
+		IType[] supertypes= fHierarchy.getSupertypes(type);
+		for (int i= 0; i < supertypes.length; i++) {
+			IType supertype= supertypes[i];
+			IType superRep= fUnionFind.find(supertype);
+			if (superRep == null) {
+				//Type doesn't declare method, but maybe supertypes?
+				uniteWithSupertypes(anchor, supertype);
+			} else {
+				//check whether method in supertype is really overridden:
+				IMember superMethod= fTypeToMethod.get(supertype);
+				if (JavaModelUtil.isVisibleInHierarchy(superMethod, anchor.getPackageFragment())) {
+					IType rep= fUnionFind.find(anchor);
+					fUnionFind.union(rep, superRep);
+					// current type is no root anymore
+					fRootTypes.remove(anchor);
+					uniteWithSupertypes(supertype, supertype);
+				} else {
+					//Not overridden -> overriding chain ends here.
+				}
+			}
+		}
+	}
+

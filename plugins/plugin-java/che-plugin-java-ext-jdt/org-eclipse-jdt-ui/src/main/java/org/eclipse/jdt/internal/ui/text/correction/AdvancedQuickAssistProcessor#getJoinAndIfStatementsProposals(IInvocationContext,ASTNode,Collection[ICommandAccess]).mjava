@@ -1,0 +1,93 @@
+	private static boolean getJoinAndIfStatementsProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+
+		//
+		if (!(node instanceof IfStatement)) {
+			return false;
+		}
+		IfStatement ifStatement= (IfStatement) node;
+		if (ifStatement.getElseStatement() != null) {
+			return false;
+		}
+		// case when current IfStatement is sole child of another IfStatement
+		{
+			IfStatement outerIf= null;
+			if (ifStatement.getParent() instanceof IfStatement) {
+				outerIf= (IfStatement) ifStatement.getParent();
+			} else if (ifStatement.getParent() instanceof Block) {
+				Block block= (Block) ifStatement.getParent();
+				if (block.getParent() instanceof IfStatement && block.statements().size() == 1) {
+					outerIf= (IfStatement) block.getParent();
+				}
+			}
+			if (outerIf != null && outerIf.getElseStatement() == null) {
+				if (resultingCollections == null) {
+					return true;
+				}
+				//
+				AST ast= node.getAST();
+				ASTRewrite rewrite= ASTRewrite.create(ast);
+				// create compound condition
+				InfixExpression condition= ast.newInfixExpression();
+				condition.setOperator(InfixExpression.Operator.CONDITIONAL_AND);
+				// prepare condition parts, add parentheses if needed
+				Expression
+						outerCondition= getParenthesizedExpressionIfNeeded(ast, rewrite, outerIf.getExpression(), condition, InfixExpression.LEFT_OPERAND_PROPERTY);
+				Expression innerCondition= getParenthesizedExpressionIfNeeded(ast, rewrite, ifStatement.getExpression(), condition, InfixExpression.RIGHT_OPERAND_PROPERTY);
+				condition.setLeftOperand(outerCondition);
+				condition.setRightOperand(innerCondition);
+				// create new IfStatement
+				IfStatement newIf= ast.newIfStatement();
+				newIf.setExpression(condition);
+				Statement bodyPlaceholder= (Statement) rewrite.createCopyTarget(ifStatement.getThenStatement());
+				newIf.setThenStatement(bodyPlaceholder);
+				rewrite.replace(outerIf, newIf, null);
+				// add correction proposal
+				String label= CorrectionMessages.AdvancedQuickAssistProcessor_joinWithOuter_description;
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.JOIN_IF_WITH_OUTER_IF, image);
+				resultingCollections.add(proposal);
+			}
+		}
+		// case when current IfStatement has another IfStatement as sole child
+		{
+			IfStatement innerIf= null;
+			if (ifStatement.getThenStatement() instanceof IfStatement) {
+				innerIf= (IfStatement) ifStatement.getThenStatement();
+			} else if (ifStatement.getThenStatement() instanceof Block) {
+				Block block= (Block) ifStatement.getThenStatement();
+				if (block.statements().size() == 1 && block.statements().get(0) instanceof IfStatement) {
+					innerIf= (IfStatement) block.statements().get(0);
+				}
+			}
+			if (innerIf != null && innerIf.getElseStatement() == null) {
+				if (resultingCollections == null) {
+					return true;
+				}
+				//
+				AST ast= node.getAST();
+				ASTRewrite rewrite= ASTRewrite.create(ast);
+				// create compound condition
+				InfixExpression condition= ast.newInfixExpression();
+				condition.setOperator(InfixExpression.Operator.CONDITIONAL_AND);
+				// prepare condition parts, add parentheses if needed
+				Expression outerCondition= getParenthesizedExpressionIfNeeded(ast, rewrite, ifStatement.getExpression(), condition, InfixExpression.LEFT_OPERAND_PROPERTY);
+				Expression
+						innerCondition= getParenthesizedExpressionIfNeeded(ast, rewrite, innerIf.getExpression(), condition, InfixExpression.RIGHT_OPERAND_PROPERTY);
+				condition.setLeftOperand(outerCondition);
+				condition.setRightOperand(innerCondition);
+				// create new IfStatement
+				IfStatement newIf= ast.newIfStatement();
+				newIf.setExpression(condition);
+				Statement bodyPlaceholder= (Statement) rewrite.createCopyTarget(innerIf.getThenStatement());
+				newIf.setThenStatement(bodyPlaceholder);
+				rewrite.replace(ifStatement, newIf, null);
+				// add correction proposal
+				String label= CorrectionMessages.AdvancedQuickAssistProcessor_joinWithInner_description;
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.JOIN_IF_WITH_INNER_IF, image);
+				resultingCollections.add(proposal);
+			}
+		}
+		return true;
+	}
+

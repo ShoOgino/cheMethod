@@ -1,0 +1,157 @@
+	public static void getVariableProposals(IInvocationContext context, IProblemLocation problem, IVariableBinding resolvedField, Collection<ICommandAccess> proposals) throws
+
+																																										CoreException {
+
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		CompilationUnit astRoot= context.getASTRoot();
+		ASTNode selectedNode= problem.getCoveredNode(astRoot);
+		if (selectedNode == null) {
+			return;
+		}
+
+		// type that defines the variable
+		ITypeBinding binding= null;
+		ITypeBinding declaringTypeBinding= Bindings.getBindingOfParentTypeContext(selectedNode);
+		if (declaringTypeBinding == null) {
+			return;
+		}
+
+		// possible type kind of the node
+		boolean suggestVariableProposals= true;
+		int typeKind= 0;
+
+		while (selectedNode instanceof ParenthesizedExpression) {
+			selectedNode= ((ParenthesizedExpression) selectedNode).getExpression();
+		}
+
+
+		Name node= null;
+
+		switch (selectedNode.getNodeType()) {
+			case ASTNode.SIMPLE_NAME:
+				node= (SimpleName) selectedNode;
+				ASTNode parent= node.getParent();
+				StructuralPropertyDescriptor locationInParent= node.getLocationInParent();
+				if (locationInParent == ExpressionMethodReference.EXPRESSION_PROPERTY) {
+					typeKind= SimilarElementsRequestor.REF_TYPES;
+				} else if (locationInParent == MethodInvocation.EXPRESSION_PROPERTY) {
+					if (JavaModelUtil.is18OrHigher(cu.getJavaProject())) {
+						typeKind= SimilarElementsRequestor.CLASSES | SimilarElementsRequestor.INTERFACES | SimilarElementsRequestor.ENUMS;
+					} else {
+						typeKind= SimilarElementsRequestor.CLASSES;
+					}
+				} else if (locationInParent == FieldAccess.NAME_PROPERTY) {
+					Expression expression= ((FieldAccess) parent).getExpression();
+					if (expression != null) {
+						binding= expression.resolveTypeBinding();
+						if (binding == null) {
+							node= null;
+						}
+					}
+				} else if (parent instanceof SimpleType || parent instanceof NameQualifiedType) {
+					suggestVariableProposals= false;
+					typeKind= SimilarElementsRequestor.REF_TYPES_AND_VAR;
+				} else if (parent instanceof QualifiedName) {
+					Name qualifier= ((QualifiedName) parent).getQualifier();
+					if (qualifier != node) {
+						binding= qualifier.resolveTypeBinding();
+					} else {
+						typeKind= SimilarElementsRequestor.REF_TYPES;
+					}
+					ASTNode outerParent= parent.getParent();
+					while (outerParent instanceof QualifiedName) {
+						outerParent= outerParent.getParent();
+					}
+					if (outerParent instanceof SimpleType || outerParent instanceof NameQualifiedType) {
+						typeKind= SimilarElementsRequestor.REF_TYPES;
+						suggestVariableProposals= false;
+					}
+				} else if (locationInParent == SwitchCase.EXPRESSION_PROPERTY) {
+					ITypeBinding switchExp= ((SwitchStatement) node.getParent().getParent()).getExpression().resolveTypeBinding();
+					if (switchExp != null && switchExp.isEnum()) {
+						binding= switchExp;
+					}
+				} else if (locationInParent == SuperFieldAccess.NAME_PROPERTY) {
+					binding= declaringTypeBinding.getSuperclass();
+				}
+				break;
+			case ASTNode.QUALIFIED_NAME:
+				QualifiedName qualifierName= (QualifiedName) selectedNode;
+				ITypeBinding qualifierBinding= qualifierName.getQualifier().resolveTypeBinding();
+				if (qualifierBinding != null) {
+					node= qualifierName.getName();
+					binding= qualifierBinding;
+				} else {
+					node= qualifierName.getQualifier();
+					typeKind= SimilarElementsRequestor.REF_TYPES;
+					suggestVariableProposals= node.isSimpleName();
+				}
+				if (selectedNode.getParent() instanceof SimpleType || selectedNode.getParent() instanceof NameQualifiedType) {
+					typeKind= SimilarElementsRequestor.REF_TYPES;
+					suggestVariableProposals= false;
+				}
+				break;
+			case ASTNode.FIELD_ACCESS:
+				FieldAccess access= (FieldAccess) selectedNode;
+				Expression expression= access.getExpression();
+				if (expression != null) {
+					binding= expression.resolveTypeBinding();
+					if (binding != null) {
+						node= access.getName();
+					}
+				}
+				break;
+			case ASTNode.SUPER_FIELD_ACCESS:
+				binding= declaringTypeBinding.getSuperclass();
+				node= ((SuperFieldAccess) selectedNode).getName();
+				break;
+			default:
+		}
+
+		if (node == null) {
+			return;
+		}
+
+		// add type proposals
+		if (typeKind != 0) {
+			if (!JavaModelUtil.is50OrHigher(cu.getJavaProject())) {
+				typeKind &= ~(SimilarElementsRequestor.ANNOTATIONS | SimilarElementsRequestor.ENUMS | SimilarElementsRequestor.VARIABLES);
+			}
+
+			int relevance= Character.isUpperCase(ASTNodes.getSimpleNameIdentifier(node).charAt(0)) ? IProposalRelevance.VARIABLE_TYPE_PROPOSAL_1 : IProposalRelevance.VARIABLE_TYPE_PROPOSAL_2;
+			addSimilarTypeProposals(typeKind, cu, node, relevance + 1, proposals);
+
+			typeKind &= ~SimilarElementsRequestor.ANNOTATIONS;
+			addNewTypeProposals(cu, node, typeKind, relevance, proposals);
+
+			ReorgCorrectionsSubProcessor.addProjectSetupFixProposal(context, problem, node.getFullyQualifiedName(), proposals);
+		}
+
+		if (!suggestVariableProposals) {
+			return;
+		}
+
+		SimpleName simpleName= node.isSimpleName() ? (SimpleName) node : ((QualifiedName) node).getName();
+		boolean isWriteAccess= ASTResolving.isWriteAccess(node);
+
+		// similar variables
+		addSimilarVariableProposals(cu, astRoot, binding, resolvedField, simpleName, isWriteAccess, proposals);
+		
+		if (binding == null) {
+			addStaticImportFavoriteProposals(context, simpleName, false, proposals);
+		}
+
+		if (resolvedField == null || binding == null || resolvedField.getDeclaringClass() != binding.getTypeDeclaration() && Modifier
+				.isPrivate(resolvedField.getModifiers())) {
+
+			// new fields
+			addNewFieldProposals(cu, astRoot, binding, declaringTypeBinding, simpleName, isWriteAccess, proposals);
+
+			// new parameters and local variables
+			if (binding == null) {
+				addNewVariableProposals(cu, node, simpleName, proposals);
+			}
+		}
+	}
+

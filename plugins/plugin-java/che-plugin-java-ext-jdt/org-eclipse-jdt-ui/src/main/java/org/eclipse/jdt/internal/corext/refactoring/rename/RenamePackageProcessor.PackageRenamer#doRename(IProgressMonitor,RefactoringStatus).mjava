@@ -1,0 +1,32 @@
+		void doRename(IProgressMonitor pm, RefactoringStatus result) throws CoreException {
+			pm.beginTask("", 16); //$NON-NLS-1$
+			if (fProcessor.getUpdateReferences()){
+				pm.setTaskName(RefactoringCoreMessages.RenamePackageRefactoring_searching);
+
+				String binaryRefsDescription= Messages.format(RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description , getElementLabel(fPackage));
+				ReferencesInBinaryContext binaryRefs= new ReferencesInBinaryContext(binaryRefsDescription);
+
+				fOccurrences= getReferences(new SubProgressMonitor(pm, 4), binaryRefs, result);
+				fReferencesToTypesInNamesakes= getReferencesToTypesInNamesakes(new SubProgressMonitor(pm, 4), result);
+				fReferencesToTypesInPackage= getReferencesToTypesInPackage(new SubProgressMonitor(pm, 4), binaryRefs, result);
+				binaryRefs.addErrorIfNecessary(result);
+
+				pm.setTaskName(RefactoringCoreMessages.RenamePackageRefactoring_checking);
+				result.merge(analyzeAffectedCompilationUnits());
+				pm.worked(1);
+			} else {
+				fOccurrences= new SearchResultGroup[0];
+				pm.worked(13);
+			}
+
+			if (result.hasFatalError())
+				return;
+
+			if (fProcessor.getUpdateReferences())
+				addReferenceUpdates(new SubProgressMonitor(pm, 3));
+			else
+				pm.worked(3);
+
+			pm.done();
+		}
+

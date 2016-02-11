@@ -1,0 +1,42 @@
+	private RefactoringStatus findCommonParent(ITypeBinding typeBinding) {
+
+		RefactoringStatus status= new RefactoringStatus();
+
+		ITypeBinding highest= fIntermediaryFirstParameterType;
+		ITypeBinding current= typeBinding;
+
+		if (current.equals(highest) || Bindings.isSuperType(highest, current))
+			// current is the same as highest or highest is already a supertype of current in the same hierarchy => no change
+			return status;
+
+		// find lowest common supertype with the method
+		// search in bottom-up order
+		ITypeBinding[] currentAndSupers= getTypeAndAllSuperTypes(current);
+		ITypeBinding[] highestAndSupers= getTypeAndAllSuperTypes(highest);
+
+		ITypeBinding foundBinding= null;
+		for (int i1= 0; i1 < currentAndSupers.length; i1++) {
+			for (int i2= 0; i2 < highestAndSupers.length; i2++) {
+				if (highestAndSupers[i2].isEqualTo(currentAndSupers[i1])
+						&& (Bindings.findMethodInHierarchy(highestAndSupers[i2], fTargetMethodBinding.getName(),
+														   fTargetMethodBinding.getParameterTypes()) != null)) {
+					foundBinding= highestAndSupers[i2];
+					break;
+				}
+			}
+			if (foundBinding != null)
+				break;
+		}
+
+		if (foundBinding != null) {
+			fIntermediaryFirstParameterType= foundBinding;
+		} else {
+			String type1= BasicElementLabels.getJavaElementName(fIntermediaryFirstParameterType.getQualifiedName());
+			String type2= BasicElementLabels.getJavaElementName(current.getQualifiedName());
+			status.addFatalError(Messages.format(RefactoringCoreMessages.IntroduceIndirectionRefactoring_open_hierarchy_error,
+												 new String[]{type1, type2}));
+		}
+
+		return status;
+	}
+

@@ -1,0 +1,45 @@
+	private Type evaluateVariableType(AST ast, ImportRewrite imports, ImportRewriteContext importRewriteContext, IBinding targetContext) {
+		if (fOriginalNode.getParent() instanceof MethodInvocation) {
+			MethodInvocation parent= (MethodInvocation) fOriginalNode.getParent();
+			if (parent.getExpression() == fOriginalNode) {
+				// _x_.foo() -> guess qualifier type by looking for a type with method 'foo'
+				ITypeBinding[] bindings= ASTResolving
+						.getQualifierGuess(fOriginalNode.getRoot(), parent.getName().getIdentifier(), parent.arguments(), targetContext);
+				if (bindings.length > 0) {
+					for (int i= 0; i < bindings.length; i++) {
+						addLinkedPositionProposal(KEY_TYPE, bindings[i]);
+					}
+					return imports.addImport(bindings[0], ast, importRewriteContext);
+				}
+			}
+		}
+
+		ITypeBinding binding= ASTResolving.guessBindingForReference(fOriginalNode);
+		if (binding != null) {
+			if (binding.isWildcardType()) {
+				binding= ASTResolving.normalizeWildcardType(binding, isVariableAssigned(), ast);
+				if (binding == null) {
+					// only null binding applies
+					binding= ast.resolveWellKnownType("java.lang.Object"); //$NON-NLS-1$
+				}
+			}
+
+			if (isVariableAssigned()) {
+				ITypeBinding[] typeProposals= ASTResolving.getRelaxingTypes(ast, binding);
+				for (int i= 0; i < typeProposals.length; i++) {
+					addLinkedPositionProposal(KEY_TYPE, typeProposals[i]);
+				}
+			}
+			return imports.addImport(binding, ast, importRewriteContext);
+		}
+		// no binding, find type AST node instead -> ABC a= x-> use 'ABC' as is
+		Type type= ASTResolving.guessTypeForReference(ast, fOriginalNode);
+		if (type != null) {
+			return type;
+		}
+		if (fVariableKind == CONST_FIELD) {
+			return ast.newSimpleType(ast.newSimpleName("String")); //$NON-NLS-1$
+		}
+		return ast.newSimpleType(ast.newSimpleName("Object")); //$NON-NLS-1$
+	}
+

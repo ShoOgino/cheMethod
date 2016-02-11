@@ -1,0 +1,68 @@
+	private static boolean getInverseIfIntoContinueInLoopsProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
+		if (!(covering instanceof IfStatement)) {
+			return false;
+		}
+		IfStatement ifStatement= (IfStatement) covering;
+		if (ifStatement.getElseStatement() != null) {
+			return false;
+		}
+		// prepare outer control structure and block that contains 'if' statement
+		ASTNode ifParent= ifStatement.getParent();
+		Block ifParentBlock= null;
+		ASTNode ifParentStructure= ifParent;
+		if (ifParentStructure instanceof Block) {
+			ifParentBlock= (Block) ifParent;
+			ifParentStructure= ifParentStructure.getParent();
+		}
+		// check that control structure is loop and 'if' statement if last statement
+		if (!(ifParentStructure instanceof ForStatement) && !(ifParentStructure instanceof WhileStatement)) {
+			return false;
+		}
+		if (ifParentBlock != null && ifParentBlock.statements().indexOf(ifStatement) != ifParentBlock.statements().size() - 1) {
+			return false;
+		}
+		//  we could produce quick assist
+		if (resultingCollections == null) {
+			return true;
+		}
+		//
+		AST ast= covering.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		// create inverted 'if' statement
+		Expression inversedExpression= getInversedExpression(rewrite, ifStatement.getExpression());
+		IfStatement newIf= ast.newIfStatement();
+		newIf.setExpression(inversedExpression);
+		newIf.setThenStatement(ast.newContinueStatement());
+		//
+		if (ifParentBlock == null) {
+			// if there is no block, create it
+			ifParentBlock= ast.newBlock();
+			ifParentBlock.statements().add(newIf);
+			for (Iterator<Statement> iter= getUnwrappedStatements(ifStatement.getThenStatement()).iterator(); iter.hasNext();) {
+				Statement statement= iter.next();
+				ifParentBlock.statements().add(rewrite.createMoveTarget(statement));
+			}
+			// replace 'if' statement as body with new block
+			if (ifParentStructure instanceof ForStatement) {
+				rewrite.set(ifParentStructure, ForStatement.BODY_PROPERTY, ifParentBlock, null);
+			} else if (ifParentStructure instanceof WhileStatement) {
+				rewrite.set(ifParentStructure, WhileStatement.BODY_PROPERTY, ifParentBlock, null);
+			}
+		} else {
+			// if there was block, replace
+			ListRewrite listRewriter= rewrite.getListRewrite(ifParentBlock, (ChildListPropertyDescriptor) ifStatement.getLocationInParent());
+			listRewriter.replace(ifStatement, newIf, null);
+			// add statements from 'then' to the end of block
+			for (Iterator<Statement> iter= getUnwrappedStatements(ifStatement.getThenStatement()).iterator(); iter.hasNext();) {
+				Statement statement= iter.next();
+				listRewriter.insertLast(rewrite.createMoveTarget(statement), null);
+			}
+		}
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_inverseIfToContinue_description;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVERT_IF_TO_CONTINUE, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

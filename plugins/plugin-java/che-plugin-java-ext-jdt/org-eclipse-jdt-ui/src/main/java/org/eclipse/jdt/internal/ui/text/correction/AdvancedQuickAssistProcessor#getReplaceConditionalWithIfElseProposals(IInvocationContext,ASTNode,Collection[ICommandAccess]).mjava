@@ -1,0 +1,98 @@
+	private static boolean getReplaceConditionalWithIfElseProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
+		ASTNode node= covering;
+		while (!(node instanceof ConditionalExpression) && node instanceof Expression) {
+			node= node.getParent();
+		}
+		if (!(node instanceof ConditionalExpression)) {
+			node= covering;
+			while (node != null && !(node instanceof Statement)) {
+				node= node.getParent();
+			}
+			if (node instanceof VariableDeclarationStatement) {
+				node= (ASTNode)(((VariableDeclarationStatement)node).fragments().get(0));
+				node= ((VariableDeclarationFragment)node).getInitializer();
+			}
+			if (node instanceof ExpressionStatement) {
+				node= ((ExpressionStatement)node).getExpression();
+				if (node instanceof Assignment) {
+					node= ((Assignment)node).getRightHandSide();
+				}
+			}
+			if (node instanceof ReturnStatement) {
+				node= ((ReturnStatement)node).getExpression();
+			}
+		}
+
+		if (!(node instanceof ConditionalExpression)) {
+			return false;
+		}
+		covering= node;
+
+		StructuralPropertyDescriptor locationInParent= covering.getLocationInParent();
+		if (locationInParent == Assignment.RIGHT_HAND_SIDE_PROPERTY) {
+			if (covering.getParent().getLocationInParent() != ExpressionStatement.EXPRESSION_PROPERTY) {
+				return false;
+			}
+		} else if (locationInParent == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
+			ASTNode statement= covering.getParent().getParent();
+			if (!(statement instanceof VariableDeclarationStatement) || statement.getLocationInParent() != Block.STATEMENTS_PROPERTY) {
+				return false;
+			}
+		} else if (locationInParent != ReturnStatement.EXPRESSION_PROPERTY) {
+			return false;
+		}
+
+		ConditionalExpression conditional= (ConditionalExpression) covering;
+		//  we could produce quick assist
+		if (resultingCollections == null) {
+			return true;
+		}
+		//
+		AST ast= covering.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		// prepare new 'if' statement
+		Expression expression= conditional.getExpression();
+		while (expression instanceof ParenthesizedExpression) {
+			expression= ((ParenthesizedExpression) expression).getExpression();
+		}
+		IfStatement ifStatement= ast.newIfStatement();
+		ifStatement.setExpression((Expression) rewrite.createCopyTarget(expression));
+		if (locationInParent == Assignment.RIGHT_HAND_SIDE_PROPERTY) {
+			Assignment assignment= (Assignment) covering.getParent();
+			Expression assignee= assignment.getLeftHandSide();
+			Assignment.Operator op= assignment.getOperator();
+
+			ifStatement.setThenStatement(createAssignmentStatement(rewrite, op, assignee, conditional.getThenExpression()));
+			ifStatement.setElseStatement(createAssignmentStatement(rewrite, op, assignee, conditional.getElseExpression()));
+
+			// replace return conditional expression with if/then/else/return
+			rewrite.replace(covering.getParent().getParent(), ifStatement, null);
+
+		} else if (locationInParent == ReturnStatement.EXPRESSION_PROPERTY) {
+			ifStatement.setThenStatement(createReturnExpression(rewrite, conditional.getThenExpression()));
+			ifStatement.setElseStatement(createReturnExpression(rewrite, conditional.getElseExpression()));
+			//
+			// replace return conditional expression with if/then/else/return
+			rewrite.replace(conditional.getParent(), ifStatement, null);
+		} else if (locationInParent == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
+			VariableDeclarationFragment frag= (VariableDeclarationFragment) covering.getParent();
+			Assignment.Operator op= Assignment.Operator.ASSIGN;
+
+			Expression assignee= frag.getName();
+			ifStatement.setThenStatement(createAssignmentStatement(rewrite, op, assignee, conditional.getThenExpression()));
+			ifStatement.setElseStatement(createAssignmentStatement(rewrite, op, assignee, conditional.getElseExpression()));
+
+			rewrite.set(frag, VariableDeclarationFragment.INITIALIZER_PROPERTY, null, null); // clear initializer
+
+			ASTNode statement= frag.getParent();
+			rewrite.getListRewrite(statement.getParent(), Block.STATEMENTS_PROPERTY).insertAfter(ifStatement, statement, null);
+		}
+
+		// add correction proposal
+		String label= CorrectionMessages.AdvancedQuickAssistProcessor_replaceConditionalWithIf;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REPLACE_CONDITIONAL_WITH_IF_ELSE, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

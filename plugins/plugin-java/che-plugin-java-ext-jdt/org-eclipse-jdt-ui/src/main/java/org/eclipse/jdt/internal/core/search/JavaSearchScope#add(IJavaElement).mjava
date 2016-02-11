@@ -1,0 +1,81 @@
+    /**
+     * Add an element to the java search scope.
+     * @param element The element we want to add to current java search scope
+     * @throws JavaModelException May happen if some Java Model info are not available
+     */
+    public void add(IJavaElement element) throws JavaModelException {
+        IPath containerPath = null;
+        String containerPathToString = null;
+        PackageFragmentRoot root = null;
+        int includeMask = SOURCES | APPLICATION_LIBRARIES | SYSTEM_LIBRARIES;
+        switch (element.getElementType()) {
+            case IJavaElement.JAVA_MODEL:
+                // a workspace sope should be used
+                break;
+            case IJavaElement.JAVA_PROJECT:
+                add((JavaProject)element, null, includeMask, new HashSet(2), new HashSet(2), null);
+                break;
+            case IJavaElement.PACKAGE_FRAGMENT_ROOT:
+                root = (PackageFragmentRoot)element;
+                IPath rootPath = root.internalPath();
+                containerPath = root.getKind() == IPackageFragmentRoot.K_SOURCE ? root.getParent().getPath() : rootPath;
+                containerPathToString = containerPath.getDevice() == null ? containerPath.toString() : containerPath.toOSString();
+                IResource rootResource = root.resource();
+                String projectPath = root.getJavaProject().getPath().toString();
+                if (rootResource != null && rootResource.isAccessible()) {
+                    String relativePath = Util.relativePath(rootResource.getFullPath(), containerPath.segmentCount());
+                    add(projectPath, relativePath, containerPathToString, false/*not a package*/, null);
+                } else {
+                    add(projectPath, "", containerPathToString, false/*not a package*/, null); //$NON-NLS-1$
+                }
+                break;
+            case IJavaElement.PACKAGE_FRAGMENT:
+                root = (PackageFragmentRoot)element.getParent();
+                projectPath = root.getJavaProject().getPath().toString();
+                if (root.isArchive()) {
+                    String relativePath = Util.concatWith(((PackageFragment)element).names, '/');
+                    containerPath = root.getPath();
+                    containerPathToString = containerPath.getDevice() == null ? containerPath.toString() : containerPath.toOSString();
+                    add(projectPath, relativePath, containerPathToString, true/*package*/, null);
+                } else {
+                    IResource resource = ((JavaElement)element).resource();
+                    if (resource != null) {
+                        if (resource.isAccessible()) {
+                            containerPath =
+                                    root.getKind() == IPackageFragmentRoot.K_SOURCE ? root.getParent().getPath() : root.internalPath();
+                        } else {
+                            // for working copies, get resource container full path
+                            containerPath = resource.getParent().getFullPath();
+                        }
+                        containerPathToString = containerPath.getDevice() == null ? containerPath.toString() : containerPath.toOSString();
+                        String relativePath = Util.relativePath(resource.getFullPath(), containerPath.segmentCount());
+                        add(projectPath, relativePath, containerPathToString, true/*package*/, null);
+                    }
+                }
+                break;
+            default:
+                // remember sub-cu (or sub-class file) java elements
+                if (element instanceof IMember) {
+                    if (this.elements == null) {
+                        this.elements = new ArrayList();
+                    }
+                    this.elements.add(element);
+                }
+                root = (PackageFragmentRoot)element.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
+                projectPath = root.getJavaProject().getPath().toString();
+                String relativePath;
+                if (root.getKind() == IPackageFragmentRoot.K_SOURCE) {
+                    containerPath = root.getParent().getPath();
+                    relativePath = Util.relativePath(getPath(element, false/*full path*/), root.getJavaProject().getPath().segmentCount()/*remove project segment*/);
+                } else {
+                    containerPath = root.internalPath();
+                    relativePath = getPath(element, true/*relative path*/).toString();
+                }
+                containerPathToString = containerPath.getDevice() == null ? containerPath.toString() : containerPath.toOSString();
+                add(projectPath, relativePath, containerPathToString, false/*not a package*/, null);
+        }
+
+        if (root != null)
+            addEnclosingProjectOrJar(root.getKind() == IPackageFragmentRoot.K_SOURCE ? root.getParent().getPath() : root.getPath());
+    }
+

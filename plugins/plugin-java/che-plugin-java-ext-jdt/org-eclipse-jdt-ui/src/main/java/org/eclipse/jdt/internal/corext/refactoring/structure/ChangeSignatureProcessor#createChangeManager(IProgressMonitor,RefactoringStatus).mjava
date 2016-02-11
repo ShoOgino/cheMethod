@@ -1,0 +1,60 @@
+	private TextChangeManager createChangeManager(IProgressMonitor pm, RefactoringStatus result) throws CoreException {
+		pm.beginTask(RefactoringCoreMessages.ChangeSignatureRefactoring_preview, 2);
+		fChangeManager= new TextChangeManager();
+		boolean isNoArgConstructor= isNoArgConstructor();
+		Map<ICompilationUnit, Set<IType>> namedSubclassMapping= null;
+		if (isNoArgConstructor){
+			//create only when needed;
+			namedSubclassMapping= createNamedSubclassMapping(new SubProgressMonitor(pm, 1));
+		}else{
+			pm.worked(1);
+		}
+		for (int i= 0; i < fOccurrences.length; i++) {
+			if (pm.isCanceled())
+				throw new OperationCanceledException();
+			SearchResultGroup group= fOccurrences[i];
+			ICompilationUnit cu= group.getCompilationUnit();
+			if (cu == null)
+				continue;
+			CompilationUnitRewrite cuRewrite;
+			if (cu.equals(getCu())) {
+				cuRewrite= fBaseCuRewrite;
+			} else {
+				cuRewrite= new CompilationUnitRewrite(cu);
+				cuRewrite.getASTRewrite().setTargetSourceRangeComputer(new TightSourceRangeComputer());
+			}
+			ASTNode[] nodes= ASTNodeSearchUtil.findNodes(group.getSearchResults(), cuRewrite.getRoot());
+
+			//IntroduceParameterObjectRefactoring needs to update declarations first:
+			List<OccurrenceUpdate<? extends ASTNode>> deferredUpdates= new ArrayList<OccurrenceUpdate<? extends ASTNode>>();
+			for (int j= 0; j < nodes.length; j++) {
+				OccurrenceUpdate<? extends ASTNode> update= createOccurrenceUpdate(nodes[j], cuRewrite, result);
+				if (update instanceof DeclarationUpdate) {
+					update.updateNode();
+				} else {
+					deferredUpdates.add(update);
+				}
+			}
+			for (Iterator<OccurrenceUpdate<? extends ASTNode>> iter= deferredUpdates.iterator(); iter.hasNext();) {
+				iter.next().updateNode();
+			}
+
+			if (isNoArgConstructor && namedSubclassMapping.containsKey(cu)){
+				//only non-anonymous subclasses may have noArgConstructors to modify - see bug 43444
+				Set<IType> subtypes= namedSubclassMapping.get(cu);
+				for (Iterator<IType> iter= subtypes.iterator(); iter.hasNext();) {
+					IType subtype= iter.next();
+					AbstractTypeDeclaration subtypeNode= ASTNodeSearchUtil.getAbstractTypeDeclarationNode(subtype, cuRewrite.getRoot());
+					if (subtypeNode != null)
+						modifyImplicitCallsToNoArgConstructor(subtypeNode, cuRewrite);
+				}
+			}
+			TextChange change= cuRewrite.createChange(true);
+			if (change != null)
+				fChangeManager.manage(cu, change);
+		}
+
+		pm.done();
+		return fChangeManager;
+	}
+

@@ -1,0 +1,47 @@
+	/**
+	 * Proposes a setter for this field.
+	 * 
+	 * @param context the proposal parameter
+	 * @param relevance relevance of this proposal
+	 * @return the proposal if available or null
+	 */
+	private static ChangeCorrectionProposal addSetterProposal(ProposalParameter context, int relevance) {
+		boolean isBoolean= isBoolean(context);
+		String setterName= GetterSetterUtil
+				.getSetterName(context.variableBinding, context.compilationUnit.getJavaProject(), null, isBoolean);
+		ITypeBinding declaringType= context.variableBinding.getDeclaringClass();
+		if (declaringType == null)
+			return null;
+
+		IMethodBinding
+				method= Bindings.findMethodInHierarchy(declaringType, setterName, new ITypeBinding[]{context.variableBinding.getType()});
+		if (method != null && Bindings.isVoidType(method.getReturnType()) && (
+				Modifier.isStatic(method.getModifiers()) == Modifier.isStatic(context.variableBinding.getModifiers()))) {
+			Expression assignedValue= getAssignedValue(context);
+			if (assignedValue == null)
+				return null; //we don't know how to handle those cases.
+			Expression mi= createMethodInvocation(context, method, assignedValue);
+			context.astRewrite.replace(context.accessNode.getParent(), mi, null);
+
+			String label= Messages.format(CorrectionMessages.GetterSetterCorrectionSubProcessor_replacewithsetter_description,
+										  BasicElementLabels.getJavaCodeString(ASTNodes.asString(context.accessNode)));
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			ASTRewriteCorrectionProposal
+					proposal= new ASTRewriteCorrectionProposal(label, context.compilationUnit, context.astRewrite, relevance, image);
+			return proposal;
+		} else {
+			//TODO
+//			IJavaElement element= context.variableBinding.getJavaElement();
+//			if (element instanceof IField) {
+//				IField field= (IField) element;
+//				try {
+//					if (RefactoringAvailabilityTester.isSelfEncapsulateAvailable(field))
+//						return new SelfEncapsulateFieldProposal(relevance, field);
+//				} catch (JavaModelException e) {
+//					JavaPlugin.log(e);
+//				}
+//			}
+		}
+		return null;
+	}
+

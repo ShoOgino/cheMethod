@@ -1,0 +1,35 @@
+	private void helperQualifiedName(String oldName, String newName, String textFileName, String filePatterns) throws Exception {
+		ICompilationUnit cu= createCUfromTestFile(getPackageP(), oldName);
+		IType classA= getType(cu, oldName);
+
+		String content= getFileContents(getTestPath() + name.getMethodName() + TEST_INPUT_INFIX + textFileName);
+		IProject project= classA.getJavaProject().getProject();
+		IFile file= project.getFile(textFileName);
+		file.create(new ByteArrayInputStream(content.getBytes()), true, null);
+        ResourceChangedEvent
+                event = new ResourceChangedEvent(new File(BaseTest.class.getResource("/projects").getFile()),new ProjectItemModifiedEvent(
+                ProjectItemModifiedEvent.EventType.CREATED, "projects",fProject.getElementName(),file.getFullPath().toOSString(), false));
+
+        JavaModelManager.getJavaModelManager().deltaState.resourceChanged(event);
+
+		RenameJavaElementDescriptor descriptor= createRefactoringDescriptor(classA, newName);
+		descriptor.setUpdateQualifiedNames(true);
+		descriptor.setFileNamePatterns(filePatterns);
+
+		assertEquals("was supposed to pass", null, performRefactoring(descriptor));
+
+		ICompilationUnit newcu= getPackageP().getCompilationUnit(newName + ".java");
+		assertEqualLines("invalid renaming", getFileContents(getOutputTestFileName(newName)), newcu.getSource());
+		InputStreamReader reader= new InputStreamReader(file.getContents(true));
+		StringBuffer newContent= new StringBuffer();
+		try {
+			int ch;
+			while((ch= reader.read()) != -1)
+				newContent.append((char)ch);
+		} finally {
+			reader.close();
+		}
+		String definedContent= getFileContents(getTestPath() + name.getMethodName() + TEST_OUTPUT_INFIX + textFileName);
+		assertEqualLines("invalid updating", definedContent, newContent.toString());
+    }
+

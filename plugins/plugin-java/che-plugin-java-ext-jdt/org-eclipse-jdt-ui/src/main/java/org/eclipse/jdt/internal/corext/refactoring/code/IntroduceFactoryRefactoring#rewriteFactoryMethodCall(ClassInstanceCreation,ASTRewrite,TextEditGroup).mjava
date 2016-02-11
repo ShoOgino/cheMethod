@@ -1,0 +1,54 @@
+	/**
+	 * Updates the constructor call.
+	 *
+	 * @param ctorCall the ClassInstanceCreation to be marked as replaced
+	 * @param unitRewriter the AST rewriter
+	 * @param gd the edit group to use
+	 */
+	private void rewriteFactoryMethodCall(ClassInstanceCreation ctorCall, ASTRewrite unitRewriter, TextEditGroup gd) {
+		AST ast= unitRewriter.getAST();
+		MethodInvocation factoryMethodCall= ast.newMethodInvocation();
+
+		ASTNode ctorCallParent= ctorCall.getParent();
+		StructuralPropertyDescriptor ctorCallLocation= ctorCall.getLocationInParent();
+		if (ctorCallLocation instanceof ChildListPropertyDescriptor) {
+			ListRewrite ctorCallParentListRewrite= unitRewriter.getListRewrite(ctorCallParent, (ChildListPropertyDescriptor)ctorCallLocation);
+			int index= ctorCallParentListRewrite.getOriginalList().indexOf(ctorCall);
+			ctorCall= (ClassInstanceCreation)ctorCallParentListRewrite.getRewrittenList().get(index);
+		} else {
+			ctorCall= (ClassInstanceCreation)unitRewriter.get(ctorCallParent, ctorCallLocation);
+		}
+		
+		ListRewrite actualFactoryArgs= unitRewriter.getListRewrite(factoryMethodCall, MethodInvocation.ARGUMENTS_PROPERTY);
+		ListRewrite actualCtorArgs= unitRewriter.getListRewrite(ctorCall, ClassInstanceCreation.ARGUMENTS_PROPERTY);
+
+		// Need to use a qualified name for the factory method if we're not
+		// in the context of the class holding the factory.
+		AbstractTypeDeclaration callOwner= (AbstractTypeDeclaration) ASTNodes.getParent(ctorCall, AbstractTypeDeclaration.class);
+		ITypeBinding callOwnerBinding= callOwner.resolveBinding();
+
+		if (callOwnerBinding == null || !Bindings.equals(callOwner.resolveBinding(), fFactoryOwningClass.resolveBinding())) {
+			String qualifier= fImportRewriter.addImport(fFactoryOwningClass.resolveBinding());
+			factoryMethodCall.setExpression(ASTNodeFactory.newName(ast, qualifier));
+		}
+
+		factoryMethodCall.setName(ast.newSimpleName(fNewMethodName));
+
+		List<Expression> actualCtorArgsList= actualCtorArgs.getRewrittenList();
+		for (int i=0; i < actualCtorArgsList.size(); i++) {
+			Expression actualCtorArg= actualCtorArgsList.get(i);
+			
+			ASTNode movedArg;
+			if (ASTNodes.isExistingNode(actualCtorArg)) {
+				movedArg= unitRewriter.createMoveTarget(actualCtorArg);
+			} else {
+				unitRewriter.remove(actualCtorArg, null);
+				movedArg= actualCtorArg;
+			}
+				
+			actualFactoryArgs.insertLast(movedArg, gd);
+		}
+
+		unitRewriter.replace(ctorCall, factoryMethodCall, gd);
+	}
+

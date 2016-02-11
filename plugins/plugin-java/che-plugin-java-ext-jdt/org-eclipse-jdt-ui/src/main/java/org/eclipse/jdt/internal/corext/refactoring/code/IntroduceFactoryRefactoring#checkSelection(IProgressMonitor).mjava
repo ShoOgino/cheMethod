@@ -1,0 +1,70 @@
+	/**
+	 * Determines what kind of AST node was selected, and returns an error status
+	 * if the kind of node is inappropriate for this refactoring.
+	 * @param pm
+	 * @return a RefactoringStatus indicating whether the selection is valid
+	 * @throws JavaModelException
+	 */
+	private RefactoringStatus checkSelection(IProgressMonitor pm) throws JavaModelException {
+		try {
+			pm.beginTask(RefactoringCoreMessages.IntroduceFactory_examiningSelection, 2);
+
+			fSelectedNode = getTargetNode(fCUHandle, fSelectionStart, fSelectionLength);
+
+			if (fSelectedNode == null)
+				return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceFactory_notAConstructorInvocation);
+
+			// getTargetNode() must return either a ClassInstanceCreation or a
+			// constructor MethodDeclaration; nothing else.
+			if (fSelectedNode instanceof ClassInstanceCreation) {
+				ClassInstanceCreation classInstanceCreation = (ClassInstanceCreation)fSelectedNode;
+				fCtorBinding = classInstanceCreation.resolveConstructorBinding();
+			} else if (fSelectedNode instanceof MethodDeclaration) {
+				MethodDeclaration methodDeclaration = (MethodDeclaration)fSelectedNode;
+				fCtorBinding = methodDeclaration.resolveBinding();
+			}
+
+			if (fCtorBinding == null)
+				return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages
+																		.IntroduceFactory_unableToResolveConstructorBinding);
+
+			// If this constructor is of a generic type, get the generic version,
+			// not some instantiation thereof.
+			fCtorBinding = fCtorBinding.getMethodDeclaration();
+
+			pm.worked(1);
+
+			// We don't handle constructors of nested types at the moment
+			if (fCtorBinding.getDeclaringClass().isNested())
+				return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceFactory_unsupportedNestedTypes);
+
+			ITypeBinding ctorType = fCtorBinding.getDeclaringClass();
+			IType ctorOwningType = (IType)ctorType.getJavaElement();
+
+			if (ctorOwningType.isBinary())
+				// Can't modify binary CU; don't know what CU to put factory method
+				return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceFactory_constructorInBinaryClass);
+			if (ctorOwningType.isEnum())
+				// Doesn't make sense to encapsulate enum constructors
+				return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceFactory_constructorInEnum);
+
+			// Put the generated factory method inside the type that owns the constructor
+			fFactoryUnitHandle = ctorOwningType.getCompilationUnit();
+			fFactoryCU = getASTFor(fFactoryUnitHandle);
+
+			Name ctorOwnerName = (Name)NodeFinder.perform(fFactoryCU, ctorOwningType.getNameRange());
+
+			fCtorOwningClass = (AbstractTypeDeclaration)ASTNodes.getParent(ctorOwnerName, AbstractTypeDeclaration.class);
+			fFactoryOwningClass = fCtorOwningClass;
+
+			pm.worked(1);
+
+			if (fNewMethodName == null)
+				return setNewMethodName("create" + fCtorBinding.getName());//$NON-NLS-1$
+			else
+				return new RefactoringStatus();
+		} finally {
+			pm.done();
+		}
+	}
+

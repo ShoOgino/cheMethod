@@ -1,0 +1,112 @@
+	public static void addAbstractMethodProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		CompilationUnit astRoot= context.getASTRoot();
+
+		ASTNode selectedNode= problem.getCoveringNode(astRoot);
+		if (selectedNode == null) {
+			return;
+		}
+		MethodDeclaration decl;
+		if (selectedNode instanceof SimpleName) {
+			decl= (MethodDeclaration) selectedNode.getParent();
+		} else if (selectedNode instanceof MethodDeclaration) {
+			decl= (MethodDeclaration) selectedNode;
+		} else {
+			return;
+		}
+
+		ASTNode parentType= ASTResolving.findParentType(decl);
+		TypeDeclaration parentTypeDecl= null;
+		boolean parentIsAbstractClass= false;
+		if (parentType instanceof TypeDeclaration) {
+			parentTypeDecl= (TypeDeclaration) parentType;
+			parentIsAbstractClass= !parentTypeDecl.isInterface() && Modifier.isAbstract(parentTypeDecl.getModifiers());
+		}
+		boolean hasNoBody= decl.getBody() == null;
+
+		int id= problem.getProblemId();
+		if (id == IProblem.AbstractMethodInAbstractClass
+				|| id == IProblem.EnumAbstractMethodMustBeImplemented
+				|| id == IProblem.AbstractMethodInEnum
+				|| parentIsAbstractClass) {
+			AST ast= astRoot.getAST();
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+
+			removeModifier(decl, rewrite, Modifier.ABSTRACT);
+
+			if (hasNoBody) {
+				Block newBody= ast.newBlock();
+				rewrite.set(decl, MethodDeclaration.BODY_PROPERTY, newBody, null);
+
+				Type returnType= decl.getReturnType2();
+				if (returnType != null) {
+					Expression expr= ASTNodeFactory.newDefaultExpression(ast, returnType, decl.getExtraDimensions());
+					if (expr != null) {
+						ReturnStatement returnStatement= ast.newReturnStatement();
+						returnStatement.setExpression(expr);
+						newBody.statements().add(returnStatement);
+					}
+				}
+			}
+
+			String label= CorrectionMessages.ModifierCorrectionSubProcessor_removeabstract_description;
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			ASTRewriteCorrectionProposal
+					proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.REMOVE_ABSTRACT_MODIFIER, image);
+			proposals.add(proposal);
+		}
+
+		if (!hasNoBody && id == IProblem.BodyForAbstractMethod) {
+			AST ast= decl.getAST();
+			{
+				ASTRewrite rewrite= ASTRewrite.create(ast);
+				rewrite.remove(decl.getBody(), null);
+
+				String label= CorrectionMessages.ModifierCorrectionSubProcessor_removebody_description;
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+				ASTRewriteCorrectionProposal
+						proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.REMOVE_METHOD_BODY, image);
+				proposals.add(proposal);
+			}
+
+			if (JavaModelUtil.is18OrHigher(cu.getJavaProject()) && parentTypeDecl.isInterface()) {
+				{
+					// insert proposal to add static modifier
+					ASTRewrite rewrite= ASTRewrite.create(ast);
+					removeModifier(decl, rewrite, Modifier.ABSTRACT);
+					Modifier newModifier= ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD);
+					rewrite.getListRewrite(decl, MethodDeclaration.MODIFIERS2_PROPERTY).insertLast(newModifier, null);
+
+					String label= Messages
+							.format(CorrectionMessages.ModifierCorrectionSubProcessor_changemodifiertostatic_description, decl.getName());
+					Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+					int included= Modifier.STATIC;
+					int excluded= Modifier.ABSTRACT | Modifier.DEFAULT;
+					proposals.add(new ModifierChangeCorrectionProposal(label, cu, decl.resolveBinding(), decl, included, excluded,
+							IProposalRelevance.ADD_STATIC_MODIFIER, image));
+				}
+
+				{
+					// insert proposal to add default modifier
+					ASTRewrite rewrite= ASTRewrite.create(ast);
+					removeModifier(decl, rewrite, Modifier.ABSTRACT);
+					Modifier newModifier= ast.newModifier(Modifier.ModifierKeyword.DEFAULT_KEYWORD);
+					rewrite.getListRewrite(decl, MethodDeclaration.MODIFIERS2_PROPERTY).insertLast(newModifier, null);
+
+					String label= Messages
+							.format(CorrectionMessages.ModifierCorrectionSubProcessor_changemodifiertodefault_description, decl.getName());
+					Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+					int included= Modifier.DEFAULT;
+					int excluded= Modifier.ABSTRACT | Modifier.STATIC;
+					proposals.add(new ModifierChangeCorrectionProposal(label, cu, decl.resolveBinding(), decl, included, excluded, IProposalRelevance.ADD_DEFAULT_MODIFIER, image));
+				}
+			}
+		}
+
+		if (id == IProblem.AbstractMethodInAbstractClass && parentTypeDecl != null) {
+			addMakeTypeAbstractProposal(context, parentTypeDecl, proposals);
+		}
+
+	}
+

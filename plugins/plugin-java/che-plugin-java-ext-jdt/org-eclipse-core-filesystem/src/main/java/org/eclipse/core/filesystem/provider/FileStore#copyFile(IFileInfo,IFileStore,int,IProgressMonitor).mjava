@@ -1,0 +1,50 @@
+	/**
+	 * Copies a file as specified by 
+	 * {@link IFileStore#copy(IFileStore, int, IProgressMonitor)}.
+
+	 * @param sourceInfo The current file information for the source of the move
+	 * @param destination The destination of the copy.
+	 * @param options bit-wise or of option flag constants (
+	 * {@link EFS#OVERWRITE} or {@link EFS#SHALLOW}).
+	 * @param monitor a progress monitor, or <code>null</code> if progress
+	 *    reporting and cancellation are not desired
+	 * @exception CoreException if this method fails. Reasons include:
+	 * <ul>
+	 * <li> This store does not exist.</li>
+	 * <li> The <code>OVERWRITE</code> flag is not specified and a file of the
+	 * same name already exists at the copy destination.</li>
+	 * <li> A directory of the same name already exists at the copy destination.</li>
+	 * </ul>
+	 */
+	protected void copyFile(IFileInfo sourceInfo, IFileStore destination, int options, IProgressMonitor monitor) throws CoreException {
+		try {
+			if ((options & EFS.OVERWRITE) == 0 && destination.fetchInfo().exists())
+				Policy.error(EFS.ERROR_EXISTS, NLS.bind(Messages.fileExists, destination));
+			long length = sourceInfo.getLength();
+			int totalWork;
+			if (length == -1)
+				totalWork = IProgressMonitor.UNKNOWN;
+			else
+				totalWork = 1 + (int) (length / buffer.length);
+			String sourcePath = toString();
+			monitor.beginTask(NLS.bind(Messages.copying, sourcePath), totalWork);
+			InputStream in = null;
+			OutputStream out = null;
+			try {
+				in = openInputStream(EFS.NONE, Policy.subMonitorFor(monitor, 0));
+				out = destination.openOutputStream(EFS.NONE, Policy.subMonitorFor(monitor, 0));
+				transferStreams(in, out, sourcePath, monitor);
+				transferAttributes(sourceInfo, destination);
+			} catch (CoreException e) {
+				Policy.safeClose(in);
+				Policy.safeClose(out);
+				//if we failed to write, try to cleanup the half written file
+				if (!destination.fetchInfo(0, null).exists())
+					destination.delete(EFS.NONE, null);
+				throw e;
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

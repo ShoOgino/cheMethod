@@ -1,0 +1,68 @@
+    /*
+     * @see JavaTypeCompletionProposal#updateReplacementString(IDocument,char,int,ImportRewrite)
+     */
+    @Override
+    protected boolean updateReplacementString(IDocument document, char trigger, int offset, ImportRewrite importRewrite)
+            throws CoreException, BadLocationException {
+        Document recoveredDocument = new Document();
+        CompilationUnit unit = getRecoveredAST(document, offset, recoveredDocument);
+        ImportRewriteContext context;
+        if (importRewrite != null) {
+            context = new ContextSensitiveImportRewriteContext(unit, offset, importRewrite);
+        } else {
+            importRewrite = StubUtility.createImportRewrite(unit, true); // create a dummy import rewriter to have one
+            context = new ImportRewriteContext() { // forces that all imports are fully qualified
+                @Override
+                public int findInContext(String qualifier, String name, int kind) {
+                    return RES_NAME_CONFLICT;
+                }
+            };
+        }
+
+        ITypeBinding declaringType = null;
+        ChildListPropertyDescriptor descriptor= null;
+		ASTNode node= NodeFinder.perform(unit, offset, 1);
+		if (node instanceof AnonymousClassDeclaration) {
+			declaringType= ((AnonymousClassDeclaration) node).resolveBinding();
+			descriptor= AnonymousClassDeclaration.BODY_DECLARATIONS_PROPERTY;
+		} else if (node instanceof AbstractTypeDeclaration) {
+			AbstractTypeDeclaration declaration= (AbstractTypeDeclaration) node;
+			descriptor= declaration.getBodyDeclarationsProperty();
+			declaringType= declaration.resolveBinding();
+		}
+		if (declaringType != null) {
+			ASTRewrite rewrite= ASTRewrite.create(unit.getAST());
+			IMethodBinding methodToOverride= Bindings.findMethodInHierarchy(declaringType, fMethodName, fParamTypes);
+			if (methodToOverride == null && declaringType.isInterface()) {
+				methodToOverride= Bindings.findMethodInType(node.getAST().resolveWellKnownType("java.lang.Object"), fMethodName, fParamTypes); //$NON-NLS-1$
+			}
+			if (methodToOverride != null) {
+				CodeGenerationSettings settings= JavaPreferencesSettings.getCodeGenerationSettings(fJavaProject);
+				MethodDeclaration stub= StubUtility2.createImplementationStub(fCompilationUnit, rewrite, importRewrite, context, methodToOverride, declaringType.getName(), settings, declaringType.isInterface());
+				ListRewrite rewriter= rewrite.getListRewrite(node, descriptor);
+				rewriter.insertFirst(stub, null);
+
+				ITrackedNodePosition position= rewrite.track(stub);
+				try {
+					rewrite.rewriteAST(recoveredDocument, fJavaProject.getOptions(true)).apply(recoveredDocument);
+
+					String generatedCode= recoveredDocument.get(position.getStartPosition(), position.getLength());
+					int generatedIndent= IndentManipulation
+                            .measureIndentUnits(getIndentAt(recoveredDocument, position.getStartPosition(), settings), settings.tabWidth,
+                                                settings.indentWidth);
+
+					String indent= getIndentAt(document, getReplacementOffset(), settings);
+					setReplacementString(IndentManipulation
+                                                 .changeIndent(generatedCode, generatedIndent, settings.tabWidth, settings.indentWidth,
+                                                               indent, TextUtilities.getDefaultLineDelimiter(document)));
+
+				} catch (MalformedTreeException exception) {
+					JavaPlugin.log(exception);
+				} catch (BadLocationException exception) {
+					JavaPlugin.log(exception);
+				}
+			}
+		}
+		return true;
+	}
+

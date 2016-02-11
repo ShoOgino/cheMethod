@@ -1,0 +1,49 @@
+	@Override
+	public Change createChange(IProgressMonitor pm) throws CoreException {
+		Assert.isTrue(fMovePolicy.getJavaElementDestination() == null || fMovePolicy.getResourceDestination() == null);
+		Assert.isTrue(fMovePolicy.getJavaElementDestination() != null || fMovePolicy.getResourceDestination() != null);
+		try {
+			final DynamicValidationStateChange result= new DynamicValidationStateChange(RefactoringCoreMessages.JavaMoveProcessor_change_name) {
+
+				@Override
+				public ChangeDescriptor getDescriptor() {
+					return fMovePolicy.getDescriptor();
+				}
+
+				@Override
+				public Change perform(IProgressMonitor pm2) throws CoreException {
+					Change change= super.perform(pm2);
+					Change[] changes= getChildren();
+					for (int index= 0; index < changes.length; index++) {
+						if (!(changes[index] instanceof TextEditBasedChange))
+							return null;
+					}
+					return change;
+				}
+			};
+			CreateTargetExecutionLog log= null;
+			if (fCreateTargetQueries instanceof MonitoringCreateTargetQueries) {
+				final MonitoringCreateTargetQueries queries= (MonitoringCreateTargetQueries) fCreateTargetQueries;
+				final ICreateTargetQueries delegate= queries.getDelegate();
+				if (delegate instanceof LoggedCreateTargetQueries)
+					log= queries.getCreateTargetExecutionLog();
+			}
+			if (log != null) {
+				final Object[] selected= log.getSelectedElements();
+				for (int index= 0; index < selected.length; index++) {
+					result.add(new LoggedCreateTargetChange(selected[index], fCreateTargetQueries));
+				}
+			}
+			Change change= fMovePolicy.createChange(pm);
+			if (change instanceof CompositeChange) {
+				CompositeChange subComposite= (CompositeChange) change;
+				result.merge(subComposite);
+			} else {
+				result.add(change);
+			}
+			return result;
+		} finally {
+			pm.done();
+		}
+	}
+

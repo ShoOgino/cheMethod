@@ -1,0 +1,45 @@
+	public static void createMissingCaseProposals(IInvocationContext context, SwitchStatement switchStatement,
+												  ArrayList<String> enumConstNames, Collection<ICommandAccess> proposals) {
+		List<Statement> statements = switchStatement.statements();
+		int defaultIndex = statements.size();
+		for (int i = 0; i < statements.size(); i++) {
+			Statement curr = statements.get(i);
+			if (curr instanceof SwitchCase && ((SwitchCase)curr).getExpression() == null) {
+				defaultIndex = i;
+				break;
+			}
+		}
+		boolean hasDefault = defaultIndex < statements.size();
+
+		AST ast = switchStatement.getAST();
+		Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+
+		if (enumConstNames.size() > 0) {
+			ASTRewrite astRewrite = ASTRewrite.create(ast);
+			ListRewrite listRewrite = astRewrite.getListRewrite(switchStatement, SwitchStatement.STATEMENTS_PROPERTY);
+			for (int i = 0; i < enumConstNames.size(); i++) {
+				SwitchCase newSwitchCase = ast.newSwitchCase();
+				newSwitchCase.setExpression(ast.newName(enumConstNames.get(i)));
+				listRewrite.insertAt(newSwitchCase, defaultIndex, null);
+				defaultIndex++;
+				if (!hasDefault) {
+					listRewrite.insertAt(ast.newBreakStatement(), defaultIndex, null);
+					defaultIndex++;
+				}
+			}
+			if (!hasDefault) {
+				SwitchCase newSwitchCase = ast.newSwitchCase();
+				newSwitchCase.setExpression(null);
+				listRewrite.insertAt(newSwitchCase, defaultIndex, null);
+				defaultIndex++;
+				listRewrite.insertAt(ast.newBreakStatement(), defaultIndex, null);
+			}
+			String label = CorrectionMessages.LocalCorrectionsSubProcessor_add_missing_cases_description;
+			proposals.add(new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), astRewrite,
+														   IProposalRelevance.ADD_MISSING_CASE_STATEMENTS, image));
+		}
+		if (!hasDefault) {
+			createMissingDefaultProposal(context, switchStatement, image, proposals);
+		}
+	}
+

@@ -1,0 +1,43 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.ltk.core.refactoring.Change#perform(org.eclipse.core.runtime.IProgressMonitor)
+	 */
+	public final Change perform(IProgressMonitor monitor) throws CoreException, OperationCanceledException {
+		try {
+			if (monitor == null)
+				monitor= new NullProgressMonitor();
+
+			monitor.beginTask(getName(), 4);
+
+			Change deleteUndo= null;
+
+			// delete destination if required
+			IResource resourceAtDestination= fTarget.findMember(fSource.getName());
+			if (resourceAtDestination != null && resourceAtDestination.exists()) {
+				deleteUndo= performDestinationDelete(resourceAtDestination, new SubProgressMonitor(monitor, 1));
+			} else {
+				monitor.worked(1);
+			}
+
+			// move resource
+			long currentStamp= fSource.getModificationStamp();
+			IPath destinationPath= fTarget.getFullPath().append(fSource.getName());
+			fSource.move(destinationPath, IResource.KEEP_HISTORY | IResource.SHALLOW, new SubProgressMonitor(monitor, 2));
+			resourceAtDestination= ResourcesPlugin.getWorkspace().getRoot().findMember(destinationPath);
+
+			// restore timestamp at destination
+			if (fStampToRestore != IResource.NULL_STAMP) {
+				resourceAtDestination.revertModificationStamp(fStampToRestore);
+			}
+
+			// restore file at source
+			if (fRestoreSourceChange != null) {
+				performSourceRestore(new SubProgressMonitor(monitor, 1));
+			} else {
+				monitor.worked(1);
+			}
+			return new MoveResourceChange(resourceAtDestination, fSource.getParent(), currentStamp, deleteUndo);
+		} finally {
+			monitor.done();
+		}
+	}
+

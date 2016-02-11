@@ -1,0 +1,90 @@
+	private void createIntermediaryMethod() throws CoreException {
+
+		CompilationUnitRewrite imRewrite= getCachedCURewrite(fIntermediaryType.getCompilationUnit());
+		AST ast= imRewrite.getAST();
+		MethodDeclaration intermediary= ast.newMethodDeclaration();
+
+		// Intermediary class is non-anonymous
+		AbstractTypeDeclaration type= (AbstractTypeDeclaration)typeToDeclaration(fIntermediaryType, imRewrite.getRoot());
+
+		// Name
+		intermediary.setName(ast.newSimpleName(fIntermediaryMethodName));
+
+		// Flags
+		List<IExtendedModifier> modifiers= intermediary.modifiers();
+		if (!fIntermediaryType.isInterface()) {
+			modifiers.add(imRewrite.getAST().newModifier(ModifierKeyword.PUBLIC_KEYWORD));
+		}
+		modifiers.add(imRewrite.getAST().newModifier(ModifierKeyword.STATIC_KEYWORD));
+
+		// Parameters
+		String targetParameterName= StubUtility
+				.suggestArgumentName(getProject(), fIntermediaryFirstParameterType.getName(), fTargetMethod.getParameterNames());
+
+		ImportRewriteContext context= new ContextSensitiveImportRewriteContext(type, imRewrite.getImportRewrite());
+		if (!isStaticTarget()) {
+			// Add first param
+			SingleVariableDeclaration parameter= imRewrite.getAST().newSingleVariableDeclaration();
+			Type t= imRewrite.getImportRewrite().addImport(fIntermediaryFirstParameterType, imRewrite.getAST(), context);
+			if (fIntermediaryFirstParameterType.isGenericType()) {
+				ParameterizedType parameterized= imRewrite.getAST().newParameterizedType(t);
+				ITypeBinding[] typeParameters= fIntermediaryFirstParameterType.getTypeParameters();
+				for (int i= 0; i < typeParameters.length; i++)
+					parameterized.typeArguments().add(imRewrite.getImportRewrite().addImport(typeParameters[i], imRewrite.getAST()));
+				t= parameterized;
+			}
+			parameter.setType(t);
+			parameter.setName(imRewrite.getAST().newSimpleName(targetParameterName));
+			intermediary.parameters().add(parameter);
+		}
+		// Add other params
+		copyArguments(intermediary, imRewrite);
+
+		// Add type parameters of declaring type (and enclosing types)
+		if (!isStaticTarget() && fIntermediaryFirstParameterType.isGenericType())
+			addTypeParameters(imRewrite, intermediary.typeParameters(), fIntermediaryFirstParameterType);
+
+		// Add type params of method
+		copyTypeParameters(intermediary, imRewrite);
+
+		// Return type
+		intermediary.setReturnType2(imRewrite.getImportRewrite().addImport(fTargetMethodBinding.getReturnType(), ast, context));
+
+		// Exceptions
+		copyExceptions(intermediary, imRewrite);
+
+		// Body
+		MethodInvocation invocation= imRewrite.getAST().newMethodInvocation();
+		invocation.setName(imRewrite.getAST().newSimpleName(fTargetMethod.getElementName()));
+		if (isStaticTarget()) {
+			Type importedType= imRewrite.getImportRewrite().addImport(fTargetMethodBinding.getDeclaringClass(), ast, context);
+			invocation.setExpression(ASTNodeFactory.newName(ast, ASTNodes.asString(importedType)));
+		} else {
+			invocation.setExpression(imRewrite.getAST().newSimpleName(targetParameterName));
+		}
+		copyInvocationParameters(invocation, ast);
+		Statement call= encapsulateInvocation(intermediary, invocation);
+
+		final Block body= imRewrite.getAST().newBlock();
+		body.statements().add(call);
+		intermediary.setBody(body);
+
+		// method comment
+		ICompilationUnit targetCU= imRewrite.getCu();
+		if (StubUtility.doAddComments(targetCU.getJavaProject())) {
+			String comment= CodeGeneration
+					.getMethodComment(targetCU, getIntermediaryTypeName(), intermediary, null, StubUtility.getLineDelimiterUsed(targetCU));
+			if (comment != null) {
+				Javadoc javadoc= (Javadoc) imRewrite.getASTRewrite().createStringPlaceholder(comment, ASTNode.JAVADOC);
+				intermediary.setJavadoc(javadoc);
+			}
+		}
+
+		// Add the completed method to the intermediary type:
+		ChildListPropertyDescriptor typeBodyDeclarationsProperty= typeToBodyDeclarationProperty(fIntermediaryType, imRewrite.getRoot());
+
+		ListRewrite bodyDeclarationsListRewrite= imRewrite.getASTRewrite().getListRewrite(type, typeBodyDeclarationsProperty);
+		bodyDeclarationsListRewrite.insertAt(intermediary, ASTNodes.getInsertionIndex(intermediary, type.bodyDeclarations()), imRewrite
+				.createGroupDescription(RefactoringCoreMessages.IntroduceIndirectionRefactoring_group_description_create_new_method));
+	}
+

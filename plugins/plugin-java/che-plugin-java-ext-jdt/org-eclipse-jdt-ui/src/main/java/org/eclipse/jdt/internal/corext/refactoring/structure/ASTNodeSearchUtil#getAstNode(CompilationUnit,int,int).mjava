@@ -1,0 +1,37 @@
+	public static ASTNode getAstNode(CompilationUnit cuNode, int start, int length){
+		SelectionAnalyzer analyzer= new SelectionAnalyzer(Selection.createFromStartLength(start, length), true);
+		cuNode.accept(analyzer);
+		//XXX workaround for jdt core feature 23527
+		ASTNode node= analyzer.getFirstSelectedNode();
+		if (node == null && analyzer.getLastCoveringNode() instanceof SuperConstructorInvocation)
+			node= analyzer.getLastCoveringNode().getParent();
+		else if (node == null && analyzer.getLastCoveringNode() instanceof ConstructorInvocation)
+			node= analyzer.getLastCoveringNode().getParent();
+
+		if (node == null)
+			return null;
+
+		ASTNode parentNode= node.getParent();
+
+		if (parentNode instanceof MethodDeclaration){
+			MethodDeclaration md= (MethodDeclaration)parentNode;
+			if (!(node instanceof SimpleName)
+				&& md.isConstructor()
+			    && md.getBody() != null
+			    && md.getBody().statements().size() > 0
+			    &&(md.getBody().statements().get(0) instanceof ConstructorInvocation || md.getBody().statements().get(0) instanceof SuperConstructorInvocation)
+			    &&((ASTNode)md.getBody().statements().get(0)).getLength() == length + 1)
+			return (ASTNode)md.getBody().statements().get(0);
+		}
+
+		if (parentNode instanceof SuperConstructorInvocation){
+			if (parentNode.getLength() == length + 1)
+				return parentNode;
+		}
+		if (parentNode instanceof ConstructorInvocation){
+			if (parentNode.getLength() == length + 1)
+				return parentNode;
+		}
+		return node;
+	}
+

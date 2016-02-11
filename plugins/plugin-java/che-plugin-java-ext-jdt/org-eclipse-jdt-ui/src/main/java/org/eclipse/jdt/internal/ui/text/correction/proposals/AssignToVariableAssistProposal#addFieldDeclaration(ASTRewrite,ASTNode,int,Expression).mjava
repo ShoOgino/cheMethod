@@ -1,0 +1,31 @@
+	private VariableDeclarationFragment addFieldDeclaration(ASTRewrite rewrite, ASTNode newTypeDecl, int modifiers, Expression expression) {
+		if (fExistingFragment != null) {
+			return fExistingFragment;
+		}
+
+		ChildListPropertyDescriptor property= ASTNodes.getBodyDeclarationsProperty(newTypeDecl);
+		List<BodyDeclaration> decls= ASTNodes.getBodyDeclarations(newTypeDecl);
+		AST ast= newTypeDecl.getAST();
+		String[] varNames= suggestFieldNames(fTypeBinding, expression, modifiers);
+		for (int i= 0; i < varNames.length; i++) {
+			addLinkedPositionProposal(KEY_NAME, varNames[i], null);
+		}
+		String varName= varNames[0];
+
+		VariableDeclarationFragment newDeclFrag= ast.newVariableDeclarationFragment();
+		newDeclFrag.setName(ast.newSimpleName(varName));
+
+		FieldDeclaration newDecl= ast.newFieldDeclaration(newDeclFrag);
+
+		Type type= evaluateType(ast);
+		newDecl.setType(type);
+		newDecl.modifiers().addAll(ASTNodeFactory.newModifiers(ast, modifiers));
+
+		ModifierCorrectionSubProcessor.installLinkedVisibilityProposals(getLinkedProposalModel(), rewrite, newDecl.modifiers(), false);
+
+		int insertIndex= findFieldInsertIndex(decls, fNodeToAssign.getStartPosition());
+		rewrite.getListRewrite(newTypeDecl, property).insertAt(newDecl, insertIndex, null);
+
+		return newDeclFrag;
+	}
+

@@ -1,0 +1,32 @@
+	/**
+	 * Reads the refactoring history from disk.
+	 *
+	 * @param start
+	 *            the start time stamp, inclusive
+	 * @param end
+	 *            the end time stamp, inclusive
+	 * @param monitor
+	 *            the progress monitor to use
+	 * @return the refactoring history
+	 */
+	RefactoringHistory readRefactoringHistory(final long start, final long end, final IProgressMonitor monitor) {
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_retrieving_history, 200);
+			final Set set= new HashSet();
+			try {
+				if (fHistoryStore.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 20, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists())
+					readRefactoringDescriptorProxies(fHistoryStore, fProjectName, set, start, end, new SubProgressMonitor(monitor, 80), RefactoringCoreMessages.RefactoringHistoryService_retrieving_history);
+				final IFileStore store= EFS.getLocalFileSystem().getStore(RefactoringCorePlugin.getDefault().getStateLocation()).getChild(RefactoringHistoryService.NAME_HISTORY_FOLDER).getChild(RefactoringHistoryService.NAME_WORKSPACE_PROJECT);
+				if (store.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 20, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists())
+					readRefactoringDescriptorProxies(store, null, set, start, end, new SubProgressMonitor(monitor, 80), RefactoringCoreMessages.RefactoringHistoryService_retrieving_history);
+			} catch (CoreException exception) {
+				RefactoringCorePlugin.log(exception);
+			}
+			final RefactoringDescriptorProxy[] proxies= new RefactoringDescriptorProxy[set.size()];
+			set.toArray(proxies);
+			return new RefactoringHistoryImplementation(proxies);
+		} finally {
+			monitor.done();
+		}
+	}
+

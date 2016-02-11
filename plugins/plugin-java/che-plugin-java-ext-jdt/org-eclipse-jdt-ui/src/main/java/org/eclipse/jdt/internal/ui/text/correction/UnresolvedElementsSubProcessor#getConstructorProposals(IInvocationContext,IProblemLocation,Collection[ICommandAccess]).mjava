@@ -1,0 +1,67 @@
+	public static void getConstructorProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) throws
+																																		   CoreException {
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		CompilationUnit astRoot= context.getASTRoot();
+		ASTNode selectedNode= problem.getCoveringNode(astRoot);
+		if (selectedNode == null) {
+			return;
+		}
+
+		ITypeBinding targetBinding= null;
+		List<Expression> arguments= null;
+		IMethodBinding recursiveConstructor= null;
+
+		int type= selectedNode.getNodeType();
+		if (type == ASTNode.CLASS_INSTANCE_CREATION) {
+			ClassInstanceCreation creation= (ClassInstanceCreation) selectedNode;
+
+			IBinding binding= creation.getType().resolveBinding();
+			if (binding instanceof ITypeBinding) {
+				targetBinding= (ITypeBinding) binding;
+				arguments= creation.arguments();
+			}
+		} else if (type == ASTNode.SUPER_CONSTRUCTOR_INVOCATION) {
+			ITypeBinding typeBinding= Bindings.getBindingOfParentType(selectedNode);
+			if (typeBinding != null && !typeBinding.isAnonymous()) {
+				targetBinding= typeBinding.getSuperclass();
+				arguments= ((SuperConstructorInvocation) selectedNode).arguments();
+			}
+		} else if (type == ASTNode.CONSTRUCTOR_INVOCATION) {
+			ITypeBinding typeBinding= Bindings.getBindingOfParentType(selectedNode);
+			if (typeBinding != null && !typeBinding.isAnonymous()) {
+				targetBinding= typeBinding;
+				arguments= ((ConstructorInvocation) selectedNode).arguments();
+				recursiveConstructor= ASTResolving.findParentMethodDeclaration(selectedNode).resolveBinding();
+			}
+		}
+		if (targetBinding == null) {
+			return;
+		}
+		IMethodBinding[] methods= targetBinding.getDeclaredMethods();
+		ArrayList<IMethodBinding> similarElements= new ArrayList<IMethodBinding>();
+		for (int i= 0; i < methods.length; i++) {
+			IMethodBinding curr= methods[i];
+			if (curr.isConstructor() && recursiveConstructor != curr) {
+				similarElements.add(curr); // similar elements can contain a implicit default constructor
+			}
+		}
+
+		addParameterMissmatchProposals(context, problem, similarElements, selectedNode, arguments, proposals);
+
+		if (targetBinding.isFromSource()) {
+			ITypeBinding targetDecl= targetBinding.getTypeDeclaration();
+
+			ICompilationUnit targetCU= ASTResolving.findCompilationUnitForBinding(cu, astRoot, targetDecl);
+			if (targetCU != null) {
+				String[] args= new String[] { ASTResolving.getMethodSignature(ASTResolving.getTypeSignature(targetDecl),
+																			  getParameterTypes(arguments), false) };
+				String label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_createconstructor_description, args);
+				Image image= JavaElementImageProvider
+						.getDecoratedImage(JavaPluginImages.DESC_MISC_PUBLIC, JavaElementImageDescriptor.CONSTRUCTOR,
+										   JavaElementImageProvider.SMALL_SIZE);
+				proposals.add(new NewMethodCorrectionProposal(label, targetCU, selectedNode, arguments, targetDecl, IProposalRelevance.CREATE_CONSTRUCTOR, image));
+			}
+		}
+	}
+

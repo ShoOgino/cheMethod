@@ -1,0 +1,62 @@
+	private static boolean getUnrollMultiCatchProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
+		if (!JavaModelUtil.is17OrHigher(context.getCompilationUnit().getJavaProject()))
+			return false;
+
+		CatchClause catchClause= (CatchClause) ASTResolving.findAncestor(covering, ASTNode.CATCH_CLAUSE);
+		if (catchClause == null) {
+			return false;
+		}
+
+		Statement statement= ASTResolving.findParentStatement(covering);
+		if (statement != catchClause.getParent() && statement != catchClause.getBody()) {
+			return false; // selection is in a statement inside the body
+		}
+
+		Type type1= catchClause.getException().getType();
+		Type selectedMultiCatchType= null;
+		if (type1.isUnionType() && covering instanceof Name) {
+			Name topMostName= ASTNodes.getTopMostName((Name)covering);
+			ASTNode parent= topMostName.getParent();
+			if (parent instanceof SimpleType || parent instanceof NameQualifiedType) {
+				selectedMultiCatchType= (Type) parent;
+			}
+		}
+		if (selectedMultiCatchType != null)
+			return false;
+
+		SingleVariableDeclaration singleVariableDeclaration= catchClause.getException();
+		Type type= singleVariableDeclaration.getType();
+		if (!(type instanceof UnionType))
+			return false;
+
+		if (resultingCollections == null)
+			return true;
+
+		AST ast= covering.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+
+		TryStatement tryStatement= (TryStatement) catchClause.getParent();
+		ListRewrite listRewrite= rewrite.getListRewrite(tryStatement, TryStatement.CATCH_CLAUSES_PROPERTY);
+
+		UnionType unionType= (UnionType) type;
+		List<Type> types= unionType.types();
+		for (int i= types.size() - 1; i >= 0; i--) {
+			Type type2= types.get(i);
+			CatchClause newCatchClause= ast.newCatchClause();
+
+			SingleVariableDeclaration newSingleVariableDeclaration= ast.newSingleVariableDeclaration();
+			newSingleVariableDeclaration.setType((Type) rewrite.createCopyTarget(type2));
+			newSingleVariableDeclaration.setName((SimpleName) rewrite.createCopyTarget(singleVariableDeclaration.getName()));
+			newCatchClause.setException(newSingleVariableDeclaration);
+			setCatchClauseBody(newCatchClause, rewrite, catchClause);
+			listRewrite.insertAfter(newCatchClause, catchClause, null);
+		}
+		rewrite.remove(catchClause, null);
+
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		String label= CorrectionMessages.QuickAssistProcessor_convert_to_multiple_singletype_catch_blocks;
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.USE_SEPARATE_CATCH_BLOCKS, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

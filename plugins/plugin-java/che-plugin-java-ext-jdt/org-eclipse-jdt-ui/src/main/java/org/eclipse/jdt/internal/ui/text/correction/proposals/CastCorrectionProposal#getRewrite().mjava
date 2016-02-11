@@ -1,0 +1,35 @@
+	@Override
+	protected ASTRewrite getRewrite() throws CoreException {
+		AST ast= fNodeToCast.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		ImportRewrite importRewrite= createImportRewrite((CompilationUnit) fNodeToCast.getRoot());
+
+		Type newTypeNode= getNewCastTypeNode(rewrite, importRewrite);
+
+		if (fNodeToCast.getNodeType() == ASTNode.CAST_EXPRESSION) {
+			CastExpression expression= (CastExpression) fNodeToCast;
+			rewrite.replace(expression.getType(), newTypeNode, null);
+		} else {
+			Expression expressionCopy= (Expression) rewrite.createCopyTarget(fNodeToCast);
+			if (needsInnerParantheses(fNodeToCast)) {
+				ParenthesizedExpression parenthesizedExpression= ast.newParenthesizedExpression();
+				parenthesizedExpression.setExpression(expressionCopy);
+				expressionCopy= parenthesizedExpression;
+			}
+
+			CastExpression castExpression= ast.newCastExpression();
+			castExpression.setExpression(expressionCopy);
+			castExpression.setType(newTypeNode);
+
+			ASTNode replacingNode= castExpression;
+			if (needsOuterParantheses(fNodeToCast)) {
+				ParenthesizedExpression parenthesizedExpression= ast.newParenthesizedExpression();
+				parenthesizedExpression.setExpression(castExpression);
+				replacingNode= parenthesizedExpression;
+			}
+
+			rewrite.replace(fNodeToCast, replacingNode, null);
+		}
+		return rewrite;
+	}
+

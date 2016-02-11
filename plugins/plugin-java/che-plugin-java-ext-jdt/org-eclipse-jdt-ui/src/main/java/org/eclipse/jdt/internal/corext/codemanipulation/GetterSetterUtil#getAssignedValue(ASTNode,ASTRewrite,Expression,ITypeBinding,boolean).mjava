@@ -1,0 +1,56 @@
+	/**
+	 * Converts an assignment, postfix expression or prefix expression into an assignable equivalent expression using the getter.
+	 *
+	 * @param node the assignment/prefix/postfix node
+	 * @param astRewrite the astRewrite to use
+	 * @param getterExpression the expression to insert for read accesses or <code>null</code> if such an expression does not exist
+	 * @param variableType the type of the variable that the result will be assigned to
+	 * @param is50OrHigher <code>true</code> if a 5.0 or higher environment can be used
+	 * @return an expression that can be assigned to the type variableType with node being replaced by a equivalent expression using the getter
+	 */
+	public static Expression getAssignedValue(ASTNode node, ASTRewrite astRewrite, Expression getterExpression, ITypeBinding variableType, boolean is50OrHigher) {
+		InfixExpression.Operator op= null;
+		AST ast= astRewrite.getAST();
+		if (isNotInBlock(node))
+			return null;
+		if (node.getNodeType() == ASTNode.ASSIGNMENT) {
+			Assignment assignment= ((Assignment) node);
+			Expression rightHandSide= assignment.getRightHandSide();
+			Expression copiedRightOp= (Expression) astRewrite.createCopyTarget(rightHandSide);
+			if (assignment.getOperator() == Operator.ASSIGN) {
+				ITypeBinding rightHandSideType= rightHandSide.resolveTypeBinding();
+				copiedRightOp= createNarrowCastIfNessecary(copiedRightOp, rightHandSideType, ast, variableType, is50OrHigher);
+				return copiedRightOp;
+			}
+			if (getterExpression != null) {
+				InfixExpression infix= ast.newInfixExpression();
+				infix.setLeftOperand(getterExpression);
+				infix.setOperator(ASTNodes.convertToInfixOperator(assignment.getOperator()));
+				ITypeBinding infixType= infix.resolveTypeBinding();
+				if (NecessaryParenthesesChecker.needsParenthesesForRightOperand(rightHandSide, infix, variableType)) {
+					ParenthesizedExpression p= ast.newParenthesizedExpression();
+					p.setExpression(copiedRightOp);
+					copiedRightOp= p;
+				}
+				infix.setRightOperand(copiedRightOp);
+				return createNarrowCastIfNessecary(infix, infixType, ast, variableType, is50OrHigher);
+			}
+		} else if (node.getNodeType() == ASTNode.POSTFIX_EXPRESSION) {
+			PostfixExpression po= (PostfixExpression) node;
+			if (po.getOperator() == PostfixExpression.Operator.INCREMENT)
+				op= InfixExpression.Operator.PLUS;
+			if (po.getOperator() == PostfixExpression.Operator.DECREMENT)
+				op= InfixExpression.Operator.MINUS;
+		} else if (node.getNodeType() == ASTNode.PREFIX_EXPRESSION) {
+			PrefixExpression pe= (PrefixExpression) node;
+			if (pe.getOperator() == PrefixExpression.Operator.INCREMENT)
+				op= InfixExpression.Operator.PLUS;
+			if (pe.getOperator() == PrefixExpression.Operator.DECREMENT)
+				op= InfixExpression.Operator.MINUS;
+		}
+		if (op != null && getterExpression != null) {
+			return createInfixInvocationFromPostPrefixExpression(op, getterExpression, ast, variableType, is50OrHigher);
+		}
+		return null;
+	}
+

@@ -1,0 +1,139 @@
+	/**
+	 * Returns an image descriptor for a java element. This is the base image, no overlays.
+	 * @param element the element
+	 * @param renderFlags the image flags
+	 * @return returns the image descriptor
+	 */
+	public ImageDescriptor getBaseImageDescriptor(IJavaElement element, int renderFlags) {
+
+		try {
+			switch (element.getElementType()) {
+				case IJavaElement.INITIALIZER:
+					return JavaPluginImages.DESC_MISC_PRIVATE; // 23479
+				case IJavaElement.METHOD: {
+					IMethod method= (IMethod) element;
+					IType declType= method.getDeclaringType();
+					int flags= method.getFlags();
+					if (declType.isEnum() && isDefaultFlag(flags) && method.isConstructor())
+						return JavaPluginImages.DESC_MISC_PRIVATE;
+					return getMethodImageDescriptor(JavaModelUtil.isInterfaceOrAnnotation(declType), flags);
+				}
+				case IJavaElement.FIELD: {
+					IMember member= (IMember) element;
+					IType declType= member.getDeclaringType();
+					return getFieldImageDescriptor(JavaModelUtil.isInterfaceOrAnnotation(declType), member.getFlags());
+				}
+				case IJavaElement.LOCAL_VARIABLE:
+					return JavaPluginImages.DESC_OBJS_LOCAL_VARIABLE;
+
+				case IJavaElement.PACKAGE_DECLARATION:
+					return JavaPluginImages.DESC_OBJS_PACKDECL;
+
+				case IJavaElement.IMPORT_DECLARATION:
+					return JavaPluginImages.DESC_OBJS_IMPDECL;
+
+				case IJavaElement.IMPORT_CONTAINER:
+					return JavaPluginImages.DESC_OBJS_IMPCONT;
+
+				case IJavaElement.TYPE: {
+					IType type= (IType) element;
+
+					IType declType= type.getDeclaringType();
+					boolean isInner= declType != null;
+					boolean isInInterfaceOrAnnotation= isInner && JavaModelUtil.isInterfaceOrAnnotation(declType);
+					return getTypeImageDescriptor(isInner, isInInterfaceOrAnnotation, type.getFlags(), useLightIcons(renderFlags));
+				}
+
+				case IJavaElement.PACKAGE_FRAGMENT_ROOT: {
+					IPackageFragmentRoot root= (IPackageFragmentRoot) element;
+					IPath attach= root.getSourceAttachmentPath();
+					if (root.getKind() == IPackageFragmentRoot.K_BINARY) {
+						if (root.isArchive()) {
+							if (root.isExternal()) {
+								if (attach == null) {
+									return JavaPluginImages.DESC_OBJS_EXTJAR;
+								} else {
+									return JavaPluginImages.DESC_OBJS_EXTJAR_WSRC;
+								}
+							} else {
+								if (attach == null) {
+									return JavaPluginImages.DESC_OBJS_JAR;
+								} else {
+									return JavaPluginImages.DESC_OBJS_JAR_WSRC;
+								}
+							}
+						} else {
+							if (attach == null) {
+								return JavaPluginImages.DESC_OBJS_CLASSFOLDER;
+							} else {
+								return JavaPluginImages.DESC_OBJS_CLASSFOLDER_WSRC;
+							}
+						}
+					} else {
+						return JavaPluginImages.DESC_OBJS_PACKFRAG_ROOT;
+					}
+				}
+
+				case IJavaElement.PACKAGE_FRAGMENT:
+					return getPackageFragmentIcon(element);
+
+
+				case IJavaElement.COMPILATION_UNIT:
+					return JavaPluginImages.DESC_OBJS_CUNIT;
+
+				case IJavaElement.CLASS_FILE:
+					/* this is too expensive for large packages
+					try {
+						IClassFile cfile= (IClassFile)element;
+						if (cfile.isClass())
+							return JavaPluginImages.IMG_OBJS_CFILECLASS;
+						return JavaPluginImages.IMG_OBJS_CFILEINT;
+					} catch(JavaModelException e) {
+						// fall through;
+					}*/
+					return JavaPluginImages.DESC_OBJS_CFILE;
+
+				case IJavaElement.JAVA_PROJECT:
+					IJavaProject jp= (IJavaProject)element;
+					if (jp.getProject().isOpen()) {
+//						IProject project= jp.getProject();
+//						IWorkbenchAdapter adapter= (IWorkbenchAdapter)project.getAdapter(IWorkbenchAdapter.class);
+//						if (adapter != null) {
+//							ImageDescriptor result= adapter.getImageDescriptor(project);
+//							if (result != null)
+//								return result;
+//						}
+						return DESC_OBJ_PROJECT;
+					}
+					return DESC_OBJ_PROJECT_CLOSED;
+
+				case IJavaElement.JAVA_MODEL:
+					return JavaPluginImages.DESC_OBJS_JAVA_MODEL;
+
+				case IJavaElement.TYPE_PARAMETER:
+					return JavaPluginImages.DESC_OBJS_TYPEVARIABLE;
+
+				case IJavaElement.ANNOTATION:
+					return JavaPluginImages.DESC_OBJS_ANNOTATION;
+
+				default:
+					// ignore. Must be a new, yet unknown Java element
+//					// give an advanced IWorkbenchAdapter the chance
+//					IWorkbenchAdapter wbAdapter= (IWorkbenchAdapter) element.getAdapter(IWorkbenchAdapter.class);
+//					if (wbAdapter != null && !(wbAdapter instanceof JavaWorkbenchAdapter)) { // avoid recursion
+//						ImageDescriptor imageDescriptor= wbAdapter.getImageDescriptor(element);
+//						if (imageDescriptor != null) {
+//							return imageDescriptor;
+//						}
+//					}
+					return JavaPluginImages.DESC_OBJS_GHOST;
+			}
+
+		} catch (JavaModelException e) {
+			if (e.isDoesNotExist())
+				return JavaPluginImages.DESC_OBJS_UNKNOWN;
+			JavaPlugin.log(e);
+			return JavaPluginImages.DESC_OBJS_GHOST;
+		}
+	}
+

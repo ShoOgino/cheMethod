@@ -1,0 +1,76 @@
+	/**
+	 * Must be called in the UI thread.<br>
+	 * <strong>Use {@link #perform(boolean, boolean)} unless you know exactly what you are doing!</strong>
+	 *
+	 * @param fork if set, the operation will be forked
+	 * @param forkChangeExecution if the change should not be executed in the UI thread: This may not work in any case
+	 * @param cancelable  if set, the operation will be cancelable
+	 * @throws InterruptedException thrown when the operation is cancelled
+	 * @throws InvocationTargetException thrown when the operation failed to execute
+	 */
+	public RefactoringStatus perform(boolean fork, boolean forkChangeExecution, boolean cancelable)
+            throws InterruptedException, InvocationTargetException, CoreException {
+//		Assert.isTrue(Display.getCurrent() != null);
+		final IJobManager manager=  Job.getJobManager();
+		final ISchedulingRule rule;
+		if (fRefactoring instanceof IScheduledRefactoring) {
+			rule= ((IScheduledRefactoring)fRefactoring).getSchedulingRule();
+		} else {
+			rule= ResourcesPlugin.getWorkspace().getRoot();
+		}
+        Operation op = null;
+		try {
+//			try {
+//				Runnable r= new Runnable() {
+//					public void run() {
+//						manager.beginRule(rule, null);
+//					}
+//				};
+////				BusyIndicator.showWhile(fParent.getDisplay(), r);
+//			} catch (OperationCanceledException e) {
+//				throw new InterruptedException(e.getMessage());
+//			}
+
+//			RefactoringSaveHelper saveHelper= new RefactoringSaveHelper(fSaveMode);
+//			if (!saveHelper.saveEditors(fParent))
+//				throw new InterruptedException();
+
+			try{
+				op = new Operation(fork, forkChangeExecution);
+				op.run(new NullProgressMonitor());
+				fPerformChangeOperation = op.fPerformChangeOperation;
+//			fRefactoring.setValidationContext(fParent);
+				if(op.fPerformChangeOperation != null) {
+                    ResourcesPlugin.getWorkspace().run(op.fPerformChangeOperation, new NullProgressMonitor());
+                }
+//				if (fork && !forkChangeExecution && op.fPerformChangeOperation != null)
+//					fExecContext.run(false, false, new WorkbenchRunnableAdapter(op.fPerformChangeOperation, rule, true));
+
+				if (op.fPerformChangeOperation != null) {
+					RefactoringStatus validationStatus= op.fPerformChangeOperation.getValidationStatus();
+					if (validationStatus != null /*&& validationStatus.hasFatalError()*/) {
+//						MessageDialog.openError(fParent, fRefactoring.getName(),
+//								Messages.format(
+//										RefactoringMessages.RefactoringExecutionHelper_cannot_execute,
+//										validationStatus.getMessageMatchingSeverity(RefactoringStatus.FATAL)));
+//						throw new InterruptedException();
+						return validationStatus;
+					}
+				}
+			} catch (OperationCanceledException e) {
+				if(op != null) {
+					if (op.allConditions != null) {
+						return op.allConditions;
+					}
+				}
+				throw new InterruptedException(e.getMessage());
+			} finally {
+//				saveHelper.triggerIncrementalBuild();
+			}
+		} finally {
+//			manager.endRule(rule);
+			fRefactoring.setValidationContext(null);
+		}
+        return new RefactoringStatus();
+	}
+

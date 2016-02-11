@@ -1,0 +1,29 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	public void writeRefactoringDescriptors(final RefactoringDescriptorProxy[] proxies, final OutputStream stream, final int flags, final boolean time, IProgressMonitor monitor) throws CoreException {
+		Assert.isNotNull(proxies);
+		Assert.isNotNull(stream);
+		Assert.isTrue(flags >= RefactoringDescriptor.NONE);
+		if (monitor == null)
+			monitor= new NullProgressMonitor();
+		try {
+			monitor.beginTask("", 100 * proxies.length); //$NON-NLS-1$
+			connect();
+			final List list= new ArrayList(proxies.length);
+			for (int index= 0; index < proxies.length; index++) {
+				final RefactoringDescriptor descriptor= proxies[index].requestDescriptor(new SubProgressMonitor(monitor, 100));
+				if (descriptor != null) {
+					final int current= descriptor.getFlags();
+					if ((current | flags) == current)
+						list.add(descriptor);
+				}
+			}
+			final RefactoringDescriptor[] descriptors= new RefactoringDescriptor[list.size()];
+			list.toArray(descriptors);
+			RefactoringHistoryManager.writeRefactoringSession(stream, new RefactoringSessionDescriptor(descriptors, IRefactoringSerializationConstants.CURRENT_VERSION, null), time);
+		} finally {
+			disconnect();
+		}
+	}
+

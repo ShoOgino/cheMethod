@@ -1,0 +1,124 @@
+    /*
+     * Processing for an element that has been added:<ul>
+     * <li>If the element is a project, do nothing, and do not process
+     * children, as when a project is created it does not yet have any
+     * natures - specifically a java nature.
+     * <li>If the elemet is not a project, process it as added (see
+     * <code>basicElementAdded</code>.
+     * </ul>
+     * Delta argument could be null if processing an external JAR change
+     */
+    private void elementAdded(Openable element, IResourceDelta delta, RootInfo rootInfo) {
+        int elementType = element.getElementType();
+
+        if (elementType == IJavaElement.JAVA_PROJECT) {
+            // project add is handled by JavaProject.configure() because
+            // when a project is created, it does not yet have a Java nature
+            IProject project;
+            if (delta != null && JavaProject.hasJavaNature(project = (IProject)delta.getResource())) {
+                addToParentInfo(element);
+                this.manager.getPerProjectInfo(project, true /*create info if needed*/).rememberExternalLibTimestamps();
+                if ((delta.getFlags() & IResourceDelta.MOVED_FROM) != 0) {
+                    Openable movedFromElement = (Openable)element.getJavaModel().getJavaProject(delta.getMovedFromPath().lastSegment());
+                    currentDelta().movedTo(element, movedFromElement);
+                } else {
+                    // Force the project to be closed as it might have been opened
+                    // before the resource modification came in and it might have a new child
+                    // For example, in an IWorkspaceRunnable:
+                    // 1. create a Java project P (where P=src)
+                    // 2. open project P
+                    // 3. add folder f in P's pkg fragment root
+                    // When the resource delta comes in, only the addition of P is notified,
+                    // but the pkg fragment root of project P is already opened, thus its children are not recomputed
+                    // and it appears to contain only the default package.
+                    close(element);
+
+                    currentDelta().added(element);
+                }
+                this.state.updateRoots(element.getPath(), delta, this);
+
+                // remember that the project's cache must be reset
+                this.projectCachesToReset.add(element);
+            }
+        } else {
+            if (delta == null || (delta.getFlags() & IResourceDelta.MOVED_FROM) == 0) {
+                // regular element addition
+                if (isPrimaryWorkingCopy(element, elementType)) {
+                    // filter out changes to primary compilation unit in working copy mode
+                    // just report a change to the resource (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=59500)
+                    currentDelta().changed(element, IJavaElementDelta.F_PRIMARY_RESOURCE);
+                } else {
+                    addToParentInfo(element);
+
+                    // Force the element to be closed as it might have been opened
+                    // before the resource modification came in and it might have a new child
+                    // For example, in an IWorkspaceRunnable:
+                    // 1. create a package fragment p using a java model operation
+                    // 2. open package p
+                    // 3. add file X.java in folder p
+                    // When the resource delta comes in, only the addition of p is notified,
+                    // but the package p is already opened, thus its children are not recomputed
+                    // and it appears empty.
+                    close(element);
+
+                    currentDelta().added(element);
+                }
+            } else {
+                // element is moved
+                addToParentInfo(element);
+                close(element);
+
+                IPath movedFromPath = delta.getMovedFromPath();
+                IResource res = delta.getResource();
+                IResource movedFromRes;
+                if (res instanceof IFile) {
+                    movedFromRes = res.getWorkspace().getRoot().getFile(movedFromPath);
+                } else {
+                    movedFromRes = res.getWorkspace().getRoot().getFolder(movedFromPath);
+                }
+
+                // find the element type of the moved from element
+                IPath rootPath = externalPath(movedFromRes);
+                RootInfo movedFromInfo = enclosingRootInfo(rootPath, IResourceDelta.REMOVED);
+                int movedFromType =
+                        elementType(
+                                movedFromRes,
+                                IResourceDelta.REMOVED,
+                                element.getParent().getElementType(),
+                                movedFromInfo);
+
+                // reset current element as it might be inside a nested root (popUntilPrefixOf() may use the outer root)
+                this.currentElement = null;
+
+                // create the moved from element
+                Openable movedFromElement =
+                        elementType != IJavaElement.JAVA_PROJECT && movedFromType == IJavaElement.JAVA_PROJECT ?
+                        null : // outside classpath
+                        createElement(movedFromRes, movedFromType, movedFromInfo);
+                if (movedFromElement == null) {
+                    // moved from outside classpath
+                    currentDelta().added(element);
+                } else {
+                    currentDelta().movedTo(element, movedFromElement);
+                }
+            }
+
+            switch (elementType) {
+                case IJavaElement.PACKAGE_FRAGMENT_ROOT:
+                    // when a root is added, and is on the classpath, the project must be updated
+                    JavaProject project = (JavaProject)element.getJavaProject();
+
+                    // remember that the project's cache must be reset
+                    this.projectCachesToReset.add(project);
+
+                    break;
+                case IJavaElement.PACKAGE_FRAGMENT:
+                    // reset project's package fragment cache
+                    project = (JavaProject)element.getJavaProject();
+                    this.projectCachesToReset.add(project);
+
+                    break;
+            }
+        }
+    }
+

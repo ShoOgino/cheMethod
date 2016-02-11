@@ -1,0 +1,33 @@
+	public static boolean isInlineMethodAvailable(final JavaTextSelection selection) throws JavaModelException {
+		final IJavaElement[] elements= selection.resolveElementAtOffset();
+		if (elements.length != 1) {
+			IJavaElement enclosingElement= selection.resolveEnclosingElement();
+			if (!(enclosingElement instanceof IMember))
+				return false;
+			ITypeRoot typeRoot= ((IMember)enclosingElement).getTypeRoot();
+			CompilationUnit compilationUnit= selection.resolvePartialAstAtOffset();
+			if (compilationUnit == null)
+				return false;
+			return getInlineableMethodNode(typeRoot, compilationUnit, selection.getOffset(), selection.getLength()) != null;
+		}
+		IJavaElement element= elements[0];
+		if (!(element instanceof IMethod))
+			return false;
+		IMethod method= (IMethod) element;
+		if (!isInlineMethodAvailable((method)))
+			return false;
+
+		// in binary class, only activate for method declarations
+		IJavaElement enclosingElement= selection.resolveEnclosingElement();
+		if (enclosingElement == null || enclosingElement.getAncestor(IJavaElement.CLASS_FILE) == null)
+			return true;
+		if (!(enclosingElement instanceof IMethod))
+			return false;
+		IMethod enclosingMethod= (IMethod) enclosingElement;
+		if (enclosingMethod.isConstructor())
+			return false;
+		int nameOffset= enclosingMethod.getNameRange().getOffset();
+		int nameLength= enclosingMethod.getNameRange().getLength();
+		return (nameOffset <= selection.getOffset()) && (selection.getOffset() + selection.getLength() <= nameOffset + nameLength);
+	}
+

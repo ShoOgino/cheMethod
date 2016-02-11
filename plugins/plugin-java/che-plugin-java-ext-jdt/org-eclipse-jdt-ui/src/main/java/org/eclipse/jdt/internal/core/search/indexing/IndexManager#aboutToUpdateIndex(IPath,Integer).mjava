@@ -1,0 +1,18 @@
+    public synchronized void aboutToUpdateIndex(IPath containerPath, Integer newIndexState) {
+        // newIndexState is either UPDATING_STATE or REBUILDING_STATE
+        // must tag the index as inconsistent, in case we exit before the update job is started
+        IndexLocation indexLocation = computeIndexLocation(containerPath);
+        Object state = getIndexStates().get(indexLocation);
+        Integer currentIndexState = state == null ? UNKNOWN_STATE : (Integer)state;
+        if (currentIndexState.compareTo(REBUILDING_STATE) >= 0) return; // already rebuilding the index
+
+        int compare = newIndexState.compareTo(currentIndexState);
+        if (compare > 0) {
+            // so UPDATING_STATE replaces SAVED_STATE and REBUILDING_STATE replaces everything
+            updateIndexState(indexLocation, newIndexState);
+        } else if (compare < 0 && this.indexes.get(indexLocation) == null) {
+            // if already cached index then there is nothing more to do
+            rebuildIndex(indexLocation, containerPath);
+        }
+    }
+

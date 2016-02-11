@@ -1,0 +1,42 @@
+	public static void addSuppressWarningsProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		if (problem.isError() && ! JavaCore.ENABLED.equals(context.getCompilationUnit().getJavaProject().getOption(JavaCore.COMPILER_PB_SUPPRESS_OPTIONAL_ERRORS, true))) {
+			return;
+		}
+		if (JavaCore.DISABLED.equals(context.getCompilationUnit().getJavaProject().getOption(JavaCore.COMPILER_PB_SUPPRESS_WARNINGS, true))) {
+			return;
+		}
+
+		String warningToken= CorrectionEngine.getWarningToken(problem.getProblemId());
+		if (warningToken == null) {
+			return;
+		}
+		for (Iterator<ICommandAccess> iter= proposals.iterator(); iter.hasNext();) {
+			Object element= iter.next();
+			if (element instanceof SuppressWarningsProposal && warningToken.equals(((SuppressWarningsProposal) element).getWarningToken())) {
+				return; // only one at a time
+			}
+		}
+
+		ASTNode node= problem.getCoveringNode(context.getASTRoot());
+		if (node == null) {
+			return;
+		}
+		
+		ASTNode target= node;
+		int relevance= IProposalRelevance.ADD_SUPPRESSWARNINGS;
+		do {
+			relevance= addSuppressWarningsProposalIfPossible(context.getCompilationUnit(), target, warningToken, relevance, proposals);
+			if (relevance == 0)
+				return;
+			target= target.getParent();
+		} while (target != null);
+		
+		ASTNode importStatement= ASTNodes.getParent(node, ImportDeclaration.class);
+		if (importStatement != null && !context.getASTRoot().types().isEmpty()) {
+			target= (ASTNode) context.getASTRoot().types().get(0);
+			if (target != null) {
+				addSuppressWarningsProposalIfPossible(context.getCompilationUnit(), target, warningToken, IProposalRelevance.ADD_SUPPRESSWARNINGS, proposals);
+			}
+		}
+	}
+

@@ -1,0 +1,43 @@
+		/* (non-Javadoc)
+		 * @see org.eclipse.jdt.internal.ui.text.correction.ASTRewriteCorrectionProposal#getRewrite()
+		 */
+		@Override
+		protected ASTRewrite getRewrite() throws CoreException {
+			AST ast = fNode.getAST();
+			ASTRewrite rewrite = ASTRewrite.create(ast);
+
+			StringLiteral newStringLiteral = ast.newStringLiteral();
+			newStringLiteral.setLiteralValue(fWarningToken);
+
+			Annotation existing = findExistingAnnotation(ASTNodes.getChildListProperty(fNode, fProperty));
+			if (existing == null) {
+				ListRewrite listRewrite = rewrite.getListRewrite(fNode, fProperty);
+
+				SingleMemberAnnotation newAnnot = ast.newSingleMemberAnnotation();
+				String importString =
+						createImportRewrite((CompilationUnit)fNode.getRoot()).addImport("java.lang.SuppressWarnings"); //$NON-NLS-1$
+				newAnnot.setTypeName(ast.newName(importString));
+
+				newAnnot.setValue(newStringLiteral);
+
+				listRewrite.insertFirst(newAnnot, null);
+			} else if (existing instanceof SingleMemberAnnotation) {
+				SingleMemberAnnotation annotation = (SingleMemberAnnotation)existing;
+				Expression value = annotation.getValue();
+				if (!addSuppressArgument(rewrite, value, newStringLiteral)) {
+					rewrite.set(existing, SingleMemberAnnotation.VALUE_PROPERTY, newStringLiteral, null);
+				}
+			} else if (existing instanceof NormalAnnotation) {
+				NormalAnnotation annotation = (NormalAnnotation)existing;
+				Expression value = findValue(annotation.values());
+				if (!addSuppressArgument(rewrite, value, newStringLiteral)) {
+					ListRewrite listRewrite = rewrite.getListRewrite(annotation, NormalAnnotation.VALUES_PROPERTY);
+					MemberValuePair pair = ast.newMemberValuePair();
+					pair.setName(ast.newSimpleName("value")); //$NON-NLS-1$
+					pair.setValue(newStringLiteral);
+					listRewrite.insertFirst(pair, null);
+				}
+			}
+			return rewrite;
+		}
+

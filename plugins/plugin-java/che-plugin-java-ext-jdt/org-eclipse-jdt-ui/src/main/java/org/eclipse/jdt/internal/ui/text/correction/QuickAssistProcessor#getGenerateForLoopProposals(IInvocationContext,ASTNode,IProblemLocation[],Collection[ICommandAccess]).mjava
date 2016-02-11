@@ -1,0 +1,61 @@
+	public static boolean getGenerateForLoopProposals(IInvocationContext context, ASTNode coveringNode, IProblemLocation[] locations, Collection<ICommandAccess> resultingCollections) {
+//		if (containsMatchingProblem(locations, IProblem.ParsingErrorInsertToComplete))
+//			return false;
+
+		Statement statement= ASTResolving.findParentStatement(coveringNode);
+		ICompilationUnit cu= context.getCompilationUnit();
+		ITypeBinding expressionType= null;
+		Expression expression= null;
+		int relevanceBoost= 0;
+
+		if (statement instanceof ExpressionStatement) {
+			expressionType= extractExpressionType((ExpressionStatement) statement);
+			expression= ((ExpressionStatement) statement).getExpression();
+			
+		} else if (statement instanceof VariableDeclarationStatement && ((VariableDeclarationStatement) statement).fragments().size() == 1
+				&& ((VariableDeclarationStatement) statement).fragments().get(0).toString().equals("$missing$")) { //$NON-NLS-1$
+			// variable name is resolved to the type in a variable declaration statement, see https://bugs.eclipse.org/430336
+			Type type= ((VariableDeclarationStatement) statement).getType();
+			if (type instanceof SimpleType) {
+				SimpleType simpleType= (SimpleType) type;
+				expressionType= extractExpressionType(simpleType);
+				expression= simpleType.getName();
+				relevanceBoost+= 6; // need to overrule the bad UnresolvedElementsSubProcessor#addNewTypeProposals(..)
+			}
+		} else {
+			return false;
+		}
+
+		if (expressionType == null)
+			return false;
+
+		if (Bindings.findTypeInHierarchy(expressionType, "java.lang.Iterable") != null) { //$NON-NLS-1$
+			if (resultingCollections == null)
+				return true;
+			GenerateForLoopAssistProposal proposal= new GenerateForLoopAssistProposal(cu, expressionType, statement, expression, GenerateForLoopAssistProposal.GENERATE_ITERATOR_FOR);
+			proposal.setRelevance(proposal.getRelevance() + relevanceBoost);
+			resultingCollections.add(proposal);
+			if (Bindings.findTypeInHierarchy(expressionType, "java.util.List") != null) { //$NON-NLS-1$
+				proposal= new GenerateForLoopAssistProposal(cu, expressionType, statement, expression, GenerateForLoopAssistProposal.GENERATE_ITERATE_LIST);
+				proposal.setRelevance(proposal.getRelevance() + relevanceBoost);
+				resultingCollections.add(proposal);
+			}
+		} else if (expressionType.isArray()) {
+			if (resultingCollections == null)
+				return true;
+			GenerateForLoopAssistProposal proposal= new GenerateForLoopAssistProposal(cu, expressionType, statement, expression, GenerateForLoopAssistProposal.GENERATE_ITERATE_ARRAY);
+			proposal.setRelevance(proposal.getRelevance() + relevanceBoost);
+			resultingCollections.add(proposal);
+		} else {
+			return false;
+		}
+
+		if (JavaModelUtil.is50OrHigher(cu.getJavaProject())) {
+			GenerateForLoopAssistProposal proposal= new GenerateForLoopAssistProposal(cu, expressionType, statement, expression, GenerateForLoopAssistProposal.GENERATE_FOREACH);
+			proposal.setRelevance(proposal.getRelevance() + relevanceBoost);
+			resultingCollections.add(proposal);
+		}
+
+		return true;
+	}
+

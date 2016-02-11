@@ -1,0 +1,40 @@
+	@Override
+	public RefactoringStatus checkInitialConditions(IProgressMonitor pm) throws CoreException {
+		try {
+			pm.beginTask("", 7); //$NON-NLS-1$
+
+			RefactoringStatus result = Checks.validateEdit(fCu, getValidationContext());
+			if (result.hasFatalError())
+				return result;
+			pm.worked(1);
+
+			if (fCuRewrite == null) {
+				CompilationUnit cuNode = RefactoringASTParser.parseWithASTProvider(fCu, true, new SubProgressMonitor(pm, 3));
+				fCuRewrite = new CompilationUnitRewrite(fCu, cuNode);
+			} else {
+				pm.worked(3);
+			}
+			result.merge(checkSelection(new SubProgressMonitor(pm, 3)));
+
+			if (result.hasFatalError())
+				return result;
+
+			if (isLiteralNodeSelected())
+				fReplaceAllOccurrences = false;
+
+			if (isInTypeDeclarationAnnotation(getSelectedExpression().getAssociatedNode())) {
+				fVisibility = JdtFlags.VISIBILITY_STRING_PACKAGE;
+			}
+
+			ITypeBinding targetType = getContainingTypeBinding();
+			if (targetType.isInterface()) {
+				fTargetIsInterface = true;
+				fVisibility = JdtFlags.VISIBILITY_STRING_PUBLIC;
+			}
+
+			return result;
+		} finally {
+			pm.done();
+		}
+	}
+

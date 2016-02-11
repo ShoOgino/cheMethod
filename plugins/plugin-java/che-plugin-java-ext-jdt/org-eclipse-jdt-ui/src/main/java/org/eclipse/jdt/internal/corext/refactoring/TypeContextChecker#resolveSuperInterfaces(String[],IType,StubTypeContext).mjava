@@ -1,0 +1,45 @@
+	public static ITypeBinding[] resolveSuperInterfaces(String[] interfaces, IType typeHandle, StubTypeContext superInterfaceContext) {
+		ITypeBinding[] result= new ITypeBinding[interfaces.length];
+
+		int[] interfaceOffsets= new int[interfaces.length];
+		StringBuffer cuString= new StringBuffer();
+		cuString.append(superInterfaceContext.getBeforeString());
+		int last= interfaces.length - 1;
+		for (int i= 0; i <= last; i++) {
+			interfaceOffsets[i]= cuString.length();
+			cuString.append(interfaces[i]);
+			if (i != last)
+				cuString.append(", "); //$NON-NLS-1$
+		}
+		cuString.append(superInterfaceContext.getAfterString());
+
+		try {
+			ICompilationUnit
+					wc= typeHandle.getCompilationUnit().getWorkingCopy(new WorkingCopyOwner() {/*subclass*/}, new NullProgressMonitor());
+			try {
+				wc.getBuffer().setContents(cuString.toString());
+				CompilationUnit compilationUnit= new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(wc, true);
+				for (int i= 0; i <= last; i++) {
+					ASTNode type= NodeFinder.perform(compilationUnit, interfaceOffsets[i], interfaces[i].length());
+					if (type instanceof Type) {
+						result[i]= handleBug84585(((Type) type).resolveBinding());
+					} else if (type instanceof Name) {
+						ASTNode parent= type.getParent();
+						if (parent instanceof Type) {
+							result[i]= handleBug84585(((Type) parent).resolveBinding());
+						} else {
+							throw new IllegalStateException();
+						}
+					} else {
+						throw new IllegalStateException();
+					}
+				}
+			} finally {
+				wc.discardWorkingCopy();
+			}
+		} catch (JavaModelException e) {
+			// won't happen
+		}
+		return result;
+	}
+

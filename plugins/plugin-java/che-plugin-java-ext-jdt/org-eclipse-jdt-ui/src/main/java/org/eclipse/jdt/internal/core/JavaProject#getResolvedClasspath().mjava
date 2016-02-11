@@ -1,0 +1,36 @@
+    /**
+     * This is a helper method returning the resolved classpath for the project
+     * as a list of simple (non-variable, non-container) classpath entries.
+     * All classpath variable and classpath container entries in the project's
+     * raw classpath will be replaced by the simple classpath entries they
+     * resolve to.
+     * <p>
+     * The resulting resolved classpath is accurate for the given point in time.
+     * If the project's raw classpath is later modified, or if classpath
+     * variables are changed, the resolved classpath can become out of date.
+     * Because of this, hanging on resolved classpath is not recommended.
+     * </p>
+     * <p>
+     * Note that if the resolution creates duplicate entries
+     * (i.e. {@link IClasspathEntry entries} which are {@link Object#equals(Object)}),
+     * only the first one is added to the resolved classpath.
+     * </p>
+     *
+     * @see IClasspathEntry
+     */
+    public IClasspathEntry[] getResolvedClasspath() throws JavaModelException {
+        PerProjectInfo perProjectInfo = getPerProjectInfo();
+        IClasspathEntry[] resolvedClasspath = perProjectInfo.getResolvedClasspath();
+        if (resolvedClasspath == null) {
+            resolveClasspath(perProjectInfo, false/*don't use previous session values*/, true/*add classpath change*/);
+            resolvedClasspath = perProjectInfo.getResolvedClasspath();
+            if (resolvedClasspath == null) {
+                // another thread reset the resolved classpath, use a temporary PerProjectInfo
+                PerProjectInfo temporaryInfo = newTemporaryInfo();
+                resolveClasspath(temporaryInfo, false/*don't use previous session values*/, true/*add classpath change*/);
+                resolvedClasspath = temporaryInfo.getResolvedClasspath();
+            }
+        }
+        return resolvedClasspath;
+    }
+

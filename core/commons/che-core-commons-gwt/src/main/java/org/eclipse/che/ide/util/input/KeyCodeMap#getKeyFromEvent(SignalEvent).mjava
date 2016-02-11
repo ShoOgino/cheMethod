@@ -1,0 +1,62 @@
+    /**
+     * Map from event.keyCode to internal representation (ascii+special keys)
+     * <p/>
+     * NOTE(wetherbeei): SignalEvent tends to return correct ascii values from
+     * keyPress events where possible, then keyCodes when they aren't available
+     */
+    public static int getKeyFromEvent(SignalEvent event) {
+        int ascii = event.getKeyCode();
+
+        if (ascii > 255) {
+            // out of handling range - all keycodes handled are under 256
+            return ascii;
+        }
+
+        KeySignalType type = event.getKeySignalType();
+        if (type != KeySignalType.INPUT) {
+            // convert these non-ascii characters to new unicode private area
+            if (KeyCode.F1 <= ascii && ascii <= KeyCode.F12) {
+                ascii = (ascii - KeyCode.F1) + F1;
+            }
+
+            if (keyCodeToAscii.isSet(ascii)) {
+                ascii = keyCodeToAscii.get(ascii);
+            }
+        }
+
+        // map enter \r (0x0D) to \n (0x0A)
+        if (ascii == 0x0D) {
+            ascii = 0x0A;
+        }
+
+    /*
+     * Platform/browser specific modifications
+     * 
+     * Firefox captures combos using keyPress, which returns the correct case of
+     * the pressed key in ascii. Other browsers are captured on keyDown and only
+     * return the keyCode value (upper case or 0-9) of the pressed key
+     * 
+     * TODO: test on other browsers.
+     */
+        if (UserAgent.isFirefox() && event.getType().equals("keypress")) {
+            // this is a combo event, leave it alone in firefox
+        } else if (event.getType().equals("keydown")) {
+            // other browsers keydown combo captured, need to convert keyCode to ascii
+
+            // upper case letters to lower if no shift key
+            if (!event.getShiftKey()) {
+                if ('A' <= ascii && ascii <= 'Z') {
+                    ascii = ascii - 'A' + 'a';
+                }
+            } else {
+                // shift key, check for additional symbol changes
+                if (lowerToUpper.isSet(ascii)) {
+                    ascii = lowerToUpper.get(ascii);
+                }
+            }
+        }
+
+        // anything in other ranges will be passed through
+        return ascii;
+    }
+

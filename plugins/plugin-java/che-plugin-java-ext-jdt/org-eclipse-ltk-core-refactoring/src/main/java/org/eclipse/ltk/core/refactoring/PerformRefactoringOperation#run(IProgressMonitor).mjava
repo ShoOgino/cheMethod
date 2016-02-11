@@ -1,0 +1,29 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	public void run(IProgressMonitor monitor) throws CoreException {
+		try {
+			if (monitor == null)
+				monitor= new NullProgressMonitor();
+			monitor.beginTask("", 10); //$NON-NLS-1$
+			final CreateChangeOperation create= new CreateChangeOperation(new CheckConditionsOperation(fRefactoring, fStyle), RefactoringStatus.FATAL);
+			create.run(new SubProgressMonitor(monitor, 6));
+			fPreconditionStatus= create.getConditionCheckingStatus();
+			if (fPreconditionStatus.hasFatalError()) {
+				monitor.done();
+				return;
+			}
+			final Change change= create.getChange();
+			if (change != null) {
+				final PerformChangeOperation perform= new PerformChangeOperation(change);
+				perform.setUndoManager(RefactoringCore.getUndoManager(), fRefactoring.getName());
+				perform.run(new SubProgressMonitor(monitor, 2));
+				fValidationStatus= perform.getValidationStatus();
+				fUndo= perform.getUndoChange();
+			}
+		} finally {
+			if (fRefactoringContext != null)
+				fRefactoringContext.dispose();
+		}
+	}
+

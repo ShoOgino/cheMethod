@@ -1,0 +1,100 @@
+    /**
+     * Replaces the old node in the tree with data representing the subtree rooted
+     * where the old node used to be if the old node was rendered.
+     * <p/>
+     * <p>{@code oldSubtreeData} and {@code incomingSubtreeData} are allowed to be
+     * the same node (it will simply get re-rendered).
+     * <p/>
+     * <p>This methods also tries to preserve the original expansion state. Any
+     * path that was expanded before executing this method but could not be
+     * expanded after replacing the subtree, will be returned in the result array,
+     * so that it could be expanded later using the {@link #expandPaths} method,
+     * if needed (for example, if children of the tree are getting populated
+     * asynchronously).
+     *
+     * @param shouldAnimate
+     *         if true, the subtree will animate open if it is still open
+     * @return array paths that could not be expanded in the new subtree
+     */
+    public List<List<String>> replaceSubtree(D oldSubtreeData, D incomingSubtreeData, boolean shouldAnimate) {
+
+        // Gather paths that were expanded in this subtree so that we can restore
+        // them later after rendering.
+        List<List<String>> expandedPaths = gatherExpandedPaths(oldSubtreeData);
+
+        boolean wasRoot = (oldSubtreeData == getModel().root);
+        TreeNodeElement<D> oldRenderedNode = null;
+        TreeNodeElement<D> newRenderedNode = null;
+
+        if (wasRoot) {
+
+            // We are rendering root! Just render it from the top. We will restore the
+            // expansion later.
+            getModel().setRoot(incomingSubtreeData);
+            renderTree(0);
+        } else {
+            oldRenderedNode = getModel().dataAdapter.getRenderedTreeNode(oldSubtreeData);
+
+            // If the node does not have a rendered node, then we have nothing to do.
+            if (oldRenderedNode == null) {
+                expandedPaths.clear();
+                return expandedPaths;
+            }
+
+            JsElement parentElem = oldRenderedNode.getParentElement();
+
+            // The old node may have been moved from a rendered to a non-rendered
+            // state (e.g., into a collapsed folder). In that case, it doesn't have a
+            // parent, and we're done here.
+            if (parentElem == null) {
+                expandedPaths.clear();
+                return expandedPaths;
+            }
+
+            // Make a new tree node.
+            newRenderedNode = createNode(incomingSubtreeData);
+            parentElem.insertBefore(newRenderedNode, oldRenderedNode);
+            newRenderedNode.updateLeafOffset(parentElem);
+
+            // Remove the old rendered node from the tree.
+            DomUtils.removeFromParent(oldRenderedNode);
+        }
+
+        // If the old node was the root, or if it and its parents were expanded, then we should
+        // attempt to restore expansion.
+        boolean shouldExpand = wasRoot;
+        if (!wasRoot && oldRenderedNode != null) {
+            shouldExpand = true;
+            TreeNodeElement<D> curNode = oldRenderedNode;
+            while (curNode != null) {
+                if (!curNode.isOpen()) {
+                    // One of the parents is closed, so we should not expand all paths.
+                    shouldExpand = false;
+                    break;
+                }
+
+                D parentData = getModel().dataAdapter.getParent(curNode.getData());
+                curNode = (parentData == null) ? null : getModel().dataAdapter.getRenderedTreeNode(parentData);
+            }
+        }
+        if (shouldExpand) {
+            // Animate the top node if it was open. If we should not animate, the newRenderedNode will
+            // still be expanded by the call to expandPaths() below.
+            if (shouldAnimate && newRenderedNode != null) {
+                expandNode(newRenderedNode, true, true);
+            }
+
+            // But if it is open, we need to attempt to restore the expansion.
+            expandedPaths = expandPaths(expandedPaths, true);
+        } else {
+            expandedPaths.clear();
+        }
+
+        // TODO: Be more surgical about restoring the selection model. We
+        // are currently recomputing all selected nodes.
+        List<List<String>> selectedPaths = getModel().selectionModel.computeSelectedPaths();
+        restoreSelectionModel(selectedPaths);
+
+        return expandedPaths;
+    }
+

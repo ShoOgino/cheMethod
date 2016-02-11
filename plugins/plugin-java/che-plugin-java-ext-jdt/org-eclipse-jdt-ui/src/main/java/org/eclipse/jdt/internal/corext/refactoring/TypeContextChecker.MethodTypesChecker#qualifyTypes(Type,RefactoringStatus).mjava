@@ -1,0 +1,46 @@
+		private String qualifyTypes(Type type, final RefactoringStatus result) throws CoreException {
+			class NestedException extends RuntimeException {
+				private static final long serialVersionUID= 1L;
+				NestedException(CoreException e) {
+					super(e);
+				}
+			}
+			ASTFlattener flattener= new ASTFlattener() {
+				@Override
+				public boolean visit(SimpleName node) {
+					appendResolved(node.getIdentifier());
+					return false;
+				}
+				@Override
+				public boolean visit(QualifiedName node) {
+					appendResolved(node.getFullyQualifiedName());
+					return false;
+				}
+				@Override
+				public boolean visit(QualifiedType node) {
+					appendResolved(ASTNodes.getQualifiedTypeName(node));
+					return false;
+				}
+				@Override
+				public boolean visit(NameQualifiedType node) {
+					appendResolved(ASTNodes.getQualifiedTypeName(node));
+					return false;
+				}
+				private void appendResolved(String typeName) {
+					String resolvedType;
+					try {
+						resolvedType= resolveType(typeName, result, fMethod.getDeclaringType(), null);
+					} catch (CoreException e) {
+						throw new NestedException(e);
+					}
+					this.fBuffer.append(resolvedType);
+				}
+			};
+			try {
+				type.accept(flattener);
+			} catch (NestedException e) {
+				throw ((CoreException) e.getCause());
+			}
+			return flattener.getResult();
+		}
+

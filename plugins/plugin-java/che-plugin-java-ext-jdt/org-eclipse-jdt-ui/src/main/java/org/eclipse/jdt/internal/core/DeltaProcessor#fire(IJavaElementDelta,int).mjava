@@ -1,0 +1,53 @@
+    /*
+     * Fire Java Model delta, flushing them after the fact after post_change notification.
+     * If the firing mode has been turned off, this has no effect.
+     */
+    public void fire(IJavaElementDelta customDelta, int eventType) {
+        if (!this.isFiring) return;
+
+        if (DEBUG) {
+            System.out.println(
+                    "-----------------------------------------------------------------------------------------------------------------------");//$NON-NLS-1$
+        }
+
+        IJavaElementDelta deltaToNotify;
+        if (customDelta == null) {
+            deltaToNotify = mergeDeltas(this.javaModelDeltas);
+        } else {
+            deltaToNotify = customDelta;
+        }
+
+        // Refresh internal scopes
+        if (deltaToNotify != null) {
+            Iterator scopes = this.manager.searchScopes.keySet().iterator();
+            while (scopes.hasNext()) {
+                AbstractSearchScope scope = (AbstractSearchScope)scopes.next();
+                scope.processDelta(deltaToNotify, eventType);
+            }
+            JavaWorkspaceScope workspaceScope = this.manager.workspaceScope;
+            if (workspaceScope != null)
+                workspaceScope.processDelta(deltaToNotify, eventType);
+        }
+
+        // Notification
+
+        // Important: if any listener reacts to notification by updating the listeners list or mask, these lists will
+        // be duplicated, so it is necessary to remember original lists in a variable (since field values may change under us)
+        IElementChangedListener[] listeners;
+        int[] listenerMask;
+        int listenerCount;
+        synchronized (this.state) {
+            listeners = this.state.elementChangedListeners;
+            listenerMask = this.state.elementChangedListenerMasks;
+            listenerCount = this.state.elementChangedListenerCount;
+        }
+
+        switch (eventType) {
+            case DEFAULT_CHANGE_EVENT:
+            case ElementChangedEvent.POST_CHANGE:
+                firePostChangeDelta(deltaToNotify, listeners, listenerMask, listenerCount);
+                fireReconcileDelta(listeners, listenerMask, listenerCount);
+                break;
+        }
+    }
+

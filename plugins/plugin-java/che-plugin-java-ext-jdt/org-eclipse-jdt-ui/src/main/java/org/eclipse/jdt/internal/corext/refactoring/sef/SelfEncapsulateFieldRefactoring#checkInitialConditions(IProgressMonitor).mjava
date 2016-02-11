@@ -1,0 +1,27 @@
+	@Override
+	public RefactoringStatus checkInitialConditions(IProgressMonitor pm) throws CoreException {
+		if (fVisibility < 0)
+			fVisibility = (fField.getFlags() & (Flags.AccPublic | Flags.AccProtected | Flags.AccPrivate));
+		RefactoringStatus result = new RefactoringStatus();
+		result.merge(Checks.checkAvailability(fField));
+		if (result.hasFatalError())
+			return result;
+		fRoot = new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(fField.getCompilationUnit(), true, pm);
+		ISourceRange sourceRange = fField.getNameRange();
+		ASTNode node = NodeFinder.perform(fRoot, sourceRange.getOffset(), sourceRange.getLength());
+		if (node == null) {
+			return mappingErrorFound(result, node);
+		}
+		fFieldDeclaration = (VariableDeclarationFragment)ASTNodes.getParent(node, VariableDeclarationFragment.class);
+		if (fFieldDeclaration == null) {
+			return mappingErrorFound(result, node);
+		}
+		if (fFieldDeclaration.resolveBinding() == null) {
+			if (!processCompilerError(result, node))
+				result.addFatalError(RefactoringCoreMessages.SelfEncapsulateField_type_not_resolveable);
+			return result;
+		}
+		computeUsedNames();
+		return result;
+	}
+

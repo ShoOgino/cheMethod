@@ -1,0 +1,50 @@
+		public RefactoringStatus[] checkAndResolveMethodTypes() throws CoreException {
+			RefactoringStatus[] results = new MethodTypesSyntaxChecker(fMethod, fParameterInfos, fReturnTypeInfo).checkSyntax();
+			for (int i = 0; i < results.length; i++)
+				if (results[i] != null && results[i].hasFatalError())
+					return results;
+
+			int parameterCount = fParameterInfos.size();
+			String[] types = new String[parameterCount + 1];
+			for (int i = 0; i < parameterCount; i++)
+				types[i] = ParameterInfo.stripEllipsis((fParameterInfos.get(i)).getNewTypeName());
+			types[parameterCount] = fReturnTypeInfo.getNewTypeName();
+			RefactoringStatus[] semanticsResults = new RefactoringStatus[parameterCount + 1];
+			ITypeBinding[] typeBindings = resolveBindings(types, semanticsResults, true);
+
+			boolean needsSecondPass = false;
+			for (int i = 0; i < types.length; i++)
+				if (typeBindings[i] == null || !semanticsResults[i].isOK())
+					needsSecondPass = true;
+
+			RefactoringStatus[] semanticsResults2 = new RefactoringStatus[parameterCount + 1];
+			if (needsSecondPass)
+				typeBindings = resolveBindings(types, semanticsResults2, false);
+
+			for (int i = 0; i < fParameterInfos.size(); i++) {
+				ParameterInfo parameterInfo = fParameterInfos.get(i);
+				if (!parameterInfo.isResolve())
+					continue;
+				if (parameterInfo.getOldTypeBinding() != null && !parameterInfo.isTypeNameChanged()) {
+					parameterInfo.setNewTypeBinding(parameterInfo.getOldTypeBinding());
+				} else {
+					parameterInfo.setNewTypeBinding(typeBindings[i]);
+					if (typeBindings[i] == null || (needsSecondPass && !semanticsResults2[i].isOK())) {
+						if (results[i] == null)
+							results[i] = semanticsResults2[i];
+						else
+							results[i].merge(semanticsResults2[i]);
+					}
+				}
+			}
+			fReturnTypeInfo.setNewTypeBinding(typeBindings[fParameterInfos.size()]);
+			if (typeBindings[parameterCount] == null || (needsSecondPass && !semanticsResults2[parameterCount].isOK())) {
+				if (results[parameterCount] == null)
+					results[parameterCount] = semanticsResults2[parameterCount];
+				else
+					results[parameterCount].merge(semanticsResults2[parameterCount]);
+			}
+
+			return results;
+		}
+

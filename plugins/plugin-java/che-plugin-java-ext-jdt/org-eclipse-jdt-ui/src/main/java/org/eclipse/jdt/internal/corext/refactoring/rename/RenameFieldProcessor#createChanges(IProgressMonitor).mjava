@@ -1,0 +1,43 @@
+	private RefactoringStatus createChanges(IProgressMonitor pm) throws CoreException {
+		pm.beginTask(RefactoringCoreMessages.RenameFieldRefactoring_checking, 10);
+		RefactoringStatus result= new RefactoringStatus();
+		if (!fIsComposite)
+			fChangeManager.clear();
+
+		// Delegate creation requires ASTRewrite which
+		// creates a new change -> do this first.
+		if (fDelegateUpdating)
+			result.merge(addDelegates());
+
+		addDeclarationUpdate();
+
+		if (fUpdateReferences) {
+			addReferenceUpdates(new SubProgressMonitor(pm, 1));
+			result.merge(analyzeRenameChanges(new SubProgressMonitor(pm, 2)));
+			if (result.hasFatalError())
+				return result;
+		} else {
+			pm.worked(3);
+		}
+
+		if (getGetter() != null && fRenameGetter) {
+			addGetterOccurrences(new SubProgressMonitor(pm, 1), result);
+		} else {
+			pm.worked(1);
+		}
+
+		if (getSetter() != null && fRenameSetter) {
+			addSetterOccurrences(new SubProgressMonitor(pm, 1), result);
+		} else {
+			pm.worked(1);
+		}
+
+		if (fUpdateTextualMatches) {
+			addTextMatches(new SubProgressMonitor(pm, 5));
+		} else {
+			pm.worked(5);
+		}
+		pm.done();
+		return result;
+	}
+

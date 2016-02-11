@@ -1,0 +1,27 @@
+	private boolean checkDescriptor(RefactoringDescriptor descriptor, IUndoableOperation operation) {
+		Assert.isNotNull(descriptor);
+		try {
+			final Map arguments= RefactoringHistoryManager.getArgumentMap(descriptor);
+			if (arguments != null)
+				RefactoringHistoryManager.checkArgumentMap(arguments);
+		} catch (CoreException exception) {
+			final IStatus status= exception.getStatus();
+			if (status.getCode() == IRefactoringCoreStatusCodes.REFACTORING_HISTORY_FORMAT_ERROR) {
+				final String time= DateFormat.getDateTimeInstance().format(new Date(descriptor.getTimeStamp()));
+				final String message= "The refactoring executed at " + time + " contributed a refactoring descriptor with invalid format:"; //$NON-NLS-1$//$NON-NLS-2$
+				final IStatus comment= new Status(IStatus.ERROR, RefactoringCorePlugin.getPluginId(), descriptor.getComment());
+				RefactoringCorePlugin.log(new MultiStatus(RefactoringCorePlugin.getPluginId(), 0, new IStatus[] { comment}, message, null));
+			}
+			RefactoringCorePlugin.log(exception);
+
+			if (operation instanceof TriggeredOperations) {
+				operation= ((TriggeredOperations) operation).getTriggeringOperation();
+			}
+			if (operation instanceof UndoableOperation2ChangeAdapter) {
+				((UndoableOperation2ChangeAdapter) operation).setChangeDescriptor(null);
+			}
+			return false;
+		}
+		return true;
+	}
+

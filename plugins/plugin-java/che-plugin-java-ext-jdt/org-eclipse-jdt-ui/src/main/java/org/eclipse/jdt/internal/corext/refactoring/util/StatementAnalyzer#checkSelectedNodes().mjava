@@ -1,0 +1,33 @@
+	protected void checkSelectedNodes() {
+		ASTNode[] nodes = getSelectedNodes();
+		if (nodes.length == 0)
+			return;
+
+		ASTNode node = nodes[0];
+		int selectionOffset = getSelection().getOffset();
+		try {
+			int start = fScanner.getNextStartOffset(selectionOffset, true);
+			if (start == node.getStartPosition()) {
+				int lastNodeEnd = ASTNodes.getExclusiveEnd(nodes[nodes.length - 1]);
+				int pos = fScanner.getNextStartOffset(lastNodeEnd, true);
+				int selectionEnd = getSelection().getInclusiveEnd();
+				if (pos <= selectionEnd) {
+					IScanner scanner = fScanner.getScanner();
+					char[] token = scanner.getCurrentTokenSource(); //see https://bugs.eclipse.org/324237
+					if (start < lastNodeEnd && token.length == 1 && (token[0] == ';' || token[0] == ',')) {
+						setSelection(Selection.createFromStartEnd(start, lastNodeEnd - 1));
+					} else {
+						ISourceRange range = new SourceRange(lastNodeEnd, pos - lastNodeEnd);
+						invalidSelection(RefactoringCoreMessages.StatementAnalyzer_end_of_selection,
+										 JavaStatusContext.create(fCUnit, range));
+					}
+				}
+				return; // success
+			}
+		} catch (CoreException e) {
+			// fall through
+		}
+		ISourceRange range = new SourceRange(selectionOffset, node.getStartPosition() - selectionOffset + 1);
+		invalidSelection(RefactoringCoreMessages.StatementAnalyzer_beginning_of_selection, JavaStatusContext.create(fCUnit, range));
+	}
+

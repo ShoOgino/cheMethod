@@ -1,0 +1,41 @@
+	public static IMethodBinding[] getVisibleConstructors(ITypeBinding binding, boolean accountExisting, boolean proposeDefault) {
+		List<IMethodBinding> constructorMethods= new ArrayList<IMethodBinding>();
+		List<IMethodBinding> existingConstructors= null;
+		ITypeBinding superType= binding.getSuperclass();
+		if (superType == null)
+			return new IMethodBinding[0];
+		if (accountExisting) {
+			IMethodBinding[] methods= binding.getDeclaredMethods();
+			existingConstructors= new ArrayList<IMethodBinding>(methods.length);
+			for (int index= 0; index < methods.length; index++) {
+				IMethodBinding method= methods[index];
+				if (method.isConstructor() && !method.isDefaultConstructor())
+					existingConstructors.add(method);
+			}
+		}
+		if (existingConstructors != null)
+			constructorMethods.addAll(existingConstructors);
+		IMethodBinding[] methods= binding.getDeclaredMethods();
+		IMethodBinding[] superMethods= superType.getDeclaredMethods();
+		for (int index= 0; index < superMethods.length; index++) {
+			IMethodBinding method= superMethods[index];
+			if (method.isConstructor()) {
+				if (Bindings.isVisibleInHierarchy(method, binding.getPackage()) && (!accountExisting || !Bindings.containsSignatureEquivalentConstructor(methods, method)))
+					constructorMethods.add(method);
+			}
+		}
+		if (existingConstructors != null)
+			constructorMethods.removeAll(existingConstructors);
+		if (constructorMethods.isEmpty()) {
+			superType= binding;
+			while (superType.getSuperclass() != null)
+				superType= superType.getSuperclass();
+			IMethodBinding method= Bindings.findMethodInType(superType, "Object", new ITypeBinding[0]); //$NON-NLS-1$
+			if (method != null) {
+				if ((proposeDefault || !accountExisting || existingConstructors == null || existingConstructors.isEmpty()) && (!accountExisting || !Bindings.containsSignatureEquivalentConstructor(methods, method)))
+					constructorMethods.add(method);
+			}
+		}
+		return constructorMethods.toArray(new IMethodBinding[constructorMethods.size()]);
+	}
+

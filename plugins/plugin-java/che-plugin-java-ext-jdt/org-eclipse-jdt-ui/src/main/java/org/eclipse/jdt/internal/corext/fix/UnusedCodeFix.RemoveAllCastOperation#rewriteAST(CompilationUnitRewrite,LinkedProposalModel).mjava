@@ -1,0 +1,49 @@
+		/**
+		 * {@inheritDoc}
+		 */
+		@Override
+		public void rewriteAST(CompilationUnitRewrite cuRewrite, LinkedProposalModel model) throws CoreException {
+			ASTRewrite rewrite = cuRewrite.getASTRewrite();
+
+			TextEditGroup group = createTextEditGroup(FixMessages.UnusedCodeFix_RemoveCast_description, cuRewrite);
+
+			while (fUnnecessaryCasts.size() > 0) {
+				CastExpression castExpression = fUnnecessaryCasts.iterator().next();
+				fUnnecessaryCasts.remove(castExpression);
+				
+				/*
+				 * ASTRewrite doesn't allow replacing (deleting) of moved nodes. To solve problems
+				 * with nested casts, we need to replace all casts at once.
+				 * 
+				 * The loop proceeds downwards to find the innermost expression that stays in the result (downChild)
+				 * and it also skips necessary parentheses.
+				 */
+				CastExpression down = castExpression;
+				Expression downChild = down.getExpression();
+				while (true) {
+					if (fUnnecessaryCasts.contains(downChild)) {
+						down = (CastExpression)downChild;
+						fUnnecessaryCasts.remove(down);
+						downChild = down.getExpression();
+					} else if (downChild instanceof ParenthesizedExpression) {
+						Expression downChildExpression = ((ParenthesizedExpression)downChild).getExpression();
+						// is it justified that downChild is a ParenthesizedExpression?
+						if (NecessaryParenthesesChecker.needsParentheses(downChildExpression, down, CastExpression.EXPRESSION_PROPERTY)) {
+							// yes => continue walking down
+							downChild = downChildExpression;
+						} else {
+							// no => stop walking
+							break;
+						}
+					} else {
+						break;
+					}
+				}
+
+				// downChild is the innermost CastExpression's expression, stripped of a necessary surrounding ParenthesizedExpression
+				// Move either downChild (if it doesn't need parentheses), or a parenthesized version if necessary
+
+				replaceCast(castExpression, downChild, rewrite, group);
+			}
+		}
+

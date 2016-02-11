@@ -1,0 +1,87 @@
+	private void modifyExceptions(ASTRewrite rewrite, MethodDeclaration methodDecl) {
+		AST ast= methodDecl.getAST();
+
+		ImportRewrite imports= getImportRewrite();
+		ImportRewriteContext context= new ContextSensitiveImportRewriteContext(methodDecl, imports);
+		ListRewrite listRewrite= rewrite.getListRewrite(methodDecl, MethodDeclaration.THROWN_EXCEPTION_TYPES_PROPERTY);
+
+		List<Type> exceptions= methodDecl.thrownExceptionTypes(); // old exceptions
+		int k= 0; // index over the old exceptions
+
+		for (int i= 0; i < fExceptionChanges.length; i++) {
+			ChangeDescription curr= fExceptionChanges[i];
+
+			if (curr == null) {
+				k++;
+			} else if (curr instanceof InsertDescription) {
+				InsertDescription desc= (InsertDescription) curr;
+				String type= imports.addImport(desc.type, context);
+				ASTNode newNode= imports.addImport(desc.type, ast, context);
+
+				listRewrite.insertAt(newNode, i, null);
+
+				String key= getExceptionTypeGroupId(i);
+				addLinkedPosition(rewrite.track(newNode), false, key);
+
+				Javadoc javadoc= methodDecl.getJavadoc();
+				if (javadoc != null && JavadocTagsSubProcessor.findThrowsTag(javadoc, type) == null) {
+					TagElement newTagElement= ast.newTagElement();
+					newTagElement.setTagName(TagElement.TAG_THROWS);
+					ASTNode newRef= ASTNodeFactory.newName(ast, type);
+					newTagElement.fragments().add(newRef);
+					insertTabStop(rewrite, newTagElement.fragments(), "throws_tagcomment" + i); //$NON-NLS-1$
+					insertThrowsTag(rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY), exceptions, k, newTagElement);
+
+					addLinkedPosition(rewrite.track(newRef), false, key);
+				}
+
+			} else if (curr instanceof RemoveDescription) {
+				Type node= exceptions.get(k);
+
+				listRewrite.remove(node, null);
+				k++;
+
+				TagElement tagNode= findThrowsTag(methodDecl, node);
+				if (tagNode != null) {
+					rewrite.remove(tagNode, null);
+				}
+			} else if (curr instanceof EditDescription) {
+				EditDescription desc= (EditDescription) curr;
+
+				Type oldNode= exceptions.get(k);
+
+				String type= imports.addImport(desc.type, context);
+				ASTNode newNode= imports.addImport(desc.type, ast, context);
+
+				listRewrite.replace(oldNode, newNode, null);
+				String key= getExceptionTypeGroupId(i);
+				addLinkedPosition(rewrite.track(newNode), false, key);
+
+				k++;
+
+				TagElement tagNode= findThrowsTag(methodDecl, oldNode);
+				if (tagNode != null) {
+					ASTNode newRef= ASTNodeFactory.newType(ast, type);
+					rewrite.replace((ASTNode) tagNode.fragments().get(0), newRef, null);
+					addLinkedPosition(rewrite.track(newRef), false, key);
+				}
+
+			} else if (curr instanceof SwapDescription) {
+				Type decl1= exceptions.get(k);
+				Type decl2= exceptions.get(((SwapDescription) curr).index);
+
+				rewrite.replace(decl1, rewrite.createCopyTarget(decl2), null);
+				rewrite.replace(decl2, rewrite.createCopyTarget(decl1), null);
+
+				k++;
+
+				TagElement tagNode1= findThrowsTag(methodDecl, decl1);
+				TagElement tagNode2= findThrowsTag(methodDecl, decl2);
+				if (tagNode1 != null && tagNode2 != null) {
+					rewrite.replace(tagNode1, rewrite.createCopyTarget(tagNode2), null);
+					rewrite.replace(tagNode2, rewrite.createCopyTarget(tagNode1), null);
+				}
+			}
+		}
+	}
+

@@ -1,0 +1,46 @@
+	private static void createAddNullAnnotationOperations(CompilationUnit compilationUnit, IProblemLocation[] locations, List<CompilationUnitRewriteOperation> result) {
+		String nullableAnnotationName= getNullableAnnotationName(compilationUnit.getJavaElement(), false);
+		String nonNullAnnotationName= getNonNullAnnotationName(compilationUnit.getJavaElement(), false);
+		Set<String> handledPositions= new HashSet<String>();
+		for (int i= 0; i < locations.length; i++) {
+			IProblemLocation problem= locations[i];
+			if (problem == null)
+				continue; // problem was filtered out by createCleanUp()
+			boolean isArgumentProblem= isComplainingAboutArgument(problem.getCoveredNode(compilationUnit));
+			String annotationToAdd= nullableAnnotationName;
+			String annotationToRemove= nonNullAnnotationName;
+			// cf. createNullAnnotationInSignatureFix() but changeKind is constantly LOCAL
+			switch (problem.getProblemId()) {
+				case IProblem.IllegalDefinitionToNonNullParameter:
+				case IProblem.IllegalRedefinitionToNonNullParameter:
+					break;
+				case IProblem.ParameterLackingNonNullAnnotation:
+				case IProblem.IllegalReturnNullityRedefinition:
+					annotationToAdd= nonNullAnnotationName;
+					annotationToRemove= nullableAnnotationName;
+					break;
+				case IProblem.RequiredNonNullButProvidedNull:
+				case IProblem.RequiredNonNullButProvidedPotentialNull:
+				case IProblem.RequiredNonNullButProvidedUnknown:
+				case IProblem.RequiredNonNullButProvidedSpecdNullable:
+					if (isArgumentProblem) {
+						annotationToAdd= nonNullAnnotationName;
+						annotationToRemove= nullableAnnotationName;
+					}
+					break;
+				// all others propose to add @Nullable
+			}
+			// when performing multiple changes we can only modify the one CU that the CleanUp infrastructure provides to the operation.
+			SignatureAnnotationRewriteOperation fix= NullAnnotationsRewriteOperations
+					.createAddAnnotationOperation(compilationUnit, problem, annotationToAdd, annotationToRemove, handledPositions,
+												  true/*thisUnitOnly*/, false/*allowRemove*/, isArgumentProblem, ChangeKind.LOCAL);
+			if (fix != null) {
+				if (annotationToAdd == nonNullAnnotationName) {
+					fix.fRemoveIfNonNullByDefault= true;
+					fix.fNonNullByDefaultName= getNonNullByDefaultAnnotationName(compilationUnit.getJavaElement(), false);
+				}
+				result.add(fix);
+			}
+		}
+	}
+

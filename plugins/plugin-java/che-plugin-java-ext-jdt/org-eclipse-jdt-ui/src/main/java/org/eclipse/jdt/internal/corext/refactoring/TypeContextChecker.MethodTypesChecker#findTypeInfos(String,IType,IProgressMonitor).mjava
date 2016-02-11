@@ -1,0 +1,28 @@
+		private static List<TypeNameMatch> findTypeInfos(String typeName, IType contextType, IProgressMonitor pm) throws
+																												  JavaModelException {
+			IJavaSearchScope scope= SearchEngine.createJavaSearchScope(new IJavaProject[]{contextType.getJavaProject()}, true);
+			IPackageFragment currPackage= contextType.getPackageFragment();
+			ArrayList<TypeNameMatch> collectedInfos= new ArrayList<TypeNameMatch>();
+			TypeNameMatchCollector requestor= new TypeNameMatchCollector(collectedInfos);
+			int matchMode= SearchPattern.R_EXACT_MATCH | SearchPattern.R_CASE_SENSITIVE;
+			new SearchEngine().searchAllTypeNames(null, matchMode, typeName.toCharArray(), matchMode, IJavaSearchConstants.TYPE, scope, requestor, IJavaSearchConstants.WAIT_UNTIL_READY_TO_SEARCH, pm);
+
+			List<TypeNameMatch> result= new ArrayList<TypeNameMatch>();
+			for (Iterator<TypeNameMatch> iter= collectedInfos.iterator(); iter.hasNext();) {
+				TypeNameMatch curr= iter.next();
+				IType type= curr.getType();
+				if (type != null) {
+					boolean visible=true;
+					try {
+						visible= JavaModelUtil.isVisible(type, currPackage);
+					} catch (JavaModelException e) {
+						//Assume visibile if not available
+					}
+					if (visible) {
+						result.add(curr);
+					}
+				}
+			}
+			return result;
+		}
+

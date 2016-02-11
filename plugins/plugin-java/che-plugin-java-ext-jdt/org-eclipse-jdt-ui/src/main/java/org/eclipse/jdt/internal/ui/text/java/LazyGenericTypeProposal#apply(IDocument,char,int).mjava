@@ -1,0 +1,65 @@
+    /*
+     * @see ICompletionProposalExtension#apply(IDocument, char)
+     */
+    @Override
+    public void apply(IDocument document, char trigger, int offset) {
+        boolean onlyAppendArguments;
+        try {
+            onlyAppendArguments = fProposal.getCompletion().length == 0 && offset > 0 && document.getChar(offset - 1) == '<';
+        } catch (BadLocationException e) {
+            onlyAppendArguments = false;
+        }
+
+        if (onlyAppendArguments || shouldAppendArguments(document, offset, trigger)) {
+            try {
+                TypeArgumentProposal[] typeArgumentProposals = computeTypeArgumentProposals();
+                if (typeArgumentProposals.length > 0) {
+
+                    int[] offsets = new int[typeArgumentProposals.length];
+                    int[] lengths = new int[typeArgumentProposals.length];
+                    StringBuffer buffer;
+
+                    if (canUseDiamond()) {
+                        buffer = new StringBuffer(getReplacementString());
+                        buffer.append("<>"); //$NON-NLS-1$
+                    } else
+                        buffer = createParameterList(typeArgumentProposals, offsets, lengths, onlyAppendArguments);
+
+                    // set the generic type as replacement string
+                    boolean insertClosingParenthesis = trigger == '(' && autocloseBrackets();
+                    if (insertClosingParenthesis)
+                        updateReplacementWithParentheses(buffer);
+                    super.setReplacementString(buffer.toString());
+
+                    // add import & remove package, update replacement offset
+                    super.apply(document, '\0', offset);
+
+                    if (getTextViewer() != null) {
+                        if (hasAmbiguousProposals(typeArgumentProposals)) {
+                            adaptOffsets(offsets, buffer);
+                            installLinkedMode(document, offsets, lengths, typeArgumentProposals, insertClosingParenthesis,
+                                              onlyAppendArguments);
+                        } else {
+//                            if (insertClosingParenthesis)
+//                                setUpLinkedMode(document, ')');
+//                            else
+                                fSelectedRegion = new Region(getReplacementOffset() + getReplacementString().length(), 0);
+                        }
+                    }
+
+                    return;
+                }
+            } catch (JavaModelException e) {
+                // log and continue
+                JavaPlugin.log(e);
+            }
+        }
+
+        // default is to use the super implementation
+        // reasons:
+        // - not a parameterized type,
+        // - already followed by <type arguments>
+        // - proposal type does not inherit from expected type
+        super.apply(document, trigger, offset);
+    }
+

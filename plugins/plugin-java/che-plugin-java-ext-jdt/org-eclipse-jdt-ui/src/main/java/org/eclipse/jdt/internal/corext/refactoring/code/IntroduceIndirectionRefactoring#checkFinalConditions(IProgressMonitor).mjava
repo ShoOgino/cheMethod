@@ -1,0 +1,97 @@
+	@Override
+	public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException, OperationCanceledException {
+
+		RefactoringStatus result= new RefactoringStatus();
+		fTextChangeManager= new TextChangeManager();
+		fIntermediaryFirstParameterType= null;
+		fIntermediaryTypeBinding= null;
+		for (Iterator<CompilationUnitRewrite> iter= fRewrites.values().iterator(); iter.hasNext();)
+			iter.next().clearASTAndImportRewrites();
+
+		int startupTicks= 5;
+		int hierarchyTicks= 5;
+		int visibilityTicks= 5;
+		int referenceTicks= fUpdateReferences ? 30 : 5;
+		int creationTicks= 5;
+
+		pm.beginTask("", startupTicks + hierarchyTicks + visibilityTicks + referenceTicks + creationTicks); //$NON-NLS-1$
+		pm.setTaskName(RefactoringCoreMessages.IntroduceIndirectionRefactoring_checking_conditions);
+
+		result.merge(Checks.checkMethodName(fIntermediaryMethodName, fIntermediaryType));
+		if (result.hasFatalError())
+			return result;
+
+		if (fIntermediaryType == null)
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_run_without_intermediary_type);
+
+		// intermediary type is already non binary/non-enum
+		CompilationUnitRewrite imRewrite= getCachedCURewrite(fIntermediaryType.getCompilationUnit());
+		fIntermediaryTypeBinding= typeToBinding(fIntermediaryType, imRewrite.getRoot());
+
+		fAdjustor= new MemberVisibilityAdjustor(fIntermediaryType, fIntermediaryType);
+		fIntermediaryAdjustments= new HashMap<IMember, IncomingMemberVisibilityAdjustment>();
+
+		// check static method in non-static nested type
+		if (fIntermediaryTypeBinding.isNested() && !Modifier.isStatic(fIntermediaryTypeBinding.getModifiers()))
+			return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_create_in_nested_nonstatic, JavaStatusContext.create(fIntermediaryType));
+
+		pm.worked(startupTicks);
+		if (pm.isCanceled())
+			throw new OperationCanceledException();
+
+		if (fUpdateReferences) {
+			pm.setTaskName(RefactoringCoreMessages.IntroduceIndirectionRefactoring_checking_conditions + " " + RefactoringCoreMessages.IntroduceIndirectionRefactoring_looking_for_references); //$NON-NLS-1$
+			result.merge(updateReferences(new NoOverrideProgressMonitor(pm, referenceTicks)));
+			pm.setTaskName(RefactoringCoreMessages.IntroduceIndirectionRefactoring_checking_conditions);
+		} else {
+			// only update the declaration and/or a selected method invocation
+			if (fSelectionMethodInvocation != null) {
+				fIntermediaryFirstParameterType= getExpressionType(fSelectionMethodInvocation);
+				final IMember enclosing= getEnclosingInitialSelectionMember();
+				// create an edit for this particular call
+				result.merge(updateMethodInvocation(fSelectionMethodInvocation, enclosing, getCachedCURewrite(fSelectionCompilationUnit)));
+
+				if (!isRewriteKept(fSelectionCompilationUnit))
+					createChangeAndDiscardRewrite(fSelectionCompilationUnit);
+
+				// does call see the intermediary method?
+				// => increase visibility of the type of the intermediary method.
+				result.merge(adjustVisibility(fIntermediaryType, enclosing.getDeclaringType(), new NoOverrideProgressMonitor(pm, 0)));
+			}
+			pm.worked(referenceTicks);
+		}
+
+		if (pm.isCanceled())
+			throw new OperationCanceledException();
+
+		if (fIntermediaryFirstParameterType == null)
+			fIntermediaryFirstParameterType= fTargetMethodBinding.getDeclaringClass();
+
+		// The target type and method may have changed - update them
+
+		IType actualTargetType= (IType) fIntermediaryFirstParameterType.getJavaElement();
+		if (!fTargetMethod.getDeclaringType().equals(actualTargetType)) {
+			IMethod actualTargetMethod= new MethodOverrideTester(actualTargetType, actualTargetType.newSupertypeHierarchy(null)).findOverriddenMethodInHierarchy(actualTargetType, fTargetMethod);
+			fTargetMethod= actualTargetMethod;
+			fTargetMethodBinding= findMethodBindingInHierarchy(fIntermediaryFirstParameterType, actualTargetMethod);
+			Assert.isNotNull(fTargetMethodBinding);
+		}
+
+		result.merge(checkCanCreateIntermediaryMethod());
+		createIntermediaryMethod();
+		pm.worked(creationTicks);
+
+		pm.setTaskName(RefactoringCoreMessages.IntroduceIndirectionRefactoring_checking_conditions + " " + RefactoringCoreMessages.IntroduceIndirectionRefactoring_adjusting_visibility); //$NON-NLS-1$
+		result.merge(updateTargetVisibility(new NoOverrideProgressMonitor(pm, 0)));
+		result.merge(updateIntermediaryVisibility(new NoOverrideProgressMonitor(pm, 0)));
+		pm.worked(visibilityTicks);
+		pm.setTaskName(RefactoringCoreMessages.IntroduceIndirectionRefactoring_checking_conditions);
+
+		createChangeAndDiscardRewrite(fIntermediaryType.getCompilationUnit());
+
+		result.merge(Checks.validateModifiesFiles(getAllFilesToModify(), getValidationContext()));
+		pm.done();
+
+		return result;
+	}
+

@@ -1,0 +1,70 @@
+	private StringBuffer internalGetSubstitutedTypeName(String typeSig, IMember context, boolean erasure, StringBuffer buf) throws
+																															JavaModelException {
+		int sigKind= Signature.getTypeSignatureKind(typeSig);
+		switch (sigKind) {
+			case Signature.BASE_TYPE_SIGNATURE:
+				return buf.append(Signature.toString(typeSig));
+			case Signature.ARRAY_TYPE_SIGNATURE:
+				internalGetSubstitutedTypeName(Signature.getElementType(typeSig), context, erasure, buf);
+				for (int i= Signature.getArrayCount(typeSig); i > 0; i--) {
+					buf.append('[').append(']');
+				}
+				return buf;
+			case Signature.CLASS_TYPE_SIGNATURE: {
+				String erasureSig= Signature.getTypeErasure(typeSig);
+				String erasureName= Signature.getSimpleName(Signature.toString(erasureSig));
+
+				char ch= erasureSig.charAt(0);
+				if (ch == Signature.C_RESOLVED) {
+					buf.append(erasureName);
+				} else if (ch == Signature.C_UNRESOLVED) { // could be a type variable
+					if (erasure) {
+						buf.append(getVariableErasure(context, erasureName));
+					} else {
+						buf.append(getVariableSubstitution(context, erasureName));
+					}
+				} else {
+					Assert.isTrue(false, "Unknown class type signature"); //$NON-NLS-1$
+				}
+				if (!erasure) {
+					String[] typeArguments= Signature.getTypeArguments(typeSig);
+					if (typeArguments.length > 0) {
+						buf.append('<');
+						for (int i= 0; i < typeArguments.length; i++) {
+							if (i > 0) {
+								buf.append(',');
+							}
+							internalGetSubstitutedTypeName(typeArguments[i], context, erasure, buf);
+						}
+						buf.append('>');
+					}
+				}
+				return buf;
+			}
+			case Signature.TYPE_VARIABLE_SIGNATURE:
+				String varName= Signature.toString(typeSig);
+				if (erasure) {
+					return buf.append(getVariableErasure(context, varName));
+				} else {
+					return buf.append(getVariableSubstitution(context, varName));
+				}
+			case Signature.WILDCARD_TYPE_SIGNATURE: {
+				buf.append('?');
+				char ch= typeSig.charAt(0);
+				if (ch == Signature.C_STAR) {
+					return buf;
+				} else if (ch == Signature.C_EXTENDS) {
+					buf.append(" extends "); //$NON-NLS-1$
+				} else {
+					buf.append(" super "); //$NON-NLS-1$
+				}
+				return internalGetSubstitutedTypeName(typeSig.substring(1), context, erasure, buf);
+			}
+			case Signature.CAPTURE_TYPE_SIGNATURE:
+				return internalGetSubstitutedTypeName(typeSig.substring(1), context, erasure, buf);
+			default:
+				Assert.isTrue(false, "Unhandled type signature kind"); //$NON-NLS-1$
+				return buf;
+		}
+	}
+

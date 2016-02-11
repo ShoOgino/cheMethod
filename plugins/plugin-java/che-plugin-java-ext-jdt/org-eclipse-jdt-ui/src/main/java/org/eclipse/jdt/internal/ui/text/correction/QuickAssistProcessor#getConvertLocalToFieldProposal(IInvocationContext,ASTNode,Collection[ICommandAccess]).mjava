@@ -1,0 +1,35 @@
+	private static boolean getConvertLocalToFieldProposal(IInvocationContext context, final ASTNode node, Collection<ICommandAccess> proposals) throws
+																																				CoreException {
+		if (!(node instanceof SimpleName))
+			return false;
+
+		SimpleName name= (SimpleName) node;
+		IBinding binding= name.resolveBinding();
+		if (!(binding instanceof IVariableBinding))
+			return false;
+		IVariableBinding varBinding= (IVariableBinding) binding;
+		if (varBinding.isField() || varBinding.isParameter())
+			return false;
+		ASTNode decl= context.getASTRoot().findDeclaringNode(varBinding);
+		if (decl == null || decl.getLocationInParent() != VariableDeclarationStatement.FRAGMENTS_PROPERTY)
+			return false;
+
+		if (proposals == null) {
+			return true;
+		}
+
+		PromoteTempToFieldRefactoring refactoring= new PromoteTempToFieldRefactoring((VariableDeclaration) decl);
+		if (refactoring.checkInitialConditions(new NullProgressMonitor()).isOK()) {
+			String label= CorrectionMessages.QuickAssistProcessor_convert_local_to_field_description;
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			LinkedProposalModel linkedProposalModel= new LinkedProposalModel();
+			refactoring.setLinkedProposalModel(linkedProposalModel);
+
+			RefactoringCorrectionProposal proposal= new RefactoringCorrectionProposal(label, context.getCompilationUnit(), refactoring, IProposalRelevance.CONVERT_LOCAL_TO_FIELD, image);
+			proposal.setLinkedProposalModel(linkedProposalModel);
+			proposal.setCommandId(CONVERT_LOCAL_TO_FIELD_ID);
+			proposals.add(proposal);
+		}
+		return true;
+	}
+

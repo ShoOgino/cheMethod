@@ -1,0 +1,36 @@
+	public TypeChangeCorrectionProposal(ICompilationUnit targetCU, IBinding binding, CompilationUnit astRoot, ITypeBinding newType,
+										boolean offerSuperTypeProposals, int relevance) {
+		super("", targetCU, null, relevance, JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE)); //$NON-NLS-1$
+
+		Assert.isTrue(binding != null && (binding.getKind() == IBinding.METHOD || binding.getKind() == IBinding.VARIABLE) &&
+					  Bindings.isDeclarationBinding(binding));
+
+		fBinding = binding; // must be generic method or (generic) variable
+		fAstRoot = astRoot;
+
+		if (offerSuperTypeProposals) {
+			fTypeProposals = ASTResolving.getRelaxingTypes(astRoot.getAST(), newType);
+			sortTypes(fTypeProposals);
+			fNewType = fTypeProposals[0];
+		} else {
+			fNewType = newType;
+			fTypeProposals = null;
+		}
+
+		String typeName = BindingLabelProvider.getBindingLabel(fNewType, JavaElementLabels.ALL_DEFAULT);
+		if (binding.getKind() == IBinding.VARIABLE) {
+			IVariableBinding varBinding = (IVariableBinding)binding;
+			String[] args = {BasicElementLabels.getJavaElementName(varBinding.getName()), BasicElementLabels.getJavaElementName(typeName)};
+			if (varBinding.isField()) {
+				setDisplayName(Messages.format(CorrectionMessages.TypeChangeCompletionProposal_field_name, args));
+			} else if (astRoot.findDeclaringNode(binding) instanceof SingleVariableDeclaration) {
+				setDisplayName(Messages.format(CorrectionMessages.TypeChangeCompletionProposal_param_name, args));
+			} else {
+				setDisplayName(Messages.format(CorrectionMessages.TypeChangeCompletionProposal_variable_name, args));
+			}
+		} else {
+			String[] args = {binding.getName(), typeName};
+			setDisplayName(Messages.format(CorrectionMessages.TypeChangeCompletionProposal_method_name, args));
+		}
+	}
+

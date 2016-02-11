@@ -1,0 +1,52 @@
+	private void readIncludedTemplates(Collection templates/*, IConfigurationElement element*/, String file) throws IOException {
+//		String file= element.getAttribute(FILE);
+		if (file != null) {
+//			Bundle plugin = Platform.getBundle(element.getContributor().getName());
+//			URL url= FileLocator.find(plugin, Path.fromOSString(file), null);
+			URL url = ContributionTemplateStore.class.getResource(file);
+			if (url != null) {
+				ResourceBundle bundle= null;
+				InputStream bundleStream= null;
+				InputStream stream= null;
+				try {
+//					String translations= element.getAttribute(TRANSLATIONS);
+//					if (translations != null) {
+						String props = "/org/eclipse/templates/default-templates.properties"; //file.substring(0, file.lastIndexOf('.'));
+						URL bundleURL= ContributionTemplateStore.class.getResource(props);
+						if (bundleURL != null) {
+							bundleStream= bundleURL.openStream();
+							bundle= new PropertyResourceBundle(bundleStream);
+						}
+//					}
+
+					stream= new BufferedInputStream(url.openStream());
+					TemplateReaderWriter reader= new TemplateReaderWriter();
+					TemplatePersistenceData[] datas= reader.read(stream, bundle);
+					for (int i= 0; i < datas.length; i++) {
+						TemplatePersistenceData data= datas[i];
+						if (data.isCustom()) {
+							if (data.getId() == null)
+								JavaPlugin.logErrorMessage("Ignoring template ''"+data.getTemplate().getName()+"'' since it has no id.");
+							else
+								JavaPlugin.logErrorMessage("Ignoring template ''"+data.getTemplate().getName()+"'' since it is deleted.");
+						} else if (validateTemplate(data.getTemplate())) {
+							templates.add(data);
+						}
+					}
+				} finally {
+					try {
+						if (bundleStream != null)
+							bundleStream.close();
+					} catch (IOException x) {
+					} finally {
+						try {
+							if (stream != null)
+								stream.close();
+						} catch (IOException x) {
+						}
+					}
+				}
+			}
+		}
+	}
+

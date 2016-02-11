@@ -1,0 +1,89 @@
+    /*
+     * @see ASTVisitor#visit(MethodDeclaration)
+     */
+    @Override
+    public boolean visit(MethodDeclaration node) {
+        if (node.getJavadoc() != null) {
+            node.getJavadoc().accept(this);
+        }
+        if (node.getAST().apiLevel() >= JLS3) {
+            printModifiers(node.modifiers());
+            if (!node.typeParameters().isEmpty()) {
+                this.fBuffer.append("<");//$NON-NLS-1$
+                for (Iterator<TypeParameter> it = node.typeParameters().iterator(); it.hasNext(); ) {
+                    TypeParameter t = it.next();
+                    t.accept(this);
+                    if (it.hasNext()) {
+                        this.fBuffer.append(", ");//$NON-NLS-1$
+                    }
+                }
+                this.fBuffer.append("> ");//$NON-NLS-1$
+            }
+        }
+        if (!node.isConstructor()) {
+            if (node.getReturnType2() != null) {
+                node.getReturnType2().accept(this);
+            } else {
+                // methods really ought to have a return type
+                this.fBuffer.append("void");//$NON-NLS-1$
+            }
+            this.fBuffer.append(" ");//$NON-NLS-1$
+        }
+        node.getName().accept(this);
+        this.fBuffer.append("(");//$NON-NLS-1$
+        if (node.getAST().apiLevel() >= AST.JLS8) {
+            Type receiverType = node.getReceiverType();
+            if (receiverType != null) {
+                receiverType.accept(this);
+                this.fBuffer.append(' ');
+                SimpleName qualifier = node.getReceiverQualifier();
+                if (qualifier != null) {
+                    qualifier.accept(this);
+                    this.fBuffer.append('.');
+                }
+                this.fBuffer.append("this"); //$NON-NLS-1$
+                if (node.parameters().size() > 0) {
+                    this.fBuffer.append(',');
+                }
+            }
+        }
+        for (Iterator<SingleVariableDeclaration> it = node.parameters().iterator(); it.hasNext(); ) {
+            SingleVariableDeclaration v = it.next();
+            v.accept(this);
+            if (it.hasNext()) {
+                this.fBuffer.append(", ");//$NON-NLS-1$
+            }
+        }
+        this.fBuffer.append(")");//$NON-NLS-1$
+        if (node.getAST().apiLevel() >= AST.JLS8) {
+            List<Dimension> dimensions = node.extraDimensions();
+            for (Iterator<Dimension> it = dimensions.iterator(); it.hasNext(); ) {
+                Dimension e = it.next();
+                e.accept(this);
+            }
+        } else {
+            for (int i = 0; i < node.getExtraDimensions(); i++) {
+                this.fBuffer.append("[]"); //$NON-NLS-1$
+            }
+        }
+        List<? extends ASTNode> thrownExceptions =
+                node.getAST().apiLevel() >= AST.JLS8 ? node.thrownExceptionTypes() : getThrownExceptions(node);
+        if (!thrownExceptions.isEmpty()) {
+            this.fBuffer.append(" throws ");//$NON-NLS-1$
+            for (Iterator<? extends ASTNode> it = thrownExceptions.iterator(); it.hasNext(); ) {
+                ASTNode n = it.next();
+                n.accept(this);
+                if (it.hasNext()) {
+                    this.fBuffer.append(", ");//$NON-NLS-1$
+                }
+            }
+            this.fBuffer.append(" ");//$NON-NLS-1$
+        }
+        if (node.getBody() == null) {
+            this.fBuffer.append(";");//$NON-NLS-1$
+        } else {
+            node.getBody().accept(this);
+        }
+        return false;
+    }
+

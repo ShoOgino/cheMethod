@@ -1,0 +1,40 @@
+	/**
+	 * @param fullyQualifiedTypeName the fully qualified name of the intermediary method
+	 * @return status for type name. Use {@link #setIntermediaryMethodName(String)} to check for overridden methods.
+	 */
+	public RefactoringStatus setIntermediaryTypeName(String fullyQualifiedTypeName) {
+		IType target = null;
+
+		try {
+			if (fullyQualifiedTypeName.length() == 0)
+				return RefactoringStatus
+						.createFatalErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_type_not_selected_error);
+
+			// find type (now including secondaries)
+			target = getProject().findType(fullyQualifiedTypeName, new NullProgressMonitor());
+			if (target == null || !target.exists())
+				return RefactoringStatus.createErrorStatus(
+						Messages.format(RefactoringCoreMessages.IntroduceIndirectionRefactoring_type_does_not_exist_error,
+										BasicElementLabels.getJavaElementName(fullyQualifiedTypeName)));
+			if (target.isAnnotation())
+				return RefactoringStatus
+						.createErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_create_in_annotation);
+			if (target.isInterface() && !(JavaModelUtil.is18OrHigher(target.getJavaProject()) && JavaModelUtil.is18OrHigher(getProject())))
+				return RefactoringStatus
+						.createErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_create_on_interface);
+		} catch (JavaModelException e) {
+			return RefactoringStatus
+					.createFatalErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_unable_determine_declaring_type);
+		}
+
+		if (target.isReadOnly())
+			return RefactoringStatus.createErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_create_in_readonly);
+
+		if (target.isBinary())
+			return RefactoringStatus.createErrorStatus(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_create_in_binary);
+
+		fIntermediaryType = target;
+
+		return new RefactoringStatus();
+	}
+

@@ -1,0 +1,60 @@
+    @Test
+	public void testTypeParametersToRawTypeReference02() throws Exception {
+		Hashtable options= JavaCore.getOptions();
+		options.put(JavaCore.COMPILER_PB_RAW_TYPE_REFERENCE, JavaCore.WARNING);
+		JavaCore.setOptions(options);
+
+		IPackageFragment pack1= fSourceFolder.createPackageFragment("pack", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("public class E {\n");
+		buf.append("    private class E1<P1, P2> {}\n");
+		buf.append("    public void test() {\n");
+		buf.append("        E1 e1;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+
+		CompilationUnit astRoot= getASTRoot(cu);
+		ArrayList proposals= collectCorrections(cu, astRoot, 1);
+
+		assertCorrectLabels(proposals);
+		assertNumberOfProposals(proposals, 4);
+
+		String[] expected= new String[3];
+
+		buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("public class E {\n");
+		buf.append("    private class E1<P1, P2> {}\n");
+		buf.append("    public void test() {\n");
+		buf.append("        @SuppressWarnings(\"rawtypes\")\n");
+		buf.append("        E1 e1;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[0]= buf.toString();
+
+		buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("public class E {\n");
+		buf.append("    private class E1<P1, P2> {}\n");
+		buf.append("    @SuppressWarnings(\"rawtypes\")\n");
+		buf.append("    public void test() {\n");
+		buf.append("        E1 e1;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[1]= buf.toString();
+
+		buf= new StringBuffer();
+		buf.append("package pack;\n");
+		buf.append("public class E {\n");
+		buf.append("    private class E1<P1, P2> {}\n");
+		buf.append("    public void test() {\n");
+		buf.append("        E1<?, ?> e1;\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		expected[2]= buf.toString();
+
+		assertExpectedExistInProposals(proposals, expected);
+	}
+

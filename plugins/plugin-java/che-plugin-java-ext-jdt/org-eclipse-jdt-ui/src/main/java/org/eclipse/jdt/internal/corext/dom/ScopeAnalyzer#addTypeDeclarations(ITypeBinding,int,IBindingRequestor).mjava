@@ -1,0 +1,41 @@
+	/**
+	 * Collects all elements available in a type: its hierarchy and its outer scopes.
+	 * @param binding The type binding
+	 * @param flags Flags defining the elements to report
+	 * @param requestor the requestor to which all results are reported
+	 * @return return <code>true</code> if the requestor has reported the binding as found and no further results are required
+	 */
+	private boolean addTypeDeclarations(ITypeBinding binding, int flags, IBindingRequestor requestor) {
+		if (hasFlag(TYPES, flags) && !binding.isAnonymous()) {
+			if (requestor.acceptBinding(binding))
+				return true;
+
+			ITypeBinding[] typeParameters = binding.getTypeParameters();
+			for (int i = 0; i < typeParameters.length; i++) {
+				if (requestor.acceptBinding(typeParameters[i]))
+					return true;
+			}
+		}
+
+		addInherited(binding, flags, requestor); // add inherited
+
+		if (binding.isLocal()) {
+			addOuterDeclarationsForLocalType(binding, flags, requestor);
+		} else {
+			ITypeBinding declaringClass = binding.getDeclaringClass();
+			if (declaringClass != null) {
+				if (addTypeDeclarations(declaringClass, flags, requestor)) // Recursively add inherited
+					return true;
+			} else if (hasFlag(TYPES, flags)) {
+				if (fRoot.findDeclaringNode(binding) != null) {
+					List<AbstractTypeDeclaration> types = fRoot.types();
+					for (int i = 0; i < types.size(); i++) {
+						if (requestor.acceptBinding(types.get(i).resolveBinding()))
+							return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+

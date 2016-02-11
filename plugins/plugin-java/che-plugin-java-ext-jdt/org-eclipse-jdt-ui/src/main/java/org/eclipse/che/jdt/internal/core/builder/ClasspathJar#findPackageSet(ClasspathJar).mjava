@@ -1,0 +1,38 @@
+    /**
+     * Calculate and cache the package list available in the zipFile.
+     *
+     * @param jar
+     *         The ClasspathJar to use
+     * @return A SimpleSet with the all the package names in the zipFile.
+     */
+    static SimpleSet findPackageSet(ClasspathJar jar) {
+        String zipFileName = jar.zipFilename;
+
+        SimpleSet packageSet = new SimpleSet(41);
+        packageSet.add(""); //$NON-NLS-1$
+        nextEntry:
+        for (Enumeration e = jar.zipFile.entries(); e.hasMoreElements(); ) {
+            String fileName = ((ZipEntry)e.nextElement()).getName();
+
+            // add the package name & all of its parent packages
+            int last = fileName.lastIndexOf('/');
+            while (last > 0) {
+                // extract the package name
+                String packageName = fileName.substring(0, last);
+                String[] splittedName = Util.splitOn('/', packageName, 0, packageName.length());
+                for (String s : splittedName) {
+                    if (!org.eclipse.jdt.internal.core.util.Util.isValidFolderNameForPackage(s, "1.7", "1.7")) {
+                        continue nextEntry;
+                    }
+                }
+
+                if (packageSet.addIfNotIncluded(packageName) == null)
+                    continue nextEntry; // already existed
+
+                last = packageName.lastIndexOf('/');
+            }
+        }
+
+        return packageSet;
+    }
+

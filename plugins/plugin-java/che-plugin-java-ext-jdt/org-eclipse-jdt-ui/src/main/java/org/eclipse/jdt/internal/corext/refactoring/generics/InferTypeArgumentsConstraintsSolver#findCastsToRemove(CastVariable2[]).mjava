@@ -1,0 +1,31 @@
+	private void findCastsToRemove(CastVariable2[] castVariables) {
+		for (int i = 0; i < castVariables.length; i++) {
+			CastVariable2 castCv = castVariables[i];
+			ConstraintVariable2 expressionVariable = castCv.getExpressionVariable();
+			TType chosenType = InferTypeArgumentsConstraintsSolver.getChosenType(expressionVariable);
+			TType castType = castCv.getType();
+			TType expressionType = expressionVariable.getType();
+			if (chosenType != null && TTypes.canAssignTo(chosenType, castType)) {
+				if (chosenType.equals(expressionType))
+					continue; // The type has not changed. Don't remove the cast, since it could be
+				// there to get access to default-visible members or to
+				// unify types of conditional expressions.
+				fUpdate.addCastToRemove(castCv);
+
+			} else if (expressionVariable instanceof ArrayTypeVariable2 && castType.isArrayType()) { // bug 97258
+				ArrayElementVariable2 arrayElementCv = fTCModel.getArrayElementVariable(expressionVariable);
+				if (arrayElementCv == null)
+					continue;
+				TType chosenArrayElementType = InferTypeArgumentsConstraintsSolver.getChosenType(arrayElementCv);
+				if (chosenArrayElementType != null &&
+					TTypes.canAssignTo(chosenArrayElementType, ((ArrayType)castType).getComponentType())) {
+					if (expressionType instanceof ArrayType &&
+						chosenArrayElementType.equals(((ArrayType)expressionType).getComponentType()))
+						continue; // The type has not changed. Don't remove the cast, since it could be
+					// there to unify types of conditional expressions.
+					fUpdate.addCastToRemove(castCv);
+				}
+			}
+		}
+	}
+

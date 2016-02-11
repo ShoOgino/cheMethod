@@ -1,0 +1,91 @@
+	private static boolean getConvertToMultiCatchProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
+		if (!JavaModelUtil.is17OrHigher(context.getCompilationUnit().getJavaProject()))
+			return false;
+
+		CatchClause catchClause= (CatchClause) ASTResolving.findAncestor(covering, ASTNode.CATCH_CLAUSE);
+		if (catchClause == null) {
+			return false;
+		}
+
+		Statement statement= ASTResolving.findParentStatement(covering);
+		if (statement != catchClause.getParent() && statement != catchClause.getBody()) {
+			return false; // selection is in a statement inside the body
+		}
+
+		Type type1= catchClause.getException().getType();
+		Type selectedMultiCatchType= null;
+		if (type1.isUnionType() && covering instanceof Name) {
+			Name topMostName= ASTNodes.getTopMostName((Name)covering);
+			ASTNode parent= topMostName.getParent();
+			if (parent instanceof SimpleType || parent instanceof NameQualifiedType) {
+				selectedMultiCatchType= (Type) parent;
+			}
+		}
+		if (selectedMultiCatchType != null)
+			return false;
+
+		TryStatement tryStatement= (TryStatement) catchClause.getParent();
+		List<CatchClause> catchClauses= tryStatement.catchClauses();
+		if (catchClauses.size() <= 1)
+			return false;
+
+		String commonSource= null;
+		try {
+			IBuffer buffer= context.getCompilationUnit().getBuffer();
+			for (Iterator<CatchClause> iterator= catchClauses.iterator(); iterator.hasNext();) {
+				CatchClause catchClause1= iterator.next();
+				Block body= catchClause1.getBody();
+				String source= buffer.getText(body.getStartPosition(), body.getLength());
+				if (commonSource == null) {
+					commonSource= source;
+				} else {
+					if (!commonSource.equals(source))
+						return false;
+				}
+			}
+		} catch (JavaModelException e) {
+			return false;
+		}
+
+		if (resultingCollections == null)
+			return true;
+
+		AST ast= covering.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		TightSourceRangeComputer sourceRangeComputer= new TightSourceRangeComputer();
+		sourceRangeComputer.addTightSourceNode(catchClauses.get(catchClauses.size() - 1));
+		rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
+		
+		CatchClause firstCatchClause= catchClauses.get(0);
+
+		UnionType newUnionType= ast.newUnionType();
+		List<Type> types= newUnionType.types();
+		for (Iterator<CatchClause> iterator= catchClauses.iterator(); iterator.hasNext();) {
+			CatchClause catchClause1= iterator.next();
+			Type type= catchClause1.getException().getType();
+			if (type instanceof UnionType) {
+				List<Type> types2= ((UnionType) type).types();
+				for (Iterator<Type> iterator2= types2.iterator(); iterator2.hasNext();) {
+					types.add((Type) rewrite.createCopyTarget(iterator2.next()));
+				}
+			} else {
+				types.add((Type) rewrite.createCopyTarget(type));
+			}
+		}
+
+		SingleVariableDeclaration newExceptionDeclaration= ast.newSingleVariableDeclaration();
+		newExceptionDeclaration.setType(newUnionType);
+		newExceptionDeclaration.setName((SimpleName) rewrite.createCopyTarget(firstCatchClause.getException().getName()));
+		rewrite.replace(firstCatchClause.getException(), newExceptionDeclaration, null);
+
+		for (int i= 1; i < catchClauses.size(); i++) {
+			rewrite.remove(catchClauses.get(i), null);
+		}
+
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		String label= CorrectionMessages.QuickAssistProcessor_convert_to_single_multicatch_block;
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.COMBINE_CATCH_BLOCKS, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

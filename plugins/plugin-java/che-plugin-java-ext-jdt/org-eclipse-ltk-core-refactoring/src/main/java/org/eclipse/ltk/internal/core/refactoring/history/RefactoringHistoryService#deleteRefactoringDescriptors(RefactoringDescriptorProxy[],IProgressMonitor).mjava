@@ -1,0 +1,64 @@
+	/**
+	 * Deletes the specified refactoring descriptors from their associated
+	 * refactoring histories.
+	 *
+	 * @param proxies
+	 *            the refactoring descriptor proxies
+	 * @param monitor
+	 *            the progress monitor to use, or <code>null</code>
+	 * @throws CoreException
+	 *             if an error occurs while deleting the refactoring
+	 *             descriptors. Reasons include:
+	 *             <ul>
+	 *             <li>The refactoring history has an illegal format, contains
+	 *             illegal arguments or otherwise illegal information.</li>
+	 *             <li>An I/O error occurs while deleting the refactoring
+	 *             descriptors from the refactoring history.</li>
+	 *             </ul>
+	 *
+	 * @see IRefactoringCoreStatusCodes#REFACTORING_HISTORY_FORMAT_ERROR
+	 * @see IRefactoringCoreStatusCodes#REFACTORING_HISTORY_IO_ERROR
+	 */
+	public void deleteRefactoringDescriptors(final RefactoringDescriptorProxy[] proxies, IProgressMonitor monitor) throws CoreException {
+		Assert.isNotNull(proxies);
+		if (monitor == null)
+			monitor= new NullProgressMonitor();
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_deleting_refactorings, proxies.length + 300);
+			final Map projects= new HashMap();
+			for (int index= 0; index < proxies.length; index++) {
+				String project= proxies[index].getProject();
+				if (project == null || "".equals(project)) //$NON-NLS-1$
+					project= RefactoringHistoryService.NAME_WORKSPACE_PROJECT;
+				Collection collection= (Collection) projects.get(project);
+				if (collection == null) {
+					collection= new ArrayList();
+					projects.put(project, collection);
+				}
+				collection.add(proxies[index]);
+				monitor.worked(1);
+			}
+			final SubProgressMonitor subMonitor= new SubProgressMonitor(monitor, 300);
+			try {
+				final Set entries= projects.entrySet();
+				subMonitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_deleting_refactorings, entries.size());
+				for (final Iterator iterator= entries.iterator(); iterator.hasNext();) {
+					final Map.Entry entry= (Map.Entry) iterator.next();
+					final Collection collection= (Collection) entry.getValue();
+					String project= (String) entry.getKey();
+					if (project.equals(RefactoringHistoryService.NAME_WORKSPACE_PROJECT))
+						project= null;
+					final RefactoringHistoryManager manager= getManager(project);
+					if (manager != null)
+						manager.removeRefactoringDescriptors((RefactoringDescriptorProxy[]) collection.toArray(new RefactoringDescriptorProxy[collection.size()]), new SubProgressMonitor(subMonitor, 1), RefactoringCoreMessages.RefactoringHistoryService_deleting_refactorings);
+					else
+						subMonitor.worked(1);
+				}
+			} finally {
+				subMonitor.done();
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

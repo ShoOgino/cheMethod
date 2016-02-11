@@ -1,0 +1,89 @@
+    public void generate() {
+
+        Set<URL> urls = getClasspathForPackages(dtoPackages);
+        genFileName = genFileName.replace('/', File.separatorChar);
+        String outputFilePath = genFileName;
+
+        // Extract the name of the output file that will contain all the DTOs and its package.
+        String myPackageBase = packageBase;
+        if (!myPackageBase.endsWith("/")) {
+            myPackageBase += "/";
+        }
+        myPackageBase = myPackageBase.replace('/', File.separatorChar);
+
+        int packageStart = outputFilePath.lastIndexOf(myPackageBase) + myPackageBase.length();
+        int packageEnd = outputFilePath.lastIndexOf(File.separatorChar);
+        String fileName = outputFilePath.substring(packageEnd + 1);
+        String className = fileName.substring(0, fileName.indexOf(".java"));
+        String packageName = outputFilePath.substring(packageStart, packageEnd).replace(File.separatorChar, '.');
+
+        File outFile = new File(outputFilePath);
+
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (String dtoPackage : dtoPackages) {
+                if (sb.length() > 0) {
+                    sb.append(dtoPackage);
+                }
+                sb.append(dtoPackage);
+            }
+
+            DtoTemplate dtoTemplate = new DtoTemplate(packageName, className, impl);
+            Reflections reflection = new Reflections(new ConfigurationBuilder().setUrls(urls).setScanners(new SubTypesScanner(), new TypeAnnotationsScanner()));
+            
+            List<Class<?>> dtos = new ArrayList<>(reflection.getTypesAnnotatedWith(DTO.class));
+
+            // We sort alphabetically to ensure deterministic order of routing types.
+            Collections.sort(dtos, new ClassesComparator());
+
+            for (Class<?> clazz : dtos) {
+
+                // DTO are interface
+                if (clazz.isInterface()) {
+                    dtoTemplate.addInterface(clazz);
+                }
+            }
+
+            reflection = new Reflections(
+                    new ConfigurationBuilder().setUrls(ClasspathHelper.forClassLoader()).setScanners(new SubTypesScanner(), new TypeAnnotationsScanner()));
+            List<Class<?>> dtosDependencies = new ArrayList<>(reflection.getTypesAnnotatedWith(DTO.class));
+            dtosDependencies.removeAll(dtos);
+
+            reflection = new Reflections(
+                    new ConfigurationBuilder().setUrls(ClasspathHelper.forClassLoader()).setScanners(new SubTypesScanner()));
+
+            for (Class<?> clazz : dtosDependencies) {
+                for (Class impl : reflection.getSubTypesOf(clazz)) {
+                    if (!(impl.isInterface() || urls.contains(impl.getProtectionDomain().getCodeSource().getLocation()))) {
+                        if ("client".equals(dtoTemplate.getImplType())) {
+                           if (isClientImpl(impl))  {
+                               dtoTemplate.addImplementation(clazz, impl);
+                           }
+                        } else if ("server".equals(dtoTemplate.getImplType())) {
+                            if (isServerImpl(impl))  {
+                                dtoTemplate.addImplementation(clazz, impl);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Emit the generated file.
+            Files.createDirectories(outFile.toPath().getParent());
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outFile))) {
+                writer.write(dtoTemplate.toString());
+            }
+
+            if ("server".equals(impl)) {
+                // Create file in META-INF/services/
+                File outServiceFile = new File(myPackageBase + "META-INF/services/" + DtoFactoryVisitor.class.getCanonicalName());
+                Files.createDirectories(outServiceFile.toPath().getParent());
+                try (BufferedWriter serviceFileWriter = new BufferedWriter(new FileWriter(outServiceFile))) {
+                    serviceFileWriter.write(packageName + "." + className);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+

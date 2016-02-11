@@ -1,0 +1,74 @@
+	/**
+	 * {@inheritDoc}
+	 * <p>
+	 * May be replaced or extended by subclasses.
+	 * </p>
+	 */
+	public ITypedRegion[] computePartitioning(int offset, int length, boolean includeZeroLengthPartitions) {
+		checkInitialization();
+		List list= new ArrayList();
+
+		try {
+
+			int endOffset= offset + length;
+
+			Position[] category= getPositions();
+
+			TypedPosition previous= null, current= null;
+			int start, end, gapOffset;
+			Position gap= new Position(0);
+
+			int startIndex= getFirstIndexEndingAfterOffset(category, offset);
+			int endIndex= getFirstIndexStartingAfterOffset(category, endOffset);
+			for (int i= startIndex; i < endIndex; i++) {
+
+				current= (TypedPosition) category[i];
+
+				gapOffset= (previous != null) ? previous.getOffset() + previous.getLength() : 0;
+				gap.setOffset(gapOffset);
+				gap.setLength(current.getOffset() - gapOffset);
+				if ((includeZeroLengthPartitions && overlapsOrTouches(gap, offset, length)) ||
+						(gap.getLength() > 0 && gap.overlapsWith(offset, length))) {
+					start= Math.max(offset, gapOffset);
+					end= Math.min(endOffset, gap.getOffset() + gap.getLength());
+					list.add(new TypedRegion(start, end - start, IDocument.DEFAULT_CONTENT_TYPE));
+				}
+
+				if (current.overlapsWith(offset, length)) {
+					start= Math.max(offset, current.getOffset());
+					end= Math.min(endOffset, current.getOffset() + current.getLength());
+					list.add(new TypedRegion(start, end - start, current.getType()));
+				}
+
+				previous= current;
+			}
+
+			if (previous != null) {
+				gapOffset= previous.getOffset() + previous.getLength();
+				gap.setOffset(gapOffset);
+				gap.setLength(fDocument.getLength() - gapOffset);
+				if ((includeZeroLengthPartitions && overlapsOrTouches(gap, offset, length)) ||
+						(gap.getLength() > 0 && gap.overlapsWith(offset, length))) {
+					start= Math.max(offset, gapOffset);
+					end= Math.min(endOffset, fDocument.getLength());
+					list.add(new TypedRegion(start, end - start, IDocument.DEFAULT_CONTENT_TYPE));
+				}
+			}
+
+			if (list.isEmpty())
+				list.add(new TypedRegion(offset, length, IDocument.DEFAULT_CONTENT_TYPE));
+
+		} catch (BadPositionCategoryException ex) {
+			// Make sure we clear the cache
+			clearPositionCache();
+		} catch (RuntimeException ex) {
+			// Make sure we clear the cache
+			clearPositionCache();
+			throw ex;
+		}
+
+		TypedRegion[] result= new TypedRegion[list.size()];
+		list.toArray(result);
+		return result;
+	}
+

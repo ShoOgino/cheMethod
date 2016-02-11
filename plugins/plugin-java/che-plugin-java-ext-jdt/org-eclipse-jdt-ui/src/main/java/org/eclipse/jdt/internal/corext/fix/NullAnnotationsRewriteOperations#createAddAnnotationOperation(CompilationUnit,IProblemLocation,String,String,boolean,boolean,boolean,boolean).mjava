@@ -1,0 +1,122 @@
+	private static SignatureAnnotationRewriteOperation createAddAnnotationOperation(CompilationUnit compilationUnit,
+																					IProblemLocation problem, String annotationToAdd,
+																					String annotationToRemove,
+																					boolean changeTargetMethod, boolean thisUnitOnly,
+																					boolean allowRemove, boolean isArgumentProblem) {
+		ICompilationUnit cu = (ICompilationUnit)compilationUnit.getJavaElement();
+		if (!JavaModelUtil.is50OrHigher(cu.getJavaProject()))
+			return null;
+
+		ASTNode selectedNode = problem.getCoveringNode(compilationUnit);
+		if (selectedNode == null)
+			return null;
+		ASTNode declaringNode = getDeclaringNode(selectedNode);
+
+		switch (problem.getProblemId()) {
+			case IProblem.IllegalDefinitionToNonNullParameter:
+//			case IllegalRedefinitionToNonNullParameter:
+				// these affect another method
+				break;
+			case IProblem.IllegalReturnNullityRedefinition:
+				if (declaringNode == null)
+					declaringNode = selectedNode;
+				break; // do propose changes even if we already have an annotation
+			default:
+				// if this method has annotations, don't change'em
+				if (!allowRemove && NullAnnotationsFix.hasExplicitNullAnnotation(cu, problem.getOffset()))
+					return null;
+		}
+
+		String annotationNameLabel = annotationToAdd;
+		int lastDot = annotationToAdd.lastIndexOf('.');
+		if (lastDot != -1)
+			annotationNameLabel = annotationToAdd.substring(lastDot + 1);
+		annotationNameLabel = BasicElementLabels.getJavaElementName(annotationNameLabel);
+
+		if (changeTargetMethod) {
+			MethodInvocation methodInvocation = null;
+			if (isArgumentProblem) {
+				if (selectedNode.getParent() instanceof MethodInvocation)
+					methodInvocation = (MethodInvocation)selectedNode.getParent();
+			} else {
+				if (selectedNode instanceof MethodInvocation)
+					methodInvocation = (MethodInvocation)selectedNode;
+			}
+			if (methodInvocation != null) {
+				// DefiniteNullToNonNullParameter || PotentialNullToNonNullParameter
+				int paramIdx = methodInvocation.arguments().indexOf(selectedNode);
+				IMethodBinding methodBinding = methodInvocation.resolveMethodBinding();
+				compilationUnit = findCUForMethod(compilationUnit, cu, methodBinding);
+				if (compilationUnit == null)
+					return null;
+				if (thisUnitOnly && !compilationUnit.getJavaElement().equals(cu))
+					return null;
+				ASTNode methodDecl = compilationUnit.findDeclaringNode(methodBinding.getKey());
+				if (methodDecl == null)
+					return null;
+				if (isArgumentProblem) {
+					String message = Messages.format(FixMessages.NullAnnotationsRewriteOperations_change_target_method_parameter_nullness,
+													 new Object[]{methodInvocation.getName(), annotationNameLabel});
+					return new ParameterAnnotationRewriteOperation(compilationUnit, (MethodDeclaration)methodDecl, annotationToAdd,
+																   annotationToRemove, paramIdx, allowRemove, message);
+				} else {
+					MethodDeclaration declaration = (MethodDeclaration)methodDecl;
+					String message = Messages.format(FixMessages.NullAnnotationsRewriteOperations_change_method_return_nullness,
+													 new String[]{declaration.getName().getIdentifier(), annotationNameLabel});
+					return new ReturnAnnotationRewriteOperation(compilationUnit, declaration, annotationToAdd, annotationToRemove,
+																allowRemove, message);
+				}
+			}
+		} else if (declaringNode instanceof MethodDeclaration) {
+			// complaint is in signature of this method
+			MethodDeclaration declaration = (MethodDeclaration)declaringNode;
+			switch (problem.getProblemId()) {
+				case IProblem.ParameterLackingNonNullAnnotation:
+				case IProblem.ParameterLackingNullableAnnotation:
+				case IProblem.IllegalDefinitionToNonNullParameter:
+				case IProblem.IllegalRedefinitionToNonNullParameter:
+				case IProblem.SpecdNonNullLocalVariableComparisonYieldsFalse:
+				case IProblem.RedundantNullCheckOnSpecdNonNullLocalVariable:
+					// problems regarding the argument declaration:
+					if (declaration.getNodeType() == ASTNode.METHOD_DECLARATION) {
+						String paramName = findAffectedParameterName(selectedNode);
+						if (paramName != null) {
+							String message = Messages.format(FixMessages.NullAnnotationsRewriteOperations_change_method_parameter_nullness,
+															 new Object[]{paramName, annotationNameLabel});
+							return new ParameterAnnotationRewriteOperation(compilationUnit, declaration, annotationToAdd,
+																		   annotationToRemove, paramName, allowRemove, message);
+						}
+					}
+					break;
+				case IProblem.RequiredNonNullButProvidedNull:
+				case IProblem.RequiredNonNullButProvidedPotentialNull:
+				case IProblem.RequiredNonNullButProvidedSpecdNullable:
+				case IProblem.RequiredNonNullButProvidedUnknown:
+				case IProblem.ConflictingNullAnnotations:
+				case IProblem.ConflictingInheritedNullAnnotations:
+					if (isArgumentProblem) {
+						// statement suggests changing parameters:
+						if (declaration.getNodeType() == ASTNode.METHOD_DECLARATION && selectedNode instanceof SimpleName) {
+							// don't call findAffectedParameterName(), in this branch we're not interested in any target method
+							String paramName = ((SimpleName)selectedNode).getIdentifier();
+							if (paramName != null) {
+								String message =
+										Messages.format(FixMessages.NullAnnotationsRewriteOperations_change_method_parameter_nullness,
+														new Object[]{paramName, annotationNameLabel});
+								return new ParameterAnnotationRewriteOperation(compilationUnit, declaration, annotationToAdd,
+																			   annotationToRemove, paramName, allowRemove, message);
+							}
+						}
+						break;
+					}
+					//$FALL-THROUGH$
+				case IProblem.IllegalReturnNullityRedefinition:
+					String message = Messages.format(FixMessages.NullAnnotationsRewriteOperations_change_method_return_nullness,
+													 new String[]{declaration.getName().getIdentifier(), annotationNameLabel});
+					return new ReturnAnnotationRewriteOperation(compilationUnit, declaration, annotationToAdd, annotationToRemove,
+																allowRemove, message);
+			}
+		}
+		return null;
+	}
+

@@ -1,0 +1,61 @@
+	private MethodDeclaration getStub(ASTRewrite rewrite, ASTNode targetTypeDecl) throws CoreException {
+		AST ast = targetTypeDecl.getAST();
+		MethodDeclaration decl = ast.newMethodDeclaration();
+
+		SimpleName newNameNode = getNewName(rewrite);
+
+		decl.setConstructor(isConstructor());
+
+		addNewModifiers(rewrite, targetTypeDecl, decl.modifiers());
+
+		ArrayList<String> takenNames = new ArrayList<String>();
+		addNewTypeParameters(rewrite, takenNames, decl.typeParameters());
+
+		decl.setName(newNameNode);
+
+		IVariableBinding[] declaredFields = fSenderBinding.getDeclaredFields();
+		for (int i= 0; i < declaredFields.length; i++) { // avoid to take parameter names that are equal to field names
+			takenNames.add(declaredFields[i].getName());
+		}
+
+		String bodyStatement= ""; //$NON-NLS-1$
+		if (!isConstructor()) {
+			Type returnType= getNewMethodType(rewrite);
+			decl.setReturnType2(returnType);
+
+			boolean isVoid= returnType instanceof PrimitiveType && PrimitiveType.VOID.equals(((PrimitiveType)returnType).getPrimitiveTypeCode());
+			if (!fSenderBinding.isInterface() && !isVoid) {
+				ReturnStatement returnStatement= ast.newReturnStatement();
+				returnStatement.setExpression(ASTNodeFactory.newDefaultExpression(ast, returnType, 0));
+				bodyStatement= ASTNodes
+						.asFormattedString(returnStatement, 0, String.valueOf('\n'), getCompilationUnit().getJavaProject().getOptions(true));
+			}
+		}
+
+		addNewParameters(rewrite, takenNames, decl.parameters());
+		addNewExceptions(rewrite, decl.thrownExceptionTypes());
+
+		Block body= null;
+		if (!fSenderBinding.isInterface()) {
+			body= ast.newBlock();
+			String placeHolder= CodeGeneration
+					.getMethodBodyContent(getCompilationUnit(), fSenderBinding.getName(), newNameNode.getIdentifier(), isConstructor(),
+										  bodyStatement, String.valueOf('\n'));
+			if (placeHolder != null) {
+				ReturnStatement todoNode= (ReturnStatement)rewrite.createStringPlaceholder(placeHolder, ASTNode.RETURN_STATEMENT);
+				body.statements().add(todoNode);
+			}
+		}
+		decl.setBody(body);
+
+		CodeGenerationSettings settings= JavaPreferencesSettings.getCodeGenerationSettings(getCompilationUnit().getJavaProject());
+		if (settings.createComments && !fSenderBinding.isAnonymous()) {
+			String string= CodeGeneration.getMethodComment(getCompilationUnit(), fSenderBinding.getName(), decl, null, String.valueOf('\n'));
+			if (string != null) {
+				Javadoc javadoc= (Javadoc) rewrite.createStringPlaceholder(string, ASTNode.JAVADOC);
+				decl.setJavadoc(javadoc);
+			}
+		}
+		return decl;
+	}
+

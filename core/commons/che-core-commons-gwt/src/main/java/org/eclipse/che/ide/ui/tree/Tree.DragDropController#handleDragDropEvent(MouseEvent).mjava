@@ -1,0 +1,76 @@
+        void handleDragDropEvent(MouseEvent evt) {
+            final D rootData = getModel().root;
+            final NodeDataAdapter<D> dataAdapter = getModel().getDataAdapter();
+            final Css css = getModel().resources.treeCss();
+
+            @SuppressWarnings("unchecked")
+            TreeNodeElement<D> node =
+                    (TreeNodeElement<D>)CssUtils.getAncestorOrSelfWithClassName((Element)evt.getTarget(), css.treeNode());
+            D newTargetData = node != null ? dataAdapter.getDragDropTarget(node.getData()) : rootData;
+            if (newTargetData == null) {
+                return;
+            }
+            TreeNodeElement<D> newTargetNode = dataAdapter.getRenderedTreeNode(newTargetData);
+
+            String type = evt.getType();
+
+            if (Event.DRAGSTART.equals(type)) {
+                if (getModel().externalEventDelegate != null) {
+                    D sourceData = node != null ? node.getData() : rootData;
+                    // TODO support multiple folder selection.
+                    // We do not support dragging without any folder/file selection.
+                    if (sourceData != rootData) {
+                        TreeNodeElement<D> sourceNode = dataAdapter.getRenderedTreeNode(sourceData);
+                        getModel().externalEventDelegate.onNodeDragStart(sourceNode, evt);
+                    }
+                }
+                return;
+            }
+
+            if (Event.DROP.equals(type)) {
+                if (getModel().externalEventDelegate != null) {
+                    if (newTargetData == rootData) {
+                        getModel().externalEventDelegate.onRootDragDrop(evt);
+                    } else {
+                        getModel().externalEventDelegate.onNodeDragDrop(newTargetNode, evt);
+                    }
+                }
+
+                clearDropTarget();
+
+            } else if (Event.DRAGOVER.equals(type)) {
+                if (newTargetNode != targetNode) {
+                    clearDropTarget();
+
+                    if (newTargetNode != null) {
+                        // Highlight the node by setting its drop target property
+                        targetNode = newTargetNode;
+                        targetNode.setIsDropTarget(true, css);
+
+                        if (dataAdapter.hasChildren(newTargetData) && !targetNode.isOpen()) {
+                            hoverToExpandTimer.schedule(HOVER_TO_EXPAND_DELAY_MS);
+                        }
+                    }
+                }
+
+            } else if (Event.DRAGLEAVE.equals(type)) {
+                if (!hadDragEnterEvent) {
+                    // This wasn't part of a DRAGENTER-DRAGLEAVE pair (see below)
+                    clearDropTarget();
+                }
+
+            } else if (Event.DRAGENTER.equals(type)) {
+            /*
+             * DRAGENTER comes before DRAGLEAVE, and a deferred command scheduled
+             * here will execute after the DRAGLEAVE. We use hadDragEnter to track a
+             * paired DRAGENTER-DRAGLEAVE so that we can cleanup when we get an
+             * unpaired DRAGLEAVE.
+             */
+                hadDragEnterEvent = true;
+                Scheduler.get().scheduleDeferred(hadDragEnterEventResetter);
+            }
+
+            evt.preventDefault();
+            evt.stopPropagation();
+        }
+

@@ -1,0 +1,46 @@
+	/**
+	 * Checks if the refactoring can be activated. Activation typically means, if a
+	 * corresponding menu entry can be added to the UI.
+	 *
+	 * @param pm a progress monitor to report progress during activation checking.
+	 * @return the refactoring status describing the result of the activation check.
+	 * @throws CoreException if checking fails
+	 */
+	@Override
+	public RefactoringStatus checkInitialConditions(IProgressMonitor pm) throws CoreException {
+		RefactoringStatus result = new RefactoringStatus();
+		pm.beginTask("", 100); //$NON-NLS-1$
+
+		if (fSelectionStart < 0 || fSelectionLength == 0)
+			return mergeTextSelectionStatus(result);
+
+		IFile[] changedFiles = ResourceUtil.getFiles(new ICompilationUnit[]{fCUnit});
+		result.merge(Checks.validateModifiesFiles(changedFiles, getValidationContext()));
+		if (result.hasFatalError())
+			return result;
+		result.merge(ResourceChangeChecker.checkFilesToBeChanged(changedFiles, new SubProgressMonitor(pm, 1)));
+
+		if (fRoot == null) {
+			fRoot = RefactoringASTParser.parseWithASTProvider(fCUnit, true, new SubProgressMonitor(pm, 99));
+		}
+		fImportRewriter = StubUtility.createImportRewrite(fRoot, true);
+
+		fAST = fRoot.getAST();
+		fRoot.accept(createVisitor());
+
+		fSelectionStart = fAnalyzer.getSelection().getOffset();
+		fSelectionLength = fAnalyzer.getSelection().getLength();
+
+		result.merge(fAnalyzer.checkInitialConditions(fImportRewriter));
+		if (result.hasFatalError())
+			return result;
+		if (fVisibility == -1) {
+			setVisibility(Modifier.PRIVATE);
+		}
+		initializeParameterInfos();
+		initializeUsedNames();
+		initializeDuplicates();
+		initializeDestinations();
+		return result;
+	}
+

@@ -1,0 +1,200 @@
+	/**
+	 * Is this proposal applicable?
+	 *
+	 * @return A status with severity <code>IStatus.Error</code> if not
+	 *         applicable
+	 */
+	@Override
+	public final IStatus satisfiesPreconditions() {
+		IStatus resultStatus= StatusInfo.OK_STATUS;
+		if (JavaModelUtil.is50OrHigher(getJavaProject())) {
+			resultStatus= checkExpressionCondition();
+			if (resultStatus.getSeverity() == IStatus.ERROR)
+				return resultStatus;
+
+			List<Expression> updateExpressions= getForStatement().updaters();
+			if (updateExpressions.size() == 1) {
+				resultStatus= new StatusInfo(IStatus.WARNING, Messages
+						.format(FixMessages.ConvertIterableLoopOperation_RemoveUpdateExpression_Warning,
+								BasicElementLabels.getJavaCodeString(updateExpressions.get(0).toString())));
+			} else if (updateExpressions.size() > 1) {
+				resultStatus= new StatusInfo(IStatus.WARNING, FixMessages.ConvertIterableLoopOperation_RemoveUpdateExpressions_Warning);
+			}
+
+			for (final Iterator<Expression> outer= getForStatement().initializers().iterator(); outer.hasNext();) {
+				final Expression initializer= outer.next();
+				if (initializer instanceof VariableDeclarationExpression) {
+					final VariableDeclarationExpression declaration= (VariableDeclarationExpression)initializer;
+					List<VariableDeclarationFragment> fragments= declaration.fragments();
+					if (fragments.size() != 1) {
+						return new StatusInfo(IStatus.ERROR, ""); //$NON-NLS-1$
+					} else {
+						final VariableDeclarationFragment fragment= fragments.get(0);
+						fragment.accept(new ASTVisitor() {
+
+							@Override
+							public final boolean visit(final MethodInvocation node) {
+								final IMethodBinding binding= node.resolveMethodBinding();
+								if (binding != null) {
+									final ITypeBinding type= binding.getReturnType();
+									if (type != null) {
+										final String qualified= type.getQualifiedName();
+										if (qualified.startsWith("java.util.Enumeration<") || qualified.startsWith("java.util.Iterator<")) { //$NON-NLS-1$ //$NON-NLS-2$
+											final Expression qualifier= node.getExpression();
+											if (qualifier != null) {
+												final ITypeBinding resolved= qualifier.resolveTypeBinding();
+												if (resolved != null) {
+													final ITypeBinding iterable= getSuperType(resolved, "java.lang.Iterable"); //$NON-NLS-1$
+													if (iterable != null) {
+														fExpression= qualifier;
+														fIterable= resolved;
+													}
+												}
+											} else {
+												final ITypeBinding declaring= binding.getDeclaringClass();
+												if (declaring != null) {
+													final ITypeBinding superBinding= getSuperType(declaring, "java.lang.Iterable"); //$NON-NLS-1$
+													if (superBinding != null) {
+														fIterable= superBinding;
+														fThis= true;
+													}
+												}
+											}
+										}
+									}
+								}
+								return true;
+							}
+
+							@Override
+							public final boolean visit(final VariableDeclarationFragment node) {
+								final IVariableBinding binding= node.resolveBinding();
+								if (binding != null) {
+									final ITypeBinding type= binding.getType();
+									if (type != null) {
+										ITypeBinding iterator= getSuperType(type, "java.util.Iterator"); //$NON-NLS-1$
+										if (iterator != null)
+											fIteratorVariable= binding;
+										else {
+											iterator= getSuperType(type, "java.util.Enumeration"); //$NON-NLS-1$
+											if (iterator != null)
+												fIteratorVariable= binding;
+										}
+									}
+								}
+								return true;
+							}
+						});
+					}
+				}
+			}
+			final Statement statement= getForStatement().getBody();
+			final boolean[] otherInvocationThenNext= new boolean[] {false};
+			final int[] nextInvocationCount= new int[] {0};
+			if (statement != null && fIteratorVariable != null) {
+				final ITypeBinding elementType= getElementType(fIteratorVariable.getType());
+				statement.accept(new ASTVisitor() {
+
+					@Override
+					public boolean visit(SimpleName node) {
+						IBinding nodeBinding= node.resolveBinding();
+						if (fElementVariable != null && fElementVariable.equals(nodeBinding)) {
+							fMakeFinal= false;
+						}
+
+						if (nodeBinding == fIteratorVariable) {
+							if (node.getLocationInParent() == MethodInvocation.EXPRESSION_PROPERTY) {
+								MethodInvocation invocation= (MethodInvocation) node.getParent();
+								String name= invocation.getName().getIdentifier();
+								if (name.equals("next") || name.equals("nextElement")) { //$NON-NLS-1$ //$NON-NLS-2$
+									nextInvocationCount[0]++;
+
+									Expression left= null;
+									if (invocation.getLocationInParent() == Assignment.RIGHT_HAND_SIDE_PROPERTY) {
+										left= ((Assignment) invocation.getParent()).getLeftHandSide();
+									} else if (invocation.getLocationInParent() == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
+										left= ((VariableDeclarationFragment) invocation.getParent()).getName();
+									}
+
+									return visitElementVariable(left);
+								}
+							}
+							otherInvocationThenNext[0]= true;
+						}
+						return true;
+					}
+
+					private boolean visitElementVariable(final Expression node) {
+						if (node != null) {
+							final ITypeBinding binding= node.resolveTypeBinding();
+							if (binding != null && elementType.equals(binding)) {
+								if (node instanceof Name) {
+									final Name name= (Name)node;
+									final IBinding result= name.resolveBinding();
+									if (result != null) {
+										fOccurrences.add(node);
+										fElementVariable= result;
+										return false;
+									}
+								} else if (node instanceof FieldAccess) {
+									final FieldAccess access= (FieldAccess)node;
+									final IBinding result= access.resolveFieldBinding();
+									if (result != null) {
+										fOccurrences.add(node);
+										fElementVariable= result;
+										return false;
+									}
+								}
+							}
+						}
+						return true;
+					}
+				});
+				if (otherInvocationThenNext[0])
+					return ERROR_STATUS;
+
+				if (nextInvocationCount[0] > 1)
+					return ERROR_STATUS;
+
+				if (fElementVariable != null) {
+					statement.accept(new ASTVisitor() {
+						@Override
+						public final boolean visit(final VariableDeclarationFragment node) {
+							if (node.getInitializer() instanceof NullLiteral) {
+								SimpleName name= node.getName();
+								if (elementType.equals(name.resolveTypeBinding()) && fElementVariable.equals(name.resolveBinding())) {
+									fOccurrences.add(name);
+								}
+							}
+
+							return true;
+						}
+					});
+				}
+			}
+			final ASTNode root= getForStatement().getRoot();
+			if (root != null) {
+				root.accept(new ASTVisitor() {
+
+					@Override
+					public final boolean visit(final ForStatement node) {
+						return false;
+					}
+
+					@Override
+					public final boolean visit(final SimpleName node) {
+						final IBinding binding= node.resolveBinding();
+						if (binding != null && binding.equals(fElementVariable))
+							fAssigned= true;
+						return false;
+					}
+				});
+			}
+		}
+		if ((fExpression != null || fThis) && fIterable != null && fIteratorVariable != null && !fAssigned) {
+			return resultStatus;
+		} else {
+			return ERROR_STATUS;
+		}
+	}
+

@@ -1,0 +1,32 @@
+	/**
+	 * Performs the actual rewriting and adds an edit to the ASTRewrite set with
+	 * {@link #setSourceRewrite(CompilationUnitRewrite)}.
+	 *
+	 * @throws JavaModelException
+	 */
+	public void createEdit() throws JavaModelException {
+		try {
+			IDocument document= new Document(fDelegateRewrite.getCu().getBuffer().getContents());
+			TextEdit edit= fDelegateRewrite.getASTRewrite().rewriteAST(document, fDelegateRewrite.getCu().getJavaProject().getOptions(true));
+			edit.apply(document, TextEdit.UPDATE_REGIONS);
+
+			String newSource= Strings.trimIndentation(document.get(fTrackedPosition.getStartPosition(), fTrackedPosition.getLength()),
+													  fPreferences.tabWidth, fPreferences.indentWidth, false);
+
+			ASTNode placeholder= fOriginalRewrite.getASTRewrite().createStringPlaceholder(newSource, fDeclaration.getNodeType());
+
+			CategorizedTextEditGroup groupDescription= fOriginalRewrite.createCategorizedGroupDescription(getTextEditGroupLabel(), CATEGORY_DELEGATE);
+			ListRewrite bodyDeclarationsListRewrite= fOriginalRewrite.getASTRewrite().getListRewrite(fDeclaration.getParent(), getTypeBodyDeclarationsProperty());
+			if (fCopy)
+				if (fInsertBefore)
+					bodyDeclarationsListRewrite.insertBefore(placeholder, fDeclaration, groupDescription);
+				else
+					bodyDeclarationsListRewrite.insertAfter(placeholder, fDeclaration, groupDescription);
+			else
+				bodyDeclarationsListRewrite.replace(fDeclaration, placeholder, groupDescription);
+
+		} catch (BadLocationException e) {
+			JavaPlugin.log(e);
+		}
+	}
+

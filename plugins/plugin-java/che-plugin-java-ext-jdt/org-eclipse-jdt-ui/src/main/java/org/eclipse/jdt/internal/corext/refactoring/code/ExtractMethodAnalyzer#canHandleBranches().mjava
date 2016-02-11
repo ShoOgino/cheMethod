@@ -1,0 +1,59 @@
+	private String canHandleBranches() {
+		if (fReturnValue != null)
+			return RefactoringCoreMessages.ExtractMethodAnalyzer_branch_mismatch;
+		
+		ASTNode[] selectedNodes= getSelectedNodes();
+		final ASTNode lastSelectedNode= selectedNodes[selectedNodes.length - 1];
+		Statement body= getParentLoopBody(lastSelectedNode.getParent());
+		if (!(body instanceof Block))
+			return RefactoringCoreMessages.ExtractMethodAnalyzer_branch_mismatch;
+		
+		if (body != lastSelectedNode) {
+			Block block= (Block)body;
+			List<Statement> statements= block.statements();
+			ASTNode lastStatementInLoop= statements.get(statements.size() - 1);
+			if (lastSelectedNode != lastStatementInLoop)
+				return RefactoringCoreMessages.ExtractMethodAnalyzer_branch_mismatch;
+		}
+		
+		final String continueMatchesLoopProblem[]= { null };
+		for (int i= 0; i < selectedNodes.length; i++) {
+			final ASTNode astNode= selectedNodes[i];
+			astNode.accept(new ASTVisitor() {
+				ArrayList<String> fLocalLoopLabels= new ArrayList<String>();
+				
+				@Override
+				public boolean visit(BreakStatement node) {
+					SimpleName label= node.getLabel();
+					if (label != null && !fLocalLoopLabels.contains(label.getIdentifier())) {
+						continueMatchesLoopProblem[0]= Messages.format(
+								RefactoringCoreMessages.ExtractMethodAnalyzer_branch_break_mismatch,
+								new Object[]{("break " + label.getIdentifier())}); //$NON-NLS-1$
+					}
+					return false;
+				}
+				
+				@Override
+				public boolean visit(LabeledStatement node) {
+					SimpleName label= node.getLabel();
+					if (label != null)
+						fLocalLoopLabels.add(label.getIdentifier());
+					return true;
+				}
+				
+				@Override
+				public void endVisit(ContinueStatement node) {
+					SimpleName label= node.getLabel();
+					if (label != null && !fLocalLoopLabels.contains(label.getIdentifier())) {
+						if (fEnclosingLoopLabel == null || ! label.getIdentifier().equals(fEnclosingLoopLabel.getIdentifier())) {
+							continueMatchesLoopProblem[0]= Messages.format(
+									RefactoringCoreMessages.ExtractMethodAnalyzer_branch_continue_mismatch,
+									new Object[]{"continue " + label.getIdentifier()}); //$NON-NLS-1$
+						}
+					}
+				}
+			});
+		}
+		return continueMatchesLoopProblem[0];
+	}
+

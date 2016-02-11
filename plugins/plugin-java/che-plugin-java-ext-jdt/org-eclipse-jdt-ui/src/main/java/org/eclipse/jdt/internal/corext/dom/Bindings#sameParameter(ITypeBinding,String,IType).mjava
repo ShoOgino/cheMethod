@@ -1,0 +1,39 @@
+    private static boolean sameParameter(ITypeBinding type, String candidate, IType scope) throws JavaModelException {
+        if (type.getDimensions() != Signature.getArrayCount(candidate))
+            return false;
+
+        // Normalizes types
+        if (type.isArray())
+            type= type.getElementType();
+        candidate= Signature.getElementType(candidate);
+
+        if ((Signature.getTypeSignatureKind(candidate) == Signature.BASE_TYPE_SIGNATURE) != type.isPrimitive()) {
+            return false;
+        }
+
+        if (type.isPrimitive() || type.isTypeVariable()) {
+            return type.getName().equals(Signature.toString(candidate));
+        } else {
+            // normalize (quick hack until binding.getJavaElement works)
+            candidate= Signature.getTypeErasure(candidate);
+            type= type.getErasure();
+
+            if (candidate.charAt(Signature.getArrayCount(candidate)) == Signature.C_RESOLVED) {
+                return Signature.toString(candidate).equals(Bindings.getFullyQualifiedName(type));
+            } else {
+                String[][] qualifiedCandidates= scope.resolveType(Signature.toString(candidate));
+                if (qualifiedCandidates == null || qualifiedCandidates.length == 0)
+                    return false;
+                String packageName= type.getPackage().isUnnamed() ? "" : type.getPackage().getName(); //$NON-NLS-1$
+                String typeName= getTypeQualifiedName(type);
+                for (int i= 0; i < qualifiedCandidates.length; i++) {
+                    String[] qualifiedCandidate= qualifiedCandidates[i];
+                    if (	qualifiedCandidate[0].equals(packageName) &&
+                            qualifiedCandidate[1].equals(typeName))
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+

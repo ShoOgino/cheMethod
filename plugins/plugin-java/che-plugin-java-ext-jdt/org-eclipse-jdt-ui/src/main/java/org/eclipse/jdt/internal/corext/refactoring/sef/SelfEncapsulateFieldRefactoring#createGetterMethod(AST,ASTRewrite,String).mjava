@@ -1,0 +1,36 @@
+	private MethodDeclaration createGetterMethod(AST ast, ASTRewrite rewriter, String lineDelimiter) throws CoreException {
+		FieldDeclaration field= (FieldDeclaration)ASTNodes.getParent(fFieldDeclaration, FieldDeclaration.class);
+		Type type= field.getType();
+		MethodDeclaration result= ast.newMethodDeclaration();
+		result.setName(ast.newSimpleName(fGetterName));
+		result.modifiers().addAll(ASTNodeFactory.newModifiers(ast, createModifiers()));
+		Type returnType= DimensionRewrite.copyTypeAndAddDimensions(type, fFieldDeclaration.extraDimensions(), rewriter);
+		result.setReturnType2(returnType);
+
+		Block block= ast.newBlock();
+		result.setBody(block);
+
+		String body= CodeGeneration.getGetterMethodBodyContent(fField.getCompilationUnit(), getTypeName(field.getParent()), fGetterName,
+															   fField.getElementName(), lineDelimiter);
+		if (body != null) {
+			ASTNode getterNode= rewriter.createStringPlaceholder(body, ASTNode.BLOCK);
+	    	block.statements().add(getterNode);
+		} else {
+			ReturnStatement rs= ast.newReturnStatement();
+			rs.setExpression(ast.newSimpleName(fField.getElementName()));
+			block.statements().add(rs);
+		}
+	    if (fGenerateJavadoc) {
+			String string= CodeGeneration.getGetterComment(
+					fField.getCompilationUnit(), getTypeName(field.getParent()), fGetterName,
+					fField.getElementName(), ASTNodes.asString(type),
+					StubUtility.getBaseName(fField),
+					lineDelimiter);
+			if (string != null) {
+				Javadoc javadoc= (Javadoc)fRewriter.createStringPlaceholder(string, ASTNode.JAVADOC);
+				result.setJavadoc(javadoc);
+			}
+		}
+		return result;
+	}
+

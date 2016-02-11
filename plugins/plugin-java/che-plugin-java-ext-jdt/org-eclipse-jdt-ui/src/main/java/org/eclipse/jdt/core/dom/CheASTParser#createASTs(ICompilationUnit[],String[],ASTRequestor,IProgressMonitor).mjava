@@ -1,0 +1,89 @@
+	/**
+	 * Creates ASTs for a batch of compilation units.
+	 * <p>When bindings are being resolved, processing a
+	 * batch of compilation units is more efficient because much
+	 * of the work involved in resolving bindings can be shared.</p>
+	 * <p>
+	 * When bindings are being resolved, all compilation units must
+	 * come from the same Java project, which must be set beforehand
+	 * with {@link #setProject(IJavaProject) setProject}.</p>
+	 * <p>The compilation units are processed one at a time in no
+	 * specified order. For each of the compilation units in turn,</p>
+	 * <ul>
+	 * <li>{@link #createAST(IProgressMonitor) ASTParser.createAST} is called to parse it
+	 * and create a corresponding AST. The calls to
+	 * {@link #createAST(IProgressMonitor) ASTParser.createAST} all employ the same settings.</li>
+	 * <li>{@link ASTRequestor#acceptAST(ICompilationUnit, CompilationUnit) ASTRequestor.acceptAST}
+	 * is called passing the compilation unit and the corresponding AST to <code>requestor</code>.
+	 * </li>
+	 * </ul>
+	 * Note only ASTs from the given compilation units are reported
+	 * to the requestor. If additional compilation units are required to
+	 * resolve the original ones, the corresponding ASTs are <b>not</b>
+	 * reported to the requestor.
+	 * </p>
+	 * <p>
+	 * Note also the following parser parameters are used, regardless of what
+	 * may have been specified:
+	 * <ul>
+	 * <li>The {@linkplain #setKind(int) parser kind} is <code>K_COMPILATION_UNIT</code></li>
+	 * <li>The {@linkplain #setSourceRange(int,int) source range} is <code>(0, -1)</code></li>
+	 * <li>The {@linkplain #setFocalPosition(int) focal position} is not set</li>
+	 * </ul>
+	 * </p>
+	 * <p>
+	 * The <code>bindingKeys</code> parameter specifies bindings keys
+	 * ({@link IBinding#getKey()}) that are to be looked up. These keys may
+	 * be for elements either inside or outside the set of compilation
+	 * units being processed. When bindings are being resolved,
+	 * the keys and corresponding bindings (or <code>null</code> if none) are
+	 * passed to {@link ASTRequestor#acceptBinding(String, IBinding) ASTRequestor.acceptBinding}.
+	 * Note that binding keys for elements outside the set of compilation units being processed
+	 * are looked up after all {@link ASTRequestor#acceptAST(ICompilationUnit, CompilationUnit) ASTRequestor.acceptAST}
+	 * callbacks have been made.
+	 * Binding keys for elements inside the set of compilation units being processed
+	 * are looked up and reported right after the corresponding
+	 * {@link ASTRequestor#acceptAST(ICompilationUnit, CompilationUnit) ASTRequestor.acceptAST} callback has been made.
+	 * No {@link ASTRequestor#acceptBinding(String, IBinding) ASTRequestor.acceptBinding} callbacks are made unless
+	 * bindings are being resolved.
+	 * </p>
+	 * <p>
+	 * A successful call to this method returns all settings to their
+	 * default values so the object is ready to be reused.
+	 * </p>
+	 *
+	 * @param compilationUnits the compilation units to create ASTs for
+	 * @param bindingKeys the binding keys to create bindings for
+	 * @param requestor the AST requestor that collects abstract syntax trees and bindings
+	 * @param monitor the progress monitor used to report progress and request cancellation,
+	 *   or <code>null</code> if none
+	 * @exception IllegalStateException if the settings provided
+	 * are insufficient, contradictory, or otherwise unsupported
+	 * @since 3.1
+	 */
+	public void createASTs(ICompilationUnit[] compilationUnits, String[] bindingKeys, ASTRequestor requestor, IProgressMonitor monitor) {
+		try {
+			int flags = 0;
+			if ((this.bits & CompilationUnitResolver.STATEMENT_RECOVERY) != 0) {
+				flags |= ICompilationUnit.ENABLE_STATEMENTS_RECOVERY;
+			}
+			if ((this.bits & CompilationUnitResolver.IGNORE_METHOD_BODIES) != 0) {
+				flags |= ICompilationUnit.IGNORE_METHOD_BODIES;
+			}
+			if ((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0) {
+				if (this.project == null)
+					throw new IllegalStateException("project not specified"); //$NON-NLS-1$
+				if ((this.bits & CompilationUnitResolver.BINDING_RECOVERY) != 0) {
+					flags |= ICompilationUnit.ENABLE_BINDINGS_RECOVERY;
+				}
+				CompilationUnitResolver.resolve(compilationUnits, bindingKeys, requestor, this.apiLevel, this.compilerOptions, this.project,
+												this.workingCopyOwner, flags, monitor);
+			} else {
+				CompilationUnitResolver.parse(compilationUnits, requestor, this.apiLevel, this.compilerOptions, flags, monitor);
+			}
+		} finally {
+			// reset to defaults to allow reuse (and avoid leaking)
+			initializeDefaults();
+		}
+	}
+

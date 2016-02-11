@@ -1,0 +1,41 @@
+	/**
+	 * Adjusts the visibility of the member based on the incoming references
+	 * represented by the specified search result groups.
+	 *
+	 * If there is at least one reference to the moved element from outside the
+	 * moved element, visibility must be increased such that the moved element
+	 * (fReferenced) is still visible at the target from all references. This
+	 * effectively means that the old element (fReferenced) must be visible from
+	 * the new location (fReferencing).
+	 *
+	 * @param groups the search result groups representing the references
+	 * @param monitor the progress monitor to use
+	 * @throws JavaModelException if the java elements could not be accessed
+	 */
+	private void adjustIncomingVisibility(final SearchResultGroup[] groups, final IProgressMonitor monitor) throws JavaModelException {
+		try {
+			monitor.beginTask("", groups.length); //$NON-NLS-1$
+			monitor.setTaskName(RefactoringCoreMessages.MemberVisibilityAdjustor_checking);
+			SearchMatch[] matches = null;
+			boolean adjusted = false;
+			for (int index = 0; index < groups.length; index++) {
+				matches = groups[index].getSearchResults();
+				for (int offset = 0; offset < matches.length; offset++) {
+					final Object element = matches[offset].getElement();
+					if (element instanceof IMember && !isInsideMovedMember((IMember)element)) {
+						// found one reference which is not inside the moved
+						// element => adjust visibility of the moved element
+						adjustIncomingVisibility(fReferencing, fReferenced, monitor);
+						adjusted = true; // one adjustment is enough
+						break;
+					}
+				}
+				if (adjusted)
+					break;
+				monitor.worked(1);
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

@@ -1,0 +1,110 @@
+	private static boolean getUnWrapProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		ASTNode outer= node;
+
+		Block block= null;
+		if (outer.getNodeType() == ASTNode.BLOCK) {
+			block= (Block) outer;
+			outer= block.getParent();
+		}
+
+		ASTNode body= null;
+		String label= null;
+		if (outer instanceof IfStatement) {
+			IfStatement ifStatement= (IfStatement) outer;
+			Statement elseBlock= ifStatement.getElseStatement();
+			if (elseBlock == null || elseBlock instanceof Block && ((Block) elseBlock).statements().isEmpty()) {
+				body= ifStatement.getThenStatement();
+			}
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_ifstatement;
+		} else if (outer instanceof WhileStatement) {
+			body=((WhileStatement) outer).getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_whilestatement;
+		} else if (outer instanceof ForStatement) {
+			body=((ForStatement) outer).getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_forstatement;
+		} else if (outer instanceof EnhancedForStatement) {
+			body=((EnhancedForStatement) outer).getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_forstatement;
+		} else if (outer instanceof SynchronizedStatement) {
+			body=((SynchronizedStatement) outer).getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_synchronizedstatement;
+		} else if (outer instanceof SimpleName && outer.getParent() instanceof LabeledStatement) {
+			LabeledStatement labeledStatement= (LabeledStatement) outer.getParent();
+			outer= labeledStatement;
+			body= labeledStatement.getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_labeledstatement;
+		} else if (outer instanceof LabeledStatement) {
+			body=((LabeledStatement) outer).getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_labeledstatement;
+		} else if (outer instanceof DoStatement) {
+			body=((DoStatement) outer).getBody();
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_dostatement;
+		} else if (outer instanceof TryStatement) {
+			TryStatement tryStatement= (TryStatement) outer;
+			if (tryStatement.catchClauses().isEmpty() && tryStatement.resources().isEmpty()) {
+				body= tryStatement.getBody();
+			}
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_trystatement;
+		} else if (outer instanceof AnonymousClassDeclaration) {
+			List<BodyDeclaration> decls= ((AnonymousClassDeclaration) outer).bodyDeclarations();
+			for (int i= 0; i < decls.size(); i++) {
+				BodyDeclaration elem= decls.get(i);
+				if (elem instanceof MethodDeclaration) {
+					Block curr= ((MethodDeclaration) elem).getBody();
+					if (curr != null && !curr.statements().isEmpty()) {
+						if (body != null) {
+							return false;
+						}
+						body= curr;
+					}
+				} else if (elem instanceof TypeDeclaration) {
+					return false;
+				}
+			}
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_anonymous;
+			outer= ASTResolving.findParentStatement(outer);
+			if (outer == null) {
+				return false; // private Object o= new Object() { ... };
+			}
+		} else if (outer instanceof Block) {
+			//	-> a block in a block
+			body= block;
+			outer= block;
+			label= CorrectionMessages.QuickAssistProcessor_unwrap_block;
+		} else if (outer instanceof ParenthesizedExpression) {
+			//ParenthesizedExpression expression= (ParenthesizedExpression) outer;
+			//body= expression.getExpression();
+			//label= CorrectionMessages.getString("QuickAssistProcessor.unwrap.parenthesis");	 //$NON-NLS-1$
+		} else if (outer instanceof MethodInvocation) {
+			MethodInvocation invocation= (MethodInvocation) outer;
+			if (invocation.arguments().size() == 1) {
+				body= (ASTNode) invocation.arguments().get(0);
+				if (invocation.getParent().getNodeType() == ASTNode.EXPRESSION_STATEMENT) {
+					int kind= body.getNodeType();
+					if (kind != ASTNode.ASSIGNMENT && kind != ASTNode.PREFIX_EXPRESSION && kind != ASTNode.POSTFIX_EXPRESSION
+							&& kind != ASTNode.METHOD_INVOCATION && kind != ASTNode.SUPER_METHOD_INVOCATION) {
+						body= null;
+					}
+				}
+				label= CorrectionMessages.QuickAssistProcessor_unwrap_methodinvocation;
+			}
+		}
+		if (body == null) {
+			return false;
+		}
+		ASTRewrite rewrite= ASTRewrite.create(outer.getAST());
+		ASTNode inner= getCopyOfInner(rewrite, body, ASTNodes.isControlStatementBody(outer.getLocationInParent()));
+		if (inner == null) {
+			return false;
+		}
+		if (resultingCollections == null) {
+			return true;
+		}
+
+		rewrite.replace(outer, inner, null);
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_OBJS_EXCEPTION);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.UNWRAP_STATEMENTS, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

@@ -1,0 +1,36 @@
+        private CharSequence getInheritedDescription(final IMethod method, final DescriptionGetter descriptionGetter) {
+            try {
+                return (CharSequence)new InheritDocVisitor() {
+                    @Override
+                    public Object visit(IType currType) throws JavaModelException {
+                        IMethod overridden = getOverrideTester().findOverriddenMethodInType(currType, method);
+                        if (overridden == null)
+                            return InheritDocVisitor.CONTINUE;
+
+                        JavadocContentAccess2 contentAccess = getJavadocContentAccess(overridden, urlPrefix);
+                        if (contentAccess == null) {
+                            if (overridden.getOpenable().getBuffer() == null) {
+                                // Don't continue this branch when no source is available.
+                                // We don't extract individual tags from Javadoc attachments,
+                                // and it would be wrong to copy doc from further up the branch,
+                                // thereby skipping doc from this overridden method.
+                                return InheritDocVisitor.STOP_BRANCH;
+                            } else {
+                                return InheritDocVisitor.CONTINUE;
+                            }
+                        }
+
+                        CharSequence overriddenDescription = descriptionGetter.getDescription(contentAccess);
+                        if (overriddenDescription != null)
+                            return overriddenDescription;
+                        else
+                            return InheritDocVisitor.CONTINUE;
+                    }
+                }.visitInheritDoc(method.getDeclaringType(), getTypeHierarchy());
+            } catch (JavaModelException e) {
+                LOG.error(e.getMessage(), e);
+            }
+            return null;
+//            throw new UnsupportedOperationException();
+        }
+

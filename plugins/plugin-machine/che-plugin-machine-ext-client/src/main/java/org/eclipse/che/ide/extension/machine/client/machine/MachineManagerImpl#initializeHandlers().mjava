@@ -1,0 +1,42 @@
+    private void initializeHandlers() {
+        final Unmarshallable<MachineStatusEvent> unmarshaller = dtoUnmarshallerFactory.newWSUnmarshaller(MachineStatusEvent.class);
+
+        statusHandler = new SubscriptionHandler<MachineStatusEvent>(unmarshaller) {
+            @Override
+            protected void onMessageReceived(MachineStatusEvent event) {
+                switch (event.getEventType()) {
+                    case RUNNING:
+                        initialLoadingInfo.setOperationStatus(MACHINE_BOOTING.getValue(), SUCCESS);
+
+                        String machineId = event.getMachineId();
+                        appContext.setDevMachineId(machineId);
+                        onMachineRunning(machineId);
+
+                        eventBus.fireEvent(new DevMachineStateEvent(event));
+                        break;
+                    case ERROR:
+                        initialLoadingInfo.setOperationStatus(MACHINE_BOOTING.getValue(), ERROR);
+                        break;
+                    default:
+                }
+            }
+
+            @Override
+            protected void onErrorReceived(Throwable exception) {
+                Log.error(MachineManagerImpl.class, exception);
+            }
+        };
+
+        outputHandler = new SubscriptionHandler<String>(new OutputMessageUnmarshaller()) {
+            @Override
+            protected void onMessageReceived(String result) {
+                machineConsolePresenter.print(result);
+            }
+
+            @Override
+            protected void onErrorReceived(Throwable exception) {
+                Log.error(MachineManagerImpl.class, exception);
+            }
+        };
+    }
+

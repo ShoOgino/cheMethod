@@ -1,0 +1,40 @@
+	private static boolean getConvertAnonymousClassCreationsToLambdaProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
+		while (covering instanceof Name
+				|| covering instanceof Type
+				|| covering instanceof Dimension
+				|| covering.getParent() instanceof MethodDeclaration
+				|| covering.getLocationInParent() == AnonymousClassDeclaration.BODY_DECLARATIONS_PROPERTY) {
+			covering= covering.getParent();
+		}
+		
+		ClassInstanceCreation cic;
+		if (covering instanceof ClassInstanceCreation) {
+			cic= (ClassInstanceCreation) covering;
+		} else if (covering.getLocationInParent() == ClassInstanceCreation.ANONYMOUS_CLASS_DECLARATION_PROPERTY) {
+			cic= (ClassInstanceCreation) covering.getParent();
+		} else if (covering instanceof Name) {
+			ASTNode normalized= ASTNodes.getNormalizedNode(covering);
+			if (normalized.getLocationInParent() != ClassInstanceCreation.TYPE_PROPERTY)
+				return false;
+			cic= (ClassInstanceCreation) normalized.getParent();
+		} else {
+			return false;
+		}
+
+		IProposableFix fix= LambdaExpressionsFix.createConvertToLambdaFix(cic);
+		if (fix == null)
+			return false;
+
+		if (resultingCollections == null)
+			return true;
+
+		// add correction proposal
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+		Map<String, String> options= new Hashtable<String, String>();
+		options.put(CleanUpConstants.CONVERT_FUNCTIONAL_INTERFACES, CleanUpOptions.TRUE);
+		options.put(CleanUpConstants.USE_LAMBDA, CleanUpOptions.TRUE);
+		FixCorrectionProposal proposal= new FixCorrectionProposal(fix, new ExpressionsCleanUp(options), IProposalRelevance.CONVERT_TO_LAMBDA_EXPRESSION, image, context);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

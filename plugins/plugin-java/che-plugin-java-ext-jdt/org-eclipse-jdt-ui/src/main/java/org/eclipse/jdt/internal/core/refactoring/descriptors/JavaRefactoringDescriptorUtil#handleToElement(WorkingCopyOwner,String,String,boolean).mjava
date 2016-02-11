@@ -1,0 +1,45 @@
+	/**
+	 * Converts an input handle back to the corresponding java element.
+	 *
+	 * @param owner
+	 *            the working copy owner
+	 * @param project
+	 *            the project, or <code>null</code> for the workspace
+	 * @param handle
+	 *            the input handle
+	 * @param check
+	 *            <code>true</code> to check for existence of the element,
+	 *            <code>false</code> otherwise
+	 * @return the corresponding java element, or <code>null</code> if no such
+	 *         element exists
+	 */
+	public static IJavaElement handleToElement(final WorkingCopyOwner owner, final String project, final String handle, final boolean check) {
+		IJavaElement element= null;
+		if (owner != null)
+			element= JavaCore.create(handle, owner);
+		else
+			element= JavaCore.create(handle);
+		if (element == null && project != null) {
+			final IJavaProject javaProject= JavaCore.create(ResourcesPlugin.getWorkspace().getRoot()).getJavaProject(project);
+			final String identifier= javaProject.getHandleIdentifier();
+			if (owner != null)
+				element= JavaCore.create(identifier + handle, owner);
+			else
+				element= JavaCore.create(identifier + handle);
+		}
+		if (check && element instanceof IMethod) {
+			/*
+			 * Resolve the method based on simple names of parameter types
+			 * (to accommodate for different qualifications when refactoring is e.g.
+			 * recorded in source but applied on binary method):
+			 */
+			final IMethod method= (IMethod) element;
+			final IMethod[] methods= method.getDeclaringType().findMethods(method);
+			if (methods != null && methods.length > 0)
+				element= methods[0];
+		}
+		if (element != null && (!check || element.exists()))
+			return element;
+		return null;
+	}
+

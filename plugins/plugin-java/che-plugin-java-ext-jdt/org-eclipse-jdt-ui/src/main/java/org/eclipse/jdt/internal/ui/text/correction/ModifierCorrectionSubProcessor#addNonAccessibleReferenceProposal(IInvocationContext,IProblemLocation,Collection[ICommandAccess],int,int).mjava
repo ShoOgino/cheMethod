@@ -1,0 +1,135 @@
+	public static void addNonAccessibleReferenceProposal(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals, int kind, int relevance) throws
+
+																																											  CoreException {
+		ICompilationUnit cu= context.getCompilationUnit();
+
+		ASTNode selectedNode= problem.getCoveringNode(context.getASTRoot());
+		if (selectedNode == null) {
+			return;
+		}
+
+		IBinding binding=null;
+		switch (selectedNode.getNodeType()) {
+			case ASTNode.SIMPLE_NAME:
+				binding= ((SimpleName) selectedNode).resolveBinding();
+				break;
+			case ASTNode.QUALIFIED_NAME:
+				binding= ((QualifiedName) selectedNode).resolveBinding();
+				break;
+			case ASTNode.SIMPLE_TYPE:
+				binding= ((SimpleType) selectedNode).resolveBinding();
+				break;
+			case ASTNode.NAME_QUALIFIED_TYPE:
+				binding= ((NameQualifiedType) selectedNode).resolveBinding();
+				break;
+			case ASTNode.METHOD_INVOCATION:
+				binding= ((MethodInvocation) selectedNode).getName().resolveBinding();
+				break;
+			case ASTNode.SUPER_METHOD_INVOCATION:
+				binding= ((SuperMethodInvocation) selectedNode).getName().resolveBinding();
+				break;
+			case ASTNode.FIELD_ACCESS:
+				binding= ((FieldAccess) selectedNode).getName().resolveBinding();
+				break;
+			case ASTNode.SUPER_FIELD_ACCESS:
+				binding= ((SuperFieldAccess) selectedNode).getName().resolveBinding();
+				break;
+			case ASTNode.CLASS_INSTANCE_CREATION:
+				binding= ((ClassInstanceCreation) selectedNode).resolveConstructorBinding();
+				break;
+			case ASTNode.SUPER_CONSTRUCTOR_INVOCATION:
+				binding= ((SuperConstructorInvocation) selectedNode).resolveConstructorBinding();
+				break;
+			default:
+				return;
+		}
+		ITypeBinding typeBinding= null;
+		String name;
+		IBinding bindingDecl;
+		boolean isLocalVar= false;
+		if (binding instanceof IVariableBinding && problem.getProblemId() == IProblem.NotVisibleType) {
+			binding= ((IVariableBinding) binding).getType();
+		}
+		if (binding instanceof IMethodBinding && problem.getProblemId() == IProblem.NotVisibleType) {
+			binding= ((IMethodBinding) binding).getReturnType();
+		}
+		if (binding instanceof IMethodBinding) {
+			IMethodBinding methodDecl= (IMethodBinding) binding;
+			if (methodDecl.isDefaultConstructor()) {
+				UnresolvedElementsSubProcessor.getConstructorProposals(context, problem, proposals);
+				return;
+			}
+			bindingDecl= methodDecl.getMethodDeclaration();
+			typeBinding= methodDecl.getDeclaringClass();
+			name= BasicElementLabels.getJavaElementName(methodDecl.getName() + "()"); //$NON-NLS-1$
+		} else if (binding instanceof IVariableBinding) {
+			IVariableBinding varDecl= (IVariableBinding) binding;
+			typeBinding= varDecl.getDeclaringClass();
+			name= BasicElementLabels.getJavaElementName(binding.getName());
+			isLocalVar= !varDecl.isField();
+			bindingDecl= varDecl.getVariableDeclaration();
+		} else if (binding instanceof ITypeBinding) {
+			typeBinding= (ITypeBinding) binding;
+			bindingDecl= typeBinding.getTypeDeclaration();
+			name= BasicElementLabels.getJavaElementName(binding.getName());
+		} else {
+			return;
+		}
+		if (typeBinding != null && typeBinding.isFromSource() || isLocalVar) {
+			int includedModifiers= 0;
+			int excludedModifiers= 0;
+			String label;
+			switch (kind) {
+				case TO_VISIBLE:
+					excludedModifiers= Modifier.PRIVATE | Modifier.PROTECTED | Modifier.PUBLIC;
+					includedModifiers= getNeededVisibility(selectedNode, typeBinding, binding);
+					label= Messages.format(CorrectionMessages.ModifierCorrectionSubProcessor_changevisibility_description,
+										   new String[]{name, getVisibilityString(includedModifiers)});
+					break;
+				case TO_STATIC:
+					label= Messages.format(CorrectionMessages.ModifierCorrectionSubProcessor_changemodifiertostatic_description, name);
+					includedModifiers= Modifier.STATIC;
+					if (bindingDecl.getKind() == IBinding.METHOD) {
+						excludedModifiers= Modifier.DEFAULT | Modifier.ABSTRACT;
+					}
+					break;
+				case TO_NON_STATIC:
+					if (typeBinding != null && typeBinding.isInterface())
+						return;
+					label= Messages.format(CorrectionMessages.ModifierCorrectionSubProcessor_changemodifiertononstatic_description, name);
+					excludedModifiers= Modifier.STATIC;
+					break;
+				case TO_NON_PRIVATE:
+					int visibility;
+					if (cu.getParent().getElementName().equals(typeBinding.getPackage().getName())) {
+						visibility= Modifier.NONE;
+						excludedModifiers= Modifier.PRIVATE;
+					} else {
+						visibility= Modifier.PUBLIC;
+						includedModifiers= Modifier.PUBLIC;
+						excludedModifiers= Modifier.PRIVATE | Modifier.PROTECTED | Modifier.PUBLIC;
+					}
+					label= Messages.format(CorrectionMessages.ModifierCorrectionSubProcessor_changevisibility_description,
+										   new String[]{name, getVisibilityString(visibility)});
+					break;
+				case TO_NON_FINAL:
+					if (typeBinding != null && typeBinding.isInterface())
+						return;
+					label= Messages.format(CorrectionMessages.ModifierCorrectionSubProcessor_changemodifiertononfinal_description, name);
+					excludedModifiers= Modifier.FINAL;
+					break;
+				default:
+					throw new IllegalArgumentException("not supported"); //$NON-NLS-1$
+			}
+			ICompilationUnit targetCU= isLocalVar ? cu : ASTResolving
+					.findCompilationUnitForBinding(cu, context.getASTRoot(), typeBinding.getTypeDeclaration());
+			if (targetCU != null) {
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+				proposals.add(new ModifierChangeCorrectionProposal(label, targetCU, bindingDecl, selectedNode, includedModifiers, excludedModifiers, relevance, image));
+			}
+		}
+		if (kind == TO_VISIBLE && bindingDecl.getKind() == IBinding.VARIABLE) {
+			UnresolvedElementsSubProcessor.getVariableProposals(context, problem, (IVariableBinding)bindingDecl, proposals);
+		}
+	}
+

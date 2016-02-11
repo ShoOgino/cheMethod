@@ -1,0 +1,35 @@
+	@Override
+	public void endVisit(CompilationUnit node) {
+		postProcessSelectedNodes(internalGetSelectedNodes());
+		BodyDeclaration enclosingNode = null;
+		superCall:
+		{
+			if (getStatus().hasFatalError())
+				break superCall;
+			if (!hasSelectedNodes()) {
+				ASTNode coveringNode = getLastCoveringNode();
+				if (coveringNode instanceof Block) {
+					Block block = (Block)coveringNode;
+					Message[] messages = ASTNodes.getMessages(block, ASTNodes.NODE_ONLY);
+					if (messages.length > 0) {
+						invalidSelection(RefactoringCoreMessages.SurroundWithTryCatchAnalyzer_compile_errors,
+										 JavaStatusContext.create(getCompilationUnit(), block));
+						break superCall;
+					}
+				}
+				invalidSelection(RefactoringCoreMessages.SurroundWithTryCatchAnalyzer_doesNotCover);
+				break superCall;
+			}
+			enclosingNode = (BodyDeclaration)ASTNodes.getParent(getFirstSelectedNode(), BodyDeclaration.class);
+			if (!(enclosingNode instanceof MethodDeclaration) && !(enclosingNode instanceof Initializer)) {
+				invalidSelection(RefactoringCoreMessages.SurroundWithTryCatchAnalyzer_doesNotContain);
+				break superCall;
+			}
+			if (!onlyStatements()) {
+				invalidSelection(RefactoringCoreMessages.SurroundWithTryCatchAnalyzer_onlyStatements);
+			}
+			fLocals= LocalDeclarationAnalyzer.perform(enclosingNode, getSelection());
+		}
+		super.endVisit(node);
+	}
+

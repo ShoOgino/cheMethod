@@ -1,0 +1,36 @@
+	private static boolean assertTrue(IResourceDelta expected, IResourceDelta actual) {
+		assertEqual(expected.getResource(), actual.getResource());
+		int actualKind= actual.getKind();
+		int actualFlags= actual.getFlags();
+		// The real delta can't combine kinds so we remove it from the received one as well.
+		if ((actualKind & (IResourceDelta.ADDED | IResourceDelta.REMOVED)) != 0) {
+			actualKind= actualKind & ~IResourceDelta.CHANGED;
+		}
+
+		// The expected delta doesn't support copy from flag. So remove it
+		actualFlags= actualFlags & ~IResourceDelta.COPIED_FROM;
+
+		int expectKind= expected.getKind();
+		int expectedFlags= expected.getFlags() & PRE_DELTA_FLAGS;
+		if ((expectKind & IResourceDelta.ADDED) != 0 && (expectedFlags & IResourceDelta.MOVED_FROM) != 0) {
+			expectedFlags= expectedFlags & ~IResourceDelta.OPEN;
+		}
+		if (expectKind != actualKind || expectedFlags != actualFlags) {
+			return false;
+		}
+		IResourceDelta[] expectedChildren=  getExpectedChildren(expected);
+		IResourceDelta[] actualChildren= getActualChildren(actual, expectedChildren);
+		if (expectedChildren.length != actualChildren.length) {
+			return false;
+		}
+		Arrays.sort(expectedChildren, COMPARATOR);
+		Arrays.sort(actualChildren, COMPARATOR);
+		for (int i= 0; i < expectedChildren.length; i++) {
+			boolean res= assertTrue(expectedChildren[i], actualChildren[i]);
+			if (!res) {
+				Assert.assertEquals(printDelta(expected), printDelta(actual));
+			}
+		}
+		return true;
+	}
+

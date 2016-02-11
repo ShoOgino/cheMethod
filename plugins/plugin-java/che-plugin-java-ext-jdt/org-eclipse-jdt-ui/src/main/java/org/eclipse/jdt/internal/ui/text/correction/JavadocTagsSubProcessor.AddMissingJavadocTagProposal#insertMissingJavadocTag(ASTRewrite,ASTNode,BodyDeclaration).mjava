@@ -1,0 +1,78 @@
+		private void insertMissingJavadocTag(ASTRewrite rewrite, ASTNode missingNode, BodyDeclaration bodyDecl) {
+			AST ast = bodyDecl.getAST();
+			Javadoc javadoc = bodyDecl.getJavadoc();
+			if (javadoc == null) {
+				javadoc = ast.newJavadoc();
+				rewrite.set(bodyDecl, bodyDecl.getJavadocProperty(), javadoc, null);
+			}
+
+			ListRewrite tagsRewriter = rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY);
+
+			StructuralPropertyDescriptor location = missingNode.getLocationInParent();
+			TagElement newTag;
+			if (location == SingleVariableDeclaration.NAME_PROPERTY) {
+				// normal parameter
+				SingleVariableDeclaration decl = (SingleVariableDeclaration)missingNode.getParent();
+
+				String name = ((SimpleName)missingNode).getIdentifier();
+				newTag = ast.newTagElement();
+				newTag.setTagName(TagElement.TAG_PARAM);
+				newTag.fragments().add(ast.newSimpleName(name));
+
+				MethodDeclaration methodDeclaration = (MethodDeclaration)bodyDecl;
+				List<SingleVariableDeclaration> params = methodDeclaration.parameters();
+
+				Set<String> sameKindLeadingNames = getPreviousParamNames(params, decl);
+
+				List<TypeParameter> typeParams = methodDeclaration.typeParameters();
+				for (int i = 0; i < typeParams.size(); i++) {
+					String curr = '<' + typeParams.get(i).getName().getIdentifier() + '>';
+					sameKindLeadingNames.add(curr);
+				}
+				insertTag(tagsRewriter, newTag, sameKindLeadingNames);
+			} else if (location == TypeParameter.NAME_PROPERTY) {
+				// type parameter
+				TypeParameter typeParam = (TypeParameter)missingNode.getParent();
+
+				String name = '<' + ((SimpleName)missingNode).getIdentifier() + '>';
+				newTag = ast.newTagElement();
+				newTag.setTagName(TagElement.TAG_PARAM);
+				TextElement text = ast.newTextElement();
+				text.setText(name);
+				newTag.fragments().add(text);
+				List<TypeParameter> params;
+				if (bodyDecl instanceof TypeDeclaration) {
+					params = ((TypeDeclaration)bodyDecl).typeParameters();
+				} else {
+					params = ((MethodDeclaration)bodyDecl).typeParameters();
+				}
+				insertTag(tagsRewriter, newTag, getPreviousTypeParamNames(params, typeParam));
+			} else if (location == MethodDeclaration.RETURN_TYPE2_PROPERTY) {
+				newTag = ast.newTagElement();
+				newTag.setTagName(TagElement.TAG_RETURN);
+				insertTag(tagsRewriter, newTag, null);
+			} else if (location == MethodDeclaration.THROWN_EXCEPTION_TYPES_PROPERTY) {
+				newTag = ast.newTagElement();
+				newTag.setTagName(TagElement.TAG_THROWS);
+				TextElement excNode = ast.newTextElement();
+				excNode.setText(ASTNodes.getQualifiedTypeName((Type)missingNode));
+				newTag.fragments().add(excNode);
+				List<Type> exceptions = ((MethodDeclaration)bodyDecl).thrownExceptionTypes();
+				insertTag(tagsRewriter, newTag, getPreviousExceptionNames(exceptions, missingNode));
+			} else {
+				Assert.isTrue(false, "AddMissingJavadocTagProposal: unexpected node location"); //$NON-NLS-1$
+				return;
+			}
+
+			TextElement textElement = ast.newTextElement();
+			textElement.setText(""); //$NON-NLS-1$
+			newTag.fragments().add(textElement);
+
+			addLinkedPosition(rewrite.track(textElement), false, "comment_start"); //$NON-NLS-1$
+
+			if (bodyDecl.getJavadoc() == null) {
+				// otherwise the linked position spans over a line delimiter
+				newTag.fragments().add(ast.newTextElement());
+			}
+		}
+

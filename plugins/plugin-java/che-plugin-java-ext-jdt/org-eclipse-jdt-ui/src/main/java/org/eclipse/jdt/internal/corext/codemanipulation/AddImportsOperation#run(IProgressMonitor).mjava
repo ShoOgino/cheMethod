@@ -1,0 +1,42 @@
+	/**
+	 * Runs the operation.
+	 *
+	 * @param monitor The progress monitor
+	 * @throws CoreException if accessing the CU or rewritting the imports fails
+	 * @throws OperationCanceledException Runtime error thrown when operation is canceled.
+	 */
+	public void run(IProgressMonitor monitor) throws CoreException, OperationCanceledException {
+		if (monitor == null) {
+			monitor = new NullProgressMonitor();
+		}
+		try {
+			monitor.beginTask(CodeGenerationMessages.AddImportsOperation_description, 4);
+
+			CompilationUnit astRoot =
+					SharedASTProvider.getAST(fCompilationUnit, SharedASTProvider.WAIT_YES, new SubProgressMonitor(monitor, 1));
+			if (astRoot == null)
+				throw new OperationCanceledException();
+
+			ImportRewrite importRewrite = StubUtility.createImportRewrite(astRoot, true);
+
+			MultiTextEdit res = new MultiTextEdit();
+
+			TextEdit edit = evaluateEdits(astRoot, importRewrite, fSelectionOffset, fSelectionLength, new SubProgressMonitor(monitor, 1));
+			if (edit == null) {
+				return;
+			}
+			res.addChild(edit);
+
+			TextEdit importsEdit = importRewrite.rewriteImports(new SubProgressMonitor(monitor, 1));
+			res.addChild(importsEdit);
+
+			fResultingEdit = res;
+
+			if (fApply) {
+				JavaModelUtil.applyEdit(fCompilationUnit, res, fDoSave, new SubProgressMonitor(monitor, 1));
+			}
+		} finally {
+			monitor.done();
+		}
+	}
+

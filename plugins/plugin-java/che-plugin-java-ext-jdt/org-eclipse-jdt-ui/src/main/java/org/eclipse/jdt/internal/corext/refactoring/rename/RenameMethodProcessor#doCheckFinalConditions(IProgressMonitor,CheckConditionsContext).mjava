@@ -1,0 +1,90 @@
+	@Override
+	protected RefactoringStatus doCheckFinalConditions(IProgressMonitor pm, CheckConditionsContext context) throws CoreException {
+		try{
+			RefactoringStatus result= new RefactoringStatus();
+			pm.beginTask("", 9); //$NON-NLS-1$
+			// TODO workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=40367
+			if (!Checks.isAvailable(fMethod)) {
+				result.addFatalError(RefactoringCoreMessages.RenameMethodProcessor_is_binary, JavaStatusContext.create(fMethod));
+				return result;
+			}
+			result.merge(Checks.checkIfCuBroken(fMethod));
+			if (result.hasFatalError())
+				return result;
+			pm.setTaskName(RefactoringCoreMessages.RenameMethodRefactoring_taskName_checkingPreconditions);
+			result.merge(checkNewElementName(getNewElementName()));
+			if (result.hasFatalError())
+				return result;
+
+			boolean mustAnalyzeShadowing;
+			IMethod[] newNameMethods= searchForDeclarationsOfClashingMethods(new SubProgressMonitor(pm, 1));
+			if (newNameMethods.length == 0) {
+				mustAnalyzeShadowing= false;
+				pm.worked(1);
+			} else {
+				IType[] outerTypes= searchForOuterTypesOfReferences(newNameMethods, new SubProgressMonitor(pm, 1));
+				if (outerTypes.length > 0) {
+					//There exists a reference to a clashing method, where the reference is in a nested type.
+					//That nested type could be a type in a ripple method's hierarchy, which could
+					//cause the reference to bind to the new ripple method instead of to
+					//its old binding (a method of an enclosing scope).
+					//-> Getting *more* references than before -> Semantics not preserved.
+					//Examples: RenameVirtualMethodInClassTests#testFail39() and #testFail41()
+					//TODO: could pass declaringTypes to the RippleMethodFinder and check whether
+					//a hierarchy contains one of outerTypes (or an outer type of an outerType, recursively).
+					mustAnalyzeShadowing= true;
+
+				} else {
+					boolean hasOldRefsInInnerTypes= true;
+						//TODO: to implement this optimization:
+						//- move search for references to before this check.
+						//- collect references in inner types.
+						//- for each reference, check for all supertypes and their enclosing types
+						//(recursively), whether they declare a rippleMethod
+					if (hasOldRefsInInnerTypes) {
+						//There exists a reference to a ripple method in a nested type
+						//of a type in the hierarchy of any ripple method.
+						//When that reference is renamed, and one of the supertypes of the
+						//nested type declared a method matching the new name, then
+						//the renamed reference will bind to the method in its supertype,
+						//since inherited methods bind stronger than methods from enclosing scopes.
+						//Getting *less* references than before -> Semantics not preserved.
+						//Examples: RenamePrivateMethodTests#testFail2(), RenamePrivateMethodTests#testFail5()
+						mustAnalyzeShadowing= true;
+					} else {
+						mustAnalyzeShadowing= false;
+					}
+				}
+			}
+
+			String binaryRefsDescription= Messages.format(RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description , BasicElementLabels.getJavaElementName(getCurrentElementName()));
+			ReferencesInBinaryContext binaryRefs= new ReferencesInBinaryContext(binaryRefsDescription);
+
+			initializeMethodsToRename(new SubProgressMonitor(pm, 1), binaryRefs);
+			pm.setTaskName(RefactoringCoreMessages.RenameMethodRefactoring_taskName_searchingForReferences);
+			fOccurrences= getOccurrences(new SubProgressMonitor(pm, 3), result, binaryRefs);
+			binaryRefs.addErrorIfNecessary(result);
+
+			pm.setTaskName(RefactoringCoreMessages.RenameMethodRefactoring_taskName_checkingPreconditions);
+
+			if (fUpdateReferences)
+				result.merge(checkRelatedMethods());
+
+			result.merge(analyzeCompilationUnits()); //removes CUs with syntax errors
+			pm.worked(1);
+
+			if (result.hasFatalError())
+				return result;
+
+			createChanges(new SubProgressMonitor(pm, 1), result);
+			if (fUpdateReferences & mustAnalyzeShadowing)
+				result.merge(analyzeRenameChanges(new SubProgressMonitor(pm, 1)));
+			else
+				pm.worked(1);
+
+			return result;
+		} finally{
+			pm.done();
+		}
+	}
+

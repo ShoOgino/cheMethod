@@ -1,0 +1,38 @@
+    /**
+     * @see AbstractJavaSearchScope#packageFragmentRoot(String, int, String)
+     */
+    public IPackageFragmentRoot packageFragmentRoot(String resourcePathString, int jarSeparatorIndex, String jarPath) {
+        int index = -1;
+        boolean isJarFile = jarSeparatorIndex != -1;
+        if (isJarFile) {
+            // internal or external jar (case 3, 4, or 5)
+            String relativePath = resourcePathString.substring(jarSeparatorIndex + 1);
+            index = indexOf(jarPath, relativePath);
+        } else {
+            // resource in workspace (case 1 or 2)
+            index = indexOf(resourcePathString);
+        }
+        if (index >= 0) {
+            int idx = this.projectIndexes[index];
+            String projectPath = idx == -1 ? null : (String)this.projectPaths.get(idx);
+            if (projectPath != null) {
+                IJavaProject project = JavaCore.create(ResourcesPlugin.getWorkspace().getRoot().getProject(projectPath));
+                if (isJarFile) {
+                    IResource resource = JavaModel.getWorkspaceTarget(new Path(jarPath));
+                    if (resource != null)
+                        return project.getPackageFragmentRoot(resource);
+                    return project.getPackageFragmentRoot(jarPath);
+                }
+                Object target = JavaModel.getWorkspaceTarget(new Path(this.containerPaths[index] + '/' + this.relativePaths[index]));
+                if (target != null) {
+                    if (target instanceof IProject) {
+                        return project.getPackageFragmentRoot((IProject)target);
+                    }
+                    IJavaElement element = JavaModelManager.create((IResource)target, project);
+                    return (IPackageFragmentRoot)element.getAncestor(IJavaElement.PACKAGE_FRAGMENT_ROOT);
+                }
+            }
+        }
+        return null;
+    }
+

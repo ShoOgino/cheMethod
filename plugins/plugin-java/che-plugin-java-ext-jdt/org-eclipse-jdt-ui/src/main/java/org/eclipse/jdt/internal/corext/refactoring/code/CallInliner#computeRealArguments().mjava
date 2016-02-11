@@ -1,0 +1,42 @@
+	private void computeRealArguments() {
+		List<Expression> arguments= Invocations.getArguments(fInvocation);
+		Set<Expression> canNotInline= crossCheckArguments(arguments);
+		boolean needsVarargBoxing= needsVarargBoxing(arguments);
+		int varargIndex= fSourceProvider.getVarargIndex();
+		AST ast= fInvocation.getAST();
+		Expression[] realArguments= new Expression[needsVarargBoxing ? varargIndex + 1 : arguments.size()];
+		for (int i= 0; i < (needsVarargBoxing ? varargIndex : arguments.size()); i++) {
+			Expression expression= arguments.get(i);
+			ParameterData parameter= fSourceProvider.getParameterData(i);
+			if (canInline(expression, parameter) && !canNotInline.contains(expression)) {
+				realArguments[i]= expression;
+			} else {
+				String name= fInvocationScope.createName(parameter.getName(), true);
+				realArguments[i]= ast.newSimpleName(name);
+				VariableDeclarationStatement local= createLocalDeclaration(parameter.getTypeBinding(), name, (Expression) fRewrite.createCopyTarget(expression));
+				if (parameter.isFinal()) {
+					local.modifiers().add(fInvocation.getAST().newModifier(ModifierKeyword.FINAL_KEYWORD));
+				}
+				fLocals.add(local);
+			}
+		}
+		if (needsVarargBoxing) {
+			ParameterData parameter= fSourceProvider.getParameterData(varargIndex);
+			String name= fInvocationScope.createName(parameter.getName(), true);
+			realArguments[varargIndex]= ast.newSimpleName(name);
+			Type type= fImportRewrite.addImport(parameter.getTypeBinding(), ast);
+			VariableDeclarationFragment fragment= ast.newVariableDeclarationFragment();
+			fragment.setName(ast.newSimpleName(name));
+			ArrayInitializer initializer= ast.newArrayInitializer();
+			for (int i= varargIndex; i < arguments.size(); i++) {
+				initializer.expressions().add(fRewrite.createCopyTarget(arguments.get(i)));
+			}
+			fragment.setInitializer(initializer);
+			VariableDeclarationStatement decl= ast.newVariableDeclarationStatement(fragment);
+			decl.setType(type);
+			fLocals.add(decl);
+		}
+		fContext.compilationUnit= fCUnit;
+		fContext.arguments= realArguments;
+	}
+

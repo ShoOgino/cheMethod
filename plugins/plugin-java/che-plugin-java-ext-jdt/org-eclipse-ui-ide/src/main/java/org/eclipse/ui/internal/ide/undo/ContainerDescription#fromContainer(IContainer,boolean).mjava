@@ -1,0 +1,48 @@
+	protected static ContainerDescription fromContainer(IContainer container, boolean usingVirtualFolder) {
+		IPath fullPath = container.getFullPath();
+		ContainerDescription firstCreatedParent = null;
+		ContainerDescription currentContainerDescription = null;
+
+		// Does the container exist already? If so, then the parent exists and
+		// we use the normal creation constructor.
+		IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+		IContainer currentContainer = (IContainer) root.findMember(fullPath);
+		if (currentContainer != null) {
+			return (ContainerDescription) ResourceDescription
+					.fromResource(container);
+		}
+
+		// Create container descriptions for any uncreated parents in the given
+		// path.
+		currentContainer = root;
+		for (int i = 0; i < fullPath.segmentCount(); i++) {
+			String currentSegment = fullPath.segment(i);
+			IResource resource = currentContainer.findMember(currentSegment);
+			if (resource != null) {
+				// parent already exists, no need to create a description for it
+				currentContainer = (IContainer) resource;
+			} else {
+				if (i == 0) {
+					// parent does not exist and it is a project
+					firstCreatedParent = new ProjectDescription(root
+							.getProject(currentSegment));
+					currentContainerDescription = firstCreatedParent;
+				} else {
+					IFolder folderHandle = currentContainer.getFolder(new Path(
+							currentSegment));
+					ContainerDescription currentFolder;
+					currentFolder = new FolderDescription(folderHandle, usingVirtualFolder);
+					currentContainer = folderHandle;
+					if (currentContainerDescription != null) {
+						currentContainerDescription.addMember(currentFolder);
+					}
+					currentContainerDescription = currentFolder;
+					if (firstCreatedParent == null) {
+						firstCreatedParent = currentFolder;
+					}
+				}
+			}
+		}
+		return firstCreatedParent;
+	}
+

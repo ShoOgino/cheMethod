@@ -1,0 +1,76 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	public void startElement(final String uri, final String localName, final String qualifiedName, final Attributes attributes) throws SAXException {
+		if (IRefactoringSerializationConstants.ELEMENT_REFACTORING.equals(qualifiedName)) {
+			final int length= attributes.getLength();
+			final Map map= new HashMap(length);
+			String id= ""; //$NON-NLS-1$
+			String stamp= ""; //$NON-NLS-1$
+			String description= ""; //$NON-NLS-1$
+			String comment= null;
+			String flags= "0"; //$NON-NLS-1$
+			String project= null;
+			for (int index= 0; index < length; index++) {
+				final String name= attributes.getQName(index);
+				final String value= attributes.getValue(index);
+				if (IRefactoringSerializationConstants.ATTRIBUTE_ID.equals(name)) {
+					id= value;
+				} else if (IRefactoringSerializationConstants.ATTRIBUTE_STAMP.equals(name)) {
+					stamp= value;
+				} else if (IRefactoringSerializationConstants.ATTRIBUTE_DESCRIPTION.equals(name)) {
+					description= value;
+				} else if (IRefactoringSerializationConstants.ATTRIBUTE_FLAGS.equals(name)) {
+					flags= value;
+				} else if (IRefactoringSerializationConstants.ATTRIBUTE_COMMENT.equals(name)) {
+					if (!"".equals(value)) //$NON-NLS-1$
+						comment= value;
+				} else if (IRefactoringSerializationConstants.ATTRIBUTE_PROJECT.equals(name)) {
+					project= value;
+				} else if (!"".equals(name)) { //$NON-NLS-1$
+					map.put(name, value);
+				}
+			}
+			int flag= 0;
+			try {
+				flag= Integer.parseInt(flags);
+			} catch (NumberFormatException exception) {
+				// Do nothing
+			}
+
+			RefactoringDescriptor descriptor= null;
+			if (fCreateDefaultDescriptors) {
+				descriptor= new DefaultRefactoringDescriptor(id, project, description, comment, map, flag);
+			} else {
+				if (fProject != null && project == null) {
+					project= fProject; // override project from file if fProject != null
+				}
+				try {
+					descriptor= RefactoringContributionManager.getInstance().createDescriptor(id, project, description, comment, map, flag);
+				} catch (RuntimeException e) {
+					throw new SAXParseException(RefactoringCoreMessages.RefactoringSessionReader_invalid_values_in_xml, fLocator, e) {
+						private static final long serialVersionUID= 1L;
+						public Throwable getCause() { // support proper 1.4-style exception chaining
+							return getException();
+						}
+					};
+				}
+			}
+			try {
+				descriptor.setTimeStamp(Long.valueOf(stamp).longValue());
+			} catch (NumberFormatException exception) {
+				// Do nothing
+			}
+			if (fRefactoringDescriptors == null)
+				fRefactoringDescriptors= new ArrayList();
+			fRefactoringDescriptors.add(descriptor);
+
+		} else if (IRefactoringSerializationConstants.ELEMENT_SESSION.equals(qualifiedName)) {
+			fSessionFound= true;
+			final String version= attributes.getValue(IRefactoringSerializationConstants.ATTRIBUTE_VERSION);
+			if (version != null && !"".equals(version)) //$NON-NLS-1$
+				fVersion= version;
+			fComment= attributes.getValue(IRefactoringSerializationConstants.ATTRIBUTE_COMMENT);
+		}
+	}
+

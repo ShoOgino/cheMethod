@@ -1,0 +1,38 @@
+	/**
+	 * Creates the necessary changes for the renaming of the type parameter.
+	 *
+	 * @param monitor
+	 *            the progress monitor to display progress
+	 * @return the status of the operation
+	 * @throws CoreException
+	 *             if the change could not be generated
+	 */
+	private RefactoringStatus createRenameChanges(IProgressMonitor monitor) throws CoreException {
+		Assert.isNotNull(monitor);
+		RefactoringStatus status= new RefactoringStatus();
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RenameTypeParameterRefactoring_searching, 2);
+			ICompilationUnit cu= fTypeParameter.getDeclaringMember().getCompilationUnit();
+			CompilationUnit root= RefactoringASTParser.parseWithASTProvider(cu, true, null);
+			CompilationUnitRewrite rewrite= new CompilationUnitRewrite(cu, root);
+			IMember member= fTypeParameter.getDeclaringMember();
+			ASTNode declaration= null;
+			if (member instanceof IMethod) {
+				declaration= ASTNodeSearchUtil.getMethodDeclarationNode((IMethod) member, root);
+			} else if (member instanceof IType) {
+				declaration= ASTNodeSearchUtil.getAbstractTypeDeclarationNode((IType) member, root);
+			} else {
+				JavaPlugin.logErrorMessage("Unexpected sub-type of IMember: " + member.getClass().getName()); //$NON-NLS-1$
+				Assert.isTrue(false);
+			}
+			monitor.worked(1);
+			RenameTypeParameterVisitor visitor= new RenameTypeParameterVisitor(rewrite, fTypeParameter.getNameRange(), status);
+			if (declaration != null)
+				declaration.accept(visitor);
+			fChange= visitor.getResult();
+		} finally {
+			monitor.done();
+		}
+		return status;
+	}
+

@@ -1,0 +1,77 @@
+	/**
+	 * Add occurrences
+	 *
+	 * @param manager the text change manager
+	 * @param pm the progress monitor
+	 * @param status the status
+	 * @throws CoreException if change creation failed
+	 */
+	protected void addOccurrences(TextChangeManager manager, IProgressMonitor pm, RefactoringStatus status) throws CoreException/*thrown in subtype*/{
+		pm.beginTask("", fOccurrences.length);				 //$NON-NLS-1$
+		for (int i= 0; i < fOccurrences.length; i++){
+			ICompilationUnit cu= fOccurrences[i].getCompilationUnit();
+			if (cu == null)
+				continue;
+
+			SearchMatch[] results= fOccurrences[i].getSearchResults();
+
+			// Split matches into declaration and non-declaration matches
+
+			List<SearchMatch> declarationsInThisCu= new ArrayList<SearchMatch>();
+			List<SearchMatch> referencesInThisCu= new ArrayList<SearchMatch>();
+
+			for (int j= 0; j < results.length; j++) {
+				if (results[j] instanceof MethodDeclarationMatch)
+					declarationsInThisCu.add(results[j]);
+				else
+					referencesInThisCu.add(results[j]);
+			}
+
+			// First, handle the declarations
+			if (declarationsInThisCu.size() > 0) {
+
+				if (fDelegateUpdating) {
+					// Update with delegates
+					CompilationUnitRewrite rewrite= new CompilationUnitRewrite(cu);
+					rewrite.setResolveBindings(true);
+
+					for (Iterator<SearchMatch> iter= declarationsInThisCu.iterator(); iter.hasNext();) {
+						SearchMatch element= iter.next();
+						MethodDeclaration method= ASTNodeSearchUtil.getMethodDeclarationNode((IMethod) element.getElement(), rewrite.getRoot());
+						DelegateCreator creator= new DelegateMethodCreator();
+						creator.setDeclareDeprecated(fDelegateDeprecation);
+						creator.setDeclaration(method);
+						creator.setSourceRewrite(rewrite);
+						creator.setNewElementName(getNewElementName());
+						creator.prepareDelegate();
+						creator.createEdit();
+					}
+					// Need to handle all delegates first as this
+					// creates a completely new change object.
+					TextChange changeForThisCu= rewrite.createChange(true);
+					changeForThisCu.setKeepPreviewEdits(true);
+					manager.manage(cu, changeForThisCu);
+				}
+
+				// Update the normal methods
+				for (Iterator<SearchMatch> iter= declarationsInThisCu.iterator(); iter.hasNext();) {
+					SearchMatch element= iter.next();
+					simpleUpdate(element, cu, manager.get(cu));
+				}
+			}
+
+			// Second, handle references
+			if (fUpdateReferences) {
+				for (Iterator<SearchMatch> iter= referencesInThisCu.iterator(); iter.hasNext();) {
+					SearchMatch element= iter.next();
+					simpleUpdate(element, cu, manager.get(cu));
+				}
+			}
+
+			pm.worked(1);
+			if (pm.isCanceled())
+				throw new OperationCanceledException();
+		}
+		pm.done();
+	}
+

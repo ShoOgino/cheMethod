@@ -1,0 +1,48 @@
+	private SearchResultGroup[] findOccurrences(IProgressMonitor pm, ReferencesInBinaryContext binaryRefs, RefactoringStatus status) throws
+																																	 JavaModelException {
+		final boolean isConstructor= fMethod.isConstructor();
+		CuCollectingSearchRequestor requestor= new CuCollectingSearchRequestor(binaryRefs) {
+			@Override
+			protected void acceptSearchMatch(ICompilationUnit unit, SearchMatch match) throws CoreException {
+				// workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=27236 :
+				if (isConstructor && match instanceof MethodReferenceMatch) {
+					MethodReferenceMatch mrm= (MethodReferenceMatch) match;
+					if (mrm.isSynthetic()) {
+						return;
+					}
+				}
+				collectMatch(match);
+			}
+		};
+
+		SearchPattern pattern;
+		if (isConstructor) {
+
+//			// workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=226151 : don't find binary refs for constructors for now
+//			return ConstructorReferenceFinder.getConstructorOccurrences(fMethod, pm, status);
+
+//			SearchPattern occPattern= SearchPattern.createPattern(fMethod, IJavaSearchConstants.ALL_OCCURRENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+			SearchPattern declPattern= SearchPattern
+					.createPattern(fMethod, IJavaSearchConstants.DECLARATIONS, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+			SearchPattern refPattern= SearchPattern
+					.createPattern(fMethod, IJavaSearchConstants.REFERENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+//			pattern= SearchPattern.createOrPattern(declPattern, refPattern);
+//			pattern= occPattern;
+
+			// workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=226151 : do two searches
+			try {
+				SearchEngine engine= new SearchEngine();
+				engine.search(declPattern, SearchUtils
+						.getDefaultSearchParticipants(), createRefactoringScope(), requestor, new NullProgressMonitor());
+				engine.search(refPattern, SearchUtils.getDefaultSearchParticipants(), createRefactoringScope(), requestor, pm);
+			} catch (CoreException e) {
+				throw new JavaModelException(e);
+			}
+			return RefactoringSearchEngine.groupByCu(requestor.getResults(), status);
+
+		} else {
+			pattern= RefactoringSearchEngine.createOrPattern(fRippleMethods, IJavaSearchConstants.ALL_OCCURRENCES);
+		}
+		return RefactoringSearchEngine.search(pattern, createRefactoringScope(), requestor, pm, status);
+	}
+

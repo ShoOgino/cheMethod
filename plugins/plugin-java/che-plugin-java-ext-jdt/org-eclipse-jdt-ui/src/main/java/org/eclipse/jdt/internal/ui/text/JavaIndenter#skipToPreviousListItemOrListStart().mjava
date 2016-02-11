@@ -1,0 +1,71 @@
+	/**
+	 * Returns the reference position for a list element. The algorithm
+	 * tries to match any previous indentation on the same list. If there is none,
+	 * the reference position returned is determined depending on the type of list:
+	 * The indentation will either match the list scope introducer (e.g. for
+	 * method declarations), so called deep indents, or simply increase the
+	 * indentation by a number of standard indents. See also {@link #handleScopeIntroduction(int)}.
+	 *
+	 * @return the reference position for a list item: either a previous list item
+	 * that has its own indentation, or the list introduction start.
+	 */
+	private int skipToPreviousListItemOrListStart() {
+		int startLine= fLine;
+		int startPosition= fPosition;
+		while (true) {
+			nextToken();
+
+			// if any line item comes with its own indentation, adapt to it
+			if (fLine < startLine) {
+				try {
+					int lineOffset= fDocument.getLineOffset(startLine);
+					int bound= Math.min(fDocument.getLength(), startPosition + 1);
+					fAlign= fScanner.findNonWhitespaceForwardInAnyPartition(lineOffset, bound);
+				} catch (BadLocationException e) {
+					// ignore and return just the position
+				}
+				return startPosition;
+			}
+
+			switch (fToken) {
+				// scopes: skip them
+				case Symbols.TokenRPAREN:
+				case Symbols.TokenRBRACKET:
+				case Symbols.TokenRBRACE:
+				case Symbols.TokenGREATERTHAN:
+					skipScope();
+					break;
+
+				// scope introduction: special treat who special is
+				case Symbols.TokenLPAREN:
+				case Symbols.TokenLBRACE:
+				case Symbols.TokenLBRACKET:
+					return handleScopeIntroduction(startPosition + 1);
+
+				case Symbols.TokenSEMICOLON:
+					int savedPosition= fPosition;
+					if (isSemicolonPartOfForStatement())
+						fIndent= fPrefs.prefContinuationIndent;
+					else
+						fPosition= savedPosition;
+					return fPosition;
+				case Symbols.TokenQUESTIONMARK:
+					if (fPrefs.prefTernaryDeepAlign) {
+						setFirstElementAlignment(fPosition - 1, fPosition + 1);
+						return fPosition;
+					} else {
+						fIndent= fPrefs.prefTernaryIndent;
+						return fPosition;
+					}
+				case Symbols.TokenRETURN:
+					fIndent= fPrefs.prefContinuationIndent;
+					return fPosition;
+				case Symbols.TokenEQUAL:
+					return handleEqual();
+				case Symbols.TokenEOF:
+					return 0;
+
+			}
+		}
+	}
+

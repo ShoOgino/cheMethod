@@ -1,0 +1,44 @@
+    @Test
+    @Ignore
+    public void testHierarchicalToSuperpackage2() throws Exception {
+        fRenameSubpackages = true;
+
+        PackageRename rename = new PackageRename(
+                new String[]{"a.b", "a.b.c", "a.c", "p"},
+                new String[][]{{"B"}, {"BC"}, {}},
+                "a",
+                true
+        );
+        IPackageFragment thisPackage = rename.fPackages[0];
+        IFolder src = (IFolder)getRoot().getResource();
+        IFolder a = src.getFolder("a");
+        IFolder ab = src.getFolder("a/b");
+        IFolder ac = src.getFolder("a/c");
+        IFolder abc = src.getFolder("a/b/c");
+
+        ParticipantTesting.reset();
+
+        String[] createHandles = {};
+        String[] deleteHandles = ParticipantTesting.createHandles(ab);
+        String[] moveHandles = ParticipantTesting.createHandles(ab.getFile("B.java"), abc.getFile("BC.java"));
+        String[] renameHandles = ParticipantTesting.createHandles(JavaElementUtil.getPackageAndSubpackages(thisPackage));
+
+        rename.createAndPerform(RefactoringStatus.OK);
+        rename.checkExpectedState();
+
+        ParticipantTesting.testCreate(createHandles);
+        ParticipantTesting.testDelete(deleteHandles);
+        ParticipantTesting.testMove(moveHandles, new MoveArguments[]{
+                new MoveArguments(a, true),
+                new MoveArguments(ac, true),
+        });
+        ParticipantTesting.testRename(renameHandles, new RenameArguments[]{
+                new RenameArguments("a", true),
+                new RenameArguments("a.c", true),
+        });
+
+        performUndo();
+        rename.fPackageNames = new String[]{"a.b", "a.b.c", "a", "p"};// empty package is not recreated, but that's OK
+        rename.checkOriginalState();
+    }
+

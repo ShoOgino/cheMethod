@@ -1,0 +1,221 @@
+	private static boolean getConvertIfElseToSwitchProposals(IInvocationContext context, ASTNode coveringNode, ArrayList<ICommandAccess> resultingCollections, boolean handleNullArg) {
+		final AST ast= coveringNode.getAST();
+		final ASTRewrite rewrite= ASTRewrite.create(ast);
+		final ImportRewrite importRewrite= StubUtility.createImportRewrite(context.getASTRoot(), true);
+		ImportRewriteContext
+				importRewriteContext= new ContextSensitiveImportRewriteContext(ASTResolving.findParentBodyDeclaration(coveringNode), importRewrite);
+		IfStatement ifStatement= (IfStatement) coveringNode;
+		IfStatement currentIf= ifStatement;
+		Statement currentStatement= ifStatement;
+		Expression currentExpression= currentIf.getExpression();
+		SwitchStatement switchStatement= ast.newSwitchStatement();
+		Expression switchExpression= null;
+		boolean executeDefaultOnNullExpression= false;
+		Statement defaultStatement=null;
+
+		while (currentStatement != null) {
+			Expression expression= null;
+			List<Expression> caseExpressions= new ArrayList<Expression>();
+			if (currentIf != null) {
+				while (currentExpression != null) { // loop for fall through cases - multiple expressions with || operator
+					Expression leftOperand;
+					Expression rightOperand;
+					boolean isMethodInvocationCase= false;
+					if (currentExpression instanceof MethodInvocation) {
+						isMethodInvocationCase= true;
+						if (!(((MethodInvocation) currentExpression).getName().getIdentifier()).equals("equals")) //$NON-NLS-1$
+							return false;
+
+						MethodInvocation invocation= (MethodInvocation) currentExpression;
+						leftOperand= invocation.getExpression();
+						if (leftOperand == null)
+							return false;
+						ITypeBinding leftBinding= leftOperand.resolveTypeBinding();
+						if (leftBinding != null) {
+							if (leftBinding.getQualifiedName().equals("java.lang.String")) { //$NON-NLS-1$
+								if (!JavaModelUtil.is17OrHigher(context.getCompilationUnit().getJavaProject()))
+									return false;
+							} else if (!leftBinding.isEnum()) {
+								return false;
+							}
+						}
+
+						List<Expression> arguments= invocation.arguments();
+						if (arguments.size() != 1)
+							return false;
+						rightOperand= arguments.get(0);
+						ITypeBinding rightBinding= leftOperand.resolveTypeBinding();
+						if (rightBinding != null) {
+							if (rightBinding.getQualifiedName().equals("java.lang.String")) { //$NON-NLS-1$
+								if (!JavaModelUtil.is17OrHigher(context.getCompilationUnit().getJavaProject()))
+									return false;
+							} else if (!rightBinding.isEnum()) {
+								return false;
+							}
+						}
+
+
+					} else if (currentExpression instanceof InfixExpression) {
+						InfixExpression infixExpression= (InfixExpression) currentExpression;
+						Operator operator= infixExpression.getOperator();
+						if (!(operator.equals(InfixExpression.Operator.CONDITIONAL_OR) || operator.equals(InfixExpression.Operator.EQUALS)))
+							return false;
+
+						leftOperand= infixExpression.getLeftOperand();
+						rightOperand= infixExpression.getRightOperand();
+
+						if (operator.equals(InfixExpression.Operator.EQUALS)) {
+							ITypeBinding typeBinding= leftOperand.resolveTypeBinding();
+							if (typeBinding != null && typeBinding.getQualifiedName().equals("java.lang.String")) { //$NON-NLS-1$
+								return false; // don't propose quick assist when == is used to compare strings, since switch will use equals()
+							}
+						} else if (operator.equals(InfixExpression.Operator.CONDITIONAL_OR)) {
+							currentExpression= leftOperand;
+							continue;
+						}
+					} else {
+						return false;
+					}
+
+					if (leftOperand.resolveConstantExpressionValue() != null) {
+						caseExpressions.add(leftOperand);
+						expression= rightOperand;
+						executeDefaultOnNullExpression|= isMethodInvocationCase;
+					} else if (rightOperand.resolveConstantExpressionValue() != null) {
+						caseExpressions.add(rightOperand);
+						expression= leftOperand;
+					} else if (leftOperand instanceof QualifiedName) {
+						QualifiedName qualifiedName= (QualifiedName) leftOperand;
+						IVariableBinding binding= (IVariableBinding) qualifiedName.resolveBinding();
+						if (binding == null || !binding.isEnumConstant())
+							return false;
+						importRewrite.addImport(binding.getDeclaringClass(), importRewriteContext);
+						caseExpressions.add(qualifiedName.getName());
+						expression= rightOperand;
+						executeDefaultOnNullExpression|= isMethodInvocationCase;
+					} else if (rightOperand instanceof QualifiedName) {
+						QualifiedName qualifiedName= (QualifiedName) rightOperand;
+						IVariableBinding binding= (IVariableBinding) qualifiedName.resolveBinding();
+						if (binding == null || !binding.isEnumConstant())
+							return false;
+						importRewrite.addImport(binding.getDeclaringClass(), importRewriteContext);
+						caseExpressions.add(qualifiedName.getName());
+						expression= leftOperand;
+					} else {
+						return false;
+					}
+					if (expression == null) { // paranoidal check: this condition should never be true
+						return false;
+					}
+
+					if (currentExpression.getParent() instanceof InfixExpression) {
+						currentExpression= getNextSiblingExpression(currentExpression);
+					} else {
+						currentExpression= null;
+					}
+
+					if (switchExpression == null) {
+						switchExpression= expression;
+					}
+
+					if (!switchExpression.subtreeMatch(new ASTMatcher(), expression)) {
+						return false;
+					}
+				}
+			}
+
+			Statement thenStatement;
+			if (currentIf == null) {
+				thenStatement= currentStatement; //currentStatement has the default else block
+				defaultStatement= currentStatement;
+			} else {
+				thenStatement= currentIf.getThenStatement();
+			}
+
+			SwitchCase[] switchCaseStatements= createSwitchCaseStatements(ast, rewrite, caseExpressions);
+			for (int i= 0; i < switchCaseStatements.length; i++) {
+				switchStatement.statements().add(switchCaseStatements[i]);
+			}
+			boolean isBreakRequired= true;
+			if (thenStatement instanceof Block) {
+				Statement statement= null;
+				for (Iterator<Statement> iter= ((Block) thenStatement).statements().iterator(); iter.hasNext();) {
+					statement= iter.next();
+					switchStatement.statements().add(rewrite.createCopyTarget(statement));
+				}
+				if (statement instanceof ReturnStatement || statement instanceof ThrowStatement)
+					isBreakRequired= false;
+			} else {
+				if (thenStatement instanceof ReturnStatement || thenStatement instanceof ThrowStatement)
+					isBreakRequired= false;
+				switchStatement.statements().add(rewrite.createCopyTarget(thenStatement));
+			}
+			if (isBreakRequired)
+				switchStatement.statements().add(ast.newBreakStatement());
+
+			// advance currentStatement to the next "else if" or "else":
+			if (currentIf != null && currentIf.getElseStatement() != null) {
+				Statement elseStatement= currentIf.getElseStatement();
+				if (elseStatement instanceof IfStatement) {
+					currentIf= (IfStatement) elseStatement;
+					currentStatement= currentIf;
+					currentExpression= currentIf.getExpression();
+				} else {
+					currentIf= null;
+					currentStatement= elseStatement;
+					currentExpression= null;
+				}
+			} else {
+				currentStatement= null;
+			}
+		}
+
+		if (switchExpression == null)
+			return false;
+		switchStatement.setExpression((Expression) rewrite.createCopyTarget(switchExpression));
+
+		if (handleNullArg) {
+			if (executeDefaultOnNullExpression) {
+				IfStatement newIfStatement= ast.newIfStatement();
+
+				InfixExpression infixExpression= ast.newInfixExpression();
+				infixExpression.setLeftOperand((Expression) rewrite.createCopyTarget(switchExpression));
+				infixExpression.setRightOperand(ast.newNullLiteral());
+				infixExpression.setOperator(InfixExpression.Operator.EQUALS);
+				newIfStatement.setExpression(infixExpression);
+
+				if (defaultStatement == null) {
+					Block block= ast.newBlock();
+					newIfStatement.setThenStatement(block);
+				} else if (defaultStatement instanceof Block) {
+					Block block= ast.newBlock();
+					for (Iterator<Statement> iter= ((Block) defaultStatement).statements().iterator(); iter.hasNext();) {
+						block.statements().add(rewrite.createCopyTarget(iter.next()));
+					}
+					newIfStatement.setThenStatement(block);
+				} else {
+					newIfStatement.setThenStatement((Statement) rewrite.createCopyTarget(defaultStatement));
+				}
+				Block block= ast.newBlock();
+				block.statements().add(switchStatement);
+				newIfStatement.setElseStatement(block);
+
+				rewrite.replace(ifStatement, newIfStatement, null);
+
+				String source= ASTNodes.asString(switchExpression).replaceAll("\r\n?|\n", " "); //$NON-NLS-1$ //$NON-NLS-2$
+				String label= Messages.format(CorrectionMessages.AdvancedQuickAssistProcessor_convertIfElseToSwitch_handleNullArg, source);
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.CONVERT_IF_ELSE_TO_SWITCH);
+				proposal.setImportRewrite(importRewrite);
+				resultingCollections.add(proposal);
+			}
+		} else {
+			rewrite.replace(ifStatement, switchStatement, null);
+
+			String label= CorrectionMessages.AdvancedQuickAssistProcessor_convertIfElseToSwitch;
+			ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.CONVERT_IF_ELSE_TO_SWITCH);
+			proposal.setImportRewrite(importRewrite);
+			resultingCollections.add(proposal);
+		}
+		return true;
+	}
+

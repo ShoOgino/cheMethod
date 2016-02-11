@@ -1,0 +1,99 @@
+		protected final void reshuffleElements() {
+			if (isOrderSameAsInitial())
+				return;
+
+			//varargs; method(p1, p2, .., pn), call(a1, a2, .., ax) :
+			// if (method_was_vararg) {
+			//     assert fOldVarargIndex != -1
+			//     if (vararg_retained) {
+			//         assert vararg_is_last_non_deleted (pn)
+			//         assert no_other_varargs
+			//         => reshuffle [1..n-1] then append remaining nodes [n..x], possibly none
+			//
+			//     } else (vararg_deleted) {
+			//         assert all_are_non_vararg
+			//         => reshuffle [1..n-1], drop all remaining nodes [n..x], possibly none
+			//     }
+			//
+			// } else if (method_became_vararg) {
+			//     assert n == x
+			//     assert fOldVarargIndex == -1
+			//     => reshuffle [1..n]
+			//
+			// } else (JLS2_case) {
+			//     assert n == x
+			//     assert fOldVarargIndex == -1
+			//     => reshuffle [1..n]
+			// }
+
+			ListRewrite listRewrite = getParamgumentsRewrite();
+			Map<N, N> newOldMap = new LinkedHashMap<N, N>();
+			List<N> nodes = listRewrite.getRewrittenList();
+			Iterator<N> rewriteIter = nodes.iterator();
+			List<N> original = listRewrite.getOriginalList();
+			for (Iterator<N> iter = original.iterator(); iter.hasNext(); ) {
+				newOldMap.put(rewriteIter.next(), iter.next());
+			}
+			List<N> newNodes = new ArrayList<N>();
+			// register removed nodes, and collect nodes in new sequence:
+			for (int i = 0; i < fParameterInfos.size(); i++) {
+				ParameterInfo info = fParameterInfos.get(i);
+				int oldIndex = info.getOldIndex();
+
+				if (info.isDeleted()) {
+					if (oldIndex != fOldVarargIndex) {
+						registerImportRemoveNode(nodes.get(oldIndex));
+					} else {
+						//vararg deleted -> remove all remaining nodes:
+						for (int n = oldIndex; n < nodes.size(); n++) {
+							registerImportRemoveNode(nodes.get(n));
+						}
+					}
+
+				} else if (info.isAdded()) {
+					N newParamgument = createNewParamgument(info, fParameterInfos, nodes);
+					if (newParamgument != null)
+						newNodes.add(newParamgument);
+
+				} else /* parameter stays */ {
+					if (oldIndex != fOldVarargIndex) {
+						N oldNode = nodes.get(oldIndex);
+						N movedNode = moveNode(oldNode, getASTRewrite());
+						newNodes.add(movedNode);
+					} else {
+						//vararg stays and is last parameter -> copy all remaining nodes:
+						for (int n = oldIndex; n < nodes.size(); n++) {
+							N oldNode = nodes.get(n);
+							N movedNode = moveNode(oldNode, getASTRewrite());
+							newNodes.add(movedNode);
+						}
+					}
+				}
+			}
+
+			Iterator<N> nodesIter = nodes.iterator();
+			Iterator<N> newIter = newNodes.iterator();
+			//replace existing nodes with new ones:
+			while (nodesIter.hasNext() && newIter.hasNext()) {
+				ASTNode node = nodesIter.next();
+				ASTNode newNode = newIter.next();
+				if (!ASTNodes.isExistingNode(node)) //XXX:should better be addressed in ListRewriteEvent.replaceEntry(ASTNode, ASTNode)
+					listRewrite.replace(newOldMap.get(node), newNode, fDescription);
+				else
+					listRewrite.replace(node, newNode, fDescription);
+			}
+			//remove remaining existing nodes:
+			while (nodesIter.hasNext()) {
+				ASTNode node = nodesIter.next();
+				if (!ASTNodes.isExistingNode(node))
+					listRewrite.remove(newOldMap.get(node), fDescription);
+				else
+					listRewrite.remove(node, fDescription);
+			}
+			//add additional new nodes:
+			while (newIter.hasNext()) {
+				ASTNode node = newIter.next();
+				listRewrite.insertLast(node, fDescription);
+			}
+		}
+

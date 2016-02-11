@@ -1,0 +1,40 @@
+	@Override
+	protected ASTRewrite getRewrite() throws CoreException {
+		CompilationUnit astRoot = ASTResolving.findParentCompilationUnit(fNode);
+		ASTNode typeDecl = astRoot.findDeclaringNode(fSenderBinding);
+		ASTNode newTypeDecl = null;
+		boolean isInDifferentCU;
+		if (typeDecl != null) {
+			isInDifferentCU = false;
+			newTypeDecl = typeDecl;
+		} else {
+			isInDifferentCU = true;
+			astRoot = ASTResolving.createQuickFixAST(getCompilationUnit(), null);
+			newTypeDecl = astRoot.findDeclaringNode(fSenderBinding.getKey());
+		}
+		createImportRewrite(astRoot);
+
+		if (newTypeDecl != null) {
+			ASTRewrite rewrite = ASTRewrite.create(astRoot.getAST());
+
+			MethodDeclaration newStub = getStub(rewrite, newTypeDecl);
+
+			ChildListPropertyDescriptor property = ASTNodes.getBodyDeclarationsProperty(newTypeDecl);
+			List<BodyDeclaration> members = ASTNodes.getBodyDeclarations(newTypeDecl);
+
+			int insertIndex;
+			if (isConstructor()) {
+				insertIndex = findConstructorInsertIndex(members);
+			} else if (!isInDifferentCU) {
+				insertIndex = findMethodInsertIndex(members, fNode.getStartPosition());
+			} else {
+				insertIndex = members.size();
+			}
+			ListRewrite listRewriter = rewrite.getListRewrite(newTypeDecl, property);
+			listRewriter.insertAt(newStub, insertIndex, null);
+
+			return rewrite;
+		}
+		return null;
+	}
+

@@ -1,0 +1,41 @@
+	/*(non-Javadoc)
+	 * @see org.eclipse.jdt.internal.ui.text.correction.ASTRewriteCorrectionProposal#getRewrite()
+	 */
+	@Override
+	protected ASTRewrite getRewrite() {
+		IBinding binding = fName.resolveBinding();
+		CompilationUnit root = (CompilationUnit)fName.getRoot();
+		ASTRewrite rewrite;
+		if (binding.getKind() == IBinding.METHOD) {
+			IMethodBinding decl = ((IMethodBinding)binding).getMethodDeclaration();
+			ASTNode declaration = root.findDeclaringNode(decl);
+			rewrite = ASTRewrite.create(root.getAST());
+			rewrite.remove(declaration, null);
+		} else if (binding.getKind() == IBinding.TYPE) {
+			ITypeBinding decl = ((ITypeBinding)binding).getTypeDeclaration();
+			ASTNode declaration = root.findDeclaringNode(decl);
+			rewrite = ASTRewrite.create(root.getAST());
+			rewrite.remove(declaration, null);
+		} else if (binding.getKind() == IBinding.VARIABLE) {
+			// needs full AST
+			CompilationUnit completeRoot = SharedASTProvider.getAST(getCompilationUnit(), SharedASTProvider.WAIT_YES, null);
+
+			SimpleName nameNode = (SimpleName)NodeFinder.perform(completeRoot, fName.getStartPosition(), fName.getLength());
+
+			rewrite = ASTRewrite.create(completeRoot.getAST());
+			SimpleName[] references = LinkedNodeFinder.findByBinding(completeRoot, nameNode.resolveBinding());
+			for (int i = 0; i < references.length; i++) {
+				removeVariableReferences(rewrite, references[i]);
+			}
+
+			IVariableBinding bindingDecl = ((IVariableBinding)nameNode.resolveBinding()).getVariableDeclaration();
+			ASTNode declaringNode = completeRoot.findDeclaringNode(bindingDecl);
+			if (declaringNode instanceof SingleVariableDeclaration) {
+				removeParamTag(rewrite, (SingleVariableDeclaration)declaringNode);
+			}
+		} else {
+			throw new IllegalArgumentException("Unexpected binding"); //$NON-NLS-1$
+		}
+		return rewrite;
+	}
+

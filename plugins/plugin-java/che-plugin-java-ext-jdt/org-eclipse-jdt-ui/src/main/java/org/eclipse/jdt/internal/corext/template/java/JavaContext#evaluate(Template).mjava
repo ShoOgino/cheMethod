@@ -1,0 +1,40 @@
+	/*
+	 * @see TemplateContext#evaluate(Template template)
+	 */
+	@Override
+	public TemplateBuffer evaluate(Template template) throws BadLocationException, TemplateException {
+		clear();
+
+		if (!canEvaluate(template))
+			throw new TemplateException(JavaTemplateMessages.Context_error_cannot_evaluate);
+
+		TemplateTranslator translator = new TemplateTranslator() {
+			@Override
+			protected TemplateVariable createVariable(TemplateVariableType type, String name, int[] offsets) {
+//				TemplateVariableResolver resolver= getContextType().getResolver(type.getName());
+//				return resolver.createVariable();
+
+				MultiVariable variable = new JavaVariable(type, name, offsets);
+				fVariables.put(name, variable);
+				return variable;
+			}
+		};
+		TemplateBuffer buffer = translator.translate(template);
+
+		getContextType().resolve(buffer, this);
+
+		rewriteImports();
+
+//		IPreferenceStore prefs = JavaPlugin.getDefault().getPreferenceStore();
+		boolean useCodeFormatter = true; //prefs.getBoolean(PreferenceConstants.TEMPLATES_USE_CODEFORMATTER);
+
+		IJavaProject project = getJavaProject();
+		JavaFormatter formatter =
+				new JavaFormatter(TextUtilities.getDefaultLineDelimiter(getDocument()), getIndentation(), useCodeFormatter, project);
+		formatter.format(buffer, this);
+
+		clear();
+
+		return buffer;
+	}
+

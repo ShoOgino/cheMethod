@@ -1,0 +1,27 @@
+	public static void addUnnecessaryThrownExceptionProposal(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+		ASTNode selectedNode= problem.getCoveringNode(context.getASTRoot());
+		selectedNode= ASTNodes.getNormalizedNode(selectedNode);
+		if (selectedNode == null || selectedNode.getLocationInParent() != MethodDeclaration.THROWN_EXCEPTION_TYPES_PROPERTY) {
+			return;
+		}
+		MethodDeclaration decl= (MethodDeclaration) selectedNode.getParent();
+		IMethodBinding binding= decl.resolveBinding();
+		if (binding != null) {
+			List<Type> thrownExceptions= decl.thrownExceptionTypes();
+			int index= thrownExceptions.indexOf(selectedNode);
+			if (index == -1) {
+				return;
+			}
+			ChangeDescription[] desc= new ChangeDescription[thrownExceptions.size()];
+			desc[index]= new RemoveDescription();
+
+			ICompilationUnit cu= context.getCompilationUnit();
+			String label= CorrectionMessages.LocalCorrectionsSubProcessor_unnecessarythrow_description;
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_OBJS_EXCEPTION);
+
+			proposals.add(new ChangeMethodSignatureProposal(label, cu, selectedNode, binding, null, desc, IProposalRelevance.UNNECESSARY_THROW, image));
+		}
+
+		JavadocTagsSubProcessor.getUnusedAndUndocumentedParameterOrExceptionProposals(context, problem, proposals);
+	}
+

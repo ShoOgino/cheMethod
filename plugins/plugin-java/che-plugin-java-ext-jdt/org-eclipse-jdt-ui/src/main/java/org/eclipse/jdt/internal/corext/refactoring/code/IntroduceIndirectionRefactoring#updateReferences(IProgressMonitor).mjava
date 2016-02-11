@@ -1,0 +1,83 @@
+	private RefactoringStatus updateReferences(IProgressMonitor monitor) throws CoreException {
+
+		RefactoringStatus result= new RefactoringStatus();
+
+		monitor.beginTask("", 90); //$NON-NLS-1$
+
+		if (monitor.isCanceled())
+			throw new OperationCanceledException();
+
+		IMethod[] ripple= RippleMethodFinder2.getRelatedMethods(fTargetMethod, false, new NoOverrideProgressMonitor(monitor, 10), null);
+
+		if (monitor.isCanceled())
+			throw new OperationCanceledException();
+
+		SearchResultGroup[] references= Checks.excludeCompilationUnits(getReferences(ripple, new NoOverrideProgressMonitor(monitor, 10), result), result);
+
+		if (result.hasFatalError())
+			return result;
+
+		result.merge(Checks.checkCompileErrorsInAffectedFiles(references));
+
+		if (monitor.isCanceled())
+			throw new OperationCanceledException();
+
+		int ticksPerCU= references.length == 0 ? 0 : 70 / references.length;
+
+		for (int i= 0; i < references.length; i++) {
+			SearchResultGroup group= references[i];
+			SearchMatch[] searchResults= group.getSearchResults();
+			CompilationUnitRewrite currentCURewrite= getCachedCURewrite(group.getCompilationUnit());
+
+			for (int j= 0; j < searchResults.length; j++) {
+
+				SearchMatch match= searchResults[j];
+				if (match.isInsideDocComment())
+					continue;
+
+				IMember enclosingMember= (IMember) match.getElement();
+				ASTNode target= getSelectedNode(group.getCompilationUnit(), currentCURewrite.getRoot(), match.getOffset(), match.getLength());
+
+				if (target instanceof SuperMethodInvocation) {
+					// Cannot retarget calls to super - add a warning
+					result.merge(createWarningAboutCall(enclosingMember, target, RefactoringCoreMessages.IntroduceIndirectionRefactoring_call_warning_super_keyword));
+					continue;
+				}
+
+				Assert.isTrue(target instanceof MethodInvocation, "Element of call should be a MethodInvocation."); //$NON-NLS-1$
+
+				MethodInvocation invocation= (MethodInvocation) target;
+				ITypeBinding typeBinding= getExpressionType(invocation);
+
+				if (fIntermediaryFirstParameterType == null) {
+					// no highest type yet
+					fIntermediaryFirstParameterType= typeBinding.getTypeDeclaration();
+				} else {
+					// check if current type is higher
+					result.merge(findCommonParent(typeBinding.getTypeDeclaration()));
+				}
+
+				if (result.hasFatalError())
+					return result;
+
+				// create an edit for this particular call
+				result.merge(updateMethodInvocation(invocation, enclosingMember, currentCURewrite));
+
+				// does call see the intermediary method?
+				// => increase visibility of the type of the intermediary method.
+				result.merge(adjustVisibility(fIntermediaryType, enclosingMember.getDeclaringType(), new NoOverrideProgressMonitor(monitor, 0)));
+
+				if (monitor.isCanceled())
+					throw new OperationCanceledException();
+			}
+
+			if (!isRewriteKept(group.getCompilationUnit()))
+				createChangeAndDiscardRewrite(group.getCompilationUnit());
+
+			monitor.worked(ticksPerCU);
+		}
+
+		monitor.done();
+		return result;
+	}
+

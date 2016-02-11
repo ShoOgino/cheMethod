@@ -1,0 +1,49 @@
+	/**
+	 * Returns a path to the source attachment for the given library, or
+	 * an empty path if none.
+	 *
+	 * @param libLocation
+	 *         the {@link java.io.File} location of the library to find the source for
+	 * @return a path to the source attachment for the given library, or
+	 * an empty path if none
+	 */
+	protected IPath getDefaultSystemLibrarySource(File libLocation) {
+		File parent = libLocation.getParentFile();
+		while (parent != null) {
+			File parentsrc = new File(parent, SRC_JAR);
+			if (parentsrc.isFile()) {
+				setDefaultRootPath(SRC);
+				return new Path(parentsrc.getPath());
+			}
+			parentsrc = new File(parent, SRC_ZIP);
+			if (parentsrc.isFile()) {
+				setDefaultRootPath(""); //$NON-NLS-1$
+				return new Path(parentsrc.getPath());
+			}
+			parent = parent.getParentFile();
+		}
+		// if we didn't find any of the normal source files, look for J9 source
+		IPath result = checkForJ9LibrarySource(libLocation);
+		if (result != null) {
+			return result;
+		}
+		// check for <lib>-src.jar pattern
+		IPath libName = new Path(libLocation.getName());
+		String extension = libName.getFileExtension();
+		String prefix = libName.removeFileExtension().lastSegment();
+		if (extension != null) {
+			IPath srcPath = new Path(libLocation.getPath());
+			srcPath = srcPath.removeLastSegments(1);
+			StringBuffer buf = new StringBuffer();
+			buf.append(prefix);
+			buf.append("-src."); //$NON-NLS-1$
+			buf.append(extension);
+			srcPath = srcPath.append(buf.toString());
+			if (srcPath.toFile().exists()) {
+				return srcPath;
+			}
+		}
+		setDefaultRootPath(""); //$NON-NLS-1$
+		return Path.EMPTY;
+	}
+

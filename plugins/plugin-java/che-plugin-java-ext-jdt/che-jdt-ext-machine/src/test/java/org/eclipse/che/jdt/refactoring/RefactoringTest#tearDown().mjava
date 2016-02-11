@@ -1,0 +1,36 @@
+	/**
+	 * Removes contents of {@link #getPackageP()}, of {@link #getRoot()} (except for p) and of the
+	 * Java project (except for src and the JRE library).
+	 *
+	 * @throws Exception in case of errors
+	 */
+	protected void tearDown() throws Exception {
+		refreshFromLocal();
+		performDummySearch();
+
+		final boolean pExists = getPackageP().exists();
+		if (pExists) {
+			tryDeletingAllJavaChildren(getPackageP());
+			tryDeletingAllNonJavaChildResources(getPackageP());
+		}
+
+		if (getRoot().exists()) {
+			IJavaElement[] packages = getRoot().getChildren();
+			for (int i = 0; i < packages.length; i++) {
+				IPackageFragment pack = (IPackageFragment)packages[i];
+				if (!pack.equals(getPackageP()) && pack.exists() && !pack.isReadOnly())
+					if (pack.isDefaultPackage())
+						JavaProjectHelper.deletePackage(pack); // also delete packages with subpackages
+					else
+						JavaProjectHelper.delete(pack.getResource()); // also delete packages with subpackages
+			}
+			// Restore package 'p'
+			if (!pExists)
+				getRoot().createPackageFragment("p", true, null);
+
+			tryDeletingAllNonJavaChildResources(getRoot());
+		}
+
+		restoreTestProject();
+	}
+

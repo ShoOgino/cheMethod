@@ -1,0 +1,43 @@
+	/**
+	 * Updates textual matches for fields.
+	 *
+	 * Strategy for matching text matches: Match and replace all fully qualified
+	 * field names, but non-qualified field names only iff there are no fields
+	 * which have the same original, but a different new name. Don't add java
+	 * references; duplicate edits may be created but do not matter.
+	 * @param manager text change manager
+	 * @param monitor progress monitor
+	 * @throws CoreException if updating failed
+	 */
+	private void addSimilarElementsTextualUpdates(TextChangeManager manager, IProgressMonitor monitor) throws CoreException {
+
+		final Map<String, String> simpleNames= new HashMap<String, String>();
+		final List<String> forbiddenSimpleNames= new ArrayList<String>();
+
+		for (Iterator<IJavaElement> iter= fFinalSimilarElementToName.keySet().iterator(); iter.hasNext();) {
+			final IJavaElement element= iter.next();
+			if (element instanceof IField) {
+
+				if (forbiddenSimpleNames.contains(element.getElementName()))
+					continue;
+
+				final String registeredNewName= simpleNames.get(element.getElementName());
+				final String newNameToCheck= fFinalSimilarElementToName.get(element);
+				if (registeredNewName == null)
+					simpleNames.put(element.getElementName(), newNameToCheck);
+				else if (!registeredNewName.equals(newNameToCheck))
+					forbiddenSimpleNames.add(element.getElementName());
+			}
+		}
+
+		for (Iterator<IJavaElement> iter= fFinalSimilarElementToName.keySet().iterator(); iter.hasNext();) {
+			final IJavaElement element= iter.next();
+			if (element instanceof IField) {
+				final IField field= (IField) element;
+				final String newName= fFinalSimilarElementToName.get(field);
+				TextMatchUpdater.perform(monitor, RefactoringScopeFactory.create(field), field.getElementName(), field.getDeclaringType().getFullyQualifiedName(), newName, manager,
+						new SearchResultGroup[0], forbiddenSimpleNames.contains(field.getElementName()));
+			}
+		}
+	}
+

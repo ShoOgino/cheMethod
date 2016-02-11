@@ -1,0 +1,51 @@
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void rewriteAST(CompilationUnitRewrite cuRewrite, LinkedProposalModel model) throws CoreException {
+		IMethodBinding[] unimplementedMethods = getUnimplementedMethods(fTypeNode);
+		if (unimplementedMethods.length == 0)
+			return;
+
+		ImportRewriteContext context =
+				new ContextSensitiveImportRewriteContext((CompilationUnit)fTypeNode.getRoot(), fTypeNode.getStartPosition(),
+														 cuRewrite.getImportRewrite());
+		ASTRewrite rewrite = cuRewrite.getASTRewrite();
+		ICompilationUnit unit = cuRewrite.getCu();
+		CodeGenerationSettings settings = JavaPreferencesSettings.getCodeGenerationSettings(unit.getJavaProject());
+
+		ListRewrite listRewrite;
+
+		if (fTypeNode instanceof AnonymousClassDeclaration) {
+			AnonymousClassDeclaration decl = (AnonymousClassDeclaration)fTypeNode;
+			listRewrite = rewrite.getListRewrite(decl, AnonymousClassDeclaration.BODY_DECLARATIONS_PROPERTY);
+			settings.createComments = false;
+		} else if (fTypeNode instanceof AbstractTypeDeclaration) {
+			AbstractTypeDeclaration decl = (AbstractTypeDeclaration)fTypeNode;
+			listRewrite = rewrite.getListRewrite(decl, decl.getBodyDeclarationsProperty());
+		} else if (fTypeNode instanceof EnumConstantDeclaration) {
+			EnumConstantDeclaration enumConstantDeclaration = (EnumConstantDeclaration)fTypeNode;
+			AnonymousClassDeclaration anonymousClassDeclaration = enumConstantDeclaration.getAnonymousClassDeclaration();
+			if (anonymousClassDeclaration == null) {
+				anonymousClassDeclaration = rewrite.getAST().newAnonymousClassDeclaration();
+				rewrite.set(enumConstantDeclaration, EnumConstantDeclaration.ANONYMOUS_CLASS_DECLARATION_PROPERTY,
+							anonymousClassDeclaration, createTextEditGroup(
+						CorrectionMessages.AddUnimplementedMethodsOperation_AddMissingMethod_group, cuRewrite));
+			}
+			listRewrite = rewrite.getListRewrite(anonymousClassDeclaration, AnonymousClassDeclaration.BODY_DECLARATIONS_PROPERTY);
+			settings.createComments = false;
+		} else {
+			Assert.isTrue(false, "Unknown type node"); //$NON-NLS-1$
+			return;
+		}
+
+		ImportRewrite imports = cuRewrite.getImportRewrite();
+
+		for (int i = 0; i < unimplementedMethods.length; i++) {
+			IMethodBinding curr = unimplementedMethods[i];
+			MethodDeclaration newMethodDecl = StubUtility2
+					.createImplementationStub(unit, rewrite, imports, context, curr, curr.getDeclaringClass().getName(), settings, false);
+			listRewrite.insertLast(newMethodDecl, createTextEditGroup(CorrectionMessages.AddUnimplementedMethodsOperation_AddMissingMethod_group, cuRewrite));
+		}
+	}
+

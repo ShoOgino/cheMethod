@@ -1,0 +1,56 @@
+    /**
+     * Creates a regular expression which will match the given wildcard pattern
+     * <p/>
+     * Backslashes can be used to escape a wildcard character and make it a
+     * literal; likewise, backslashes before wildcard characters can be escaped.
+     */
+    private static String createRegExpStringForWildcardPattern(String wildcardPattern) {
+        String escaped = regexpWildcardEscape.replace(wildcardPattern, "\\$&");
+
+        /**
+         * We have already run the pattern through the naive regex escape which
+         * escapes all characters except the * and ?. This leads to double escaped \
+         * characters that we have to inspect to determine if the user escaped the
+         * wildcard or if we should replace it with it's regex equivalent.
+         *
+         *  NOTE: * is replaced with \S+ (matches all non-whitespace characters) and
+         * ? is replaced with a single \S to match any non-whitespace
+         */
+        RegExp mimicLookbehind = RegExp.compile("([\\\\]*)([?*])", "g");
+        StringBuilder wildcardStr = new StringBuilder(escaped);
+
+        for (MatchResult match = mimicLookbehind.exec(wildcardStr.toString()); match != null;
+             match = mimicLookbehind.exec(wildcardStr.toString())) {
+            // in some browsers an optional group is null, in others its empty string
+            if (match.getGroup(1) != null && !match.getGroup(1).isEmpty()) {
+                // We undo double-escaping of backslashes performed by the naive escape
+                int offset = match.getGroup(1).length() / 2;
+                wildcardStr.delete(match.getIndex(), match.getIndex() + offset);
+        /*
+         * An even number of slashes means the wildcard was not escaped so we
+         * must replace it with its regex equivalent.
+         */
+                if (offset % 2 == 0) {
+                    if (match.getGroup(2).equals("?")) {
+                        wildcardStr.replace(match.getIndex() + offset, match.getIndex() + offset + 1, "\\S");
+                        // we added 1 more character, so we remove 1 less from the index
+                        offset -= 1;
+                    } else {
+                        wildcardStr.replace(match.getIndex() + offset, match.getIndex() + offset + 1, "\\S+");
+                        // we added 2 characters, so we need to remove 2 less from the index
+                        offset -= 2;
+                    }
+                }
+                mimicLookbehind.setLastIndex(mimicLookbehind.getLastIndex() - offset);
+            } else if (match.getGroup(2).equals("?")) {
+                wildcardStr.replace(match.getIndex(), match.getIndex() + 1, "\\S");
+                mimicLookbehind.setLastIndex(mimicLookbehind.getLastIndex() + 1);
+            } else {
+                wildcardStr.replace(match.getIndex(), match.getIndex() + 1, "\\S+");
+                mimicLookbehind.setLastIndex(mimicLookbehind.getLastIndex() + 2);
+            }
+        }
+
+        return wildcardStr.toString();
+    }
+

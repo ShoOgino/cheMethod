@@ -1,0 +1,43 @@
+	public static void getUnusedAndUndocumentedParameterOrExceptionProposals(IInvocationContext context, IProblemLocation problem,
+																			 Collection<ICommandAccess> proposals) {
+		ICompilationUnit cu = context.getCompilationUnit();
+		IJavaProject project = cu.getJavaProject();
+
+		if (!JavaCore.ENABLED.equals(project.getOption(JavaCore.COMPILER_DOC_COMMENT_SUPPORT, true))) {
+			return;
+		}
+
+		int problemId = problem.getProblemId();
+		boolean isUnusedTypeParam = problemId == IProblem.UnusedTypeParameter;
+		boolean isUnusedParam = problemId == IProblem.ArgumentIsNeverUsed || isUnusedTypeParam;
+		String key = isUnusedParam ? JavaCore.COMPILER_PB_UNUSED_PARAMETER_INCLUDE_DOC_COMMENT_REFERENCE
+								   : JavaCore.COMPILER_PB_UNUSED_DECLARED_THROWN_EXCEPTION_INCLUDE_DOC_COMMENT_REFERENCE;
+
+		if (!JavaCore.ENABLED.equals(project.getOption(key, true))) {
+			return;
+		}
+
+		ASTNode node = problem.getCoveringNode(context.getASTRoot());
+		if (node == null) {
+			return;
+		}
+
+		BodyDeclaration bodyDecl = ASTResolving.findParentBodyDeclaration(node);
+		if (bodyDecl == null || ASTResolving.getParentMethodOrTypeBinding(bodyDecl) == null) {
+			return;
+		}
+
+		String label;
+		if (isUnusedTypeParam) {
+			label = CorrectionMessages.JavadocTagsSubProcessor_document_type_parameter_description;
+		} else if (isUnusedParam) {
+			label = CorrectionMessages.JavadocTagsSubProcessor_document_parameter_description;
+		} else {
+			node = ASTNodes.getNormalizedNode(node);
+			label = CorrectionMessages.JavadocTagsSubProcessor_document_exception_description;
+		}
+		ASTRewriteCorrectionProposal proposal = new AddMissingJavadocTagProposal(label, context.getCompilationUnit(), bodyDecl, node,
+																				 IProposalRelevance.DOCUMENT_UNUSED_ITEM);
+		proposals.add(proposal);
+	}
+

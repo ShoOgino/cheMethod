@@ -1,0 +1,29 @@
+    /*
+ * Internal findType with instanciated name lookup
+ */
+    IType findType(String fullyQualifiedName, NameLookup lookup, boolean considerSecondaryTypes, IProgressMonitor progressMonitor)
+            throws JavaModelException {
+        NameLookup.Answer answer = lookup.findType(
+                fullyQualifiedName,
+                false,
+                org.eclipse.jdt.internal.core.NameLookup.ACCEPT_ALL,
+                considerSecondaryTypes,
+                true, /* wait for indexes (only if consider secondary types)*/
+                false/*don't check restrictions*/,
+                progressMonitor);
+        if (answer == null) {
+            // try to find enclosing type
+            int lastDot = fullyQualifiedName.lastIndexOf('.');
+            if (lastDot == -1) return null;
+            IType type = findType(fullyQualifiedName.substring(0, lastDot), lookup, considerSecondaryTypes, progressMonitor);
+            if (type != null) {
+                type = type.getType(fullyQualifiedName.substring(lastDot + 1));
+                if (!type.exists()) {
+                    return null;
+                }
+            }
+            return type;
+        }
+        return answer.type;
+    }
+

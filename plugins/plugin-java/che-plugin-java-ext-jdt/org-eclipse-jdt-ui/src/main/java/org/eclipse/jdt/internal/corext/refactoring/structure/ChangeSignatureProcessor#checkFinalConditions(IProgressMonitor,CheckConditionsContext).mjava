@@ -1,0 +1,75 @@
+	/* (non-Javadoc)
+	 * @see org.eclipse.ltk.core.refactoring.participants.RefactoringProcessor#checkFinalConditions(org.eclipse.core.runtime.IProgressMonitor, org.eclipse.ltk.core.refactoring.participants.CheckConditionsContext)
+	 */
+	@Override
+	public RefactoringStatus checkFinalConditions(IProgressMonitor pm, CheckConditionsContext context) throws CoreException,
+																											  OperationCanceledException {
+		try {
+			pm.beginTask(RefactoringCoreMessages.ChangeSignatureRefactoring_checking_preconditions, 8);
+			RefactoringStatus result= new RefactoringStatus();
+			clearManagers();
+			fBaseCuRewrite.clearASTAndImportRewrites();
+			fBaseCuRewrite.getASTRewrite().setTargetSourceRangeComputer(new TightSourceRangeComputer());
+
+			if (isSignatureSameAsInitial())
+				return RefactoringStatus.createFatalErrorStatus(RefactoringCoreMessages.ChangeSignatureRefactoring_unchanged);
+			result.merge(checkSignature(true));
+			if (result.hasFatalError())
+				return result;
+
+			if (fDelegateUpdating && isSignatureClashWithInitial())
+				result.merge(RefactoringStatus.createErrorStatus(
+						RefactoringCoreMessages.ChangeSignatureRefactoring_old_and_new_signatures_not_sufficiently_different));
+
+			String binaryRefsDescription= Messages.format(RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description,
+														  BasicElementLabels.getJavaElementName(getMethodName()));
+			ReferencesInBinaryContext binaryRefs= new ReferencesInBinaryContext(binaryRefsDescription);
+
+			fRippleMethods= RippleMethodFinder2.getRelatedMethods(fMethod, binaryRefs, new SubProgressMonitor(pm, 1), null);
+			result.merge(checkVarargs());
+			if (result.hasFatalError())
+				return result;
+
+			fOccurrences= findOccurrences(new SubProgressMonitor(pm, 1), binaryRefs, result);
+			binaryRefs.addErrorIfNecessary(result);
+
+			result.merge(checkVisibilityChanges());
+			result.merge(checkTypeVariables());
+
+			//TODO:
+			// We need a common way of dealing with possible compilation errors for all occurrences,
+			// including visibility problems, shadowing and missing throws declarations.
+
+			if (! isOrderSameAsInitial())
+				result.merge(checkReorderings(new SubProgressMonitor(pm, 1)));
+			else
+				pm.worked(1);
+
+			//TODO (bug 58616): check whether changed signature already exists somewhere in the ripple,
+			// - error if exists
+			// - warn if exists with different parameter types (may cause overloading)
+
+			if (! areNamesSameAsInitial())
+				result.merge(checkRenamings(new SubProgressMonitor(pm, 1)));
+			else
+				pm.worked(1);
+			if (result.hasFatalError())
+				return result;
+
+//			resolveTypesWithoutBindings(new SubProgressMonitor(pm, 1)); // already done in checkSignature(true)
+
+			createChangeManager(new SubProgressMonitor(pm, 1), result);
+			fCachedTypeHierarchy= null;
+
+			if (mustAnalyzeAstOfDeclaringCu())
+				result.merge(checkCompilationofDeclaringCu()); //TODO: should also check in ripple methods (move into createChangeManager)
+			if (result.hasFatalError())
+				return result;
+
+			Checks.addModifiedFilesToChecker(getAllFilesToModify(), context);
+			return result;
+		} finally {
+			pm.done();
+		}
+	}
+

@@ -1,0 +1,115 @@
+    public static IJavaElement parseURI(String ssp, JavaProject project) {
+//        String ssp= uri.getSchemeSpecificPart();
+        String[] segments= ssp.split(String.valueOf(LINK_SEPARATOR));
+
+        // replace '[' manually, since URI confuses it for an IPv6 address as per RFC 2732:
+        IJavaElement element= JavaCore.create(segments[1].replace(LINK_BRACKET_REPLACEMENT, '['));
+
+        if (segments.length > 2) {
+            String refTypeName= segments[2];
+            if (refTypeName.indexOf('.') == -1) {
+                try {
+                    ITypeParameter resolvedTypeVariable= resolveTypeVariable(element, refTypeName);
+                    if (resolvedTypeVariable != null)
+                        return resolvedTypeVariable;
+                } catch (JavaModelException e) {
+                    LOG.error(e.getMessage(), e);
+                }
+            }
+            if (element instanceof IAnnotation) {
+                element= element.getParent();
+            }
+
+            if (element instanceof ILocalVariable) {
+                element= ((ILocalVariable) element).getDeclaringMember();
+            } else if (element instanceof ITypeParameter) {
+                element= ((ITypeParameter) element).getDeclaringMember();
+            }
+            if (element instanceof IMember && !(element instanceof IType)) {
+                element= ((IMember) element).getDeclaringType();
+            }
+
+            if (element instanceof IPackageFragment) {
+                try {
+                    IPackageFragment root= (IPackageFragment) element;
+                    element= resolvePackageInfoType(root, refTypeName);
+                    if (element == null) {
+                        // find it as package
+                        IJavaProject javaProject= root.getJavaProject();
+                        return JavaModelUtil.findTypeContainer(javaProject, refTypeName);
+                    }
+                } catch (JavaModelException e) {
+                    LOG.error(e.getMessage(), e);
+                }
+            }
+
+            if (element instanceof IType) {
+                try {
+                    IType type= (IType) element;
+                    if (refTypeName.length() > 0) {
+                        type= resolveType(type, refTypeName);
+                        if (type == null) {
+                            IPackageFragment pack= JavaModelUtil.getPackageFragmentRoot(element).getPackageFragment(refTypeName);
+                            if (pack.exists())
+                                return pack;
+                        }
+                    }
+                    if (type != null) {
+                        element= type;
+                        if (segments.length > 3) {
+                            String refMemberName= segments[3];
+                            if (segments.length > 4) {
+                                String[] paramSignatures= new String[segments[4].length() == 0 ? 0 : segments.length - 4];
+                                for (int i= 0; i < paramSignatures.length; i++) {
+                                    paramSignatures[i]= Signature.createTypeSignature(segments[i + 4], false);
+                                }
+                                IMethod method= type.getMethod(refMemberName, paramSignatures);
+                                IMethod[] methods= type.findMethods(method);
+                                if (methods != null) {
+                                    return methods[0];
+                                } else {
+                                    //TODO: methods whose signature contains type parameters can not be found
+                                    // easily, since the Javadoc references are erasures
+
+                                    //Shortcut: only check name and parameter count:
+                                    methods= type.getMethods();
+                                    for (int i= 0; i < methods.length; i++) {
+                                        method= methods[i];
+                                        if (method.getElementName().equals(refMemberName) && method.getNumberOfParameters() == paramSignatures.length)
+                                            return method;
+                                    }
+
+//                                    // reference can also point to method from supertype:
+//                                    ITypeHierarchy hierarchy= SuperTypeHierarchyCache.getTypeHierarchy(type);
+//                                    method= JavaModelUtil.findMethodInHierarchy(hierarchy, type, refMemberName, paramSignatures, false);
+//                                    if (method != null)
+//                                        return method;
+                                }
+                            } else {
+                                IField field= type.getField(refMemberName);
+                                if (field.exists()) {
+                                    return field;
+                                } else {
+                                    IMethod[] methods= type.getMethods();
+                                    for (int i= 0; i < methods.length; i++) {
+                                        IMethod method= methods[i];
+                                        if (method.getElementName().equals(refMemberName))
+                                            return method;
+                                    }
+                                }
+                            }
+
+                        }
+                    } else {
+                        // FIXME: either remove or show dialog
+//						JavaPlugin.logErrorMessage("JavaElementLinks could not resolve " + uri); //$NON-NLS-1$
+                    }
+                    return type;
+                } catch (JavaModelException e) {
+                    LOG.error(e.getMessage(), e);
+                }
+            }
+        }
+        return element;
+    }
+

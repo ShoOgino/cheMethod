@@ -1,0 +1,75 @@
+	/**
+	 * Adds a SuppressWarnings proposal if possible and returns whether parent nodes should be processed or not (and with what relevance).
+	 *
+	 * @param cu the compilation unit
+	 * @param node the node on which to add a SuppressWarning token
+	 * @param warningToken the warning token to add
+	 * @param relevance the proposal's relevance
+	 * @param proposals collector to which the proposal should be added
+	 * @return <code>0</code> if no further proposals should be added to parent nodes, or the relevance of the next proposal
+	 *
+	 * @since 3.6
+	 */
+	private static int addSuppressWarningsProposalIfPossible(ICompilationUnit cu, ASTNode node, String warningToken, int relevance,
+															 Collection<ICommandAccess> proposals) {
+
+		ChildListPropertyDescriptor property;
+		String name;
+		boolean isLocalVariable = false;
+		switch (node.getNodeType()) {
+			case ASTNode.SINGLE_VARIABLE_DECLARATION:
+				property = SingleVariableDeclaration.MODIFIERS2_PROPERTY;
+				name = ((SingleVariableDeclaration)node).getName().getIdentifier();
+				isLocalVariable = true;
+				break;
+			case ASTNode.VARIABLE_DECLARATION_STATEMENT:
+				property = VariableDeclarationStatement.MODIFIERS2_PROPERTY;
+				name = getFirstFragmentName(((VariableDeclarationStatement)node).fragments());
+				isLocalVariable = true;
+				break;
+			case ASTNode.VARIABLE_DECLARATION_EXPRESSION:
+				property = VariableDeclarationExpression.MODIFIERS2_PROPERTY;
+				name = getFirstFragmentName(((VariableDeclarationExpression)node).fragments());
+				isLocalVariable = true;
+				break;
+			case ASTNode.TYPE_DECLARATION:
+				property = TypeDeclaration.MODIFIERS2_PROPERTY;
+				name = ((TypeDeclaration)node).getName().getIdentifier();
+				break;
+			case ASTNode.ANNOTATION_TYPE_DECLARATION:
+				property= AnnotationTypeDeclaration.MODIFIERS2_PROPERTY;
+				name= ((AnnotationTypeDeclaration) node).getName().getIdentifier();
+				break;
+			case ASTNode.ENUM_DECLARATION:
+				property= EnumDeclaration.MODIFIERS2_PROPERTY;
+				name= ((EnumDeclaration) node).getName().getIdentifier();
+				break;
+			case ASTNode.FIELD_DECLARATION:
+				property= FieldDeclaration.MODIFIERS2_PROPERTY;
+				name= getFirstFragmentName(((FieldDeclaration) node).fragments());
+				break;
+			// case ASTNode.INITIALIZER: not used, because Initializer cannot have annotations
+			case ASTNode.METHOD_DECLARATION:
+				property= MethodDeclaration.MODIFIERS2_PROPERTY;
+				name= ((MethodDeclaration) node).getName().getIdentifier() + "()"; //$NON-NLS-1$
+				break;
+			case ASTNode.ANNOTATION_TYPE_MEMBER_DECLARATION:
+				property= AnnotationTypeMemberDeclaration.MODIFIERS2_PROPERTY;
+				name= ((AnnotationTypeMemberDeclaration) node).getName().getIdentifier() + "()"; //$NON-NLS-1$
+				break;
+			case ASTNode.ENUM_CONSTANT_DECLARATION:
+				property= EnumConstantDeclaration.MODIFIERS2_PROPERTY;
+				name= ((EnumConstantDeclaration) node).getName().getIdentifier();
+				break;
+			default:
+				return relevance;
+		}
+
+		String label= Messages.format(CorrectionMessages.SuppressWarningsSubProcessor_suppress_warnings_label,
+									  new String[]{warningToken, BasicElementLabels.getJavaElementName(name)});
+		ASTRewriteCorrectionProposal proposal= new SuppressWarningsProposal(warningToken, label, cu, node, property, relevance);
+
+		proposals.add(proposal);
+		return isLocalVariable ? relevance - 1 : 0;
+	}
+

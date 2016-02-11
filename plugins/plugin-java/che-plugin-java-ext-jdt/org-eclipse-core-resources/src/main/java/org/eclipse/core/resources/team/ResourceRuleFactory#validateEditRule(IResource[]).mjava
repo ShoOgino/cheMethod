@@ -1,0 +1,31 @@
+	/**
+	 * Default implementation of <code>IResourceRuleFactory#validateEditRule</code>.
+	 * This default implementation returns a rule that combines the parents of
+	 * all read-only resources, or <code>null</code> if there are no read-only
+	 * resources.
+	 * <p>
+	 * Subclasses may override this method. The rule provided by an overriding
+	 * method must at least contain the rule from this default implementation.
+	 *
+	 * @see org.eclipse.core.runtime.jobs.ISchedulingRule#contains(org.eclipse.core.runtime.jobs.ISchedulingRule)
+	 * @see org.eclipse.core.resources.IResourceRuleFactory#validateEditRule(IResource[])
+	 */
+	public ISchedulingRule validateEditRule(IResource[] resources) {
+		if (resources.length == 0)
+			return null;
+		//optimize rule for single file
+		if (resources.length == 1)
+			return isReadOnly(resources[0]) ? parent(resources[0]) : null;
+		//need a lock on the parents of all read-only files
+		HashSet<ISchedulingRule> rules = new HashSet<ISchedulingRule>();
+		for (int i = 0; i < resources.length; i++)
+			if (isReadOnly(resources[i]))
+				rules.add(parent(resources[i]));
+		if (rules.isEmpty())
+			return null;
+		if (rules.size() == 1)
+			return rules.iterator().next();
+		ISchedulingRule[] ruleArray = rules.toArray(new ISchedulingRule[rules.size()]);
+		return new MultiRule(ruleArray);
+	}
+

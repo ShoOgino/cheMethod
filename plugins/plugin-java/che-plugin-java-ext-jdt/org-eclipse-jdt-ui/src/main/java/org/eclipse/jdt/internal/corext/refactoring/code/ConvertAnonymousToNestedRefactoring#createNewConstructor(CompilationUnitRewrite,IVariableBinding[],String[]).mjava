@@ -1,0 +1,104 @@
+    private MethodDeclaration createNewConstructor(CompilationUnitRewrite rewrite, IVariableBinding[] bindings, String[] fieldNames) throws
+																																	 JavaModelException {
+    	ClassInstanceCreation instanceCreation= (ClassInstanceCreation) fAnonymousInnerClassNode.getParent();
+
+    	if (instanceCreation.arguments().isEmpty() && bindings.length == 0)
+			return null;
+
+    	IJavaProject project= fCu.getJavaProject();
+        AST ast= rewrite.getAST();
+        ImportRewrite importRewrite= rewrite.getImportRewrite();
+        ASTRewrite astRewrite= rewrite.getASTRewrite();
+
+		MethodDeclaration newConstructor= ast.newMethodDeclaration();
+		newConstructor.setConstructor(true);
+		newConstructor.setJavadoc(null);
+		newConstructor.modifiers().addAll(ASTNodeFactory.newModifiers(ast, fVisibility));
+		newConstructor.setName(ast.newSimpleName(fClassName));
+		addLinkedPosition(KEY_TYPE_NAME, newConstructor.getName(), astRewrite, false);
+
+		newConstructor.setBody(ast.newBlock());
+
+		List<Statement> newStatements= newConstructor.getBody().statements();
+
+        List<SingleVariableDeclaration> newParameters= newConstructor.parameters();
+        List<String> newParameterNames= new ArrayList<String>();
+
+        // add parameters for elements passed with the instance creation
+        if (!instanceCreation.arguments().isEmpty()) {
+        	IMethodBinding constructorBinding= getSuperConstructorBinding();
+        	if (constructorBinding != null) {
+        		SuperConstructorInvocation superConstructorInvocation= ast.newSuperConstructorInvocation();
+    			ITypeBinding[] parameterTypes= constructorBinding.getParameterTypes();
+    	        String[][] parameterNames= StubUtility.suggestArgumentNamesWithProposals(project, constructorBinding);
+    	        for (int i= 0; i < parameterNames.length; i++) {
+    	        	String[] nameProposals= parameterNames[i];
+    	        	String paramName= nameProposals[0];
+
+    	    		SingleVariableDeclaration param= newParameterDeclaration(ast, importRewrite, paramName, parameterTypes[i]);
+    	    		newParameters.add(param);
+    	    		newParameterNames.add(paramName);
+
+    	    		SimpleName newSIArgument= ast.newSimpleName(paramName);
+					superConstructorInvocation.arguments().add(newSIArgument);
+
+					if (fLinkedProposalModel != null) {
+						LinkedProposalPositionGroup positionGroup= fLinkedProposalModel.getPositionGroup(KEY_PARAM_NAME_CONST+ String.valueOf(i), true);
+						positionGroup.addPosition(astRewrite.track(param.getName()), false);
+						positionGroup.addPosition(astRewrite.track(newSIArgument), false);
+	        	        for (int k= 0; k < nameProposals.length; k++) {
+	        	        	positionGroup.addProposal(nameProposals[k], null, nameProposals.length - k);
+						}
+					}
+    	        }
+    	        newStatements.add(superConstructorInvocation);
+        	}
+        }
+        // add parameters for all outer variables used
+        boolean useThisAccess= useThisForFieldAccess();
+        for (int i= 0; i < bindings.length; i++) {
+        	String baseName= StubUtility.getBaseName(bindings[i], project);
+        	String[] paramNameProposals= StubUtility
+					.getVariableNameSuggestions(NamingConventions.VK_PARAMETER, project, baseName, 0, newParameterNames, true);
+        	String paramName= paramNameProposals[0];
+
+        	SingleVariableDeclaration param= newParameterDeclaration(ast, importRewrite, paramName, bindings[i].getType());
+    		newParameters.add(param);
+    		newParameterNames.add(paramName);
+
+    		String fieldName= fieldNames[i];
+    		SimpleName fieldNameNode= ast.newSimpleName(fieldName);
+    		SimpleName paramNameNode= ast.newSimpleName(paramName);
+			newStatements.add(newFieldAssignment(ast, fieldNameNode, paramNameNode, useThisAccess || newParameterNames.contains(fieldName)));
+
+			if (fLinkedProposalModel != null) {
+				LinkedProposalPositionGroup positionGroup= fLinkedProposalModel.getPositionGroup(KEY_PARAM_NAME_EXT+ String.valueOf(i), true);
+				positionGroup.addPosition(astRewrite.track(param.getName()), false);
+				positionGroup.addPosition(astRewrite.track(paramNameNode), false);
+    	        for (int k= 0; k < paramNameProposals.length; k++) {
+    	        	positionGroup.addProposal(paramNameProposals[k], null, paramNameProposals.length - k);
+				}
+
+    	        fLinkedProposalModel.getPositionGroup(KEY_FIELD_NAME_EXT + i, true).addPosition(astRewrite.track(fieldNameNode), false);
+			}
+		}
+
+		addExceptionsToNewConstructor(newConstructor, importRewrite);
+
+		if (doAddComments()) {
+			try {
+				String[] allParamNames= newParameterNames.toArray(new String[newParameterNames.size()]);
+				String string= CodeGeneration
+						.getMethodComment(fCu, fClassName, fClassName, allParamNames, new String[0], null, new String[0], null,
+										  StubUtility.getLineDelimiterUsed(fCu));
+				if (string != null) {
+					Javadoc javadoc= (Javadoc) astRewrite.createStringPlaceholder(string, ASTNode.JAVADOC);
+					newConstructor.setJavadoc(javadoc);
+				}
+			} catch (CoreException exception) {
+				throw new JavaModelException(exception);
+			}
+		}
+		return newConstructor;
+	}
+

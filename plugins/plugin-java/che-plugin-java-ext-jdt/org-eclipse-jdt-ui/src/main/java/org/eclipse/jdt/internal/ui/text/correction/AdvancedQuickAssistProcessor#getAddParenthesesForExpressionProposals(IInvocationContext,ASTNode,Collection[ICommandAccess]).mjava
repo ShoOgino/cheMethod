@@ -1,0 +1,46 @@
+	private static boolean getAddParenthesesForExpressionProposals(IInvocationContext context, ASTNode coveringNode, Collection<ICommandAccess> resultingCollections) {
+		ASTNode node;
+
+		if (context.getSelectionLength() == 0) {
+			node= coveringNode;
+			while (node != null && !(node instanceof CastExpression) && !(node instanceof InfixExpression) && !(node instanceof InstanceofExpression) && !(node instanceof ConditionalExpression)) {
+				node= node.getParent();
+			}
+		} else {
+			node= context.getCoveredNode();
+		}
+
+		String label= null;
+		if (node instanceof CastExpression) {
+			label= CorrectionMessages.UnresolvedElementsSubProcessor_missingcastbrackets_description;
+		} else if (node instanceof InstanceofExpression) {
+			label= CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_instanceof_description;
+		} else if (node instanceof InfixExpression) {
+			InfixExpression infixExpression= (InfixExpression)node;
+			label= Messages.format(CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_description,
+								   infixExpression.getOperator().toString());
+		} else if (node instanceof ConditionalExpression) {
+			label= CorrectionMessages.AdvancedQuickAssistProcessor_putConditionalExpressionInParentheses;
+		} else {
+			return false;
+		}
+
+		if (node.getParent() instanceof ParenthesizedExpression)
+			return false;
+
+		if (resultingCollections == null)
+			return true;
+
+		AST ast= node.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+
+		ParenthesizedExpression parenthesizedExpression= ast.newParenthesizedExpression();
+		parenthesizedExpression.setExpression((Expression)rewrite.createCopyTarget(node));
+		rewrite.replace(node, parenthesizedExpression, null);
+
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
+		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.ADD_PARENTHESES_FOR_EXPRESSION, image);
+		resultingCollections.add(proposal);
+		return true;
+	}
+

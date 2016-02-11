@@ -1,0 +1,27 @@
+    private CompilationUnit getRecoveredAST(IDocument document, int offset, Document recoveredDocument) {
+        CompilationUnit ast = SharedASTProvider.getAST(fCompilationUnit, SharedASTProvider.WAIT_ACTIVE_ONLY, null);
+        if (ast != null) {
+            recoveredDocument.set(document.get());
+            return ast;
+        }
+
+        char[] content = document.get().toCharArray();
+
+        // clear prefix to avoid compile errors
+        int index = offset - 1;
+        while (index >= 0 && Character.isJavaIdentifierPart(content[index])) {
+            content[index] = ' ';
+            index--;
+        }
+
+        recoveredDocument.set(new String(content));
+
+        final CheASTParser parser = CheASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+        parser.setResolveBindings(true);
+        parser.setStatementsRecovery(true);
+        parser.setSource(content);
+        parser.setUnitName(fCompilationUnit.getElementName());
+        parser.setProject(fCompilationUnit.getJavaProject());
+        return (CompilationUnit)parser.createAST(new NullProgressMonitor());
+    }
+

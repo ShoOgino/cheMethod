@@ -1,0 +1,48 @@
+	@Override
+	Change doPerformReorg(IProgressMonitor pm) throws CoreException, OperationCanceledException {
+		String name;
+		String newName = getNewName();
+		if (newName == null)
+			name = getCu().getElementName();
+		else
+			name = newName;
+
+		// get current modification stamp
+		long currentStamp = IResource.NULL_STAMP;
+		IResource resource = getCu().getResource();
+		if (resource != null) {
+			currentStamp = resource.getModificationStamp();
+		}
+
+		IPackageFragment destination = getDestinationPackage();
+		fUndoable = !destination.exists() || !destination.getCompilationUnit(name).exists();
+
+		IPackageFragment[] createdPackages= null;
+		if (!destination.exists()) {
+			IPackageFragmentRoot packageFragmentRoot= (IPackageFragmentRoot) destination.getParent();
+			createdPackages= createDestination(packageFragmentRoot, destination, pm);
+		}
+
+		// perform the move and restore modification stamp
+		getCu().move(destination, null, newName, true, pm);
+		if (fStampToRestore != IResource.NULL_STAMP) {
+			ICompilationUnit moved= destination.getCompilationUnit(name);
+			IResource movedResource= moved.getResource();
+			if (movedResource != null) {
+				movedResource.revertModificationStamp(fStampToRestore);
+			}
+		}
+
+		if (fDeletePackages != null) {
+			for (int i= fDeletePackages.length - 1; i >= 0; i--) {
+				fDeletePackages[i].delete(true, pm);
+			}
+		}
+
+		if (fUndoable) {
+			return new MoveCompilationUnitChange(destination, getCu().getElementName(), getOldPackage(), currentStamp, createdPackages);
+		} else {
+			return null;
+		}
+	}
+

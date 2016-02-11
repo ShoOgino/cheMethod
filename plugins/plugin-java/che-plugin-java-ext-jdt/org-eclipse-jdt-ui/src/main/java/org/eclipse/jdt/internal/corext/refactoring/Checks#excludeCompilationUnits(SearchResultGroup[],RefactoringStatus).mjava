@@ -1,0 +1,35 @@
+	/**
+	 * From SearchResultGroup[] passed as the parameter
+	 * this method removes all those that correspond to a non-parsable ICompilationUnit
+	 * and returns it as a result.
+	 * @param grouped the array of search result groups from which non parsable compilation
+	 *  units are to be removed.
+	 * @param status a refactoring status to collect errors and problems
+	 * @return the array of search result groups
+	 * @throws JavaModelException
+	 */
+	public static SearchResultGroup[] excludeCompilationUnits(SearchResultGroup[] grouped, RefactoringStatus status) throws
+																													 JavaModelException {
+		List<SearchResultGroup> result= new ArrayList<SearchResultGroup>();
+		boolean wasEmpty= grouped.length == 0;
+		for (int i= 0; i < grouped.length; i++){
+			IResource resource= grouped[i].getResource();
+			IJavaElement element= JavaCore.create(resource);
+			if (! (element instanceof ICompilationUnit))
+				continue;
+			//XXX this is a workaround 	for a jcore feature that shows errors in cus only when you get the original element
+			ICompilationUnit cu= (ICompilationUnit)JavaCore.create(resource);
+			if (! cu.isStructureKnown()){
+				status.addError(Messages.format(RefactoringCoreMessages.Checks_cannot_be_parsed,
+												BasicElementLabels.getPathLabel(cu.getPath(), false)));
+				continue; //removed, go to the next one
+			}
+			result.add(grouped[i]);
+		}
+
+		if ((!wasEmpty) && result.isEmpty())
+			status.addFatalError(RefactoringCoreMessages.Checks_all_excluded);
+
+		return result.toArray(new SearchResultGroup[result.size()]);
+	}
+

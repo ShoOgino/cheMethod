@@ -1,0 +1,46 @@
+	private static ITypeBinding getQualifier(SimpleName selector) {
+		ASTNode parent= selector.getParent();
+		switch (parent.getNodeType()) {
+			case ASTNode.METHOD_INVOCATION:
+				MethodInvocation decl= (MethodInvocation) parent;
+				if (selector == decl.getName()) {
+					return getBinding(decl.getExpression());
+				}
+				return null;
+			case ASTNode.QUALIFIED_NAME:
+				QualifiedName qualifiedName= (QualifiedName) parent;
+				if (selector == qualifiedName.getName()) {
+					return getBinding(qualifiedName.getQualifier());
+				}
+				return null;
+			case ASTNode.FIELD_ACCESS:
+				FieldAccess fieldAccess= (FieldAccess) parent;
+				if (selector == fieldAccess.getName()) {
+					return getBinding(fieldAccess.getExpression());
+				}
+				return null;
+			case ASTNode.SUPER_FIELD_ACCESS: {
+				ITypeBinding curr= Bindings.getBindingOfParentType(parent);
+				return curr.getSuperclass();
+			}
+			case ASTNode.SUPER_METHOD_INVOCATION: {
+				SuperMethodInvocation superInv= (SuperMethodInvocation) parent;
+				if (selector == superInv.getName()) {
+					ITypeBinding curr= Bindings.getBindingOfParentType(parent);
+					return curr.getSuperclass();
+				}
+				return null;
+			}
+			default:
+				if (parent instanceof Type) {
+					// bug 67644: in 'a.new X()', all member types of A are visible as location of X.
+					ASTNode normalizedNode= ASTNodes.getNormalizedNode(parent);
+					if (normalizedNode.getLocationInParent() == ClassInstanceCreation.TYPE_PROPERTY) {
+						ClassInstanceCreation creation= (ClassInstanceCreation) normalizedNode.getParent();
+						return getBinding(creation.getExpression());
+					}
+				}
+				return null;
+		}
+	}
+

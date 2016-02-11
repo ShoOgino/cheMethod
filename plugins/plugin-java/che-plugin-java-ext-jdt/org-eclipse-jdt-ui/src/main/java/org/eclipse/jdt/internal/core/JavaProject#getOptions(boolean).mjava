@@ -1,0 +1,68 @@
+    public Map getOptions(boolean inheritJavaCoreOptions) {
+
+        // initialize to the defaults from JavaCore options pool
+        Map options = inheritJavaCoreOptions ? JavaCore.getOptions() : new Hashtable(5);
+
+        // Get project specific options
+        PerProjectInfo perProjectInfo = null;
+        Hashtable projectOptions = null;
+        JavaModelManager javaModelManager = getJavaModelManager();
+        HashSet optionNames = javaModelManager.optionNames;
+        try {
+            perProjectInfo = getPerProjectInfo();
+            projectOptions = perProjectInfo.options;
+            if (projectOptions == null) {
+                // get eclipse preferences
+                IEclipsePreferences projectPreferences= getEclipsePreferences();
+                if (projectPreferences == null) return options; // cannot do better (non-Java project)
+                // create project options
+                String[] propertyNames = projectPreferences.keys();
+                projectOptions = new Hashtable(propertyNames.length);
+                for (int i = 0; i < propertyNames.length; i++){
+                    String propertyName = propertyNames[i];
+                    String value = projectPreferences.get(propertyName, null);
+                    if (value != null) {
+                        value = value.trim();
+                        // Keep the option value, even if it's deprecated
+                        // see bug https://bugs.eclipse.org/bugs/show_bug.cgi?id=324987
+                        projectOptions.put(propertyName, value);
+                        if (!optionNames.contains(propertyName)) {
+                            // try to migrate deprecated options
+                            String[] compatibleOptions = (String[]) javaModelManager.deprecatedOptions.get(propertyName);
+                            if (compatibleOptions != null) {
+                                for (int co=0, length=compatibleOptions.length; co < length; co++) {
+                                    String compatibleOption = compatibleOptions[co];
+                                    if (!projectOptions.containsKey(compatibleOption))
+                                        projectOptions.put(compatibleOption, value);
+                                }
+                            }
+                        }
+                    }
+                }
+                // cache project options
+                perProjectInfo.options = projectOptions;
+            }
+        } catch (JavaModelException jme) {
+            projectOptions = new Hashtable();
+        } catch (BackingStoreException e) {
+            projectOptions = new Hashtable();
+        }
+
+        // Inherit from JavaCore options if specified
+        if (inheritJavaCoreOptions) {
+            Iterator propertyNames = projectOptions.entrySet().iterator();
+            while (propertyNames.hasNext()) {
+                Map.Entry entry = (Map.Entry) propertyNames.next();
+                String propertyName = (String) entry.getKey();
+                String propertyValue = (String) entry.getValue();
+                if (propertyValue != null && javaModelManager.knowsOption(propertyName)){
+                    options.put(propertyName, propertyValue.trim());
+                }
+            }
+            Util.fixTaskTags(options);
+            return options;
+        }
+        Util.fixTaskTags(projectOptions);
+        return projectOptions;
+    }
+

@@ -1,0 +1,85 @@
+	public static boolean getCatchClauseToThrowsProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		CatchClause catchClause= (CatchClause) ASTResolving.findAncestor(node, ASTNode.CATCH_CLAUSE);
+		if (catchClause == null) {
+			return false;
+		}
+
+		Statement statement= ASTResolving.findParentStatement(node);
+		if (statement != catchClause.getParent() && statement != catchClause.getBody()) {
+			return false; // selection is in a statement inside the body
+		}
+
+		Type type= catchClause.getException().getType();
+		if (!type.isSimpleType() && !type.isUnionType() && !type.isNameQualifiedType()) {
+			return false;
+		}
+
+		BodyDeclaration bodyDeclaration= ASTResolving.findParentBodyDeclaration(catchClause);
+		if (!(bodyDeclaration instanceof MethodDeclaration) && !(bodyDeclaration instanceof Initializer)) {
+			return false;
+		}
+
+		if (resultingCollections == null) {
+			return true;
+		}
+
+		AST ast= bodyDeclaration.getAST();
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_OBJS_EXCEPTION);
+
+		Type selectedMultiCatchType= null;
+		if (type.isUnionType() && node instanceof Name) {
+			Name topMostName= ASTNodes.getTopMostName((Name)node);
+			ASTNode parent= topMostName.getParent();
+			if (parent instanceof SimpleType) {
+				selectedMultiCatchType= (SimpleType) parent;
+			} else if (parent instanceof NameQualifiedType) {
+				selectedMultiCatchType= (NameQualifiedType) parent;
+			}
+		}
+
+		if (bodyDeclaration instanceof MethodDeclaration) {
+			MethodDeclaration methodDeclaration= (MethodDeclaration) bodyDeclaration;
+
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+			if (selectedMultiCatchType != null) {
+				removeException(rewrite, (UnionType) type, selectedMultiCatchType);
+				addExceptionToThrows(ast, methodDeclaration, rewrite, selectedMultiCatchType);
+				String label= CorrectionMessages.QuickAssistProcessor_exceptiontothrows_description;
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REPLACE_EXCEPTION_WITH_THROWS, image);
+				resultingCollections.add(proposal);
+			} else {
+				removeCatchBlock(rewrite, catchClause);
+				if (type.isUnionType()) {
+					UnionType unionType= (UnionType) type;
+					List<Type> types= unionType.types();
+					for (Type elementType : types) {
+						if (!(elementType instanceof SimpleType || elementType instanceof NameQualifiedType))
+							return false;
+						addExceptionToThrows(ast, methodDeclaration, rewrite, elementType);
+					}
+				} else {
+					addExceptionToThrows(ast, methodDeclaration, rewrite, type);
+				}
+				String label= CorrectionMessages.QuickAssistProcessor_catchclausetothrows_description;
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REPLACE_CATCH_CLAUSE_WITH_THROWS, image);
+				resultingCollections.add(proposal);
+			}
+		}
+		{ // for initializers or method declarations
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+			if (selectedMultiCatchType != null) {
+				removeException(rewrite, (UnionType) type, selectedMultiCatchType);
+				String label= CorrectionMessages.QuickAssistProcessor_removeexception_description;
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REMOVE_EXCEPTION, image);
+				resultingCollections.add(proposal);
+			} else {
+				removeCatchBlock(rewrite, catchClause);
+				String label= CorrectionMessages.QuickAssistProcessor_removecatchclause_description;
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REMOVE_CATCH_CLAUSE, image);
+				resultingCollections.add(proposal);
+			}
+		}
+
+		return true;
+	}
+

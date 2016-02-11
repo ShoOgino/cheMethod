@@ -1,0 +1,30 @@
+    /**
+     * Recreates the index for a given path, keeping the same read-write monitor.
+     * Returns the new empty index or null if it didn't exist before.
+     * Warning: Does not check whether index is consistent (not being used)
+     */
+    public synchronized Index recreateIndex(IPath containerPath) {
+        // only called to over write an existing cached index...
+        String containerPathString = containerPath.getDevice() == null ? containerPath.toString() : containerPath.toOSString();
+        try {
+            // Path is already canonical
+            IndexLocation indexLocation = computeIndexLocation(containerPath);
+            Index index = getIndex(indexLocation);
+            ReadWriteMonitor monitor = index == null ? null : index.monitor;
+
+            if (JobManager.VERBOSE)
+                Util.verbose("-> recreating index: " + indexLocation + " for path: " + containerPathString); //$NON-NLS-1$ //$NON-NLS-2$
+            index = new Index(indexLocation, containerPathString, false /*do not reuse index file*/);
+            this.indexes.put(indexLocation, index);
+            index.monitor = monitor;
+            return index;
+        } catch (IOException e) {
+            // The file could not be created. Possible reason: the project has been deleted.
+            if (JobManager.VERBOSE) {
+                Util.verbose("-> failed to recreate index for path: " + containerPathString); //$NON-NLS-1$
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+

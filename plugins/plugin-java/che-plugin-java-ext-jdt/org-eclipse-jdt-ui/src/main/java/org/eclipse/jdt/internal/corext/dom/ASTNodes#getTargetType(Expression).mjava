@@ -1,0 +1,90 @@
+    /**
+     * Derives the target type defined at the location of the given expression if the target context
+     * supports poly expressions.
+     *
+     * @param expression the expression at whose location the target type is required
+     * @return the type binding of the target type defined at the location of the given expression
+     *         if the target context supports poly expressions, or <code>null</code> if the target
+     *         type could not be derived
+     *
+     * @since 3.10
+     */
+    public static ITypeBinding getTargetType(Expression expression) {
+        ASTNode parent = expression.getParent();
+        StructuralPropertyDescriptor locationInParent = expression.getLocationInParent();
+
+        if (locationInParent == VariableDeclarationFragment.INITIALIZER_PROPERTY ||
+            locationInParent == SingleVariableDeclaration.INITIALIZER_PROPERTY) {
+            return ((VariableDeclaration)parent).getName().resolveTypeBinding();
+
+        } else if (locationInParent == Assignment.RIGHT_HAND_SIDE_PROPERTY) {
+            return ((Assignment)parent).getLeftHandSide().resolveTypeBinding();
+
+        } else if (locationInParent == ReturnStatement.EXPRESSION_PROPERTY) {
+            return getTargetTypeForReturnStmt((ReturnStatement)parent);
+
+        } else if (locationInParent == ArrayInitializer.EXPRESSIONS_PROPERTY) {
+            return getTargetTypeForArrayInitializer((ArrayInitializer)parent);
+
+        } else if (locationInParent == MethodInvocation.ARGUMENTS_PROPERTY) {
+            MethodInvocation methodInvocation = (MethodInvocation)parent;
+            IMethodBinding methodBinding = methodInvocation.resolveMethodBinding();
+            if (methodBinding != null) {
+                return getParameterTypeBinding(expression, methodInvocation.arguments(), methodBinding);
+            }
+
+        } else if (locationInParent == SuperMethodInvocation.ARGUMENTS_PROPERTY) {
+            SuperMethodInvocation superMethodInvocation = (SuperMethodInvocation)parent;
+            IMethodBinding superMethodBinding = superMethodInvocation.resolveMethodBinding();
+            if (superMethodBinding != null) {
+                return getParameterTypeBinding(expression, superMethodInvocation.arguments(), superMethodBinding);
+            }
+
+        } else if (locationInParent == ConstructorInvocation.ARGUMENTS_PROPERTY) {
+            ConstructorInvocation constructorInvocation = (ConstructorInvocation)parent;
+            IMethodBinding constructorBinding = constructorInvocation.resolveConstructorBinding();
+            if (constructorBinding != null) {
+                return getParameterTypeBinding(expression, constructorInvocation.arguments(), constructorBinding);
+            }
+
+        } else if (locationInParent == SuperConstructorInvocation.ARGUMENTS_PROPERTY) {
+            SuperConstructorInvocation superConstructorInvocation = (SuperConstructorInvocation)parent;
+            IMethodBinding superConstructorBinding = superConstructorInvocation.resolveConstructorBinding();
+            if (superConstructorBinding != null) {
+                return getParameterTypeBinding(expression, superConstructorInvocation.arguments(), superConstructorBinding);
+            }
+
+        } else if (locationInParent == ClassInstanceCreation.ARGUMENTS_PROPERTY) {
+            ClassInstanceCreation creation = (ClassInstanceCreation)parent;
+            IMethodBinding creationBinding = creation.resolveConstructorBinding();
+            if (creationBinding != null) {
+                return getParameterTypeBinding(expression, creation.arguments(), creationBinding);
+            }
+
+        } else if (locationInParent == EnumConstantDeclaration.ARGUMENTS_PROPERTY) {
+            EnumConstantDeclaration enumConstantDecl = (EnumConstantDeclaration)parent;
+            IMethodBinding enumConstructorBinding = enumConstantDecl.resolveConstructorBinding();
+            if (enumConstructorBinding != null) {
+                return getParameterTypeBinding(expression, enumConstantDecl.arguments(), enumConstructorBinding);
+            }
+
+        } else if (locationInParent == LambdaExpression.BODY_PROPERTY) {
+            IMethodBinding methodBinding = ((LambdaExpression)parent).resolveMethodBinding();
+            if (methodBinding != null) {
+                return methodBinding.getReturnType();
+            }
+
+        } else if (locationInParent == ConditionalExpression.THEN_EXPRESSION_PROPERTY ||
+                   locationInParent == ConditionalExpression.ELSE_EXPRESSION_PROPERTY) {
+            return getTargetType((ConditionalExpression)parent);
+
+        } else if (locationInParent == CastExpression.EXPRESSION_PROPERTY) {
+            return ((CastExpression)parent).getType().resolveBinding();
+
+        } else if (locationInParent == ParenthesizedExpression.EXPRESSION_PROPERTY) {
+            return getTargetType((ParenthesizedExpression)parent);
+
+        }
+        return null;
+    }
+

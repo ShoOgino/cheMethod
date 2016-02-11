@@ -1,0 +1,41 @@
+	@Override
+	public void endVisit(MethodDeclaration node) {
+		IMethodBinding methodBinding= node.resolveBinding();
+
+		if (methodBinding == null)
+			return; //TODO: emit error?
+
+		int parameterCount= node.parameters().size();
+		ConstraintVariable2[] parameterTypeCvs= new ConstraintVariable2[parameterCount];
+		for (int i= 0; i < parameterCount; i++) {
+			SingleVariableDeclaration paramDecl= (SingleVariableDeclaration) node.parameters().get(i);
+			//parameterTypeVariable currently not used, but need to register in order to store source range
+			ConstraintVariable2 parameterTypeCv= fTCModel.makeDeclaredParameterTypeVariable(methodBinding, i, fCU);
+			parameterTypeCvs[i]= parameterTypeCv;
+			if (parameterTypeCv == null)
+				continue;
+
+			//creating equals constraint between parameterTypeVariable's elements and the Type's elements
+			ConstraintVariable2 typeCv= getConstraintVariable(paramDecl.getType());
+			fTCModel.createElementEqualsConstraints(parameterTypeCv, typeCv);
+
+			//TODO: should avoid having a VariableVariable as well as a ParameterVariable for a parameter
+			ConstraintVariable2 nameCv= getConstraintVariable(paramDecl.getName());
+			fTCModel.createElementEqualsConstraints(parameterTypeCv, nameCv);
+		}
+
+		ConstraintVariable2 returnTypeCv= null;
+		if (! methodBinding.isConstructor()) {
+			//TODO: should only create return type variable if type is generic?
+			ConstraintVariable2 returnTypeBindingCv= fTCModel.makeDeclaredReturnTypeVariable(methodBinding, fCU);
+			if (returnTypeBindingCv != null) {
+				returnTypeCv= getConstraintVariable(node.getReturnType2());
+				fTCModel.createElementEqualsConstraints(returnTypeBindingCv, returnTypeCv);
+			}
+		}
+		if (MethodChecks.isVirtual(methodBinding)) {
+			//TODO: RippleMethod constraints for corner cases: see testCuRippleMethods3, bug 41989
+			addConstraintsForOverriding(methodBinding, returnTypeCv, parameterTypeCvs);
+		}
+	}
+

@@ -1,0 +1,75 @@
+		//Can the block around child with childDescriptor of controlStatement be removed?
+		private static boolean satisfiesPrecondition(Statement controlStatement, ChildPropertyDescriptor childDescriptor,
+													 boolean onlyReturnAndThrows, boolean cleanUpCheck) {
+			Object child = controlStatement.getStructuralProperty(childDescriptor);
+
+			if (!(child instanceof Block))
+				return false;
+
+			Block block = (Block)child;
+			List<Statement> list = block.statements();
+			if (list.size() != 1)
+				return false;
+
+			ASTNode singleStatement = list.get(0);
+
+			if (onlyReturnAndThrows)
+				if (!(singleStatement instanceof ReturnStatement) && !(singleStatement instanceof ThrowStatement))
+					return false;
+
+			if (controlStatement instanceof IfStatement) {
+				// if (true) {
+				//  while (true)
+				// 	 if (false)
+				//    ;
+				// } else
+				//   ;
+
+				if (((IfStatement)controlStatement).getThenStatement() != child)
+					return true;//can always remove blocks in else part
+
+				IfStatement ifStatement = (IfStatement)controlStatement;
+				if (ifStatement.getElseStatement() == null)
+					return true;//can always remove if no else part
+
+				return !hasUnblockedIf((Statement)singleStatement, onlyReturnAndThrows, cleanUpCheck);
+			} else {
+				//if (true)
+				// while (true) {
+				//  if (false)
+				//   ;
+				// }
+				//else
+				// ;
+				if (!hasUnblockedIf((Statement)singleStatement, onlyReturnAndThrows, cleanUpCheck))
+					return true;
+
+				ASTNode currentChild = controlStatement;
+				ASTNode parent = currentChild.getParent();
+				while (true) {
+					Statement body = null;
+					if (parent instanceof IfStatement) {
+						body = ((IfStatement)parent).getThenStatement();
+						if (body == currentChild &&
+							((IfStatement)parent).getElseStatement() != null)//->currentChild is an unblocked then part
+							return false;
+					} else if (parent instanceof WhileStatement) {
+						body = ((WhileStatement)parent).getBody();
+					} else if (parent instanceof DoStatement) {
+						body = ((DoStatement)parent).getBody();
+					} else if (parent instanceof ForStatement) {
+						body = ((ForStatement)parent).getBody();
+					} else if (parent instanceof EnhancedForStatement) {
+						body = ((EnhancedForStatement)parent).getBody();
+					} else {
+						return true;
+					}
+					if (body != currentChild)//->parents child is a block
+						return true;
+
+					currentChild = parent;
+					parent = currentChild.getParent();
+				}
+			}
+		}
+

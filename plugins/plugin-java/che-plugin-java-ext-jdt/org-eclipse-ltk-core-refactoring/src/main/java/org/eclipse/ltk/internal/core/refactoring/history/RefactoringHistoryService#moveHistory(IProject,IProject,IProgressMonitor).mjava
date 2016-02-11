@@ -1,0 +1,30 @@
+	/**
+	 * Moves the project history from the old project to the new one.
+	 *
+	 * @param oldProject
+	 *            the old project, which does not exist anymore
+	 * @param newProject
+	 *            the new project, which already exists
+	 * @param monitor
+	 *            the progress monitor to use
+	 */
+	private void moveHistory(final IProject oldProject, final IProject newProject, final IProgressMonitor monitor) {
+		try {
+			monitor.beginTask(RefactoringCoreMessages.RefactoringHistoryService_updating_history, 60);
+			final IFileStore historyStore= EFS.getLocalFileSystem().getStore(RefactoringCorePlugin.getDefault().getStateLocation()).getChild(NAME_HISTORY_FOLDER);
+			final String oldName= oldProject.getName();
+			final String newName= newProject.getName();
+			final IFileStore oldStore= historyStore.getChild(oldName);
+			if (oldStore.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 10, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists()) {
+				final IFileStore newStore= historyStore.getChild(newName);
+				if (newStore.fetchInfo(EFS.NONE, new SubProgressMonitor(monitor, 10, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)).exists())
+					newStore.delete(EFS.NONE, new SubProgressMonitor(monitor, 20, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+				oldStore.move(newStore, EFS.OVERWRITE, new SubProgressMonitor(monitor, 20, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+			}
+		} catch (CoreException exception) {
+			RefactoringCorePlugin.log(exception);
+		} finally {
+			monitor.done();
+		}
+	}
+

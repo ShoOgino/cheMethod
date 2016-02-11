@@ -1,0 +1,59 @@
+	/**
+	 * Tests if the quick fix to loop over a method invocation is added correctly. The complete
+	 * functionality of the for loop generation is tested in {@link AssistQuickFixTest}
+	 * 
+	 * @throws Exception
+	 */
+    @Test
+	public void testGenerateForeachNotAddedForLowVersion() throws Exception {
+		if (BUG_434188)
+			return;
+		if (BUG_430818)
+			return;
+		
+		IPackageFragment pack1= fSourceFolder.createPackageFragment("test1", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package test1;\n");
+		buf.append("import java.util.Collection;\n");
+		buf.append("public class E {\n");
+		buf.append("    void foo(Collection collection) {\n");
+		buf.append("        collection\n");
+		buf.append("    }\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+
+		Map saveOptions= fJProject1.getOptions(false);
+		Map newOptions= new HashMap();
+		JavaCore.setComplianceOptions(JavaCore.VERSION_1_4, newOptions);
+		newOptions.put(DefaultCodeFormatterConstants.FORMATTER_PUT_EMPTY_STATEMENT_ON_NEW_LINE, "true");
+		try {
+			fJProject1.setOptions(newOptions);
+			List proposals= collectCorrections(cu, getASTRoot(cu), 3, null);
+
+			assertNumberOfProposals(proposals, 1);
+			assertCorrectLabels(proposals);
+			assertProposalDoesNotExist(proposals, CorrectionMessages.QuickAssistProcessor_generate_enhanced_for_loop);
+
+			String[] expected= new String[1];
+
+			// no generics should be added to iterator since the version is too low
+			buf= new StringBuffer();
+			buf.append("package test1;\n");
+			buf.append("import java.util.Collection;\n");
+			buf.append("import java.util.Iterator;\n");
+			buf.append("public class E {\n");
+			buf.append("    void foo(Collection collection) {\n");
+			buf.append("        for (Iterator iterator = collection.iterator(); iterator.hasNext();) {\n");
+			buf.append("            Object object = iterator.next();\n");
+			buf.append("            \n");
+			buf.append("        }\n");
+			buf.append("    }\n");
+			buf.append("}\n");
+			expected[0]= buf.toString();
+
+			assertExpectedExistInProposals(proposals, expected);
+		} finally {
+			fJProject1.setOptions(saveOptions);
+		}
+	}
+

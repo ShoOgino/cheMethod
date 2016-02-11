@@ -1,0 +1,197 @@
+		private void changeJavadocTags() throws JavaModelException {
+			//update tags in javadoc: @param, @return, @exception, @throws, ...
+			Javadoc javadoc = fMethDecl.getJavadoc();
+			if (javadoc == null)
+				return;
+
+			ITypeBinding typeBinding = Bindings.getBindingOfParentType(fMethDecl);
+			if (typeBinding == null)
+				return;
+			IMethodBinding methodBinding = fMethDecl.resolveBinding();
+			if (methodBinding == null)
+				return;
+
+			boolean isTopOfRipple = (Bindings.findOverriddenMethod(methodBinding, false) == null);
+			//add tags: only iff top of ripple; change and remove: always.
+			//TODO: should have preference for adding tags in (overriding) methods (with template: todo, inheritDoc, ...)
+
+			List<TagElement> tags = javadoc.tags();
+			ListRewrite tagsRewrite = getASTRewrite().getListRewrite(javadoc, Javadoc.TAGS_PROPERTY);
+
+			if (!isReturnTypeSameAsInitial()) {
+				if (PrimitiveType.VOID.toString().equals(fReturnTypeInfo.getNewTypeName())) {
+					for (int i = 0; i < tags.size(); i++) {
+						TagElement tag = tags.get(i);
+						if (TagElement.TAG_RETURN.equals(tag.getTagName())) {
+							getASTRewrite().remove(tag, fDescription);
+							registerImportRemoveNode(tag);
+						}
+					}
+				} else if (isTopOfRipple && Signature.SIG_VOID.equals(fMethod.getReturnType())) {
+					TagElement returnNode = createReturnTag();
+					TagElement previousTag = findTagElementToInsertAfter(tags, TagElement.TAG_RETURN);
+					insertTag(returnNode, previousTag, tagsRewrite);
+					tags = tagsRewrite.getRewrittenList();
+				}
+			}
+
+			if (!(areNamesSameAsInitial() && isOrderSameAsInitial())) {
+				ArrayList<TagElement> paramTags = new ArrayList<TagElement>(); // <TagElement>, only not deleted tags with simpleName
+				// delete & rename:
+				for (Iterator<TagElement> iter = tags.iterator(); iter.hasNext(); ) {
+					TagElement tag = iter.next();
+					String tagName = tag.getTagName();
+					List<? extends ASTNode> fragments = tag.fragments();
+					if (!(TagElement.TAG_PARAM.equals(tagName) && fragments.size() > 0 && fragments.get(0) instanceof SimpleName))
+						continue;
+					SimpleName simpleName = (SimpleName)fragments.get(0);
+					String identifier = simpleName.getIdentifier();
+					boolean removed = false;
+					for (int i = 0; i < fParameterInfos.size(); i++) {
+						ParameterInfo info = fParameterInfos.get(i);
+						if (identifier.equals(info.getOldName())) {
+							if (info.isDeleted()) {
+								getASTRewrite().remove(tag, fDescription);
+								registerImportRemoveNode(tag);
+								removed = true;
+							} else if (info.isRenamed()) {
+								SimpleName newName = simpleName.getAST().newSimpleName(info.getNewName());
+								getASTRewrite().replace(simpleName, newName, fDescription);
+								registerImportRemoveNode(tag);
+							}
+							break;
+						}
+					}
+					if (!removed)
+						paramTags.add(tag);
+				}
+				tags = tagsRewrite.getRewrittenList();
+
+				if (!isOrderSameAsInitial()) {
+					// reshuffle (sort in declaration sequence) & add (only add to top of ripple):
+					TagElement previousTag = findTagElementToInsertAfter(tags, TagElement.TAG_PARAM);
+					boolean first = true; // workaround for bug 92111: preserve first tag if possible
+					// reshuffle:
+					for (Iterator<ParameterInfo> infoIter = fParameterInfos.iterator(); infoIter.hasNext(); ) {
+						ParameterInfo info = infoIter.next();
+						String oldName = info.getOldName();
+						String newName = info.getNewName();
+						if (info.isAdded()) {
+							first = false;
+							if (!isTopOfRipple)
+								continue;
+							TagElement paramNode =
+									JavadocUtil.createParamTag(newName, fCuRewrite.getRoot().getAST(), fCuRewrite.getCu().getJavaProject
+											());
+							insertTag(paramNode, previousTag, tagsRewrite);
+							previousTag = paramNode;
+						} else {
+							for (Iterator<TagElement> tagIter = paramTags.iterator(); tagIter.hasNext(); ) {
+								TagElement tag = tagIter.next();
+								SimpleName tagName = (SimpleName)tag.fragments().get(0);
+								if (oldName.equals(tagName.getIdentifier())) {
+									tagIter.remove();
+									if (first) {
+										previousTag = tag;
+									} else {
+										TagElement movedTag = (TagElement)getASTRewrite().createMoveTarget(tag);
+										getASTRewrite().remove(tag, fDescription);
+										insertTag(movedTag, previousTag, tagsRewrite);
+										previousTag = movedTag;
+									}
+								}
+								first = false;
+							}
+						}
+					}
+					// params with bad names:
+					for (Iterator<TagElement> iter = paramTags.iterator(); iter.hasNext(); ) {
+						TagElement tag = iter.next();
+						TagElement movedTag = (TagElement)getASTRewrite().createMoveTarget(tag);
+						getASTRewrite().remove(tag, fDescription);
+						insertTag(movedTag, previousTag, tagsRewrite);
+						previousTag = movedTag;
+					}
+				}
+				tags = tagsRewrite.getRewrittenList();
+			}
+
+			if (!areExceptionsSameAsInitial()) {
+				// collect exceptionTags and remove deleted:
+				ArrayList<TagElement> exceptionTags = new ArrayList<TagElement>(); // <TagElement>, only not deleted tags with name
+				for (int i = 0; i < tags.size(); i++) {
+					TagElement tag = tags.get(i);
+					if (!TagElement.TAG_THROWS.equals(tag.getTagName()) && !TagElement.TAG_EXCEPTION.equals(tag.getTagName()))
+						continue;
+					if (!(tag.fragments().size() > 0 && tag.fragments().get(0) instanceof Name))
+						continue;
+					boolean tagDeleted = false;
+					Name name = (Name)tag.fragments().get(0);
+					for (int j = 0; j < fExceptionInfos.size(); j++) {
+						ExceptionInfo info = fExceptionInfos.get(j);
+						if (info.isDeleted()) {
+							boolean remove = false;
+							final ITypeBinding nameBinding = name.resolveTypeBinding();
+							if (nameBinding != null) {
+								final ITypeBinding infoBinding = info.getTypeBinding();
+								if (infoBinding != null && Bindings.equals(infoBinding, nameBinding))
+									remove = true;
+								else if (info.getElement().getElementName().equals(nameBinding.getName()))
+									remove = true;
+								if (remove) {
+									getASTRewrite().remove(tag, fDescription);
+									registerImportRemoveNode(tag);
+									tagDeleted = true;
+									break;
+								}
+							}
+						}
+					}
+					if (!tagDeleted)
+						exceptionTags.add(tag);
+				}
+				// reshuffle:
+				tags = tagsRewrite.getRewrittenList();
+				TagElement previousTag = findTagElementToInsertAfter(tags, TagElement.TAG_THROWS);
+				for (Iterator<ExceptionInfo> infoIter = fExceptionInfos.iterator(); infoIter.hasNext(); ) {
+					ExceptionInfo info = infoIter.next();
+					if (info.isAdded()) {
+						if (!isTopOfRipple)
+							continue;
+						TagElement excptNode = createExceptionTag(info.getElement().getElementName());
+						insertTag(excptNode, previousTag, tagsRewrite);
+						previousTag = excptNode;
+					} else {
+						for (Iterator<TagElement> tagIter = exceptionTags.iterator(); tagIter.hasNext(); ) {
+							TagElement tag = tagIter.next();
+							Name tagName = (Name)tag.fragments().get(0);
+							final ITypeBinding nameBinding = tagName.resolveTypeBinding();
+							if (nameBinding != null) {
+								boolean process = false;
+								final ITypeBinding infoBinding = info.getTypeBinding();
+								if (infoBinding != null && Bindings.equals(infoBinding, nameBinding))
+									process = true;
+								else if (info.getElement().getElementName().equals(nameBinding.getName()))
+									process = true;
+								if (process) {
+									tagIter.remove();
+									TagElement movedTag = (TagElement)getASTRewrite().createMoveTarget(tag);
+									getASTRewrite().remove(tag, fDescription);
+									insertTag(movedTag, previousTag, tagsRewrite);
+									previousTag = movedTag;
+								}
+							}
+						}
+					}
+				}
+				// exceptions with bad names:
+				for (Iterator<TagElement> iter = exceptionTags.iterator(); iter.hasNext(); ) {
+					TagElement tag = iter.next();
+					TagElement movedTag = (TagElement)getASTRewrite().createMoveTarget(tag);
+					getASTRewrite().remove(tag, fDescription);
+					insertTag(movedTag, previousTag, tagsRewrite);
+					previousTag = movedTag;
+				}
+			}
+		}
+

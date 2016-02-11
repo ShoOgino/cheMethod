@@ -1,0 +1,41 @@
+		@Override
+		public ICompilationUnit[] getAffectedCompilationUnits(final RefactoringStatus status, ReferencesInBinaryContext binaryRefs,
+															  IProgressMonitor pm) throws CoreException {
+			IMethod method = (IMethod)fMethodBinding.getJavaElement();
+			Assert.isTrue(method != null);
+
+			SearchPattern pattern =
+					SearchPattern.createPattern(method, IJavaSearchConstants.REFERENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+			IJavaSearchScope scope = RefactoringScopeFactory.create(method, true, false);
+			final HashSet<ICompilationUnit> affectedCompilationUnits = new HashSet<ICompilationUnit>();
+			CollectingSearchRequestor requestor = new CollectingSearchRequestor(binaryRefs) {
+				private ICompilationUnit fLastCU;
+
+				@Override
+				public void acceptSearchMatch(SearchMatch match) throws CoreException {
+					if (filterMatch(match))
+						return;
+					if (match.isInsideDocComment())
+						return; // TODO: should warn user (with something like a ReferencesInBinaryContext)
+
+					ICompilationUnit unit = SearchUtils.getCompilationUnit(match);
+					if (match.getAccuracy() == SearchMatch.A_INACCURATE) {
+						if (unit != null) {
+							status.addError(RefactoringCoreMessages.TargetProvider_inaccurate_match,
+											JavaStatusContext.create(unit, new SourceRange(match.getOffset(), match.getLength())));
+						} else {
+							status.addError(RefactoringCoreMessages.TargetProvider_inaccurate_match);
+						}
+					} else if (unit != null) {
+						if (!unit.equals(fLastCU)) {
+							fLastCU = unit;
+							affectedCompilationUnits.add(unit);
+						}
+					}
+				}
+			};
+			new SearchEngine().search(pattern, SearchUtils.getDefaultSearchParticipants(), scope, requestor, new SubProgressMonitor(pm,
+																																	1));
+			return affectedCompilationUnits.toArray(new ICompilationUnit[affectedCompilationUnits.size()]);
+		}
+

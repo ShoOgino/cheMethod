@@ -1,0 +1,179 @@
+	private static boolean getAddBlockProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		if (!(node instanceof Statement)) {
+			return false;
+		}
+
+		/*
+		 * only show the quick assist when the selection is of the control statement keywords (if, else, while,...)
+		 * but not inside the statement or the if expression.
+		 */
+		if (!isControlStatementWithBlock(node) && isControlStatementWithBlock(node.getParent())) {
+			int statementStart= node.getStartPosition();
+			int statementEnd= statementStart + node.getLength();
+
+			int offset= context.getSelectionOffset();
+			int length= context.getSelectionLength();
+			if (length == 0) {
+				if (offset != statementEnd) { // cursor at end
+					return false;
+				}
+			} else {
+				if (offset > statementStart || offset + length < statementEnd) { // statement selected
+					return false;
+				}
+			}
+			node= node.getParent();
+		}
+
+		StructuralPropertyDescriptor childProperty= null;
+		ASTNode child= null;
+		switch (node.getNodeType()) {
+			case ASTNode.IF_STATEMENT:
+				ASTNode then= ((IfStatement) node).getThenStatement();
+				ASTNode elseStatement= ((IfStatement) node).getElseStatement();
+				if ((then instanceof Block) && (elseStatement instanceof Block || elseStatement == null)) {
+					break;
+				}
+				int thenEnd= then.getStartPosition() + then.getLength();
+				int selectionEnd= context.getSelectionOffset() + context.getSelectionLength();
+				if (!(then instanceof Block)) {
+					if (selectionEnd <= thenEnd) {
+						childProperty= IfStatement.THEN_STATEMENT_PROPERTY;
+						child= then;
+						break;
+					} else if (elseStatement != null && selectionEnd < elseStatement.getStartPosition()) {
+						// find out if we are before or after the 'else' keyword
+						try {
+							TokenScanner scanner= new TokenScanner(context.getCompilationUnit());
+							int elseTokenStart= scanner.getNextStartOffset(thenEnd, true);
+							if (selectionEnd < elseTokenStart) {
+								childProperty= IfStatement.THEN_STATEMENT_PROPERTY;
+								child= then;
+								break;
+							}
+						} catch (CoreException e) {
+							// ignore
+						}
+					}
+				}
+				if (elseStatement != null && !(elseStatement instanceof Block) && context.getSelectionOffset() >= thenEnd) {
+					childProperty= IfStatement.ELSE_STATEMENT_PROPERTY;
+					child= elseStatement;
+				}
+				break;
+			case ASTNode.WHILE_STATEMENT:
+				ASTNode whileBody= ((WhileStatement) node).getBody();
+				if (!(whileBody instanceof Block)) {
+					childProperty= WhileStatement.BODY_PROPERTY;
+					child= whileBody;
+				}
+				break;
+			case ASTNode.FOR_STATEMENT:
+				ASTNode forBody= ((ForStatement) node).getBody();
+				if (!(forBody instanceof Block)) {
+					childProperty= ForStatement.BODY_PROPERTY;
+					child= forBody;
+				}
+				break;
+			case ASTNode.ENHANCED_FOR_STATEMENT:
+				ASTNode enhancedForBody= ((EnhancedForStatement) node).getBody();
+				if (!(enhancedForBody instanceof Block)) {
+					childProperty= EnhancedForStatement.BODY_PROPERTY;
+					child= enhancedForBody;
+				}
+				break;
+			case ASTNode.DO_STATEMENT:
+				ASTNode doBody= ((DoStatement) node).getBody();
+				if (!(doBody instanceof Block)) {
+					childProperty= DoStatement.BODY_PROPERTY;
+					child= doBody;
+				}
+				break;
+			default:
+		}
+		if (child == null) {
+			return false;
+		}
+
+		if (resultingCollections == null) {
+			return true;
+		}
+		AST ast= node.getAST();
+		{
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+
+			ASTNode childPlaceholder= rewrite.createMoveTarget(child);
+			Block replacingBody= ast.newBlock();
+			replacingBody.statements().add(childPlaceholder);
+			rewrite.set(node, childProperty, replacingBody, null);
+
+			String label;
+			if (childProperty == IfStatement.THEN_STATEMENT_PROPERTY) {
+				label = CorrectionMessages.QuickAssistProcessor_replacethenwithblock_description;
+			} else if (childProperty == IfStatement.ELSE_STATEMENT_PROPERTY) {
+				label = CorrectionMessages.QuickAssistProcessor_replaceelsewithblock_description;
+			} else {
+				label = CorrectionMessages.QuickAssistProcessor_replacebodywithblock_description;
+			}
+
+			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+			LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.ADD_BLOCK, image);
+			proposal.setCommandId(ADD_BLOCK_ID);
+			proposal.setEndPosition(rewrite.track(child));
+			resultingCollections.add(proposal);
+		}
+
+		if (node.getNodeType() == ASTNode.IF_STATEMENT) {
+			ASTRewrite rewrite= ASTRewrite.create(ast);
+
+			while (node.getLocationInParent() == IfStatement.ELSE_STATEMENT_PROPERTY) {
+				node= node.getParent();
+			}
+
+			boolean missingBlockFound= false;
+			boolean foundElse= false;
+
+			IfStatement ifStatement;
+			Statement thenStatment;
+			Statement elseStatment;
+			do {
+				ifStatement= (IfStatement) node;
+				thenStatment= ifStatement.getThenStatement();
+				elseStatment= ifStatement.getElseStatement();
+
+				if (!(thenStatment instanceof Block)) {
+					ASTNode childPlaceholder1= rewrite.createMoveTarget(thenStatment);
+					Block replacingBody1= ast.newBlock();
+					replacingBody1.statements().add(childPlaceholder1);
+					rewrite.set(ifStatement, IfStatement.THEN_STATEMENT_PROPERTY, replacingBody1, null);
+					if (thenStatment != child) {
+						missingBlockFound= true;
+					}
+				}
+				if (elseStatment != null) {
+					foundElse= true;
+				}
+				node= elseStatment;
+			} while (elseStatment instanceof IfStatement);
+
+			if (elseStatment != null && !(elseStatment instanceof Block)) {
+				ASTNode childPlaceholder2= rewrite.createMoveTarget(elseStatment);
+
+				Block replacingBody2= ast.newBlock();
+				replacingBody2.statements().add(childPlaceholder2);
+				rewrite.set(ifStatement, IfStatement.ELSE_STATEMENT_PROPERTY, replacingBody2, null);
+				if (elseStatment != child) {
+					missingBlockFound= true;
+				}
+			}
+
+			if (missingBlockFound && foundElse) {
+				String label = CorrectionMessages.QuickAssistProcessor_replacethenelsewithblock_description;
+				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+				ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.CHANGE_IF_ELSE_TO_BLOCK, image);
+				resultingCollections.add(proposal);
+			}
+		}
+		return true;
+	}
+

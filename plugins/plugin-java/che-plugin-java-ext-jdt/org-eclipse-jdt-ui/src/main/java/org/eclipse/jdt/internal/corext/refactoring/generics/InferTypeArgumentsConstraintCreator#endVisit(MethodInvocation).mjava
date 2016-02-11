@@ -1,0 +1,49 @@
+	@Override
+	public void endVisit(MethodInvocation node) {
+		IMethodBinding methodBinding= node.resolveMethodBinding();
+		if (methodBinding == null)
+			return;
+
+		Expression receiver;
+		if (JdtFlags.isStatic(methodBinding))
+			receiver= null;
+		else
+			receiver= node.getExpression();
+
+		//TODO: Expression can be null when visiting a non-special method in a subclass of a container type.
+
+		if (isSpecialCloneInvocation(methodBinding, receiver)) {
+			ConstraintVariable2 expressionCv= getConstraintVariable(receiver);
+			// [retVal] =^= [receiver]:
+			setConstraintVariable(node, expressionCv);
+
+		} else if ("getClass".equals(methodBinding.getName()) && methodBinding.getParameterTypes().length == 0) { //$NON-NLS-1$
+			//special case: see JLS3 4.3.2
+			ITypeBinding returnType= node.resolveTypeBinding();
+			ITypeBinding returnTypeDeclaration= returnType.getTypeDeclaration();
+			ParameterizedTypeVariable2 expressionCv= fTCModel.makeParameterizedTypeVariable(returnTypeDeclaration);
+			setConstraintVariable(node, expressionCv);
+			ConstraintVariable2 classTypeVariable= fTCModel.getElementVariable(expressionCv, returnTypeDeclaration.getTypeParameters()[0]);
+
+			//type of expression 'e.getClass()' is 'Class<? extends X>' where X is the static type of e
+			ITypeBinding capture= returnType.getTypeArguments()[0];
+			ITypeBinding wildcard= capture.getWildcard();
+			if (wildcard.getBound() == null)
+				return; // workaround for https://bugs.eclipse.org/bugs/show_bug.cgi?id=234619
+
+			ImmutableTypeVariable2 wildcardType= fTCModel.makeImmutableTypeVariable(wildcard,  /*no boxing*/null);
+			fTCModel.createSubtypeConstraint(classTypeVariable, wildcardType);
+
+//			ITypeBinding bound= wildcard.getBound();
+//			ImmutableTypeVariable2 boundType= fTCModel.makeImmutableTypeVariable(bound, node.getAST());
+//			fTCModel.createSubtypeConstraint(classTypeVariable, boundType);
+
+		} else {
+			Map<String, IndependentTypeVariable2> methodTypeVariables= createMethodTypeArguments(methodBinding);
+
+			doVisitMethodInvocationReturnType(node, methodBinding, receiver, methodTypeVariables);
+			doVisitMethodInvocationArguments(methodBinding, node.arguments(), receiver, methodTypeVariables, /*no created type*/null);
+		}
+
+	}
+

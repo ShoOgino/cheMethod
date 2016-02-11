@@ -1,0 +1,93 @@
+	private static boolean getJoinVariableProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+		ASTNode parent= node.getParent();
+
+		VariableDeclarationFragment fragment= null;
+		boolean onFirstAccess= false;
+		if (node instanceof SimpleName && node.getLocationInParent() == Assignment.LEFT_HAND_SIDE_PROPERTY) {
+			onFirstAccess= true;
+			SimpleName name= (SimpleName) node;
+			IBinding binding= name.resolveBinding();
+			if (!(binding instanceof IVariableBinding)) {
+				return false;
+			}
+			ASTNode declaring= context.getASTRoot().findDeclaringNode(binding);
+			if (declaring instanceof VariableDeclarationFragment) {
+				fragment= (VariableDeclarationFragment) declaring;
+			} else {
+				return false;
+			}
+		} else if (parent instanceof VariableDeclarationFragment) {
+			fragment= (VariableDeclarationFragment) parent;
+		} else {
+			return false;
+		}
+
+		IVariableBinding binding= fragment.resolveBinding();
+		Expression initializer= fragment.getInitializer();
+		if ((initializer != null && initializer.getNodeType() != ASTNode.NULL_LITERAL) || binding == null || binding.isField()) {
+			return false;
+		}
+
+		if (!(fragment.getParent() instanceof VariableDeclarationStatement)) {
+			return false;
+		}
+		VariableDeclarationStatement statement= (VariableDeclarationStatement) fragment.getParent();
+
+		SimpleName[] names= LinkedNodeFinder.findByBinding(statement.getParent(), binding);
+		if (names.length <= 1 || names[0] != fragment.getName()) {
+			return false;
+		}
+		SimpleName firstAccess= names[1];
+		if (onFirstAccess) {
+			if (firstAccess != node) {
+				return false;
+			}
+		} else {
+			if (firstAccess.getLocationInParent() != Assignment.LEFT_HAND_SIDE_PROPERTY) {
+				return false;
+			}
+		}
+		Assignment assignment= (Assignment) firstAccess.getParent();
+		if (assignment.getLocationInParent() != ExpressionStatement.EXPRESSION_PROPERTY) {
+			return false;
+		}
+		ExpressionStatement assignParent= (ExpressionStatement) assignment.getParent();
+
+		if (resultingCollections == null) {
+			return true;
+		}
+
+		AST ast= statement.getAST();
+		ASTRewrite rewrite= ASTRewrite.create(ast);
+		TightSourceRangeComputer sourceRangeComputer= new TightSourceRangeComputer();
+		sourceRangeComputer.addTightSourceNode(assignParent);
+		rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
+
+		String label= CorrectionMessages.QuickAssistProcessor_joindeclaration_description;
+		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_LOCAL);
+		LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.JOIN_VARIABLE_DECLARATION, image);
+		proposal.setCommandId(SPLIT_JOIN_VARIABLE_DECLARATION_ID);
+
+		Expression placeholder= (Expression) rewrite.createMoveTarget(assignment.getRightHandSide());
+		rewrite.set(fragment, VariableDeclarationFragment.INITIALIZER_PROPERTY, placeholder, null);
+
+
+		if (onFirstAccess) {
+			// replace assignment with variable declaration
+			rewrite.replace(assignParent, rewrite.createMoveTarget(statement), null);
+		} else {
+			// different scopes -> remove assignments, set variable initializer
+			if (ASTNodes.isControlStatementBody(assignParent.getLocationInParent())) {
+				Block block= ast.newBlock();
+				rewrite.replace(assignParent, block, null);
+			} else {
+				rewrite.remove(assignParent, null);
+			}
+		}
+
+		proposal.setEndPosition(rewrite.track(fragment.getName()));
+		resultingCollections.add(proposal);
+		return true;
+
+	}
+
