@@ -1,8 +1,8 @@
-    private MachineStateImpl createMachine(MachineConfig machineConfig,
-                                           String workspaceId,
-                                           String environmentName,
-                                           MachineInstanceCreator instanceCreator,
-                                           SnapshotImpl snapshot)
+    private MachineImpl createMachine(MachineConfig machineConfig,
+                                      String workspaceId,
+                                      String environmentName,
+                                      MachineInstanceCreator instanceCreator,
+                                      SnapshotImpl snapshot)
             throws NotFoundException,
                    SnapshotException,
                    ConflictException,
@@ -27,8 +27,8 @@
             throw new BadRequestException("Invalid machine name " + machineConfig.getName());
         }
 
-        for (MachineStateImpl machine : machineRegistry.getStates()) {
-            if (machine.getWorkspaceId().equals(workspaceId) && machine.getName().equals(machineConfig.getName())) {
+        for (MachineImpl machine : machineRegistry.getMachines()) {
+            if (machine.getWorkspaceId().equals(workspaceId) && machine.getConfig().getName().equals(machineConfig.getName())) {
                 throw new ConflictException("Machine with name " + machineConfig.getName() + " already exists");
             }
         }
@@ -42,29 +42,26 @@
             machineConfig = machineConfigWithLimits;
         }
 
-        final MachineStateImpl machineState = new MachineStateImpl(machineConfig.isDev(),
-                                                                   machineConfig.getName(),
-                                                                   machineConfig.getType(),
-                                                                   machineConfig.getSource(),
-                                                                   machineConfig.getLimits(),
-                                                                   machineId,
-                                                                   createMachineChannels(machineConfig.getName(),
-                                                                                         workspaceId,
-                                                                                         environmentName),
-                                                                   workspaceId,
-                                                                   creator,
-                                                                   environmentName,
-                                                                   MachineStatus.CREATING);
+        final MachineImpl machine = new MachineImpl(machineConfig,
+                                                    machineId,
+                                                    workspaceId,
+                                                    environmentName,
+                                                    creator,
+                                                    MachineStatus.CREATING,
+                                                    null);
 
         createMachineLogsDir(machineId);
-        final LineConsumer machineLogger = getMachineLogger(machineId, machineState.getChannels().getOutput());
+        final LineConsumer machineLogger = getMachineLogger(machineId, getMachineChannels(machine.getConfig().getName(),
+                                                                                          machine.getWorkspaceId(),
+                                                                                          machine.getEnvName())
+                .getOutput());
 
         try {
-            machineRegistry.add(machineState);
+            machineRegistry.addMachine(machine);
 
-            instanceCreator.createInstance(instanceProvider, recipe, instanceKey, machineState, machineLogger);
+            instanceCreator.createInstance(instanceProvider, recipe, instanceKey, machine, machineLogger);
 
-            return machineState;
+            return machine;
         } catch (ConflictException e) {
             throw new MachineException(e.getLocalizedMessage(), e);
         }

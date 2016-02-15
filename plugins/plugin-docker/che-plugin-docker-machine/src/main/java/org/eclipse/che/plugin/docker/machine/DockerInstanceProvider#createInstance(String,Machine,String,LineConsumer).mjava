@@ -1,0 +1,63 @@
+    private Instance createInstance(String containerName,
+                                    Machine machine,
+                                    String imageName,
+                                    LineConsumer outputConsumer)
+            throws MachineException {
+        try {
+            final Map<String, String> labels;
+            final Map<String, Map<String, String>> portsToExpose;
+            final String[] volumes;
+            final String[] env;
+            if (machine.getConfig().isDev()) {
+                labels = devMachineContainerLabels;
+                portsToExpose = devMachinePortsToExpose;
+
+                final String projectFolderVolume = String.format("%s:%s",
+                                                                 workspaceFolderPathProvider.getPath(machine.getWorkspaceId()),
+                                                                 projectFolderPath);
+                volumes = ObjectArrays.concat(devMachineSystemVolumes,
+                                              SystemInfo.isWindows() ? escapePath(projectFolderVolume) : projectFolderVolume);
+
+                String[] vars = {DockerInstanceRuntimeInfo.CHE_WORKSPACE_ID + '=' + machine.getWorkspaceId(),
+                                 DockerInstanceRuntimeInfo.USER_TOKEN + '=' + EnvironmentContext.getCurrent().getUser().getToken()};
+                env = ObjectArrays.concat(devMachineEnvVariables, vars, String.class);
+
+            } else {
+                labels = commonMachineContainerLabels;
+                portsToExpose = commonMachinePortsToExpose;
+                volumes = commonMachineSystemVolumes;
+                env = commonMachineEnvVariables;
+            }
+
+            final HostConfig hostConfig = new HostConfig().withBinds(volumes)
+                                                          .withExtraHosts(allMachinesExtraHosts)
+                                                          .withPublishAllPorts(true)
+                                                          .withMemorySwap(-1)
+                                                          .withMemory((long)machine.getConfig().getLimits().getRam() * 1024 * 1024);
+            final ContainerConfig config = new ContainerConfig().withImage(imageName)
+                                                                .withLabels(labels)
+                                                                .withExposedPorts(portsToExpose)
+                                                                .withHostConfig(hostConfig)
+                                                                .withEnv(env);
+
+            final String containerId = docker.createContainer(config, containerName).getId();
+
+            docker.startContainer(containerId, null);
+
+            final DockerNode node = dockerMachineFactory.createNode(machine.getWorkspaceId(), containerId);
+            if (machine.getConfig().isDev()) {
+                node.bindWorkspace();
+            }
+
+            dockerInstanceStopDetector.startDetection(containerId, machine.getId());
+
+            return dockerMachineFactory.createInstance(machine,
+                                                       containerId,
+                                                       imageName,
+                                                       node,
+                                                       outputConsumer);
+        } catch (IOException e) {
+            throw new MachineException(e.getLocalizedMessage(), e);
+        }
+    }
+
