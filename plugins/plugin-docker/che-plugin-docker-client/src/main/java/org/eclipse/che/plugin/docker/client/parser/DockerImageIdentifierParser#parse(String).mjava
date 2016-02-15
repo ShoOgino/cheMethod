@@ -1,0 +1,42 @@
+    public static DockerImageIdentifier parse(final String image) throws DockerFileException {
+        if (image == null) {
+            throw new IllegalArgumentException("Null argument value is forbidden");
+        }
+
+        String workingCopyOfImage = image;
+        String digest = "";
+        String tag = "";
+
+        // find digest
+        int index = workingCopyOfImage.lastIndexOf('@');
+        if (index != -1) {
+            digest = workingCopyOfImage.substring(index + 1);
+            if (!digest.isEmpty()) {
+                workingCopyOfImage = workingCopyOfImage.substring(0, index);
+            }
+        }
+
+        // find tag
+        index = workingCopyOfImage.lastIndexOf(':');
+        if (index != -1) {
+            if (workingCopyOfImage.lastIndexOf('/') < index) {
+                tag = workingCopyOfImage.substring(index + 1);
+                if (!tag.isEmpty()) {
+                    workingCopyOfImage = workingCopyOfImage.substring(0, index);
+                }
+            }
+        }
+
+        Matcher matcher = IMAGE_PATTERN.matcher(workingCopyOfImage);
+        if (!matcher.matches()) {
+            throw new DockerFileException("Provided image reference is invalid");
+        }
+
+        return DockerImageIdentifier.builder()
+                                    .setRepository(matcher.group("repository"))
+                                    .setRegistry(matcher.group("registry"))
+                                    .setTag(tag.isEmpty() ? null : tag)
+                                    .setDigest(digest.isEmpty() ? null : digest)
+                                    .build();
+    }
+
