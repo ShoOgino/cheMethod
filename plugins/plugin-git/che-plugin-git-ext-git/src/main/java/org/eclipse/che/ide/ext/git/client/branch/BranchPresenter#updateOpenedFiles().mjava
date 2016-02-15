@@ -1,8 +1,22 @@
     private void updateOpenedFiles() {
         for (EditorPartPresenter editorPartPresenter : editorAgent.getOpenedEditors().values()) {
-            VirtualFile file = editorPartPresenter.getEditorInput().getFile();
+            final VirtualFile file = editorPartPresenter.getEditorInput().getFile();
+            final String filePath = file.getPath();
+            Unmarshallable<ItemReference> unmarshaller = dtoUnmarshallerFactory.newUnmarshaller(ItemReference.class);
 
-            eventBus.fireEvent(new FileContentUpdateEvent(file.getPath()));
+            projectService.getItem(workspaceId, filePath,
+                                   new AsyncRequestCallback<org.eclipse.che.api.project.shared.dto.ItemReference>(unmarshaller) {
+                                       @Override
+                                       protected void onSuccess(ItemReference itemReference) {
+                                           eventBus.fireEvent(new FileContentUpdateEvent(filePath));
+                                       }
+
+                                       @Override
+                                       protected void onFailure(Throwable throwable) {
+                                           eventBus.fireEvent(new FileEvent(file, FileEvent.FileOperation.CLOSE));
+                                       }
+                                   });
+
         }
     }
 

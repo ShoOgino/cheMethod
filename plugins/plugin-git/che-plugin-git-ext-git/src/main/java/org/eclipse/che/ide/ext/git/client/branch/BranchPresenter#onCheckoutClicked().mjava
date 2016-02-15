@@ -14,25 +14,23 @@
             checkoutRequest.setName(selectedBranch.getDisplayName());
         }
 
-        final String path = project.getRootProject().getPath();
+        final ProjectConfigDto root = project.getRootProject();
+        final String path = root.getPath();
+        final String projectType = root.getType();
 
-        service.checkout(workspaceId, project.getRootProject(), checkoutRequest, new AsyncRequestCallback<String>() {
+        service.checkout(workspaceId, root, checkoutRequest, new AsyncRequestCallback<String>() {
             @Override
             protected void onSuccess(String result) {
                 getBranches();
                 //In this case we can have unconfigured state of the project,
                 //so we must repeat the logic which is performed when we open a project
-                projectExplorer.reloadChildren();
-
-                updateOpenedFiles();
-
-                //refresh project
                 projectService.getProject(workspaceId, path,
                                           new AsyncRequestCallback<ProjectConfigDto>(
                                                   dtoUnmarshallerFactory.newUnmarshaller(ProjectConfigDto.class)) {
                                               @Override
                                               protected void onSuccess(ProjectConfigDto result) {
-                                                  eventBus.fireEvent(new ProjectUpdatedEvent(path, result));
+                                                  result.setType(projectType);
+                                                  updateProject(result);
                                               }
 
                                               @Override
