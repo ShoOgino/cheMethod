@@ -4,7 +4,16 @@
         applyModelPromise.then(new Operation<RefactoringResult>() {
             @Override
             public void apply(RefactoringResult result) throws OperationException {
-                onTargetRenamed(result, linkedEditor);
+                if (result.getSeverity() > WARNING) {
+                    if (linkedEditor instanceof EmbeddedTextEditorPresenter) {
+                        ((EmbeddedTextEditorPresenter)linkedEditor).getUndoRedo().undo();
+                    }
+
+                    loader.hide();
+                    notificationManager.notify(locale.failedToRename(), result.getEntries().get(0).getMessage() , FAIL, true);
+                } else {
+                    onTargetRenamed(result, linkedEditor);
+                }
             }
         }).catchError(new Operation<PromiseError>() {
             @Override
@@ -12,6 +21,11 @@
                 if (linkedEditor instanceof EditorWithAutoSave) {
                     ((EditorWithAutoSave)linkedEditor).enableAutoSave();
                 }
+
+                if (linkedEditor instanceof EmbeddedTextEditorPresenter) {
+                    ((EmbeddedTextEditorPresenter)linkedEditor).getUndoRedo().undo();
+                }
+
                 loader.hide();
                 notificationManager.notify(locale.failedToRename(), arg.getMessage(), FAIL, true);
             }
