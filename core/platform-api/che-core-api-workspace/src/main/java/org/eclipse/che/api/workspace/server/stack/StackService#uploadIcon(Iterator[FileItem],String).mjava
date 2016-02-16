@@ -1,0 +1,38 @@
+    @POST
+    @Path("/{id}/icon")
+    @Consumes(MULTIPART_FORM_DATA)
+    @Produces(TEXT_PLAIN)
+    @GenerateLink(rel = LINK_REL_UPLOAD_ICON)
+    @RolesAllowed({"user", "system/admin", "system/manager"})
+    @ApiOperation(value = "Upload icon for required stack",
+                  notes = "This operation can be performed only by authorized stack owner")
+    @ApiResponses({@ApiResponse(code = 200, message = "Image was successfully uploaded"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "The user does not have access upload image for stack with required id"),
+                   @ApiResponse(code = 404, message = "The stack doesn't exist"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public Response uploadIcon(@ApiParam("The image for stack")
+                               final Iterator<FileItem> formData,
+                               @ApiParam("The stack id")
+                               @PathParam("id")
+                               final String id)
+            throws NotFoundException, ServerException, BadRequestException, ForbiddenException {
+        if (formData.hasNext()) {
+            FileItem fileItem = formData.next();
+            StackIcon stackIcon = new StackIcon(fileItem.getName(), fileItem.getContentType(), fileItem.get());
+
+            StackImpl stack = stackDao.getById(id);
+
+            User user = EnvironmentContext.getCurrent().getUser();
+            if (!user.getId().equals(stack.getCreator()) &&
+                !user.isMemberOf("system/admin") &&
+                !permissionChecker.hasAccess(stack, user.getId(), "write")) {
+                throw new ForbiddenException(format("User '%s' doesn't has access to stack with id '%s'", user.getId(), id));
+            }
+
+            stack.setStackIcon(stackIcon);
+            stackDao.update(stack);
+        }
+        return Response.ok().build();
+    }
+

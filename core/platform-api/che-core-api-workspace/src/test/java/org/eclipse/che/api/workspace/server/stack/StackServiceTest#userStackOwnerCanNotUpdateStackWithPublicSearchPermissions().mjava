@@ -1,0 +1,31 @@
+    @Test
+    public void userStackOwnerCanNotUpdateStackWithPublicSearchPermissions() throws NotFoundException, ServerException {
+        StackDto updatedStackDto = DtoFactory.getInstance().createDto(StackDto.class)
+                                             .withId(STACK_ID)
+                                             .withName(NAME)
+                                             .withDescription(DESCRIPTION)
+                                             .withScope(SCOPE)
+                                             .withTags(tags)
+                                             .withSource(stackSourceDto)
+                                             .withComponents(componentsDto)
+                                             .withPermissions(permissionsDescriptor);
+
+        when(checker.hasAccess(any(StackImpl.class), anyString(), eq("write"))).thenReturn(true);
+
+        when(stackDao.getById(anyString())).thenReturn(stackImpl);
+        when(checker.hasPublicSearchPermission(any())).thenReturn(true);
+
+        Response response = given().auth()
+                                   .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                   .contentType(APPLICATION_JSON)
+                                   .content(updatedStackDto)
+                                   .when()
+                                   .put(SECURE_PATH + "/stack/" + STACK_ID);
+
+        assertEquals(response.getStatusCode(), 403);
+        String expectedMessage = format("User '%s' doesn't has access to use 'public: search' permission", USER_ID);
+        assertEquals(unwrapDto(response, ServiceError.class).getMessage(), expectedMessage);
+        verify(stackDao).getById(STACK_ID);
+        verify(stackDao, never()).update(any());
+    }
+
