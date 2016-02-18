@@ -40,14 +40,12 @@
             final String localPath = localPathResolver.resolve((VirtualFileImpl)baseFolder.getVirtualFile());
             final DtoFactory dtoFactory = DtoFactory.getInstance();
             final String location = storage.getLocation();
-            // it's needed for extract repository name from repository url e.g https://github.com/codenvy/che-core.git
-            // lastIndexOf('/') + 1 for not to capture slash and length - 4 for trim .git
-            final String repositoryName = location.substring(location.lastIndexOf('/') + 1, location.length() - 4);
+            final String projectName = baseFolder.getName();
             if (keepDirectory != null) {
                 final File temp = Files.createTempDirectory(null).toFile();
                 try {
                     git = gitConnectionFactory.getConnection(temp, consumerFactory);
-                    sparsecheckout(git, location, branch == null ? "master" : branch, startPoint, repositoryName, keepDirectory, dtoFactory);
+                    sparsecheckout(git, projectName, location, branch == null ? "master" : branch, startPoint, keepDirectory, dtoFactory);
                     // Copy content of directory to the project folder.
                     final File projectDir = new File(localPath);
                     IoUtil.copy(temp, projectDir, IoUtil.ANY_FILTER);
@@ -55,6 +53,7 @@
                     FileCleaner.addFile(temp);
                 }
             } else {
+
                 git = gitConnectionFactory.getConnection(localPath, consumerFactory);
                 if (baseFolder.getChildren().size() == 0) {
                     cloneRepository(git, "origin", location, dtoFactory);
@@ -64,10 +63,10 @@
                         git.getConfig().add("remote.origin.fetch", remoteOriginFetch);
                         fetch(git, "origin", dtoFactory);
                         if (branch != null) {
-                            checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+                            checkoutBranch(git, projectName, branch, startPoint, dtoFactory);
                         }
                     } else if (branch != null) {
-                        checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+                        checkoutBranch(git, projectName, branch, startPoint, dtoFactory);
                     }
                 } else {
                     initRepository(git, dtoFactory);
@@ -79,14 +78,14 @@
                         git.getConfig().add("remote.origin.fetch", remoteOriginFetch);
                         fetch(git, "origin", dtoFactory);
                         if (branch != null) {
-                            checkoutBranch(git, branch, startPoint, repositoryName, dtoFactory);
+                            checkoutBranch(git, projectName, branch, startPoint, dtoFactory);
                         }
                     } else {
                         fetchBranch(git, "origin", branch == null ? "*" : branch, dtoFactory);
 
                         List<Branch> branchList = git.branchList(dtoFactory.createDto(BranchListRequest.class).withListMode("r"));
                         if (!branchList.isEmpty()) {
-                            checkoutBranch(git, branch == null ? "master" : branch, startPoint, repositoryName, dtoFactory);
+                            checkoutBranch(git, projectName, branch == null ? "master" : branch, startPoint, dtoFactory);
                         }
                     }
                 }
@@ -97,7 +96,7 @@
                     cleanGit(git.getWorkingDir());
                 }
             }
-        }  catch (URISyntaxException e) {
+        } catch (URISyntaxException e) {
             throw new ServerException(
                     "Your project cannot be imported. The issue is either from git configuration, a malformed URL, " +
                     "or file system corruption. Please contact support for assistance.",
