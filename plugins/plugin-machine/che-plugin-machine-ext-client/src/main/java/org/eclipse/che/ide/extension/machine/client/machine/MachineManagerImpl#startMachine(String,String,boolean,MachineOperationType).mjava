@@ -16,14 +16,18 @@
                                                .withLimits(limitsDto)
                                                .withType("docker");
 
-        Promise<MachineStateDto> machineStatePromise = workspaceServiceClient.createMachine(appContext.getWorkspace().getId(), configDto);
+        Promise<MachineDto> machinePromise = workspaceServiceClient.createMachine(appContext.getWorkspace().getId(), configDto);
 
-        machineStatePromise.then(new Operation<MachineStateDto>() {
+        machinePromise.then(new Operation<MachineDto>() {
             @Override
-            public void apply(final MachineStateDto machineStateDto) throws OperationException {
-                eventBus.fireEvent(new MachineStartingEvent(machineStateDto));
+            public void apply(final MachineDto machineDto) throws OperationException {
+                eventBus.fireEvent(new MachineStartingEvent(machineDto));
 
-                subscribeToChannel(machineStateDto.getChannels().getOutput(), outputHandler);
+                subscribeToChannel(machineDto.getConfig()
+                                             .getLink(Constants.LINK_REL_GET_MACHINE_LOGS_CHANNEL)
+                                             .getParameter("channel")
+                                             .getDefaultValue(),
+                                   outputHandler);
 
                 RunningListener runningListener = null;
 
@@ -31,12 +35,12 @@
                     runningListener = new RunningListener() {
                         @Override
                         public void onRunning() {
-                            onMachineRunning(machineStateDto.getId());
+                            onMachineRunning(machineDto.getId());
                         }
                     };
                 }
 
-                machineStatusNotifier.trackMachine(machineStateDto, runningListener, operationType);
+                machineStatusNotifier.trackMachine(machineDto, runningListener, operationType);
             }
         });
     }

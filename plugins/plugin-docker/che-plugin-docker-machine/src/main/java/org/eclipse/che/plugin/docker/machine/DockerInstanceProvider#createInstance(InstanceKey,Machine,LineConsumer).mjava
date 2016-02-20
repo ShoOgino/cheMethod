@@ -1,0 +1,31 @@
+    @Override
+    public Instance createInstance(InstanceKey instanceKey,
+                                   Machine machine,
+                                   LineConsumer creationLogsOutput) throws NotFoundException, MachineException {
+        final DockerInstanceKey dockerInstanceKey = new DockerInstanceKey(instanceKey);
+
+        pullImage(dockerInstanceKey, creationLogsOutput);
+
+        final String machineContainerName = generateContainerName(machine.getWorkspaceId(), machine.getConfig().getName());
+        final String machineImageName = "eclipse-che/" + machineContainerName;
+        final String fullNameOfPulledImage = dockerInstanceKey.getFullName();
+        try {
+            // tag image with generated name to allow sysadmin recognize it
+            docker.tag(fullNameOfPulledImage, machineImageName, null);
+        } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+            throw new MachineException("Can't create machine from snapshot.");
+        }
+        try {
+            // remove unneeded tag
+            docker.removeImage(fullNameOfPulledImage, false);
+        } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+        }
+
+        return createInstance(machineContainerName,
+                              machine,
+                              machineImageName,
+                              creationLogsOutput);
+    }
+
