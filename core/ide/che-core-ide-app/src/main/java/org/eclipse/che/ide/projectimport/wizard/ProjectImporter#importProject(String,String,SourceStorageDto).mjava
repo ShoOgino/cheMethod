@@ -1,32 +1,7 @@
     @Override
-    protected Promise<Void> importProject(@NotNull String pathToProject,
-                                          @NotNull String projectName,
-                                          @NotNull SourceStorageDto sourceStorage) {
-        final ProjectNotificationSubscriber subscriber = subscriberFactory.createSubscriber();
-        subscriber.subscribe(projectName);
-
-        Promise<Void> importPromise = projectService.importProject(workspaceId, pathToProject, false, sourceStorage);
-
-        return importPromise.then(new Operation<Void>() {
-            @Override
-            public void apply(Void arg) throws OperationException {
-                eventBus.fireEvent(new CreateProjectEvent(projectConfig));
-                projectResolver.resolveProject(callback, projectConfig);
-
-                subscriber.onSuccess();
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError exception) throws OperationException {
-                subscriber.onFailure(exception.getMessage());
-                int errorCode = ErrorMessageUtils.getErrorCode(exception.getCause());
-                // no ssh key found code. See org.eclipse.che.git.impl.nativegit.ssh.SshKeyProviderImpl.
-                if (errorCode == ErrorCodes.UNABLE_GET_PRIVATE_SSH_KEY) {
-                    callback.onFailure(new Exception(localizationConstant.importProjectMessageUnableGetSshKey()));
-                    return;
-                }
-                callback.onFailure(new Exception(exception.getCause().getMessage()));
-            }
-        });
+    protected Promise<Void> importProject(@NotNull final String pathToProject,
+                                          @NotNull final String projectName,
+                                          @NotNull final SourceStorageDto sourceStorage) {
+        return doImport(pathToProject, projectName, sourceStorage);
     }
 
