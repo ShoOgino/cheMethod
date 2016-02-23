@@ -1,0 +1,46 @@
+    @Test
+    public void shouldPreferMachineConfOverDockerLabels() throws Exception {
+        // given
+        Map<String, List<PortBinding>> ports = new HashMap<>();
+        when(networkSettings.getPorts()).thenReturn(ports);
+        Map<String, String> labels = new HashMap<>();
+        when(containerConfig.getLabels()).thenReturn(labels);
+        List<ServerConfImpl> serversConfigs = new ArrayList<>();
+        doReturn(serversConfigs).when(machineConfig).getServers();
+        ports.put("8080/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32100")));
+        ports.put("100100/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                           .withHostPort("32101")));
+        ports.put("8080/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32102")));
+        ports.put("8000/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32103")));
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/tcp" + SERVER_CONF_LABEL_REF_SUFFIX, "myserv1label");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/tcp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "https");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/udp" + SERVER_CONF_LABEL_REF_SUFFIX, "myserv1-tftp");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/udp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "tftp");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "100100/udp" + SERVER_CONF_LABEL_REF_SUFFIX, "myserv2label");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "100100/udp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "dhcp");
+        serversConfigs.add(new ServerConfImpl("myserv1conf", "8080/tcp", "http"));
+        serversConfigs.add(new ServerConfImpl(null, "8080/udp", null));
+        runtimeInfo = new DockerInstanceRuntimeInfo(containerInfo,
+                                                    CONTAINER_HOST,
+                                                    machineConfig,
+                                                    Collections.emptySet(),
+                                                    Collections.emptySet());
+
+        // when
+        final Map<String, ServerImpl> servers = runtimeInfo.getServers();
+
+        // then
+        assertEquals(servers.get("8080/tcp"), new ServerImpl("myserv1conf",
+                                                             CONTAINER_HOST + ":32100",
+                                                             "http://" + CONTAINER_HOST + ":32100"));
+        assertEquals(servers.get("100100/udp"), new ServerImpl("myserv2label",
+                                                               CONTAINER_HOST + ":32101",
+                                                               "dhcp://" + CONTAINER_HOST + ":32101"));
+        assertEquals(servers.get("8080/udp"), new ServerImpl("Server-8080-udp",
+                                                             CONTAINER_HOST + ":32102",
+                                                             null));
+    }
+

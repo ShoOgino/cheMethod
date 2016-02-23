@@ -1,0 +1,44 @@
+    @Test
+    public void shouldAddCommonAndDevSystemServersConfigToDevMachine() throws Exception {
+        // given
+        Map<String, List<PortBinding>> ports = new HashMap<>();
+        when(networkSettings.getPorts()).thenReturn(ports);
+        ports.put("4301/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32100")));
+        ports.put("4302/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32101")));
+        ports.put("4305/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32102")));
+        ports.put("4305/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32103")));
+        Set<ServerConf> commonSystemServersConfigs = new HashSet<>();
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-tcp", "4301/tcp", "http"));
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer2-udp", "4302/udp", "dhcp"));
+        Set<ServerConf> devSystemServersConfigs = new HashSet<>();
+        devSystemServersConfigs.add(new ServerConfImpl("devSysServer1-tcp", "4305/tcp", "http"));
+        devSystemServersConfigs.add(new ServerConfImpl("devSysServer1-udp", "4305/udp", null));
+        when(machineConfig.isDev()).thenReturn(true);
+        runtimeInfo = new DockerInstanceRuntimeInfo(containerInfo,
+                                                    CONTAINER_HOST,
+                                                    machineConfig,
+                                                    devSystemServersConfigs,
+                                                    commonSystemServersConfigs);
+
+        // when
+        final Map<String, ServerImpl> servers = runtimeInfo.getServers();
+
+        // then
+        assertEquals(servers.get("4301/tcp"), new ServerImpl("sysServer1-tcp",
+                                                             CONTAINER_HOST + ":32100",
+                                                             "http://" + CONTAINER_HOST + ":32100"));
+        assertEquals(servers.get("4302/udp"), new ServerImpl("sysServer2-udp",
+                                                             CONTAINER_HOST + ":32101",
+                                                             "dhcp://" + CONTAINER_HOST + ":32101"));
+        assertEquals(servers.get("4305/tcp"), new ServerImpl("devSysServer1-tcp",
+                                                             CONTAINER_HOST + ":32102",
+                                                             "http://" + CONTAINER_HOST + ":32102"));
+        assertEquals(servers.get("4305/udp"), new ServerImpl("devSysServer1-udp",
+                                                             CONTAINER_HOST + ":32103",
+                                                             null));
+    }
+

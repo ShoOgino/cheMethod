@@ -1,0 +1,41 @@
+    @Test
+    public void shouldAddEnvVarsFromMachineConfigToContainerOnNonDevInstanceCreationFromSnapshot() throws Exception {
+        // given
+        Map<String, String> envVarsFromConfig = new HashMap<>();
+        envVarsFromConfig.put("ENV_VAR1", "123");
+        envVarsFromConfig.put("ENV_VAR2", "234");
+
+        dockerInstanceProvider = new DockerInstanceProvider(dockerConnector,
+                                                            dockerConnectorConfiguration,
+                                                            dockerMachineFactory,
+                                                            dockerInstanceStopDetector,
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet(),
+                                                            null,
+                                                            workspaceFolderPathProvider,
+                                                            PROJECT_FOLDER_PATH,
+                                                            false,
+                                                            Collections.emptySet(),
+                                                            Collections.emptySet());
+
+        final boolean isDev = false;
+
+        // when
+        createInstanceFromSnapshot(getMachineBuilder().setConfig(getMachineConfigBuilder().setDev(isDev)
+                                                                                          .setEnvVariables(envVarsFromConfig)
+                                                                                          .build())
+                                                      .build());
+
+        // then
+        ArgumentCaptor<ContainerConfig> argumentCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture(), anyString());
+        assertTrue(asList(argumentCaptor.getValue().getEnv()).containsAll(envVarsFromConfig.entrySet()
+                                                                                           .stream()
+                                                                                           .map(entry -> entry.getKey() +
+                                                                                                         "=" +
+                                                                                                         entry.getValue())
+                                                                                           .collect(Collectors.toList())));
+    }
+

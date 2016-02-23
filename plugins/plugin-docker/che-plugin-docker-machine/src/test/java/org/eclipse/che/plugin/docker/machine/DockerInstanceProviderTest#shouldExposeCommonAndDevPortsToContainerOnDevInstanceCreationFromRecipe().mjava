@@ -1,17 +1,17 @@
     @Test
     public void shouldExposeCommonAndDevPortsToContainerOnDevInstanceCreationFromRecipe() throws Exception {
-        Map<String, Map<String, String>> expectedExposedPorts = new HashMap<>();
-        final Set<ServerConf> commonServers = new HashSet<>(asList(new ServerConf("reference1", "8080", "http"),
-                                                                   new ServerConf("reference2", "8081", "ftp")));
-        for (ServerConf server : commonServers) {
-            expectedExposedPorts.put(server.getPort(), Collections.emptyMap());
-        }
+        List<String> expectedExposedPorts = new ArrayList<>();
+        final Set<ServerConf> commonServers = new HashSet<>(asList(new ServerConfImpl("reference1", "8080", "http"),
+                                                                   new ServerConfImpl("reference2", "8081", "ftp")));
+        expectedExposedPorts.addAll(commonServers.stream()
+                                                 .map(ServerConf::getPort)
+                                                 .collect(Collectors.toList()));
 
-        final Set<ServerConf> devServers = new HashSet<>(asList(new ServerConf("reference3", "8082", "https"),
-                                                                new ServerConf("reference4", "8083", "sftp")));
-        for (ServerConf server : devServers) {
-            expectedExposedPorts.put(server.getPort(), Collections.emptyMap());
-        }
+        final Set<ServerConf> devServers = new HashSet<>(asList(new ServerConfImpl("reference3", "8082", "https"),
+                                                                new ServerConfImpl("reference4", "8083", "sftp")));
+        expectedExposedPorts.addAll(devServers.stream()
+                                              .map(ServerConf::getPort)
+                                              .collect(Collectors.toList()));
 
         dockerInstanceProvider = new DockerInstanceProvider(dockerConnector,
                                                             dockerConnectorConfiguration,
@@ -37,6 +37,6 @@
         ArgumentCaptor<ContainerConfig> argumentCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
         verify(dockerConnector).createContainer(argumentCaptor.capture(), anyString());
 
-        assertEquals(argumentCaptor.getValue().getExposedPorts(), expectedExposedPorts);
+        assertTrue(new ArrayList<>(argumentCaptor.getValue().getExposedPorts().keySet()).containsAll(expectedExposedPorts));
     }
 

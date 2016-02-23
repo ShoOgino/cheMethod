@@ -4,13 +4,11 @@
                                     LineConsumer outputConsumer)
             throws MachineException {
         try {
-            final Map<String, String> labels;
             final Map<String, Map<String, String>> portsToExpose;
             final String[] volumes;
-            final String[] env;
+            final List<String> env;
             if (machine.getConfig().isDev()) {
-                labels = devMachineContainerLabels;
-                portsToExpose = devMachinePortsToExpose;
+                portsToExpose = new HashMap<>(devMachinePortsToExpose);
 
                 final String projectFolderVolume = String.format("%s:%s",
                                                                  workspaceFolderPathProvider.getPath(machine.getWorkspaceId()),
@@ -18,16 +16,25 @@
                 volumes = ObjectArrays.concat(devMachineSystemVolumes,
                                               SystemInfo.isWindows() ? escapePath(projectFolderVolume) : projectFolderVolume);
 
-                String[] vars = {DockerInstanceRuntimeInfo.CHE_WORKSPACE_ID + '=' + machine.getWorkspaceId(),
-                                 DockerInstanceRuntimeInfo.USER_TOKEN + '=' + EnvironmentContext.getCurrent().getUser().getToken()};
-                env = ObjectArrays.concat(devMachineEnvVariables, vars, String.class);
-
+                env = new ArrayList<>(devMachineEnvVariables);
+                env.add(DockerInstanceRuntimeInfo.CHE_WORKSPACE_ID + '=' + machine.getWorkspaceId());
+                env.add(DockerInstanceRuntimeInfo.USER_TOKEN + '=' + EnvironmentContext.getCurrent().getUser().getToken());
             } else {
-                labels = commonMachineContainerLabels;
-                portsToExpose = commonMachinePortsToExpose;
+                portsToExpose = new HashMap<>(commonMachinePortsToExpose);
                 volumes = commonMachineSystemVolumes;
-                env = commonMachineEnvVariables;
+                env = new ArrayList<>(commonMachineEnvVariables);
             }
+            machine.getConfig()
+                   .getServers()
+                   .stream()
+                   .forEach(serverConf -> portsToExpose.put(serverConf.getPort(), Collections.emptyMap()));
+
+            machine.getConfig()
+                   .getEnvVariables()
+                   .entrySet()
+                   .stream()
+                   .map(entry -> entry.getKey() + "=" + entry.getValue())
+                   .forEach(env::add);
 
             final HostConfig hostConfig = new HostConfig().withBinds(volumes)
                                                           .withExtraHosts(allMachinesExtraHosts)
@@ -35,10 +42,9 @@
                                                           .withMemorySwap(-1)
                                                           .withMemory((long)machine.getConfig().getLimits().getRam() * 1024 * 1024);
             final ContainerConfig config = new ContainerConfig().withImage(imageName)
-                                                                .withLabels(labels)
                                                                 .withExposedPorts(portsToExpose)
                                                                 .withHostConfig(hostConfig)
-                                                                .withEnv(env);
+                                                                .withEnv(env.toArray(new String[env.size()]));
 
             final String containerId = docker.createContainer(config, containerName).getId();
 

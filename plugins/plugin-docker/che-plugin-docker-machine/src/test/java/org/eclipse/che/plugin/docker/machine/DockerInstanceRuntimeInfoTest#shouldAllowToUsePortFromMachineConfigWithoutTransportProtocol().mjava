@@ -1,0 +1,31 @@
+    @Test
+    public void shouldAllowToUsePortFromMachineConfigWithoutTransportProtocol() throws Exception {
+        // given
+        Map<String, List<PortBinding>> ports = new HashMap<>();
+        when(networkSettings.getPorts()).thenReturn(ports);
+        List<ServerConfImpl> serversConfigs = new ArrayList<>();
+        doReturn(serversConfigs).when(machineConfig).getServers();
+        ports.put("8080/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32100")));
+        ports.put("8080/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32102")));
+        serversConfigs.add(new ServerConfImpl("myserv1", "8080", "http"));
+        serversConfigs.add(new ServerConfImpl("myserv1-tftp", "8080/udp", "tftp"));
+        runtimeInfo = new DockerInstanceRuntimeInfo(containerInfo,
+                                                    CONTAINER_HOST,
+                                                    machineConfig,
+                                                    Collections.emptySet(),
+                                                    Collections.emptySet());
+
+        // when
+        final Map<String, ServerImpl> servers = runtimeInfo.getServers();
+
+        // then
+        assertEquals(servers.get("8080/tcp"), new ServerImpl("myserv1",
+                                                             CONTAINER_HOST + ":32100",
+                                                             "http://" + CONTAINER_HOST + ":32100"));
+        assertEquals(servers.get("8080/udp"), new ServerImpl("myserv1-tftp",
+                                                             CONTAINER_HOST + ":32102",
+                                                             "tftp://" + CONTAINER_HOST + ":32102"));
+    }
+
