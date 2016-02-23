@@ -1,9 +1,23 @@
     @Test
     public void onLoadRepoClickedWhenAuthorizeIsSuccessful() throws Exception {
+        doAnswer(new Answer() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                presenter.onFailRequest(promiseError);
+                return null;
+            }
+        }).doAnswer(new Answer() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                presenter.onSuccessRequest(jsArrayMixed);
+                return null;
+            }
+        }).when(presenter).doRequest(any(Promise.class), any(Promise.class), any(Promise.class));
         final Throwable exception = mock(UnauthorizedException.class);
         String userId = "userId";
         CurrentUser user = mock(CurrentUser.class);
         ProfileDescriptor profile = mock(ProfileDescriptor.class);
+        doReturn(exception).when(promiseError).getCause();
 
         when(appContext.getCurrentUser()).thenReturn(user);
         when(user.getProfile()).thenReturn(profile);
@@ -11,17 +25,16 @@
 
         presenter.onLoadRepoClicked();
 
-        verify(gitHubClientService).getAllRepositories(asyncRequestCallbackRepoListCaptor.capture());
-        AsyncRequestCallback<Map<String, List<GitHubRepository>>> asyncRequestCallback = asyncRequestCallbackRepoListCaptor.getValue();
-        GwtReflectionUtils.callOnFailure(asyncRequestCallback, exception);
+        verify(gitHubClientService).getRepositoriesList();
+        verify(gitHubClientService).getUserInfo();
+        verify(gitHubClientService).getOrganizations();
 
         verify(gitHubAuthenticator).authorize(anyString(), asyncCallbackCaptor.capture());
-        AsyncCallback<OAuthStatus> asyncCallback= asyncCallbackCaptor.getValue();
+        AsyncCallback<OAuthStatus> asyncCallback = asyncCallbackCaptor.getValue();
         asyncCallback.onSuccess(null);
 
         verify(view, times(3)).setLoaderVisibility(eq(true));
         verify(view, times(3)).setInputsEnableState(eq(false));
-        verify(view, times(2)).setInputsEnableState(eq(true));
-        verify(gitHubClientService, times(2)).getAllRepositories(Matchers.<AsyncRequestCallback<Map<String, List<GitHubRepository>>>>anyObject());
+        verify(view, times(3)).setInputsEnableState(eq(true));
     }
 
