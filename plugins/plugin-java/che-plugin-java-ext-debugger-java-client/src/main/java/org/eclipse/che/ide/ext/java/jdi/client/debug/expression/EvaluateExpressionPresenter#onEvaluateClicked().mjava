@@ -1,20 +1,22 @@
     /** {@inheritDoc} */
     @Override
     public void onEvaluateClicked() {
-        view.setEnableEvaluateButton(false);
-        service.evaluateExpression(debuggerInfo.getId(), view.getExpression(),
-                                   new AsyncRequestCallback<String>(new StringUnmarshaller()) {
-                                       @Override
-                                       protected void onSuccess(String result) {
-                                           view.setResult(result);
-                                           view.setEnableEvaluateButton(true);
-                                       }
-
-                                       @Override
-                                       protected void onFailure(Throwable exception) {
-                                           view.setResult(constant.evaluateExpressionFailed(exception.getMessage()));
-                                           view.setEnableEvaluateButton(true);
-                                       }
-                                   });
+        Debugger debugger = debuggerManager.getDebugger();
+        if (debugger != null) {
+            view.setEnableEvaluateButton(false);
+            debugger.evaluateExpression(view.getExpression()).then(new Operation<String>() {
+                @Override
+                public void apply(String result) throws OperationException {
+                    view.setResult(result);
+                    view.setEnableEvaluateButton(true);
+                }
+            }).catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError error) throws OperationException {
+                    view.setResult(constant.evaluateExpressionFailed(error.getMessage()));
+                    view.setEnableEvaluateButton(true);
+                }
+            });
+        }
     }
 
