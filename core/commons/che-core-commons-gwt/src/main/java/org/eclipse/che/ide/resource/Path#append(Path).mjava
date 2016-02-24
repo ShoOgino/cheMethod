@@ -1,0 +1,43 @@
+    /**
+     * Returns the canonicalized path obtained from the
+     * concatenation of the given path's segments to the
+     * end of this path.  If the given path has a trailing
+     * separator, the result will have a trailing separator.
+     * The device id of this path is preserved (the one
+     * of the given path is ignored). Duplicate slashes
+     * are removed from the path except at the beginning
+     * where the path is considered to be UNC.
+     *
+     * @param path
+     *         the path to concatenate
+     * @return the new path
+     * @since 4.0.0-RC5
+     */
+    public Path append(Path path) {
+        //optimize some easy cases
+        if (path == null || path.segmentCount() == 0)
+            return this;
+        //these call chains look expensive, but in most cases they are no-ops
+        if (this.isEmpty())
+            return path.setDevice(device).makeRelative().makeUNC(isUNC());
+        if (this.isRoot())
+            return path.setDevice(device).makeAbsolute().makeUNC(isUNC());
+
+        //concatenate the two segment arrays
+        int myLen = segments.length;
+        int tailLen = path.segmentCount();
+        String[] newSegments = new String[myLen + tailLen];
+        System.arraycopy(segments, 0, newSegments, 0, myLen);
+        for (int i = 0; i < tailLen; i++) {
+            newSegments[myLen + i] = path.segment(i);
+        }
+        //use my leading separators and the tail's trailing separator
+        Path result = new Path(device, newSegments,
+                               (separators & (HAS_LEADING | IS_UNC)) | (path.hasTrailingSeparator() ? HAS_TRAILING : 0));
+        String tailFirstSegment = newSegments[myLen];
+        if (tailFirstSegment.equals("..") || tailFirstSegment.equals(".")) {
+            result.canonicalize();
+        }
+        return result;
+    }
+
