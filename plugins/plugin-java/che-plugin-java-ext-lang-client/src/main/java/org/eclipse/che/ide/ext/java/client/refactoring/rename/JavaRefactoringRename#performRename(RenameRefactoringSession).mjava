@@ -1,0 +1,26 @@
+    private void performRename(RenameRefactoringSession session) {
+        final LinkedRenameRefactoringApply dto = createLinkedRenameRefactoringApplyDto(newName, session.getSessionId());
+        Promise<RefactoringResult> applyModelPromise = refactoringServiceClient.applyLinkedModeRename(dto);
+        applyModelPromise.then(new Operation<RefactoringResult>() {
+            @Override
+            public void apply(RefactoringResult result) throws OperationException {
+                if (result.getSeverity() > WARNING) {
+                    undoChanges();
+
+                    notificationManager.notify(locale.failedToRename(), result.getEntries().get(0).getMessage(), FAIL, true);
+                } else {
+                    onTargetRenamed(result);
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                enableAutoSave();
+
+                undoChanges();
+
+                notificationManager.notify(locale.failedToRename(), arg.getMessage(), FAIL, true);
+            }
+        });
+    }
+
