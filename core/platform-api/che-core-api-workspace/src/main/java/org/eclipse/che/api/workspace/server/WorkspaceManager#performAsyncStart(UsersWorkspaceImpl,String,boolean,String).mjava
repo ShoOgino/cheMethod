@@ -5,7 +5,9 @@
     UsersWorkspaceImpl performAsyncStart(UsersWorkspaceImpl workspace,
                                          String envName,
                                          boolean recover,
-                                         @Nullable String accountId) throws ConflictException {
+                                         @Nullable String accountId) throws ConflictException,
+                                                                            BadRequestException {
+
         // Runtime workspace registry performs this check as well
         // but this check needed here because permanent workspace start performed asynchronously
         // which means that even if registry won't start workspace client receives workspace object
@@ -20,6 +22,17 @@
         }
         workspace.setTemporary(false);
         workspace.setStatus(WorkspaceStatus.STARTING);
+
+        if (envName != null && !workspace.getConfig()
+                                         .getEnvironments()
+                                         .stream()
+                                         .anyMatch(env -> env.getName().equals(envName))) {
+
+            throw new BadRequestException(format("Couldn't start workspace '%s', workspace doesn't have environment '%s'",
+                                                 workspace.getConfig().getName(),
+                                                 envName));
+        }
+
         executor.execute(ThreadLocalPropagateContext.wrap(() -> {
             try {
                 performSyncStart(workspace, firstNonNull(envName, workspace.getConfig().getDefaultEnv()), recover, accountId);

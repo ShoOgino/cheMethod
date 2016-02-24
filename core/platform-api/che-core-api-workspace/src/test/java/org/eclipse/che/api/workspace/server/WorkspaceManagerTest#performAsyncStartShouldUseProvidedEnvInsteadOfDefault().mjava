@@ -1,0 +1,18 @@
+    @Test
+    public void performAsyncStartShouldUseProvidedEnvInsteadOfDefault() throws Exception {
+        final WorkspaceConfigDto config = createConfig();
+        final EnvironmentDto nonDefaultEnv = newDto(EnvironmentDto.class).withName("non-default-env")
+                                                                          .withMachineConfigs(
+                                                                                  config.getEnvironments().get(0).getMachineConfigs())
+                                                                          .withRecipe(null);
+        config.getEnvironments().add(nonDefaultEnv);
+        final UsersWorkspaceImpl workspace = workspaceManager.createWorkspace(config, "user123", "account");
+        when(registry.get(workspace.getId())).thenThrow(new NotFoundException(""));
+        when(registry.start(any(), anyString(), anyBoolean())).thenReturn(createRuntime(workspace));
+
+        workspaceManager.performAsyncStart(workspace, nonDefaultEnv.getName(), false, "account");
+
+        // timeout is needed because this invocation will run in separate thread asynchronously
+        verify(registry, timeout(2000)).start(workspace, nonDefaultEnv.getName(), false);
+    }
+
