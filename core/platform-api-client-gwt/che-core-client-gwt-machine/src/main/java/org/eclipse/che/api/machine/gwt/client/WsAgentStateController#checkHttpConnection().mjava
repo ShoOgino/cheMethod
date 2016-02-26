@@ -1,0 +1,34 @@
+    /**
+     * Goto checking HTTP connection via getting all registered REST Services
+     */
+    private void checkHttpConnection() {
+        asyncRequestFactory.createGetRequest(extPath + "/" + wsId + "/").send(new AsyncRequestCallback<String>(new StringUnmarshaller()) {
+            @Override
+            protected void onSuccess(String result) {
+                JSONObject object = JSONParser.parseStrict(result).isObject();
+                if (object.containsKey("rootResources")) {
+                    JSONArray rootResources = object.get("rootResources").isArray();
+                    for (int i = 0; i < rootResources.size(); i++) {
+                        JSONObject rootResource = rootResources.get(i).isObject();
+                        String regex = rootResource.get("regex").isString().stringValue();
+                        String fqn = rootResource.get("fqn").isString().stringValue();
+                        String path = rootResource.get("path").isString().stringValue();
+                        availableServices.add(new RestServiceInfo(fqn,regex,path));
+                    }
+                    checkWsConnection();
+                }
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                Log.error(getClass(), exception.getMessage());
+                new Timer() {
+                    @Override
+                    public void run() {
+                        checkHttpConnection();
+                    }
+                }.schedule(1000);
+            }
+        });
+    }
+
