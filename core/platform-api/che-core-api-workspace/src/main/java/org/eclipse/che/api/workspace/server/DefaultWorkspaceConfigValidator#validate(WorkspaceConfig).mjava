@@ -15,58 +15,67 @@
     @Override
     public void validate(WorkspaceConfig config) throws BadRequestException {
         // configuration object itself
-        requiredNotNull(config.getName(), "Workspace name required");
-        if (!WS_NAME.matcher(config.getName()).matches()) {
-            throw new BadRequestException("Incorrect workspace name, it must be between 3 and 20 characters and may contain digits, " +
-                                          "latin letters, underscores, dots, dashes and should start and end only with digits, " +
-                                          "latin letters or underscores");
-        }
+        checkNotNull(config.getName(), "Workspace name required");
+        checkArgument(WS_NAME.matcher(config.getName()).matches(),
+                      "Incorrect workspace name, it must be between 3 and 20 characters and may contain digits, " +
+                      "latin letters, underscores, dots, dashes and should start and end only with digits, " +
+                      "latin letters or underscores");
 
         //attributes
         for (String attributeName : config.getAttributes().keySet()) {
             //attribute name should not be empty and should not start with codenvy
-            if (attributeName.trim().isEmpty() || attributeName.toLowerCase().startsWith("codenvy")) {
-                throw new BadRequestException(format("Attribute name '%s' is not valid", attributeName));
-            }
+            checkArgument(attributeName != null && !attributeName.trim().isEmpty() && !attributeName.toLowerCase().startsWith("codenvy"),
+                          "Attribute name '%s' is not valid",
+                          attributeName);
         }
 
         //environments
-        requiredNotNull(config.getDefaultEnv(), "Workspace default environment name required");
-        if (!config.getEnvironments().stream().anyMatch(env -> env.getName().equals(config.getDefaultEnv()))) {
-            throw new BadRequestException("Workspace default environment configuration required");
-        }
+        checkArgument(!isNullOrEmpty(config.getDefaultEnv()), "Workspace default environment name required");
+        checkArgument(config.getEnvironments()
+                            .stream()
+                            .anyMatch(env -> config.getDefaultEnv().equals(env.getName())),
+                      "Workspace default environment configuration required");
+
         for (Environment environment : config.getEnvironments()) {
             final String envName = environment.getName();
-            requiredNotNull(envName, "Environment name should not be null");
+            checkArgument(!isNullOrEmpty(envName), "Environment name should be neither null nor empty");
+
+            checkArgument(environment.getRecipe() == null || "docker".equals(environment.getRecipe().getType()),
+                          "Couldn't start workspace '%s' from environment '%s', environment recipe has unsupported type '%s'",
+                          config.getName(),
+                          envName,
+                          environment.getRecipe() != null ? environment.getRecipe().getType() : null);
 
             //machine configs
-            if (environment.getMachineConfigs().isEmpty()) {
-                throw new BadRequestException("Environment '" + envName + "' should contain at least 1 machine");
-            }
+            checkArgument(!environment.getMachineConfigs().isEmpty(), "Environment '%s' should contain at least 1 machine", envName);
+
             final long devCount = environment.getMachineConfigs()
                                              .stream()
                                              .filter(MachineConfig::isDev)
                                              .count();
-            if (devCount != 1) {
-                throw new BadRequestException(format("Environment should contain exactly 1 dev machine, but '%s' contains '%d'",
-                                                     envName,
-                                                     devCount));
-            }
+            checkArgument(devCount == 1,
+                          "Environment should contain exactly 1 dev machine, but '%s' contains '%d'",
+                          envName,
+                          devCount);
             for (MachineConfig machineCfg : environment.getMachineConfigs()) {
-                if (isNullOrEmpty(machineCfg.getName())) {
-                    throw new BadRequestException("Environment " + envName + " contains machine without of name");
-                }
-                requiredNotNull(machineCfg.getSource(), "Environment " + envName + " contains machine without of source");
-                //TODO require type?
+                checkArgument(!isNullOrEmpty(machineCfg.getName()), "Environment %s contains machine with null or empty name", envName);
+                checkNotNull(machineCfg.getSource(), "Environment " + envName + " contains machine without source");
+                checkArgument("docker".equals(machineCfg.getType()),
+                              "Type of machine %s in environment %s is not supported. Supported value is 'docker'.",
+                              machineCfg.getName(),
+                              envName);
             }
         }
 
         //commands
         for (Command command : config.getCommands()) {
-            requiredNotNull(command.getName(), "Workspace " + config.getName() + " contains command without of name");
-            requiredNotNull(command.getCommandLine(), format("Command line required for command '%s' in workspace '%s'",
-                                                             command.getName(),
-                                                             config.getName()));
+            checkArgument(!isNullOrEmpty(command.getName()),
+                          "Workspace %s contains command with null or empty name",
+                          config.getName());
+            checkArgument(!isNullOrEmpty(command.getCommandLine()),
+                          "Command line required for command '%s' in workspace '%s'",
+                          command.getName(),
+                          config.getName());
         }
 
         //projects
