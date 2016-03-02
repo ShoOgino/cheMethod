@@ -12,30 +12,30 @@
 
         final StatusNotification notification =
                 notificationManager.notify(constant.pullProcess(), PROGRESS, true, project.getRootProject());
-        final GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
 
         gitServiceClient.pull(workspaceId, project.getRootProject(), getRefs(), remoteName,
                               new AsyncRequestCallback<PullResponse>(dtoUnmarshallerFactory.newUnmarshaller(PullResponse.class)) {
                                   @Override
                                   protected void onSuccess(PullResponse result) {
-                                      console.printInfo(result.getCommandOutput());
+                                      GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
+                                      console.print(result.getCommandOutput(), GREEN_COLOR);
                                       consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
                                       notification.setStatus(SUCCESS);
                                       if (result.getCommandOutput().contains("Already up-to-date")) {
                                           notification.setTitle(constant.pullUpToDate());
                                       } else {
-                                          refreshProject(openedEditors);
+                                          refreshProjectNodesAndEditors(openedEditors);
                                           notification.setTitle(constant.pullSuccess(remoteUrl));
                                       }
                                   }
 
                                   @Override
-                                  protected void onFailure(Throwable throwable) {
-                                      if (throwable.getMessage().contains("Merge conflict")) {
-                                          refreshProject(openedEditors);
+                                  protected void onFailure(Throwable exception) {
+                                      notification.setStatus(FAIL);
+                                      if (getErrorCode(exception) == ErrorCodes.MERGE_CONFLICT) {
+                                          refreshProjectNodesAndEditors(openedEditors);
                                       }
-                                      handleError(throwable, remoteUrl, notification, console);
-                                      consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+                                      handleError(exception, PULL_COMMAND_NAME);
                                   }
                               });
     }
