@@ -1,0 +1,39 @@
+    /**
+     * Handler some action whether some exception happened.
+     *
+     * @param exception
+     *         exception that happened
+     * @param commandName
+     *         name of the command
+     */
+    private void handleError(@NotNull Throwable exception, @NotNull String commandName) {
+        int errorCode = getErrorCode(exception);
+        if (errorCode == ErrorCodes.NO_COMMITTER_NAME_OR_EMAIL_DEFINED) {
+            dialogFactory.createMessageDialog(constant.pullTitle(), constant.committerIdentityInfoEmpty(), null).show();
+            return;
+        } else if (errorCode == ErrorCodes.UNABLE_GET_PRIVATE_SSH_KEY) {
+            dialogFactory.createMessageDialog(constant.pullTitle(), constant.messagesUnableGetSshKey(), null).show();
+            return;
+        }
+
+        String errorMessage = exception.getMessage();
+        if (errorMessage == null) {
+            switch (commandName) {
+                case REMOTE_REPO_COMMAND_NAME:
+                    errorMessage = constant.remoteListFailed();
+                    break;
+                case BRANCH_LIST_COMMAND_NAME:
+                    errorMessage = constant.branchesListFailed();
+                    break;
+                case PULL_COMMAND_NAME:
+                    errorMessage = constant.pullFail(view.getRepositoryUrl());
+                    break;
+            }
+        }
+
+        GitOutputConsole console = gitOutputConsoleFactory.create(commandName);
+        console.printError(errorMessage);
+        consolesPanelPresenter.addCommandOutput(appContext.getDevMachineId(), console);
+        notificationManager.notify(errorMessage, FAIL, true, project.getRootProject());
+    }
+
