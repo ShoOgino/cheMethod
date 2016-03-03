@@ -5,7 +5,7 @@
         eventBus.addHandler(EditorOpenedEvent.TYPE, new EditorOpenedEventHandler() {
             @Override
             public void onEditorOpened(EditorOpenedEvent event) {
-                onOpenEditor(event.getFile(), event.getEditor());
+                onOpenEditor(event.getFile().getPath(), event.getEditor());
             }
         });
 
@@ -27,6 +27,66 @@
             @Override
             public void onStateChanged(BreakpointStateEvent event) {
                 onBreakpointStateChanged(event.getState(), event.getFilePath(), event.getLineNumber());
+            }
+        });
+
+        eventBus.addHandler(DeleteProjectEvent.TYPE, new DeleteProjectHandler() {
+            @Override
+            public void onProjectDeleted(DeleteProjectEvent event) {
+                if (breakpoints.isEmpty()) {
+                    return;
+                }
+
+                ProjectConfigDto config = event.getProjectConfig();
+                String path = config.getPath() + "/";
+                deleteBreakpoints(getBreakpointsForPath(path));
+            }
+        });
+
+        eventBus.addHandler(ResourceNodeDeletedEvent.getType(), new ResourceNodeDeletedEvent.ResourceNodeDeletedHandler() {
+            @Override
+            public void onResourceEvent(ResourceNodeDeletedEvent event) {
+                if (breakpoints.isEmpty()) {
+                    return;
+                }
+
+                ResourceBasedNode node = event.getNode();
+                if (node instanceof ItemReferenceBasedNode) {
+                    String path = ((ItemReferenceBasedNode)node).getStorablePath();
+
+                    if (node instanceof FolderReferenceNode) {
+                        path += "/";
+                        deleteBreakpoints(getBreakpointsForPath(path));
+
+                    } else if (node instanceof FileReferenceNode) {
+                        deleteBreakpoints(Collections.singleton(path));
+                    }
+                }
+            }
+        });
+
+        eventBus.addHandler(ProjectExplorerLoadedEvent.getType(), new ProjectExplorerLoadedEvent.ProjectExplorerLoadedHandler() {
+            @Override
+            public void onProjectsLoaded(ProjectExplorerLoadedEvent event) {
+                if (breakpoints.isEmpty()) {
+                    return;
+                }
+
+                // remove breakpoints which refer to un-existed projects
+                List<Node> projects = event.getNodes();
+                Set<String> pathsToDelete = new HashSet<String>(breakpoints.keySet());
+
+                for (String breakpointPath : breakpoints.keySet()) {
+                    for (Node project : projects) {
+                        String projectName = project.getName();
+                        if (breakpointPath.startsWith("/" + projectName + "/")) {
+                            pathsToDelete.remove(breakpointPath);
+                            break;
+                        }
+                    }
+                }
+
+                deleteBreakpoints(pathsToDelete);
             }
         });
     }
