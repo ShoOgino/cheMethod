@@ -8,44 +8,43 @@
      *         when any other errors occur when try to access the current state of target JVM
      */
     public StackFrameDump dumpStackFrame() throws DebuggerStateException, DebuggerException {
-
-        StackFrameDump dump = DtoFactory.getInstance().createDto(StackFrameDump.class);
-        boolean existInformation = true;
-        JdiLocalVariable[] variables = new JdiLocalVariable[0];
+        lock.lock();
         try {
-            variables = getCurrentFrame().getLocalVariables();
-        } catch (DebuggerAbsentInformationException e) {
-            existInformation = false;
+            final JdiStackFrame currentFrame = getCurrentFrame();
+            StackFrameDump dump = newDto(StackFrameDump.class);
+            boolean existInformation = true;
+            JdiLocalVariable[] variables = new JdiLocalVariable[0];
+            try {
+                variables = currentFrame.getLocalVariables();
+            } catch (DebuggerAbsentInformationException e) {
+                existInformation = false;
+            }
+            for (JdiField f : currentFrame.getFields()) {
+                List<String> variablePath = asList(f.isStatic() ? "static" : "this", f.getName());
+                dump.getFields().add((Field)newDto(Field.class).withIsFinal(f.isFinal())
+                                                               .withIsStatic(f.isStatic())
+                                                               .withIsTransient(f.isTransient())
+                                                               .withIsVolatile(f.isVolatile())
+                                                               .withName(f.getName())
+                                                               .withExistInformation(existInformation)
+                                                               .withValue(f.getValue().getAsString())
+                                                               .withType(f.getTypeName())
+                                                               .withVariablePath(newDto(VariablePath.class).withPath(variablePath))
+                                                               .withPrimitive(f.isPrimitive()));
+            }
+            for (JdiLocalVariable var : variables) {
+                dump.getLocalVariables().add(newDto(Variable.class).withName(var.getName())
+                                                                   .withExistInformation(existInformation)
+                                                                   .withValue(var.getValue().getAsString())
+                                                                   .withType(var.getTypeName())
+                                                                   .withVariablePath(
+                                                                           newDto(VariablePath.class).withPath(singletonList(var.getName()))
+                                                                                    )
+                                                                   .withPrimitive(var.isPrimitive()));
+            }
+            return dump;
+        } finally {
+            lock.unlock();
         }
-
-        for (JdiField f : getCurrentFrame().getFields()) {
-            dump.getFields().add((Field)DtoFactory.getInstance().createDto(Field.class)
-                                                  .withIsFinal(f.isFinal())
-                                                  .withIsStatic(f.isStatic())
-                                                  .withIsTransient(f.isTransient())
-                                                  .withIsVolatile(f.isVolatile())
-                                                  .withName(f.getName())
-                                                  .withExistInformation(existInformation)
-                                                  .withValue(f.getValue().getAsString())
-                                                  .withType(f.getTypeName())
-                                                  .withVariablePath(
-                                                          DtoFactory.getInstance().createDto(VariablePath.class)
-                                                                    .withPath(Arrays.asList(f.isStatic() ? "static" : "this", f.getName()))
-                                                                   )
-                                                  .withPrimitive(f.isPrimitive()));
-        }
-        for (JdiLocalVariable var : variables) {
-            dump.getLocalVariables().add(DtoFactory.getInstance().createDto(Variable.class)
-                                                   .withName(var.getName())
-                                                   .withExistInformation(existInformation)
-                                                   .withValue(var.getValue().getAsString())
-                                                   .withType(var.getTypeName())
-                                                   .withVariablePath(
-                                                           DtoFactory.getInstance().createDto(VariablePath.class)
-                                                                     .withPath(Collections.singletonList(var.getName()))
-                                                                    )
-                                                   .withPrimitive(var.isPrimitive()));
-        }
-        return dump;
     }
 
