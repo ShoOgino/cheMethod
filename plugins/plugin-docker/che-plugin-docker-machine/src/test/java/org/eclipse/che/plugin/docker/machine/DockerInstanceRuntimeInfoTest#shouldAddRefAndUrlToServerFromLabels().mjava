@@ -1,0 +1,46 @@
+    @Test
+    public void shouldAddRefAndUrlToServerFromLabels() throws Exception {
+        // given
+        runtimeInfo = new DockerInstanceRuntimeInfo(containerInfo,
+                                                    CONTAINER_HOST,
+                                                    machineConfig,
+                                                    Collections.emptySet(),
+                                                    Collections.emptySet());
+        Map<String, List<PortBinding>> ports = new HashMap<>();
+        when(networkSettings.getPorts()).thenReturn(ports);
+        Map<String, String> labels = new HashMap<>();
+        when(containerConfig.getLabels()).thenReturn(labels);
+        ports.put("8080/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32100")));
+        ports.put("100100/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                           .withHostPort("32101")));
+        ports.put("8080/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32102")));
+        ports.put("8000/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
+                                                                         .withHostPort("32103")));
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/tcp" + SERVER_CONF_LABEL_REF_SUFFIX, "myserv1");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/tcp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "http");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/udp" + SERVER_CONF_LABEL_REF_SUFFIX, "myserv1-tftp");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8080/udp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "tftp");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "100100/udp" + SERVER_CONF_LABEL_REF_SUFFIX, "myserv2");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "100100/udp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "dhcp");
+        labels.put(SERVER_CONF_LABEL_PREFIX + "8000/tcp" + SERVER_CONF_LABEL_PROTOCOL_SUFFIX, "tcp");
+
+        // when
+        final Map<String, ServerImpl> servers = runtimeInfo.getServers();
+
+        // then
+        assertEquals(servers.get("8080/tcp"), new ServerImpl("myserv1",
+                                                             CONTAINER_HOST + ":32100",
+                                                             "http://" + CONTAINER_HOST + ":32100"));
+        assertEquals(servers.get("100100/udp"), new ServerImpl("myserv2",
+                                                               CONTAINER_HOST + ":32101",
+                                                               "dhcp://" + CONTAINER_HOST + ":32101"));
+        assertEquals(servers.get("8080/udp"), new ServerImpl("myserv1-tftp",
+                                                             CONTAINER_HOST + ":32102",
+                                                             "tftp://" + CONTAINER_HOST + ":32102"));
+        assertEquals(servers.get("8000/tcp"), new ServerImpl("Server-8000-tcp",
+                                                             CONTAINER_HOST + ":32103",
+                                                             "tcp://" + CONTAINER_HOST + ":32103"));
+    }
+
