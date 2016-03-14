@@ -1,0 +1,30 @@
+    // find type references in a compilation unit
+    private boolean collectReferences(CompilationUnit astRoot, List<SimpleName> typeReferences, List<SimpleName> staticReferences,
+                                      Set<String> oldSingleImports, Set<String> oldDemandImports) {
+        if (!fAllowSyntaxErrors) {
+            IProblem[] problems = astRoot.getProblems();
+            for (int i = 0; i < problems.length; i++) {
+                IProblem curr = problems[i];
+                if (curr.isError() && (curr.getID() & IProblem.Syntax) != 0) {
+                    fParsingError = problems[i];
+                    return false;
+                }
+            }
+        }
+        List<ImportDeclaration> imports = astRoot.imports();
+        for (int i = 0; i < imports.size(); i++) {
+            ImportDeclaration curr = imports.get(i);
+            String id = ASTResolving.getFullName(curr.getName());
+            if (curr.isOnDemand()) {
+                oldDemandImports.add(id);
+            } else {
+                oldSingleImports.add(id);
+            }
+        }
+
+        IJavaProject project = fCompilationUnit.getJavaProject();
+        ImportReferencesCollector.collect(astRoot, project, null, typeReferences, staticReferences);
+
+        return true;
+    }
+
