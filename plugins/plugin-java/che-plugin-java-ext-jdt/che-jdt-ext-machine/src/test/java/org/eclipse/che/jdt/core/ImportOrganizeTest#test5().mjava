@@ -1,0 +1,62 @@
+	@Test
+	public void test5() throws Exception {
+
+		String[] types= new String[] {
+			"org.eclipse.jdt.internal.compiler.classfmt.ClassFileReader",
+			"org.eclipse.core.resources.IContainer",
+			"org.eclipse.core.runtime.IPath",
+			"org.eclipse.core.runtime.CoreException",
+			"org.eclipse.core.resources.IResource",
+			"org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer"
+		};
+		String[] order= new String[] { "org.eclipse.jdt", "org.eclipse" };
+
+		IPackageFragmentRoot sourceFolder= JavaProjectHelper.addSourceContainer(fJProject1, "src");
+		for (int i= 0; i < types.length; i++) {
+			String pack= Signature.getQualifier(types[i]);
+			String name= Signature.getSimpleName(types[i]);
+
+			IPackageFragment pack2= sourceFolder.createPackageFragment(pack, false, null);
+			StringBuffer buf= new StringBuffer();
+			buf.append("package "); buf.append(pack); buf.append(";\n");
+			buf.append("public class "); buf.append(name); buf.append(" {\n");
+			buf.append("}\n");
+			pack2.createCompilationUnit(name + ".java", buf.toString(), false, null);
+		}
+
+		StringBuffer body= new StringBuffer();
+		body.append("public class C {\n");
+		for (int i= 0; i < types.length; i++) {
+			String name= Signature.getSimpleName(types[i]);
+			body.append(name); body.append(" a"); body.append(i); body.append(";\n");
+		}
+		body.append("}\n");
+
+		IPackageFragment pack1= sourceFolder.createPackageFragment("pack1", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package pack1;\n");
+		buf.append("\n");
+		buf.append(body.toString());
+
+		ICompilationUnit cu= pack1.createCompilationUnit("C.java", buf.toString(), false, null);
+		IChooseImportQuery query= createQuery("C", new String[] {}, new int[] {});
+
+		OrganizeImportsOperation op= createOperation(cu, order, 99, false, true, true, query);
+		op.run(null);
+
+		buf= new StringBuffer();
+		buf.append("package pack1;\n");
+		buf.append("\n");
+		buf.append("import org.eclipse.jdt.internal.compiler.classfmt.ClassFileReader;\n");
+		buf.append("import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer;\n");
+		buf.append("\n");
+		buf.append("import org.eclipse.core.resources.IContainer;\n");
+		buf.append("import org.eclipse.core.resources.IResource;\n");
+		buf.append("import org.eclipse.core.runtime.CoreException;\n");
+		buf.append("import org.eclipse.core.runtime.IPath;\n");
+		buf.append("\n");
+		buf.append(body.toString());
+
+		assertEqualString(cu.getSource(), buf.toString());
+	}
+

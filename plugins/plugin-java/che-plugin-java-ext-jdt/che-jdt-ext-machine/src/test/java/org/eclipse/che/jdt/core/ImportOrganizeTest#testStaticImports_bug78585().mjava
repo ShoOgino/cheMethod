@@ -1,0 +1,47 @@
+	@Test
+	public void testStaticImports_bug78585() throws Exception {
+		IPackageFragmentRoot sourceFolder= JavaProjectHelper.addSourceContainer(fJProject1, "src");
+
+		IPackageFragment pack0= sourceFolder.createPackageFragment("pack0", false, null);
+		StringBuffer buf= new StringBuffer();
+		buf.append("package pack0;\n");
+		buf.append("public class Test1 {\n");
+		buf.append("	public static final <T> void assertNotEquals(final String msg, final T expected, final T toCheck) {\n");
+		buf.append("	}\n");
+		buf.append("}\n");
+		pack0.createCompilationUnit("Test1.java", buf.toString(), false, null);
+
+		IPackageFragment pack1= sourceFolder.createPackageFragment("pack1", false, null);
+		buf= new StringBuffer();
+		buf.append("package pack1;\n");
+		buf.append("\n");
+		buf.append("import pack0.Test1;\n");
+		buf.append("import java.util.List;\n");
+		buf.append("\n");
+		buf.append("public class Test2 extends Test1 {\n");
+		buf.append("	public void testMe() {\n");
+		buf.append("	    assertNotEquals(\"A\", \"B\", \"C\");\n");
+		buf.append("	}\n");
+		buf.append("}\n");
+		ICompilationUnit cu= pack1.createCompilationUnit("Test2.java", buf.toString(), false, null);
+
+
+		String[] order= new String[] {};
+		IChooseImportQuery query= createQuery("MyClass", new String[] {}, new int[] {});
+
+		OrganizeImportsOperation op= createOperation(cu, order, 99, false, true, true, query);
+		op.run(null);
+
+		buf= new StringBuffer();
+		buf.append("package pack1;\n");
+		buf.append("\n");
+		buf.append("import pack0.Test1;\n"); // no static import for 'assertNotEquals'
+		buf.append("\n");
+		buf.append("public class Test2 extends Test1 {\n");
+		buf.append("	public void testMe() {\n");
+		buf.append("	    assertNotEquals(\"A\", \"B\", \"C\");\n");
+		buf.append("	}\n");
+		buf.append("}\n");
+		assertEqualString(cu.getSource(), buf.toString());
+	}
+

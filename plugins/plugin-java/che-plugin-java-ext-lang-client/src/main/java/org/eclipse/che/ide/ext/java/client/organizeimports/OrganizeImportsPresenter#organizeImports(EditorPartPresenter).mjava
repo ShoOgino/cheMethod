@@ -1,0 +1,35 @@
+    /**
+     * Make Organize imports operation. If the operation doesn't have conflicts all imports will be applied
+     * otherwise a special window will be showed for resolving conflicts.
+     *
+     * @param editor
+     *         current active editor
+     */
+    public void organizeImports(EditorPartPresenter editor) {
+        this.editor = editor;
+        this.document = ((TextEditor)editor).getDocument();
+        this.file = editor.getEditorInput().getFile();
+
+
+        final String projectPath = file.getProject().getProjectConfig().getPath();
+        final String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+
+        javaCodeAssistClient.organizeImports(projectPath, fqn)
+                            .then(new Operation<List<ConflictImportDTO>>() {
+                                @Override
+                                public void apply(List<ConflictImportDTO> choices) throws OperationException {
+                                    if (!choices.isEmpty()) {
+                                        show(choices);
+                                    } else {
+                                        applyChanges(file);
+                                    }
+                                }
+                            })
+                            .catchError(new Operation<PromiseError>() {
+                                @Override
+                                public void apply(PromiseError arg) throws OperationException {
+                                    notificationManager.notify(locale.failedToProcessOrganizeImports(), arg.getMessage(), FAIL, true);
+                                }
+                            });
+    }
+
