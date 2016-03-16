@@ -1,0 +1,37 @@
+    /**
+     * Perform an "svn resolve" based on the request.
+     *
+     * @param request
+     *         the request
+     * @return the response
+     * @throws IOException
+     *         if there is a problem executing the command
+     * @throws SubversionException
+     *         if there is a Subversion issue
+     */
+    public CLIOutputResponseList resolve(final ResolveRequest request) throws IOException, SubversionException {
+        final File projectPath = new File(request.getProjectPath());
+
+        Map<String, String> resolutions = request.getConflictResolutions();
+
+        List<CLIOutputResponse> results = new ArrayList<>();
+        for (String path : resolutions.keySet()) {
+            final List<String> uArgs = defaultArgs();
+
+            addDepth(uArgs, request.getDepth());
+            addOption(uArgs, "--accept", resolutions.get(path));
+            uArgs.add("resolve");
+
+            final CommandLineResult result = runCommand(null, uArgs, projectPath, Arrays.asList(path));
+
+            CLIOutputResponse outputResponse = DtoFactory.getInstance().createDto(CLIOutputResponse.class)
+                                                         .withCommand(result.getCommandLine().toString())
+                                                         .withOutput(result.getStdout())
+                                                         .withErrOutput(result.getStderr());
+            results.add(outputResponse);
+        }
+
+        return DtoFactory.getInstance().createDto(CLIOutputResponseList.class)
+                         .withCLIOutputResponses(results);
+    }
+

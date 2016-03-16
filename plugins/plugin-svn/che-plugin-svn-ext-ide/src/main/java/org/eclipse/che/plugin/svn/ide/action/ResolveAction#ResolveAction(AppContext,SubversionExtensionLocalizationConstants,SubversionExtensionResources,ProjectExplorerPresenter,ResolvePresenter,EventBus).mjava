@@ -1,0 +1,43 @@
+    @Inject
+    public ResolveAction(final AppContext appContext,
+                         final SubversionExtensionLocalizationConstants constants,
+                         final SubversionExtensionResources resources,
+                         final ProjectExplorerPresenter projectExplorerPresenter,
+                         final ResolvePresenter presenter,
+                         final EventBus eventBus) {
+        super(constants.resolvedTitle(), constants.resolvedDescription(), resources.resolved(),
+              appContext, constants, resources, projectExplorerPresenter);
+        this.projectExplorerPresenter = projectExplorerPresenter;
+        this.presenter = presenter;
+
+        eventBus.addHandler(SubversionProjectUpdatedEvent.TYPE, new SubversionProjectUpdatedHandler() {
+            @Override
+            public void onProjectUpdated(SubversionProjectUpdatedEvent event) {fetchConflicts();}
+        });
+        eventBus.addHandler(ProjectReadyEvent.TYPE, new ProjectReadyHandler() {
+            @Override
+            public void onProjectReady(ProjectReadyEvent projectReadyEvent) {fetchConflicts();}
+        });
+        eventBus.addHandler(SelectionChangedEvent.TYPE, new SelectionChangedHandler() {
+            @Override
+            public void onSelectionChanged(SelectionChangedEvent event) {
+                enable = false;
+
+                HasStorablePath selectedNode = ResolveAction.this.getStorableNodeFromSelection(event.getSelection());
+
+                if (selectedNode == null || conflictsList == null) {
+                    return;
+                }
+
+                for (String conflictPath : conflictsList) {
+                    final String absPath = (appContext.getCurrentProject().getRootProject().getPath() + "/" + conflictPath.trim());
+
+                    if (absPath.startsWith(selectedNode.getStorablePath())) {
+                        enable = true;
+                        break;
+                    }
+                }
+            }
+        });
+    }
+

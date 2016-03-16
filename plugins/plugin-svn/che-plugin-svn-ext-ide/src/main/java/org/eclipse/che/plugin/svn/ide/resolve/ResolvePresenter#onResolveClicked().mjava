@@ -1,0 +1,37 @@
+    @Override
+    public void onResolveClicked() {
+        CurrentProject currentProject = getActiveProject();
+        if (currentProject == null) {
+            return;
+        }
+
+        ProjectConfigDto project = currentProject.getRootProject();
+        if (project == null) {
+            return;
+        }
+
+        HashMap<String, String> filesConflictResolutionActions = new HashMap<String, String>();
+        for (String path : conflictsPaths) {
+            String resolutionActionText = view.getConflictResolutionAction(path);
+            filesConflictResolutionActions.put(path, resolutionActionText);
+        }
+
+        subversionClientService.resolve(project.getPath(), filesConflictResolutionActions, "infinity",
+                                        new AsyncCallback<CLIOutputResponseList>() {
+                                            @Override
+                                            public void onSuccess(CLIOutputResponseList result) {
+                                                for (CLIOutputResponse outputResponse : result.getCLIOutputResponses()) {
+                                                    printCommand(outputResponse.getCommand());
+                                                    printAndSpace(outputResponse.getOutput());
+                                                }
+                                            }
+
+                                            @Override
+                                            public void onFailure(Throwable exception) {
+                                                notificationManager.notify(exception.getMessage(), FAIL, true);
+                                            }
+                                        });
+        view.close();
+        conflictsPaths.clear();
+    }
+

@@ -1,0 +1,73 @@
+    /**
+     * Prepares to merging and opens Merge dialog.
+     */
+    public void merge() {
+        targetNode = getSelectedNode();
+        if (targetNode == null) {
+            return;
+        }
+
+        view.enableMergeButton(false);
+        view.sourceCheckBox().setValue(false);
+
+        /** get info of selected project item */
+        String target = getSelectedPaths().get(0);
+        subversionClientService.info(getActiveProject().getRootProject().getPath(), target, "HEAD", false,
+                                     new AsyncRequestCallback<InfoResponse>(dtoUnmarshallerFactory.newUnmarshaller(InfoResponse.class)) {
+                                         @Override
+                                         protected void onSuccess(InfoResponse result) {
+                                             if (result.getErrorOutput() != null && !result.getErrorOutput().isEmpty()) {
+                                                 printResponse(null, null, result.getErrorOutput());
+                                                 notificationManager.notify("Unable to execute subversion command", FAIL, true);
+                                                 return;
+                                             }
+
+                                             mergeTarget = result.getItems().get(0);
+                                             view.targetTextBox().setValue(mergeTarget.getRelativeURL());
+
+                                             String repositoryRoot = mergeTarget.getRepositoryRoot();
+
+                                             subversionClientService.info(getActiveProject().getRootProject().getPath(), repositoryRoot, "HEAD", true,
+                                new AsyncRequestCallback<InfoResponse>(dtoUnmarshallerFactory.newUnmarshaller(InfoResponse.class)) {
+                                    @Override
+                                    protected void onSuccess(InfoResponse result) {
+                                        if (result.getErrorOutput() != null && !result.getErrorOutput().isEmpty()) {
+                                            printResponse(null, null, result.getErrorOutput());
+                                            notificationManager.notify("Unable to execute subversion command", FAIL, true);
+                                            return;
+                                        }
+
+                                        sourceURL = result.getItems().get(0).getURL();
+                                        SubversionTreeNode subversionTreeNode = new SubversionTreeNode(result.getItems().get(0));
+
+                                        List<TreeNode<?>> children = new ArrayList<>();
+                                        if (result.getItems().size() > 1) {
+                                            for (int i = 1; i < result.getItems().size(); i++) {
+                                                SubversionItem item = result.getItems().get(i);
+                                                if (!"file".equals(item.getNodeKind())) {
+                                                    children.add(new SubversionTreeNode(item));
+                                                }
+                                            }
+                                            Collections.sort(children, svnDirectoryComparator);
+                                        }
+
+                                        subversionTreeNode.setChildren(children);
+                                        view.setRootNode(subversionTreeNode);
+                                        view.show();
+                                        validateSourceURL();
+                                    }
+
+                                    @Override
+                                    protected void onFailure(Throwable exception) {
+                                        notificationManager.notify(exception.getMessage(), FAIL, true);
+                                    }
+                                });
+                    }
+
+                    @Override
+                    protected void onFailure(Throwable exception) {
+                        notificationManager.notify(exception.getMessage(), FAIL, true);
+                    }
+                });
+    }
+
