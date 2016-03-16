@@ -6,40 +6,50 @@
         ports.put("4301/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
                                                                          .withHostPort("32100")));
         ports.put("4302/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
-                                                                           .withHostPort("32101")));
+                                                                         .withHostPort("32101")));
         ports.put("4301/udp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
                                                                          .withHostPort("32102")));
         // add user defined server
         ports.put("4305/tcp", Collections.singletonList(new PortBinding().withHostIp(DEFAULT_ADDRESS)
                                                                          .withHostPort("32103")));
         Set<ServerConf> commonSystemServersConfigs = new HashSet<>();
-        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-tcp", "4301/tcp", "http"));
-        commonSystemServersConfigs.add(new ServerConfImpl("sysServer2-udp", "4302/udp", "dhcp"));
-        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-udp", "4301/udp", null));
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-tcp", "4301/tcp", "http", "/some/path"));
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer2-udp", "4302/udp", "dhcp", null));
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-udp", "4301/udp", null, "some/path"));
         Set<ServerConf> devSystemServersConfigs = new HashSet<>();
-        devSystemServersConfigs.add(new ServerConfImpl("devSysServer1-tcp", "4305/tcp", "http"));
+        devSystemServersConfigs.add(new ServerConfImpl("devSysServer1-tcp", "4305/tcp", "http", null));
         when(machineConfig.isDev()).thenReturn(false);
         runtimeInfo = new DockerInstanceRuntimeInfo(containerInfo,
                                                     CONTAINER_HOST,
                                                     machineConfig,
                                                     devSystemServersConfigs,
                                                     commonSystemServersConfigs);
+        final HashMap<String, ServerImpl> expectedServers = new HashMap<>();
+        expectedServers.put("4301/tcp", new ServerImpl("sysServer1-tcp",
+                                                       "http",
+                                                       CONTAINER_HOST + ":32100",
+                                                       "/some/path",
+                                                       "http://" + CONTAINER_HOST + ":32100/some/path"));
+        expectedServers.put("4302/udp", new ServerImpl("sysServer2-udp",
+                                                       "dhcp",
+                                                       CONTAINER_HOST + ":32101",
+                                                       null,
+                                                       "dhcp://" + CONTAINER_HOST + ":32101"));
+        expectedServers.put("4301/udp", new ServerImpl("sysServer1-udp",
+                                                       null,
+                                                       CONTAINER_HOST + ":32102",
+                                                       "some/path",
+                                                       null));
+        expectedServers.put("4305/tcp", new ServerImpl("Server-4305-tcp",
+                                                       null,
+                                                       CONTAINER_HOST + ":32103",
+                                                       null,
+                                                       null));
 
         // when
         final Map<String, ServerImpl> servers = runtimeInfo.getServers();
 
         // then
-        assertEquals(servers.get("4301/tcp"), new ServerImpl("sysServer1-tcp",
-                                                             CONTAINER_HOST + ":32100",
-                                                             "http://" + CONTAINER_HOST + ":32100"));
-        assertEquals(servers.get("4302/udp"), new ServerImpl("sysServer2-udp",
-                                                               CONTAINER_HOST + ":32101",
-                                                               "dhcp://" + CONTAINER_HOST + ":32101"));
-        assertEquals(servers.get("4301/udp"), new ServerImpl("sysServer1-udp",
-                                                             CONTAINER_HOST + ":32102",
-                                                             null));
-        assertEquals(servers.get("4305/tcp"), new ServerImpl("Server-4305-tcp",
-                                                             CONTAINER_HOST + ":32103",
-                                                             null));
+        assertEquals(servers, expectedServers);
     }
 
