@@ -1,33 +1,30 @@
     @Override
     public void onRefreshClicked() {
-        try {
-            userProfileService.getPreferences(new AsyncRequestCallback<Map<String, String>>(new StringMapUnmarshaller()) {
+        Promise<Map<String, String>> promise = Promises.resolve(null);
+        for (final PreferencesManager preferencesManager : managers) {
+            promise = promise.thenPromise(new Function<Map<String, String>, Promise<Map<String, String>>>() {
                 @Override
-                protected void onSuccess(Map<String, String> preferences) {
-                    /**
-                     * Reload preferences by Preferences Manager
-                     */
-                    if (preferencesManager instanceof PreferencesManagerImpl) {
-                        ((PreferencesManagerImpl)preferencesManager).load(preferences);
-                    }
-
-                    /**
-                     * Revert changes on every preference page
-                     */
-                    for (PreferencePagePresenter p : PreferencesPresenter.this.preferences) {
-                        p.revertChanges();
-                    }
-                }
-
-                @Override
-                protected void onFailure(Throwable exception) {
-                    dialogFactory.createMessageDialog("", "Unable to refresh preferences", null).show();
+                public Promise<Map<String, String>> apply(Map<String, String> arg) throws FunctionException {
+                    return preferencesManager.loadPreferences().catchError(new Operation<PromiseError>() {
+                        @Override
+                        public void apply(PromiseError error) throws OperationException {
+                            notificationManagerProvider.get().notify(locale.unableToLoadPreference(), error.getMessage(), FAIL, true);
+                        }
+                    });
                 }
             });
-
-        } catch (Throwable error) {
-            dialogFactory.createMessageDialog("", "Unable to refresh preferences", null).show();
         }
 
+        /**
+         * Revert changes on every preference page
+         */
+        promise.then(new Operation<Map<String, String>>() {
+            @Override
+            public void apply(Map<String, String> arg) throws OperationException {
+                for (PreferencePagePresenter p : PreferencesPresenter.this.preferences) {
+                    p.revertChanges();
+                }
+            }
+        });
     }
 
