@@ -1,14 +1,12 @@
-    @ApiOperation(value = "Gets project by ID of workspace and project's path",
-                  response = ProjectConfigDto.class,
-                  position = 2)
-    @ApiResponses(value = {
-            @ApiResponse(code = 200, message = "OK"),
-            @ApiResponse(code = 404, message = "Project with specified path doesn't exist in workspace"),
-            @ApiResponse(code = 403, message = "Access to requested project is forbidden"),
-            @ApiResponse(code = 500, message = "Server error")})
     @GET
     @Path("/{path:.*}")
     @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Gets project by ID of workspace and project's path",
+            response = ProjectConfigDto.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 404, message = "Project with specified path doesn't exist in workspace"),
+                   @ApiResponse(code = 403, message = "Access to requested project is forbidden"),
+                   @ApiResponse(code = 500, message = "Server error")})
     public ProjectConfigDto getProject(@ApiParam(value = "ID of workspace to get projects", required = true)
                                        @PathParam("ws-id") String workspace,
                                        @ApiParam(value = "Path to requested project", required = true)
@@ -16,33 +14,6 @@
                                                                               ForbiddenException,
                                                                               ServerException,
                                                                               ConflictException {
-        Project project = projectManager.getProject(workspace, path);
-
-        if (project == null) {
-            FolderEntry projectsRoot = projectManager.getProjectsRoot(workspace);
-
-            VirtualFileEntry child = projectsRoot.getChild(path);
-
-            if (child == null) {
-                throw new NotFoundException(String.format("Project '%s' doesn't exist in workspace '%s'.", path, workspace));
-            }
-
-            boolean isFolder = child.isFolder();
-            boolean isRoot = child.getParent().isRoot();
-
-            if (isFolder && isRoot) {
-                project = new NotValidProject((FolderEntry)child, projectManager);
-            } else {
-                throw new NotFoundException(String.format("Project '%s' doesn't exist in workspace '%s'.", path, workspace));
-            }
-        }
-
-        try {
-            return toProjectConfig(project, getServiceContext().getServiceUriBuilder());
-        } catch (InvalidValueException e) {
-            NotValidProject notValidProject = new NotValidProject(project.getBaseFolder(), projectManager);
-
-            return toProjectConfig(notValidProject, getServiceContext().getServiceUriBuilder());
-        }
+        return toProjectConfig(projectManager.getProject(path), workspace, getServiceContext().getServiceUriBuilder());
     }
 

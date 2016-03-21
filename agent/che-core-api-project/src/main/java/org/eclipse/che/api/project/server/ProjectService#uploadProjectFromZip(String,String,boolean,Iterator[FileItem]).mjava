@@ -1,32 +1,29 @@
-    @ApiOperation(value = "Upload zip project",
-                  notes = "Upload project from local zip",
-                  response = ProjectConfigDto.class,
-                  position = 18)
-    @ApiResponses(value = {
-            @ApiResponse(code = 200, message = ""),
-            @ApiResponse(code = 401, message = "User not authorized to call this operation"),
-            @ApiResponse(code = 403, message = "Forbidden operation"),
-            @ApiResponse(code = 409, message = "Resource already exists"),
-            @ApiResponse(code = 500, message = "Unsupported source type")})
-
     @POST
+    @Path("/upload/zipproject/{path:.*}")
     @Consumes({MediaType.MULTIPART_FORM_DATA})
     @Produces(MediaType.APPLICATION_JSON)
-    @Path("/upload/zipproject/{path:.*}")
-    public ProjectConfigDto uploadProjectFromZip(@ApiParam(value = "Workspace ID", required = true)
-                                                 @PathParam("ws-id") String workspace,
-                                                 @ApiParam(value = "Path in the project", required = true)
-                                                 @PathParam("path") String path,
-                                                 @ApiParam(value = "Force rewrite existing project", allowableValues = "true,false")
-                                                 @QueryParam("force") boolean force,
-                                                 Iterator<FileItem> formData) throws ServerException,
-                                                                                     IOException,
-                                                                                     ConflictException,
-                                                                                     ForbiddenException,
-                                                                                     NotFoundException,
-                                                                                     BadRequestException {
+    @ApiOperation(value = "Upload zip project",
+            notes = "Upload project from local zip",
+            response = ProjectConfigDto.class)
+    @ApiResponses({@ApiResponse(code = 200, message = ""),
+                   @ApiResponse(code = 401, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 403, message = "Forbidden operation"),
+                   @ApiResponse(code = 409, message = "Resource already exists"),
+                   @ApiResponse(code = 500, message = "Unsupported source type")})
+    public List<SourceEstimation> uploadProjectFromZip(@ApiParam(value = "Workspace ID", required = true)
+                                                       @PathParam("ws-id") String workspace,
+                                                       @ApiParam(value = "Path in the project", required = true)
+                                                       @PathParam("path") String path,
+                                                       @ApiParam(value = "Force rewrite existing project", allowableValues = "true,false")
+                                                       @QueryParam("force") boolean force,
+                                                       Iterator<FileItem> formData) throws ServerException,
+                                                                                           IOException,
+                                                                                           ConflictException,
+                                                                                           ForbiddenException,
+                                                                                           NotFoundException,
+                                                                                           BadRequestException {
         // Not all importers uses virtual file system API. In this case virtual file system API doesn't get events and isn't able to set
-        final FolderEntry baseProjectFolder = (FolderEntry)getVirtualFile(workspace, path, force);
+        final FolderEntry baseProjectFolder = (FolderEntry)getVirtualFile(path, force);
 
         int stripNumber = 0;
         String projectName = "";
@@ -39,7 +36,7 @@
                 if (contentItem == null) {
                     contentItem = item;
                 } else {
-                    throw new ServerException("More then one upload file is found but only one should be. ");
+                    throw new ServerException("More then one upload file is found but only one is expected. ");
                 }
             } else {
                 switch (item.getFieldName()) {
@@ -59,27 +56,11 @@
         if (contentItem == null) {
             throw new ServerException("Cannot find zip file for upload.");
         }
+
         try (InputStream zip = contentItem.getInputStream()) {
             baseProjectFolder.getVirtualFile().unzip(zip, true, stripNumber);
         }
 
-        ProjectConfigDto projectConfig = DtoFactory.getInstance()
-                                                   .createDto(ProjectConfigDto.class)
-                                                   .withName(projectName)
-                                                   .withDescription(projectDescription);
-
-        List<SourceEstimation> sourceEstimations = projectManager.resolveSources(workspace, path, false);
-
-        for (SourceEstimation estimation : sourceEstimations) {
-            ProjectType projectType = typeRegistry.getProjectType(estimation.getType());
-
-            if (projectType.isPersisted()) {
-                projectConfig.withType(projectType.getId());
-                projectConfig.withAttributes(estimation.getAttributes());
-            }
-        }
-
-        //project source already imported going to configure project
-        return updateProject(workspace, path, projectConfig);
+        return resolveSources(workspace, path);
     }
 

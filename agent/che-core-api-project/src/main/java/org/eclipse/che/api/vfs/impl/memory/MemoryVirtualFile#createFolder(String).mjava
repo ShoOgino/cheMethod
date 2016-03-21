@@ -1,0 +1,37 @@
+    @Override
+    public VirtualFile createFolder(String name) throws ForbiddenException, ConflictException, ServerException {
+        checkExistence();
+        checkName(name);
+        if (name.charAt(0) == '/') {
+            name = name.substring(1);
+        }
+        checkName(name);
+        if (isFolder()) {
+            MemoryVirtualFile newFolder = null;
+            MemoryVirtualFile current = this;
+            if (name.indexOf('/') > 0) {
+                final Path internPath = Path.of(name);
+                for (String element : internPath.elements()) {
+                    MemoryVirtualFile folder = newFolder(current, element);
+                    if (current.addChild(folder)) {
+                        newFolder = folder;
+                        current = folder;
+                    } else {
+                        current = current.children.get(element);
+                    }
+                }
+                if (newFolder == null) {
+                    throw new ConflictException(String.format("Item with the name '%s' already exists", name));
+                }
+            } else {
+                newFolder = newFolder(this, name);
+                if (!addChild(newFolder)) {
+                    throw new ConflictException(String.format("Item with the name '%s' already exists", name));
+                }
+            }
+            return newFolder;
+        } else {
+            throw new ForbiddenException("Unable create new folder. Item specified as parent is not a folder");
+        }
+    }
+

@@ -1,0 +1,55 @@
+    @Override
+    public VirtualFile moveTo(VirtualFile parent, String newName, boolean overwrite, String lockToken)
+            throws ForbiddenException, ConflictException, ServerException {
+        checkExistence();
+        MemoryVirtualFile memoryParent = (MemoryVirtualFile)parent;
+        memoryParent.checkExistence();
+        if (isRoot()) {
+            throw new ForbiddenException("Unable move root folder");
+        }
+        if (!parent.isFolder()) {
+            throw new ForbiddenException("Unable move item. Item specified as parent is not a folder");
+        }
+        if (newName == null || newName.trim().isEmpty()) {
+            newName = this.getName();
+        }
+        final boolean isFile = isFile();
+        final Path myPath = getPath();
+        final Path newParentPath = parent.getPath();
+
+        final boolean folder = isFolder();
+        if (folder) {
+            if (newParentPath.isChild(myPath)) {
+                throw new ForbiddenException(
+                        String.format("Unable move item %s to %s. Item may not have itself as parent", myPath, newParentPath));
+            }
+            final List<VirtualFile> lockedFiles = new LockedFileFinder(this).findLockedFiles();
+            if (!lockedFiles.isEmpty()) {
+                throw new ForbiddenException(
+                        String.format("Unable move item '%s'. Child items '%s' are locked", getName(), lockedFiles));
+            }
+        } else if (fileIsLockedAndLockTokenIsInvalid(lockToken)) {
+            throw new ForbiddenException(String.format("Unable move item %s. Item is locked", myPath));
+        }
+
+        if (overwrite) {
+            MemoryVirtualFile existedItem = memoryParent.children.get(newName);
+            if (existedItem != null) {
+                existedItem.delete();
+            }
+        }
+
+        if (memoryParent.children.containsKey(newName)) {
+            throw new ConflictException(String.format("Item '%s' already exists", parent.getPath().newPath(newName)));
+        }
+        this.parent.children.remove(name);
+        memoryParent.children.put(newName, this);
+        this.parent = memoryParent;
+        this.name = newName;
+        lock = null;
+
+        deleteFromSearcher(myPath, isFile);
+        addInSearcher(this);
+        return this;
+    }
+

@@ -1,0 +1,35 @@
+    private void doDelete(LocalVirtualFile virtualFile, String lockToken) throws ForbiddenException, ServerException {
+        if (virtualFile.isFolder()) {
+            final List<VirtualFile> lockedFiles = new LockedFileFinder(virtualFile).findLockedFiles();
+            if (!lockedFiles.isEmpty()) {
+                throw new ForbiddenException(
+                        String.format("Unable delete folder '%s'. Child items '%s' are locked", virtualFile.getPath(), lockedFiles));
+            }
+        } else if (fileIsLockedAndLockTokenIsInvalid(virtualFile, lockToken)) {
+            throw new ForbiddenException(String.format("Unable delete file '%s'. File is locked", virtualFile.getPath()));
+        }
+
+        cleanUpCaches();
+
+        final File fileLockIoFile = getFileLockIoFile(virtualFile.getPath());
+        if (fileLockIoFile.delete()) {
+            if (fileLockIoFile.exists()) {
+                LOG.error("Unable delete lock file {}", fileLockIoFile);
+                throw new ServerException(String.format("Unable delete item '%s'", virtualFile.getPath()));
+            }
+        }
+
+        final File metadataIoFile = getMetadataIoFile(virtualFile.getPath());
+        if (metadataIoFile.delete()) {
+            if (metadataIoFile.exists()) {
+                LOG.error("Unable delete metadata file {}", metadataIoFile);
+                throw new ServerException(String.format("Unable delete item '%s'", virtualFile.getPath()));
+            }
+        }
+
+        if (!deleteRecursive(virtualFile.toIoFile())) {
+            LOG.error("Unable delete file {}", virtualFile.toIoFile());
+            throw new ServerException(String.format("Unable delete item '%s'", virtualFile.getPath()));
+        }
+    }
+

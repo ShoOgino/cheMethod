@@ -3,33 +3,31 @@
         return new ValueProvider() {
             @Override
             public List<String> getValues(String attributeName) throws ValueStorageException {
-                try (GitConnection gitConnection =
-                             gitConnectionFactory.getConnection(resolveLocalPathByPath(folder.getPath(), folder.getWorkspace()))) {
+                if (folder == null) {
+                    return Collections.emptyList();
+                }
+                try (GitConnection gitConnection = gitConnectionFactory.getConnection(resolveLocalPath(folder))) {
                     //check whether the folder belongs to git repository
                     if (!gitConnection.isInsideWorkTree()) {
-                        return Collections.EMPTY_LIST;
+                        return Collections.emptyList();
                     }
+
                     switch (attributeName) {
                         case VCS_PROVIDER_NAME:
                             return Collections.singletonList("git");
                         case GIT_CURRENT_BRANCH_NAME:
                             return Collections.singletonList(gitConnection.status(StatusFormat.LONG).getBranchName());
                         case GIT_REPOSITORY_REMOTES:
-                            return gitConnection.remoteList(newDto(RemoteListRequest.class)).stream().map(Remote::getUrl)
+                            return gitConnection.remoteList(newDto(RemoteListRequest.class))
+                                                .stream()
+                                                .map(Remote::getUrl)
                                                 .collect(Collectors.toList());
                         default:
-                            return Collections.EMPTY_LIST;
+                            return Collections.emptyList();
                     }
                 } catch (ApiException e) {
                     throw new ValueStorageException(e.getMessage());
                 }
-            }
-
-            @Override
-            public void setValues(String attributeName, List<String> value) throws InvalidValueException {
-                throw new InvalidValueException(
-                        String.format("It is not possible to set value for attribute %s on project %s .git project values are read only",
-                                      attributeName, folder.getPath()));
             }
         };
     }

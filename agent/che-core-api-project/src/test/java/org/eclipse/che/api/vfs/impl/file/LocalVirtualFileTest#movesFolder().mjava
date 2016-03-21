@@ -1,0 +1,33 @@
+    @Test
+    public void movesFolder() throws Exception {
+        VirtualFile folder = getRoot().createFolder(generateFolderName());
+        createFileTree(folder, 3);
+        List<VirtualFile> originalTree = getFileTreeAsList(folder);
+        for (int i = 0; i < originalTree.size(); i++) {
+            originalTree.get(i).setProperty("property" + i, "value" + i);
+        }
+        List<Path> originalTreePaths = originalTree.stream().map(VirtualFile::getPath).collect(toList());
+        VirtualFile targetFolder = getRoot().createFolder(generateFolderName());
+
+        VirtualFile movedFolder = folder.moveTo(targetFolder);
+
+        List<VirtualFile> movedTree = getFileTreeAsList(movedFolder);
+        Iterator<Path> originalPathIterator = originalTreePaths.iterator();
+        Iterator<VirtualFile> movedIterator = movedTree.iterator();
+        int i = 0;
+        while (originalPathIterator.hasNext() && movedIterator.hasNext()) {
+            Path originalPath = originalPathIterator.next();
+            VirtualFile moved = movedIterator.next();
+            assertEquals(originalPath, moved.getPath().subPath(targetFolder.getPath()));
+            if (moved.isFile()) {
+                assertionHelper.assertThatIoFileHasContent(moved.getPath(), DEFAULT_CONTENT_BYTES);
+            }
+            assertionHelper.assertThatMetadataIoFileHasContent(moved.getPath(),
+                                                               serializeVirtualFileMetadata(ImmutableMap.of("property" + i, "value" + i)));
+            assertionHelper.assertThatIoFileDoesNotExist(originalPath);
+            assertionHelper.assertThatMetadataIoFileDoesNotExist(originalPath);
+            i++;
+        }
+        assertFalse(originalPathIterator.hasNext() || movedIterator.hasNext());
+    }
+

@@ -1,8 +1,12 @@
     @Test
     public void testEstimateProject() throws Exception {
-        VirtualFile root = pm.getVirtualFileSystemRegistry().getProvider("my_ws").getMountPoint(false).getRoot();
+        VirtualFile root = pm.getProjectsRoot().getVirtualFile();
+
+                                     //getVirtualFileSystemRegistry().getProvider("my_ws").getMountPoint(false).getRoot();
         root.createFolder("testEstimateProjectGood").createFolder("check");
         root.createFolder("testEstimateProjectBad");
+
+        String errMessage = "File /check not found";
 
         final ValueProviderFactory vpf1 = projectFolder -> new ValueProvider() {
             @Override
@@ -11,19 +15,19 @@
                 VirtualFileEntry file;
                 try {
                     file = projectFolder.getChild("check");
-                } catch (ForbiddenException | ServerException e) {
+                } catch (ServerException e) {
                     throw new ValueStorageException(e.getMessage());
                 }
 
                 if (file == null) {
-                    throw new ValueStorageException("Check not found");
+                    throw new ValueStorageException(errMessage);
                 }
-                return singletonList("checked");
+                return (List <String>)singletonList("checked");
             }
 
-            @Override
-            public void setValues(String attributeName, List<String> value) {
-            }
+//            @Override
+//            public void setValues(String attributeName, List<String> value) {
+//            }
         };
 
         ProjectTypeDef pt = new ProjectTypeDef("testEstimateProjectPT", "my testEstimateProject type", true, false) {
@@ -34,7 +38,7 @@
             }
         };
 
-        pm.getProjectTypeRegistry().registerProjectType(pt);
+        ptRegistry.registerProjectType(pt);
 
         ContainerResponse response =
                 launcher.service(GET, String.format("http://localhost:8080/api/project/%s/estimate/%s?type=%s",
@@ -42,14 +46,19 @@
                                  "http://localhost:8080/api", null, null, null);
         assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
         //noinspection unchecked
-        Map<String, List<String>> result = (Map<String, List<String>>)response.getEntity();
+        SourceEstimation result = (SourceEstimation)response.getEntity();
+        assertTrue(result.isMatched());
+        assertEquals(result.getAttributes().size(), 1);
+        assertEquals(result.getAttributes().get("calculated_attribute").get(0), "checked");
 
-        assertEquals(result.size(), 1);
-        assertEquals(result.get("calculated_attribute").get(0), "checked");
-
+        // if project not matched
         response = launcher.service(GET, String.format("http://localhost:8080/api/project/%s/estimate/%s?type=%s",
                                                        workspace, "testEstimateProjectBad", "testEstimateProjectPT"),
                                     "http://localhost:8080/api", null, null, null);
+
         assertEquals(response.getStatus(), 409, "Error: " + response.getEntity());
+        String msg = JsonHelper.parseJson(response.getEntity().toString()).getElement("message").getStringValue();
+        assertEquals(errMessage, msg);
+
     }
 

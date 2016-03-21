@@ -1,0 +1,55 @@
+    /**
+     * Extension writer should call this method to apply changes which supposedly
+     * make the Project no longer have particular Project Type.
+     * In a case of removing primary project type:
+     * - if the project was NOT detected BASE Project Type will be set as primary
+     * - if the project was detected it will be converted back to the folder
+     * For example:
+     * - extension code knows that removing some file inside project's file system
+     * will (or may) cause removing particular project type
+     *
+     * @param projectPath
+     *         project path
+     * @param type
+     *         project type
+     * @return refreshed project or null if such a project not found or was removed
+     * @throws ConflictException
+     * @throws ForbiddenException
+     * @throws NotFoundException
+     * @throws ServerException
+     */
+    public RegisteredProject removeProjectType(String projectPath, String type) throws ConflictException,
+                                                                                       ForbiddenException,
+                                                                                       NotFoundException,
+                                                                                       ServerException {
+        final RegisteredProject project = getProject(projectPath);
+
+        if (project == null) {
+            return null;
+        }
+
+        List<String> newMixins = project.getMixins();
+        String newType = project.getType();
+
+        if (newMixins.contains(type)) {
+            newMixins.remove(type);
+        } else if (newType.equals(type)) {
+            if (project.isDetected()) {
+                projects.remove(project.getPath());
+                return null;
+            }
+
+            newType = BaseProjectType.ID;
+        }
+
+        final NewProjectConfig conf = new NewProjectConfig(project.getPath(),
+                                                           newType,
+                                                           newMixins,
+                                                           project.getName(),
+                                                           project.getDescription(),
+                                                           project.getAttributes(),
+                                                           project.getSource());
+
+        return putProject(conf, project.getBaseFolder(), true, project.isDetected());
+    }
+

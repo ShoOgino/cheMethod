@@ -1,0 +1,20 @@
+    @Override
+    public void visit(VirtualFile virtualFile) throws ServerException {
+        if (virtualFile.isFile()) {
+            try (InputStream in = virtualFile.getContent()) {
+                final Hasher hasher = hashFunction.newHasher();
+                ByteStreams.copy(in, asOutputStream(hasher));
+                final String hexHash = hasher.hash().toString();
+                hashSums.add(Pair.of(hexHash, virtualFile.getPath().subPath(folder.getPath()).toString()));
+            } catch (IOException e) {
+                throw new ServerException(e);
+            } catch (ForbiddenException e) {
+                throw new ServerException(e.getServiceError());
+            }
+        } else {
+            for (VirtualFile child : virtualFile.getChildren()) {
+                child.accept(this);
+            }
+        }
+    }
+

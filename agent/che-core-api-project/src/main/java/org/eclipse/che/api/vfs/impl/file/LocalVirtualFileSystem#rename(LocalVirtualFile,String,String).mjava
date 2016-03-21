@@ -1,0 +1,42 @@
+    LocalVirtualFile rename(LocalVirtualFile virtualFile, String newName, String lockToken)
+            throws ForbiddenException, ConflictException, ServerException {
+        checkName(newName);
+
+        if (virtualFile.isRoot()) {
+            throw new ForbiddenException("Unable rename root folder");
+        }
+
+        if (virtualFile.isFile()) {
+            if (fileIsLockedAndLockTokenIsInvalid(virtualFile, lockToken)) {
+                throw new ForbiddenException(String.format("Unable rename file '%s'. File is locked", virtualFile.getPath()));
+            }
+        } else {
+            final List<VirtualFile> lockedFiles = new LockedFileFinder(virtualFile).findLockedFiles();
+            if (!lockedFiles.isEmpty()) {
+                throw new ForbiddenException(
+                        String.format("Unable rename folder '%s'. Child items '%s' are locked", virtualFile.getPath(), lockedFiles));
+            }
+        }
+
+        if (newName.equals(virtualFile.getName())) {
+            return virtualFile;
+        } else {
+            final Path newPath = virtualFile.getPath().getParent().newPath(newName);
+            final LocalVirtualFile
+                    newVirtualFile = new LocalVirtualFile(new File(ioRoot, toIoPath(newPath)), newPath, this);
+            if (newVirtualFile.exists()) {
+                throw new ConflictException(String.format("Item '%s' already exists", newVirtualFile.getName()));
+            }
+
+            doCopy(virtualFile, newVirtualFile);
+            addInSearcher(newVirtualFile);
+
+            final Path path = virtualFile.getPath();
+            final boolean isFile = virtualFile.isFile();
+            doDelete(virtualFile, lockToken);
+            deleteInSearcher(path, isFile);
+
+            return newVirtualFile;
+        }
+    }
+

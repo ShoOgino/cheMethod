@@ -1,24 +1,31 @@
-    @ApiOperation(value = "Update file",
-                  notes = "Update an existing file with new content",
-                  position = 12)
-    @ApiResponses(value = {
-            @ApiResponse(code = 200, message = ""),
-            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
-            @ApiResponse(code = 404, message = "Not found"),
-            @ApiResponse(code = 500, message = "Internal Server Error")})
     @PUT
-    @Consumes({MediaType.MEDIA_TYPE_WILDCARD})
     @Path("/file/{path:.*}")
+    @Consumes({MediaType.MEDIA_TYPE_WILDCARD})
+    @ApiOperation(value = "Update file",
+            notes = "Update an existing file with new content")
+    @ApiResponses({@ApiResponse(code = 200, message = ""),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
     public Response updateFile(@ApiParam(value = "Workspace ID", required = true)
                                @PathParam("ws-id") String workspace,
                                @ApiParam(value = "Full path to a file", required = true)
                                @PathParam("path") String path,
                                InputStream content) throws NotFoundException, ForbiddenException, ServerException {
-        final FileEntry file = asFile(workspace, path);
+        final FileEntry file = projectManager.asFile(path);
+
+        if (file == null) {
+            throw new NotFoundException("File not found for " + path);
+        }
+
         file.updateContent(content);
 
         eventService.publish(new ProjectItemModifiedEvent(ProjectItemModifiedEvent.EventType.UPDATED,
-                                                          workspace, projectPath(file.getPath()), file.getPath(), false));
+                                                          workspace,
+                                                          projectPath(file.getPath().toString()),
+                                                          file.getPath().toString(),
+                                                          false));
+
         return Response.ok().build();
     }
 

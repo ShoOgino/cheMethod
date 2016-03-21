@@ -1,0 +1,23 @@
+    @Test
+    public void failsRenameFileWhenFolderContainsItemWithSameName() throws Exception {
+        VirtualFile folder = getRoot().createFolder(generateFolderName());
+        VirtualFile file = folder.createFile(generateFileName(), DEFAULT_CONTENT);
+        Path filePath = file.getPath();
+        file.setProperty("property1", "value1");
+        VirtualFile conflictFile = folder.createFile("existed_name", "xxx");
+        Path conflictFilePath = conflictFile.getPath();
+        conflictFile.setProperty("property2", "value2");
+
+        try {
+            file.rename("existed_name");
+            thrown.expect(ConflictException.class);
+        } catch (ConflictException e) {
+            assertionHelper.assertThatIoFileHasContent(conflictFilePath, "xxx".getBytes());
+            assertionHelper.assertThatMetadataIoFileHasContent(conflictFilePath,
+                                                               serializeVirtualFileMetadata(ImmutableMap.of("property2", "value2")));
+            assertionHelper.assertThatIoFileHasContent(filePath, DEFAULT_CONTENT_BYTES);
+            assertionHelper
+                    .assertThatMetadataIoFileHasContent(filePath, serializeVirtualFileMetadata(ImmutableMap.of("property1", "value1")));
+        }
+    }
+

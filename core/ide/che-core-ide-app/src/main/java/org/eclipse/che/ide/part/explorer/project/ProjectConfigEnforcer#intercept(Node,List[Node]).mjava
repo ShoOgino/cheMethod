@@ -1,0 +1,66 @@
+    /** {@inheritDoc} */
+    @Override
+    public Promise<List<Node>> intercept(Node parent, final List<Node> children) {
+        final List<Node> toReplace = newArrayList(filter(children, PROJECT_FOLDER));
+
+        if (toReplace.isEmpty()) {
+            return resolve(children);
+        }
+
+        return projectClient.getProjects(appContext.getWorkspaceId())
+                            .thenPromise(new Function<List<ProjectConfigDto>, Promise<List<Node>>>() {
+                                @Override
+                                public Promise<List<Node>> apply(final List<ProjectConfigDto> projects) throws FunctionException {
+                                    appContext.getWorkspace().getConfig().withProjects(projects);
+
+                                    List<Node> toAdd =
+                                            newArrayList(transform(toReplace, new com.google.common.base.Function<Node, Node>() {
+                                                @Nullable
+                                                @Override
+                                                public Node apply(@Nullable Node input) {
+                                                    String path = null;
+
+                                                    if (input instanceof HasStorablePath) {
+                                                        path = ((HasStorablePath)input).getStorablePath();
+                                                    }
+
+                                                    if (isNullOrEmpty(path)) {
+                                                        return input;
+                                                    }
+
+                                                    ProjectConfigDto config = null;
+
+                                                    for (ProjectConfigDto project : projects) {
+                                                        if (project.getPath().equals(((HasStorablePath)input).getStorablePath())) {
+                                                            config = project;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if (config == null) {
+                                                        return input;
+                                                    }
+
+                                                    return nodeFactory.newProjectNode(config, nodeSettingsProvider.getSettings());
+                                                }
+                                            }));
+
+                                    for (Node folder : toReplace) {
+                                        children.remove(folder);
+                                    }
+
+                                    for (Node project : toAdd) {
+                                        children.add(project);
+                                    }
+
+                                    return resolve(children);
+                                }
+                            })
+                            .catchErrorPromise(new Function<PromiseError, Promise<List<Node>>>() {
+                                @Override
+                                public Promise<List<Node>> apply(PromiseError arg) throws FunctionException {
+                                    return resolve(children);
+                                }
+                            });
+    }
+

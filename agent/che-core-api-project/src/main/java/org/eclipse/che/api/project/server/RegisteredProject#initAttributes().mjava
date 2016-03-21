@@ -1,0 +1,43 @@
+    /**
+     * Initialize project attributes.
+     *
+     * @throws ValueStorageException
+     * @throws ProjectTypeConstraintException
+     * @throws ServerException
+     * @throws NotFoundException
+     */
+    private void initAttributes() throws ValueStorageException, ProjectTypeConstraintException, ServerException, NotFoundException {
+        // we take only defined attributes, others ignored
+        for (Map.Entry<String, Attribute> entry : types.getAttributeDefs().entrySet()) {
+            final Attribute definition = entry.getValue();
+            final String name = entry.getKey();
+            AttributeValue value = new AttributeValue(config.getAttributes().get(name));
+
+            if (!definition.isVariable()) {
+                // constant, value always assumed as stated in definition
+                attributes.put(name, definition.getValue());
+            } else {
+                // variable
+                final Variable variable = (Variable)definition;
+                final ValueProviderFactory valueProviderFactory = variable.getValueProviderFactory();
+
+                if (valueProviderFactory != null) {
+                    // read-only.
+                    if (folder != null) {
+                        value = new AttributeValue(valueProviderFactory.newInstance(folder).getValues(name));
+                    } else {
+                        continue;
+                    }
+                }
+
+                if (value.isEmpty() && variable.isRequired()) {
+                    throw new ProjectTypeConstraintException("Value for required attribute is not initialized " + variable.getId());
+                }
+
+                if (!value.isEmpty()) {
+                    this.attributes.put(name, value);
+                }
+            }
+        }
+    }
+

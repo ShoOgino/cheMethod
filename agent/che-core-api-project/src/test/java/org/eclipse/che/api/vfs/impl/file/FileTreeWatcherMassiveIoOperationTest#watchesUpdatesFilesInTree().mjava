@@ -1,0 +1,28 @@
+    @Test
+    public void watchesUpdatesFilesInTree() throws Exception {
+        fileWatcherTestTree.createTree("", 7, 5);
+        Thread.sleep(100);
+
+        FileWatcherNotificationHandler notificationListener = aNotificationListener();
+        fileTreeWatcher = new FileTreeWatcher(testDirectory, newHashSet(), notificationListener);
+        fileTreeWatcher.startup();
+        Thread.sleep(5000);
+
+        List<String> updated = fileWatcherTestTree.findAllFilesInTree("").stream()
+                                                  .filter(path -> path.hashCode() % 2 == 0).collect(Collectors.toList());
+
+        for (String file : updated) {
+            fileWatcherTestTree.updateFile(file);
+        }
+
+        Thread.sleep(5000);
+
+        verify(notificationListener, never()).errorOccurred(eq(testDirectory), any(Throwable.class));
+        verify(notificationListener, never()).handleFileWatcherEvent(eq(CREATED), eq(testDirectory), anyString(), anyBoolean());
+        verify(notificationListener, never()).handleFileWatcherEvent(eq(DELETED), eq(testDirectory), anyString(), anyBoolean());
+
+        ArgumentCaptor<String> updatedEvents = ArgumentCaptor.forClass(String.class);
+        verify(notificationListener, times(updated.size())).handleFileWatcherEvent(eq(MODIFIED), eq(testDirectory), updatedEvents.capture(), anyBoolean());
+        assertThatCollectionsContainsSameItemsOrFailWithDiff(updatedEvents.getAllValues(), updated);
+    }
+

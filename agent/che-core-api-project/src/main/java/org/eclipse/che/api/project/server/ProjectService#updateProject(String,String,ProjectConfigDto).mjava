@@ -1,16 +1,14 @@
-    @ApiOperation(value = "Updates existing project",
-                  response = ProjectConfigDto.class,
-                  position = 6)
-    @ApiResponses(value = {
-            @ApiResponse(code = 200, message = "OK"),
-            @ApiResponse(code = 404, message = "Project with specified path doesn't exist in workspace"),
-            @ApiResponse(code = 403, message = "Operation is forbidden"),
-            @ApiResponse(code = 409, message = "Update operation causes conflicts"),
-            @ApiResponse(code = 500, message = "Server error")})
     @PUT
     @Path("/{path:.*}")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Updates existing project",
+            response = ProjectConfigDto.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 404, message = "Project with specified path doesn't exist in workspace"),
+                   @ApiResponse(code = 403, message = "Operation is forbidden"),
+                   @ApiResponse(code = 409, message = "Update operation causes conflicts"),
+                   @ApiResponse(code = 500, message = "Server error")})
     public ProjectConfigDto updateProject(@ApiParam(value = "ID of workspace", required = true)
                                           @PathParam("ws-id") String workspace,
                                           @ApiParam(value = "Path to updated project", required = true)
@@ -20,39 +18,9 @@
                                                                                     ForbiddenException,
                                                                                     ServerException,
                                                                                     IOException {
-        projectConfigDto.getProblems().clear();
-
-        String oldProjectName = path.startsWith("/") ? path.substring(1) : path;
-        String newProjectName = projectConfigDto.getName();
-
-        if (!oldProjectName.equals(newProjectName)) {
-            projectManager.rename(workspace, path, newProjectName, null);
+        if (path != null) {
+            projectConfigDto.setPath(path);
         }
-
-        String newProjectPath = '/' + newProjectName;
-
-        projectConfigDto.setName(newProjectName);
-        projectConfigDto.setPath(newProjectPath);
-
-        Project project = projectManager.getProject(workspace, newProjectPath);
-
-        FolderEntry baseProjectFolder = (FolderEntry)projectManager.getProjectsRoot(workspace).getChild(newProjectPath);
-        if (project != null) {
-            project = projectManager.updateProject(workspace, newProjectPath, projectConfigDto);
-            reindexProject(System.currentTimeMillis(), baseProjectFolder, project);
-        } else {
-            try {
-                project = projectManager.convertFolderToProject(workspace, newProjectPath, projectConfigDto);
-                reindexProject(System.currentTimeMillis(), baseProjectFolder, project);
-                eventService.publish(new ProjectCreatedEvent(project.getWorkspace(), project.getPath()));
-                logProjectCreatedEvent(projectConfigDto.getName(), projectConfigDto.getType());
-            } catch (ConflictException | ForbiddenException | ServerException e) {
-                project = new NotValidProject(baseProjectFolder, projectManager);
-
-                return toProjectConfig(project, getServiceContext().getServiceUriBuilder());
-            }
-        }
-
-        return toProjectConfig(project, getServiceContext().getServiceUriBuilder());
+        return toProjectConfig(projectManager.updateProject(projectConfigDto), workspace, getServiceContext().getServiceUriBuilder());
     }
 

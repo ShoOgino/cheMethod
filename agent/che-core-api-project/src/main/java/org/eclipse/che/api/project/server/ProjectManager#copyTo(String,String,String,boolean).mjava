@@ -1,0 +1,35 @@
+    public VirtualFileEntry copyTo(String itemPath, String newParentPath, String newName, boolean overwrite) throws ServerException,
+                                                                                                                    NotFoundException,
+                                                                                                                    ConflictException,
+                                                                                                                    ForbiddenException {
+        VirtualFile oldItem = vfs.getRoot().getChild(Path.of(itemPath));
+        if (oldItem == null) {
+            throw new NotFoundException("Item not found " + itemPath);
+        }
+
+        VirtualFile newParent = vfs.getRoot().getChild(Path.of(newParentPath));
+        if (newParent == null) {
+            throw new NotFoundException("New parent not found " + newParentPath);
+        }
+
+        final VirtualFile newItem = oldItem.copyTo(newParent, newName, overwrite);
+        final RegisteredProject owner = projectRegistry.getParentProject(newItem.getPath().toString());
+        if (owner == null) {
+            throw new NotFoundException("Parent project not found " + newItem.getPath().toString());
+        }
+
+        final VirtualFileEntry copy;
+        if (newItem.isFile()) {
+            copy = new FileEntry(newItem, projectRegistry);
+        } else {
+            copy = new FolderEntry(newItem, projectRegistry);
+        }
+
+        if (copy.isProject()) {
+            projectRegistry.getProject(copy.getProject()).getTypes();
+            // fire event
+        }
+
+        return copy;
+    }
+
