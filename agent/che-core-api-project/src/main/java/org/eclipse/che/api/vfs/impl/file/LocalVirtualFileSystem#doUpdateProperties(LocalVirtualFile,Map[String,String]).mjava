@@ -1,0 +1,38 @@
+    private void doUpdateProperties(LocalVirtualFile virtualFile, Map<String, String> updates) throws ServerException {
+        try {
+            final Map<String, String> properties = getProperties(virtualFile);
+            for (Map.Entry<String, String> entry : updates.entrySet()) {
+                if (entry.getValue() == null) {
+                    properties.remove(entry.getKey());
+                } else {
+                    properties.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            final File metadataIoFile = getMetadataIoFile(virtualFile.getPath());
+            if (properties.isEmpty()) {
+                if (!metadataIoFile.delete()) {
+                    if (metadataIoFile.exists()) {
+                        LOG.error("Unable delete metadata file {}", metadataIoFile);
+                        throw new IOException(String.format("Unable update properties of item '%s'", virtualFile.getPath()));
+                    }
+                }
+            } else {
+                metadataIoFile.getParentFile().mkdirs();
+                try (DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(metadataIoFile)))) {
+                    metadataSerializer.write(dos, properties);
+                }
+            }
+
+            metadataCache.put(virtualFile.getPath(), properties);
+
+            if (!virtualFile.toIoFile().setLastModified(System.currentTimeMillis())) {
+                LOG.warn("Unable to set timestamp to '{}'", virtualFile.toIoFile());
+            }
+        } catch (IOException e) {
+            String errorMessage = String.format("Unable lock file '%s'", virtualFile.getPath());
+            LOG.error(errorMessage + "\n" + e.getMessage(), e);
+            throw new ServerException(errorMessage);
+        }
+    }
+

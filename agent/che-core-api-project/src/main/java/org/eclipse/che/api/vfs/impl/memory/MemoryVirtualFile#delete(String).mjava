@@ -1,0 +1,29 @@
+    @Override
+    public void delete(String lockToken) throws ForbiddenException, ServerException {
+        checkExistence();
+        boolean isFile = isFile();
+        if (isRoot()) {
+            throw new ForbiddenException("Unable delete root folder");
+        }
+        final Path myPath = getPath();
+        final boolean folder = isFolder();
+        if (folder) {
+            final List<VirtualFile> lockedFiles = new LockedFileFinder(this).findLockedFiles();
+            if (!lockedFiles.isEmpty()) {
+                throw new ForbiddenException(
+                        String.format("Unable delete item '%s'. Child items '%s' are locked", getName(), lockedFiles));
+            }
+            for (VirtualFile virtualFile : getTreeAsList(this)) {
+                ((MemoryVirtualFile)virtualFile).exists = false;
+            }
+        } else {
+            if (fileIsLockedAndLockTokenIsInvalid(lockToken)) {
+                throw new ForbiddenException(String.format("Unable delete item '%s'. Item is locked", getPath()));
+            }
+        }
+        parent.children.remove(name);
+        exists = false;
+        parent = null;
+        deleteFromSearcher(myPath, isFile);
+    }
+

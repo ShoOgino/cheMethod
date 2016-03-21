@@ -1,0 +1,71 @@
+    @GET
+    @Path("/search/{path:.*}")
+    @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Search for resources",
+            notes = "Search for resources applying a number of search filters as query parameters",
+            response = ItemReference.class,
+            responseContainer = "List")
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 409, message = "Conflict error"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    public List<ItemReference> search(@ApiParam(value = "Workspace ID", required = true)
+                                      @PathParam("ws-id") String workspace,
+                                      @ApiParam(value = "Path to resource, i.e. where to search?", required = true)
+                                      @PathParam("path") String path,
+                                      @ApiParam(value = "Resource name")
+                                      @QueryParam("name") String name,
+                                      @ApiParam(value = "Search keywords")
+                                      @QueryParam("text") String text,
+                                      @ApiParam(value = "Maximum items to display. If this parameter is dropped, there are no limits")
+                                      @QueryParam("maxItems") @DefaultValue("-1") int maxItems,
+                                      @ApiParam(value = "Skip count")
+                                      @QueryParam("skipCount") int skipCount) throws NotFoundException,
+                                                                                     ForbiddenException,
+                                                                                     ConflictException,
+                                                                                     ServerException {
+        final Searcher searcher;
+        try {
+            searcher = projectManager.getSearcher();
+        } catch (NotFoundException e) {
+            LOG.warn(e.getLocalizedMessage());
+            return Collections.emptyList();
+        }
+
+        if (skipCount < 0) {
+            throw new ConflictException(String.format("Invalid 'skipCount' parameter: %d.", skipCount));
+        }
+
+        final QueryExpression expr = new QueryExpression()
+                .setPath(path.startsWith("/") ? path : ('/' + path))
+                .setName(name)
+                .setText(text);
+
+        final SearchResult result = searcher.search(expr);
+
+        if (skipCount > 0) {
+            if (skipCount > result.getTotalHits()) {
+                throw new ConflictException(
+                        String.format("'skipCount' parameter: %d is greater then total number of items in result: %d.",
+                                      skipCount, result.getTotalHits()));
+            }
+        }
+
+        final int length = maxItems > 0 ? Math.min(result.getTotalHits(), maxItems) : result.getTotalHits();
+        final List<ItemReference> items = new ArrayList<>(length);
+        final FolderEntry root = projectManager.getProjectsRoot();
+        final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
+
+        List<SearchResultEntry> entries = result.getResults();
+        for (int i = skipCount; i < length; i++) {
+            final VirtualFileEntry child = root.getChild(entries.get(i).getFilePath());
+
+            if (child != null && child.isFile()) {
+                items.add(DtoConverter.toItemReference((FileEntry)child, workspace, uriBuilder.clone()));
+            }
+        }
+
+        return items;
+    }
+

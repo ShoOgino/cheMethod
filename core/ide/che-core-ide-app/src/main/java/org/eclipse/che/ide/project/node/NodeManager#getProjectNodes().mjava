@@ -5,27 +5,37 @@
      */
     @NotNull
     public Promise<List<Node>> getProjectNodes() {
-        return newPromise(new RequestCall<List<ProjectConfigDto>>() {
-            @Override
-            public void makeCall(AsyncCallback<List<ProjectConfigDto>> callback) {
-                projectService.getProjects(workspaceId, true, newCallback(callback, dtoUnmarshaller.newListUnmarshaller(ProjectConfigDto.class)));
-            }
-        }).then(new Function<List<ProjectConfigDto>, List<Node>>() {
+        return projectService.getProjects(workspaceId).then(new Function<List<ProjectConfigDto>, List<Node>>() {
             @Override
             public List<Node> apply(List<ProjectConfigDto> projects) throws FunctionException {
                 if (projects == null) {
                     return Collections.emptyList();
                 }
 
+                //fill workspace projects with loaded actual configs, temporary solution that will be replaced after GA release
+                appContext.getWorkspace().getConfig().withProjects(new ArrayList<>(projects));
+
+                final Iterable<ProjectConfigDto> rootProjects = filter(projects, new Predicate<ProjectConfigDto>() {
+                    @Override
+                    public boolean apply(@Nullable ProjectConfigDto input) {
+                        final Path path = Path.valueOf(input.getPath());
+
+                        // For paths like: '/project' or '/project/' segment count always will be equals to 1
+                        return path.segmentCount() == 1;
+                    }
+                });
+
                 final NodeSettings settings = nodeSettingsProvider.getSettings();
 
-                return Lists.transform(projects, new com.google.common.base.Function<ProjectConfigDto, Node>() {
-                    @org.eclipse.che.commons.annotation.Nullable
+                final Iterable<Node> nodes = transform(rootProjects, new com.google.common.base.Function<ProjectConfigDto, Node>() {
+                    @javax.annotation.Nullable
                     @Override
                     public Node apply(@Nullable ProjectConfigDto project) {
                         return nodeFactory.newProjectNode(project, settings == null ? NodeSettings.DEFAULT_SETTINGS : settings);
                     }
                 });
+
+                return newArrayList(nodes);
             }
         });
     }

@@ -1,0 +1,61 @@
+    @Inject
+    public NodeManager(NodeFactory nodeFactory,
+                       ProjectServiceClient projectService,
+                       DtoUnmarshallerFactory dtoUnmarshaller,
+                       NodesResources nodesResources,
+                       SettingsProvider nodeSettingsProvider,
+                       DtoFactory dtoFactory,
+                       Set<NodeIconProvider> nodeIconProvider,
+                       final AppContext appContext,
+                       EventBus eventBus) {
+        this.nodeFactory = nodeFactory;
+        this.projectService = projectService;
+        this.dtoUnmarshaller = dtoUnmarshaller;
+        this.nodesResources = nodesResources;
+        this.nodeSettingsProvider = nodeSettingsProvider;
+        this.dtoFactory = dtoFactory;
+        this.nodeIconProvider = nodeIconProvider;
+        this.appContext = appContext;
+
+        this.workspaceId = appContext.getWorkspace().getId();
+
+        eventBus.addHandler(DeleteProjectEvent.TYPE, new DeleteProjectHandler() {
+            @Override
+            public void onProjectDeleted(final DeleteProjectEvent event) {
+                removeIf(appContext.getWorkspace().getConfig().getProjects(), new Predicate<ProjectConfig>() {
+                    @Override
+                    public boolean apply(@Nullable ProjectConfig input) {
+                        return input.getPath().equals(event.getProjectConfig().getPath());
+                    }
+                });
+            }
+        });
+
+        eventBus.addHandler(CreateProjectEvent.TYPE, new CreateProjectHandler() {
+            @Override
+            public void onProjectCreated(CreateProjectEvent event) {
+                appContext.getWorkspace().getConfig().getProjects().add(event.getProjectConfig());
+            }
+        });
+
+        eventBus.addHandler(ProjectUpdatedEvent.getType(), new ProjectUpdatedEvent.ProjectUpdatedHandler() {
+            @Override
+            public void onProjectUpdated(final ProjectUpdatedEvent event) {
+                final Optional<ProjectConfigDto> configOptional = tryFind(appContext.getWorkspace().getConfig().getProjects(), new Predicate<ProjectConfigDto>() {
+                    @Override
+                    public boolean apply(@Nullable ProjectConfigDto input) {
+                        return input.getPath().equals(event.getPath());
+                    }
+                });
+
+                if (!configOptional.isPresent()) {
+                    return;
+                }
+
+                if (appContext.getWorkspace().getConfig().getProjects().remove(configOptional.get())) {
+                    appContext.getWorkspace().getConfig().getProjects().add(event.getUpdatedProjectDescriptor());
+                }
+            }
+        });
+    }
+

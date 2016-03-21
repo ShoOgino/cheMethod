@@ -1,0 +1,30 @@
+    LocalVirtualFile copy(LocalVirtualFile source, LocalVirtualFile parent, String name, boolean overwrite)
+            throws ForbiddenException, ConflictException, ServerException {
+        if (source.getPath().equals(parent.getPath())) {
+            throw new ForbiddenException("Item cannot be copied to itself");
+        }
+        if (parent.isFolder()) {
+            final String newName = isNullOrEmpty(name) ? source.getName() : name;
+            LocalVirtualFile destination = (LocalVirtualFile)parent.getChild(Path.of(newName));
+            if (destination != null) {
+                if (overwrite) {
+                    delete(destination, null);
+                } else {
+                    throw new ConflictException(String.format("Item '%s' already exists", destination.getPath()));
+                }
+            } else {
+                final Path newPath = parent.getPath().newPath(newName);
+                final File newIoFile = new File(ioRoot, toIoPath(newPath));
+                destination = new LocalVirtualFile(newIoFile, newPath, this);
+            }
+
+            doCopy(source, destination);
+
+            addInSearcher(destination);
+
+            return destination;
+        } else {
+            throw new ForbiddenException("Unable copy item. Item specified as parent is not a folder");
+        }
+    }
+

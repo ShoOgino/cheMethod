@@ -1,0 +1,36 @@
+    public RegisteredProject importProject(String path, SourceStorage sourceStorage) throws ServerException,
+                                                                                            IOException,
+                                                                                            ForbiddenException,
+                                                                                            UnauthorizedException,
+                                                                                            ConflictException,
+                                                                                            NotFoundException {
+        final ProjectImporter importer = importers.getImporter(sourceStorage.getType());
+        if (importer == null) {
+            throw new NotFoundException(String.format("Unable import sources project from '%s'. Sources type '%s' is not supported.",
+                                                      sourceStorage.getLocation(), sourceStorage.getType()));
+        }
+
+        // Preparing websocket output publisher to broadcast output of import process to the ide clients while importing
+        String normalizePath = (path.startsWith("/")) ? path : "/".concat(path);
+        final LineConsumerFactory outputOutputConsumerFactory =
+                () -> new ProjectImportOutputWSLineConsumer(normalizePath, projectRegistry.getWorkspaceId(), 300);
+
+        FolderEntry folder = asFolder(normalizePath);
+
+        if (folder == null) {
+            folder = getProjectsRoot().createFolder(normalizePath);
+        }
+
+        importer.importSources(folder, sourceStorage, outputOutputConsumerFactory);
+
+        final String name = folder.getPath().getName();
+        WorkspaceConfig workspaceConfig = projectRegistry.getWorkspaceConfig();
+        List<? extends ProjectConfig> projects = workspaceConfig.getProjects();
+        for (ProjectConfig project : projects) {
+            if (normalizePath.equals(project.getPath())) {
+                return projectRegistry.putProject(project, folder, true, false);
+            }
+        }
+        return projectRegistry.putProject(new NewProjectConfig(normalizePath, name, BaseProjectType.ID, sourceStorage), folder, true, false);
+    }
+

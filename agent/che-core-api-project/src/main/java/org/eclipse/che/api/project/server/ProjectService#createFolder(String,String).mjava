@@ -1,15 +1,13 @@
-    @ApiOperation(value = "Create a folder",
-                  notes = "Create a folder is a specified project",
-                  position = 8)
-    @ApiResponses(value = {
-            @ApiResponse(code = 201, message = ""),
-            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
-            @ApiResponse(code = 404, message = "Not found"),
-            @ApiResponse(code = 409, message = "File already exists"),
-            @ApiResponse(code = 500, message = "Internal Server Error")})
     @POST
-    @Produces({MediaType.APPLICATION_JSON})
     @Path("/folder/{path:.*}")
+    @Produces({MediaType.APPLICATION_JSON})
+    @ApiOperation(value = "Create a folder",
+            notes = "Create a folder is a specified project")
+    @ApiResponses({@ApiResponse(code = 201, message = ""),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 409, message = "File already exists"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
     public Response createFolder(@ApiParam(value = "Workspace ID", required = true)
                                  @PathParam("ws-id") String workspace,
                                  @ApiParam(value = "Path to a new folder destination", required = true)
@@ -17,15 +15,18 @@
                                                                         ForbiddenException,
                                                                         ServerException,
                                                                         NotFoundException {
-        filesBuffer.addToBuffer(path);
-
-        final FolderEntry newFolder = projectManager.getProjectsRoot(workspace).createFolder(path);
+        final FolderEntry newFolder = projectManager.getProjectsRoot().createFolder(path);
         final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
-        final ItemReference folderReference = DtoConverter.toItemReference(newFolder, uriBuilder.clone(), projectManager);
-        final URI location = uriBuilder.clone().path(getClass(), "getChildren").build(workspace, newFolder.getPath().substring(1));
+        final ItemReference folderReference = DtoConverter.toItemReference(newFolder, workspace, uriBuilder.clone());
+        final URI location = uriBuilder.clone()
+                                       .path(getClass(), "getChildren")
+                                       .build(workspace, newFolder.getPath().toString().substring(1));
 
         eventService.publish(new ProjectItemModifiedEvent(ProjectItemModifiedEvent.EventType.CREATED,
-                                                          workspace, projectPath(newFolder.getPath()), newFolder.getPath(), true));
+                                                          workspace,
+                                                          projectPath(newFolder.getPath().toString()),
+                                                          newFolder.getPath().toString(),
+                                                          true));
 
         return Response.created(location).entity(folderReference).build();
     }

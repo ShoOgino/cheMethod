@@ -1,0 +1,35 @@
+    @PostConstruct
+    public void initProjects() throws ConflictException, NotFoundException, ServerException, ForbiddenException {
+        final UsersWorkspace workspace = workspaceHolder.getWorkspace();
+
+        List<? extends ProjectConfig> projectConfigs = workspace.getConfig().getProjects();
+
+        if (projectConfigs == null) {
+            projectConfigs = new ArrayList<>();
+        }
+
+        // take all the projects from ws's config
+        for (ProjectConfig projectConfig : projectConfigs) {
+            final String path = projectConfig.getPath();
+            final VirtualFile vf = vfs.getRoot().getChild(Path.of(path));
+            final FolderEntry projFolder = ((vf == null) ? null : new FolderEntry(vf, this));
+            putProject(projectConfig, projFolder, false, false);
+        }
+
+        // unconfigured folders on root
+        for (FolderEntry folder : root.getChildFolders()) {
+            if (!projects.containsKey(folder.getVirtualFile().getPath().toString())) {
+                putProject(null, folder, true, false);
+            }
+        }
+
+        initialized = true;
+
+        for (RegisteredProject project : projects.values()) {
+
+            // only for projects with sources
+            if(project.getBaseFolder() != null)
+                 fireInitHandlers(project);
+        }
+    }
+

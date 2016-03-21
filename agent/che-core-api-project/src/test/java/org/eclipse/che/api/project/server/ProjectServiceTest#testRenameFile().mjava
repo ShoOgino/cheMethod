@@ -1,16 +1,30 @@
     @Test
     public void testRenameFile() throws Exception {
-        Project myProject = pm.getProject(workspace, "my_project");
-        myProject.getBaseFolder().createFile("test.txt", "hello".getBytes());
+        RegisteredProject myProject = pm.getProject("my_project");
+        myProject.getBaseFolder().createFolder("a/b");
+        ((FolderEntry)myProject.getBaseFolder().getChild("a/b")).createFile("test.txt", "to be or not no be".getBytes());
+
+        // name for file after move
+        final String destinationName = "copyOfTestForMove.txt";
+
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
+
+        MoveOptions descriptor = DtoFactory.getInstance().createDto(MoveOptions.class);
+        descriptor.setName(destinationName);
+        descriptor.setOverWrite(false);
+
         ContainerResponse response = launcher.service(POST,
                                                       String.format(
-                                                              "http://localhost:8080/api/project/%s/rename/my_project/test.txt?name=_test.txt&mediaType=txt",
+                                                              "http://localhost:8080/api/project/%s/move/my_project/a/b/test.txt",
                                                               workspace),
-                                                      "http://localhost:8080/api", null, null, null);
+                                                      "http://localhost:8080/api", headers,
+                                                      DtoFactory.getInstance().toJson(descriptor).getBytes(), null);
         assertEquals(response.getStatus(), 201, "Error: " + response.getEntity());
         assertEquals(response.getHttpHeaders().getFirst("Location"),
-                     URI.create(String.format("http://localhost:8080/api/project/%s/file/my_project/_test.txt", workspace)));
-        assertNotNull(myProject.getBaseFolder().getChild("_test.txt"));
-        Assert.assertNull(myProject.getBaseFolder().getChild("test.txt"));
+                     URI.create(
+                             String.format("http://localhost:8080/api/project/%s/file/my_project/a/b/%s", workspace, destinationName)));
+        VirtualFileEntry theTargetFile = myProject.getBaseFolder().getChild(String.format("a/b/%s", destinationName));
+        assertNotNull(theTargetFile); // new
     }
 

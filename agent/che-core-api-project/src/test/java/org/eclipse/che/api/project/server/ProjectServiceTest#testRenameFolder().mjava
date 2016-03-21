@@ -1,16 +1,29 @@
     @Test
     public void testRenameFolder() throws Exception {
-        Project myProject = pm.getProject(workspace, "my_project");
-        myProject.getBaseFolder().createFolder("a/b/c");
+        RegisteredProject myProject = pm.getProject("my_project");
+        myProject.getBaseFolder().createFolder("a/b");
+        ((FolderEntry)myProject.getBaseFolder().getChild("a/b")).createFile("test.txt", "to be or not no be".getBytes());
+
+        // new name for folder
+        final String renamedFolder = "renamedFolder";
+
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
+
+        MoveOptions descriptor = DtoFactory.getInstance().createDto(MoveOptions.class);
+        descriptor.setName(renamedFolder);
+        descriptor.setOverWrite(false);
+
         ContainerResponse response = launcher.service(POST,
-                                                      String.format("http://localhost:8080/api/project/%s/rename/my_project/a/b?name=x",
-                                                                    workspace),
-                                                      "http://localhost:8080/api", null, null, null);
+                                                      String.format(
+                                                              "http://localhost:8080/api/project/%s/move/my_project/a/b",
+                                                              workspace),
+                                                      "http://localhost:8080/api", headers,
+                                                      DtoFactory.getInstance().toJson(descriptor).getBytes(), null);
         assertEquals(response.getStatus(), 201, "Error: " + response.getEntity());
         assertEquals(response.getHttpHeaders().getFirst("Location"),
-                     URI.create(String.format("http://localhost:8080/api/project/%s/children/my_project/a/x", workspace)));
-        assertNotNull(myProject.getBaseFolder().getChild("a/x"));
-        assertNotNull(myProject.getBaseFolder().getChild("a/x/c"));
-        Assert.assertNull(myProject.getBaseFolder().getChild("a/b"));
+                     URI.create(
+                             String.format("http://localhost:8080/api/project/%s/children/my_project/a/%s", workspace, renamedFolder)));
+        assertNotNull(myProject.getBaseFolder().getChild(String.format("a/%s/test.txt", renamedFolder)));
     }
 

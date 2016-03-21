@@ -1,0 +1,27 @@
+    @Test
+    public void watchesUpdate() throws Exception {
+        fileWatcherTestTree.createDirectory("", "watched");
+        String notifiedFile1 = fileWatcherTestTree.createFile("");
+        String notifiedFile2 = fileWatcherTestTree.createFile("watched");
+        Set<String> updated = newHashSet(notifiedFile1, notifiedFile2);
+
+        FileWatcherNotificationHandler notificationHandler = aNotificationHandler();
+        fileWatcher = new FileTreeWatcher(testDirectory, newHashSet(), notificationHandler);
+        fileWatcher.startup();
+
+        Thread.sleep(1000);
+
+        fileWatcherTestTree.updateFile(notifiedFile1);
+        fileWatcherTestTree.updateFile(notifiedFile2);
+
+        Thread.sleep(5000);
+
+        verify(notificationHandler, never()).errorOccurred(eq(testDirectory), any(Throwable.class));
+        verify(notificationHandler, never()).handleFileWatcherEvent(eq(CREATED), eq(testDirectory), anyString(), anyBoolean());
+        verify(notificationHandler, never()).handleFileWatcherEvent(eq(DELETED), eq(testDirectory), anyString(), anyBoolean());
+
+        ArgumentCaptor<String> updatedEvents = ArgumentCaptor.forClass(String.class);
+        verify(notificationHandler, times(2)).handleFileWatcherEvent(eq(MODIFIED), eq(testDirectory), updatedEvents.capture(), anyBoolean());
+        assertEquals(updated, newHashSet(updatedEvents.getAllValues()));
+    }
+

@@ -1,0 +1,29 @@
+    private void checkoutBranch(GitConnection git,
+                                String projectName,
+                                String branchName,
+                                String startPoint,
+                                DtoFactory dtoFactory) throws GitException {
+        final CheckoutRequest request = dtoFactory.createDto(CheckoutRequest.class).withName(branchName);
+        final boolean branchExist = git.branchList(dtoFactory.createDto(BranchListRequest.class).withListMode(LIST_ALL))
+                                       .stream()
+                                       .anyMatch(branch -> branch.getName().equals(branchName));
+        final GitCheckoutEvent checkout = dtoFactory.createDto(GitCheckoutEvent.class)
+                                                    .withWorkspaceId(System.getenv("CHE_WORKSPACE_ID"))
+                                                    .withProjectName(projectName);
+        if (startPoint != null) {
+            if (branchExist) {
+                git.checkout(request);
+                eventService.publish(checkout.withCheckoutOnly(true)
+                                             .withBranchRef(getRemoteBranch(dtoFactory, git, branchName)));
+            } else {
+                checkoutAndRethrow(git, request.withCreateNew(true).withStartPoint(startPoint).withNoTrack(true),
+                                   FAILED_CHECKOUT_WITH_START_POINT);
+                eventService.publish(checkout.withCheckoutOnly(false));
+            }
+        } else {
+            checkoutAndRethrow(git, request, FAILED_CHECKOUT);
+            eventService.publish(checkout.withCheckoutOnly(true)
+                                         .withBranchRef(getRemoteBranch(dtoFactory, git, branchName)));
+        }
+    }
+

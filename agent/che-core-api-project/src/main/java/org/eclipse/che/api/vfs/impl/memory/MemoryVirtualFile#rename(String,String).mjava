@@ -1,0 +1,37 @@
+    @Override
+    public VirtualFile rename(String newName, String lockToken) throws ForbiddenException, ConflictException, ServerException {
+        checkExistence();
+        checkName(newName);
+        boolean isFile = isFile();
+        if (isRoot()) {
+            throw new ForbiddenException("We were unable to rename a root folder.");
+        }
+        final Path myPath = getPath();
+        final boolean isFolder = isFolder();
+        if (isFolder) {
+            final List<VirtualFile> lockedFiles = new LockedFileFinder(this).findLockedFiles();
+            if (!lockedFiles.isEmpty()) {
+                throw new ForbiddenException(
+                        String.format("Unable rename item '%s'. Child items '%s' are locked", getName(), lockedFiles));
+            }
+        } else {
+            if (fileIsLockedAndLockTokenIsInvalid(lockToken)) {
+                throw new ForbiddenException(String.format("We were unable to rename an item '%s'." +
+                                                           " The item is currently locked by the system", getPath()));
+            }
+        }
+
+        if (parent.children.get(newName) != null) {
+            throw new ConflictException(String.format("Item '%s' already exists", newName));
+        }
+        parent.children.remove(name);
+        parent.children.put(newName, this);
+        name = newName;
+        lock = null;
+
+        lastModificationDate = System.currentTimeMillis();
+        deleteFromSearcher(myPath, isFile);
+        addInSearcher(this);
+        return this;
+    }
+

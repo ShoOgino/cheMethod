@@ -1,0 +1,31 @@
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Creates new project",
+            response = ProjectConfigDto.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 403, message = "Operation is forbidden"),
+                   @ApiResponse(code = 409, message = "Project with specified name already exist in workspace"),
+                   @ApiResponse(code = 500, message = "Server error")})
+    @GenerateLink(rel = Constants.LINK_REL_CREATE_PROJECT)
+    /**
+     * NOTE: parentPath is added to make a module
+     */
+    public ProjectConfigDto createProject(@ApiParam(value = "ID of workspace to create project", required = true)
+                                          @PathParam("ws-id") String workspace,
+                                          @ApiParam(value = "Add to this project as module", required = false)
+                                          @Description("descriptor of project") ProjectConfigDto projectConfig) throws ConflictException,
+                                                                                                                       ForbiddenException,
+                                                                                                                       ServerException,
+                                                                                                                       NotFoundException {
+        final RegisteredProject project = projectManager.createProject(projectConfig, null);
+        final ProjectConfigDto configDto = toProjectConfig(project, workspace, getServiceContext().getServiceUriBuilder());
+
+        eventService.publish(new ProjectCreatedEvent(workspace, project.getPath()));
+
+        // TODO this throws NPE
+        //logProjectCreatedEvent(configDto.getName(), configDto.getProjectType());
+
+        return configDto;
+    }
+

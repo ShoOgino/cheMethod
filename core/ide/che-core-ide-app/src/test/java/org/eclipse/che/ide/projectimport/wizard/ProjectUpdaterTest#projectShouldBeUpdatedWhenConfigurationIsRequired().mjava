@@ -1,15 +1,23 @@
     @Test
-    public void projectShouldBeUpdatedWhenConfigurationIsRequired() {
+    public void projectShouldBeUpdatedWhenConfigurationIsRequired() throws Exception {
         updater.updateProject(completeCallback, projectConfig, true);
 
+        verify(getUpdatedProjectMock).then(getUpdatedProjectCaptor.capture());
+        getUpdatedProjectCaptor.getValue().apply(projectConfig);
+
         verify(projectConfig).getName();
-        verify(dtoUnmarshallerFactory).newUnmarshaller(ProjectConfigDto.class);
 
         verify(projectServiceClient).updateProject(eq(WORKSPACE_ID),
                                                    eq('/' + PROJECT_NAME),
-                                                   eq(projectConfig),
-                                                   asyncRequestCallback.capture());
-        GwtReflectionUtils.callOnSuccess(asyncRequestCallback.getValue(), projectConfig);
+                                                   eq(projectConfig));
+
+        verify(getProjectsMock).then(getProjectsCaptor.capture());
+        getProjectsCaptor.getValue().apply(singletonList(projectConfig));
+
+        verify(projectServiceClient).getProjects(eq(WORKSPACE_ID));
+        verify(appContext).getWorkspace();
+        verify(usersWorkspaceDtoMock).getConfig();
+        verify(workspaceConfigDtoMock).withProjects(eq(newArrayList(projectConfig)));
 
         verify(eventBus, times(2)).fireEvent(Matchers.<CreateProjectEvent>anyObject());
         verify(projectNotificationSubscriber).onSuccess();

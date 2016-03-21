@@ -1,0 +1,24 @@
+    private String doLock(LocalVirtualFile virtualFile, long timeout) throws ConflictException, ServerException {
+        try {
+            if (NO_LOCK == lockTokensCache.get(virtualFile.getPath())) {
+                final FileLock lock = createLock(timeout);
+                final File fileLockIoFile = getFileLockIoFile(virtualFile.getPath());
+                fileLockIoFile.getParentFile().mkdirs();
+                try (DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(fileLockIoFile)))) {
+                    locksSerializer.write(dos, lock);
+                }
+                lockTokensCache.put(virtualFile.getPath(), lock);
+                return lock.getLockToken();
+            }
+            throw new ConflictException(String.format("Unable lock file '%s'. File already locked", virtualFile.getPath()));
+        } catch (IOException | ExecutionException e) {
+            String errorMessage = String.format("Unable lock file '%s'", virtualFile.getPath());
+            if (e instanceof ExecutionException) {
+                LOG.error(errorMessage + "\n" + e.getCause().getMessage(), e.getCause());
+            } else {
+                LOG.error(errorMessage + "\n" + e.getMessage(), e);
+            }
+            throw new ServerException(errorMessage);
+        }
+    }
+

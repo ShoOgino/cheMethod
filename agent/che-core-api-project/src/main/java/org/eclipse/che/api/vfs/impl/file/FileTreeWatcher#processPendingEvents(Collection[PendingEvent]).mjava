@@ -1,0 +1,53 @@
+    private void processPendingEvents(Collection<PendingEvent> pendingEvents) throws IOException {
+        for (PendingEvent pendingEvent : pendingEvents) {
+            Path eventDirectoryPath = pendingEvent.getPath();
+            WatchedDirectory watchedDirectory = watchedDirectories.get(eventDirectoryPath);
+            if (Files.exists(eventDirectoryPath)) {
+                final int hitCounter = watchedDirectory.incrementHitCounter();
+                try (DirectoryStream<Path> entries = Files.newDirectoryStream(eventDirectoryPath)) {
+                    for (Path fsItem : entries) {
+                        DirectoryItem directoryItem = watchedDirectory.getItem(fsItem.getFileName());
+                        if (directoryItem == null) {
+                            try {
+                                boolean directory = Files.isDirectory(fsItem);
+                                directoryItem = new DirectoryItem(fsItem.getFileName(), directory, getLastModifiedInMillis(fsItem));
+                                watchedDirectory.addItem(directoryItem);
+                                fireWatchEvent(CREATED, fsItem, directoryItem.isDirectory());
+                                if (directory) {
+                                    walkTreeAndFireCreatedEvents(fsItem);
+                                    setupDirectoryWatcher(fsItem);
+                                }
+                            } catch (IOException ignored) {
+                            }
+                        } else {
+                            long lastModified;
+                            try {
+                                lastModified = getLastModifiedInMillis(fsItem);
+                            } catch (IOException ignored) {
+                                continue;
+                            }
+                            if (lastModified != directoryItem.getLastModified() && Files.isRegularFile(fsItem)) {
+                                fireWatchEvent(MODIFIED, fsItem, false);
+                            }
+                            directoryItem.touch(lastModified);
+                            directoryItem.updateHitCounter(hitCounter);
+                        }
+                    }
+                }
+
+                for (Iterator<DirectoryItem> iterator = watchedDirectory.getItems().iterator(); iterator.hasNext(); ) {
+                    DirectoryItem directoryItem = iterator.next();
+                    if (hitCounter != directoryItem.getHitCount()) {
+                        iterator.remove();
+                        fireWatchEvent(DELETED, eventDirectoryPath.resolve(directoryItem.getName()), directoryItem.isDirectory());
+                    }
+                }
+            } else {
+                for (DirectoryItem directoryItem : watchedDirectory.getItems()) {
+                    fireWatchEvent(DELETED, eventDirectoryPath.resolve(directoryItem.getName()), directoryItem.isDirectory());
+                }
+                watchedDirectories.remove(eventDirectoryPath);
+            }
+        }
+    }
+

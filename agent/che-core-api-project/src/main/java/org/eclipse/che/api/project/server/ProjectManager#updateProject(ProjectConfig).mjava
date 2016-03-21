@@ -1,0 +1,44 @@
+    /**
+     * Updating project means:
+     * - getting the project (should exist)
+     * - updating name and description
+     * - changing project types and provided attributes
+     * - refreshing provided (transient) project types and attributes
+     *
+     * @param newConfig
+     *         new config
+     * @return updated config
+     * @throws ForbiddenException
+     * @throws ServerException
+     * @throws NotFoundException
+     * @throws ConflictException
+     * @throws IOException
+     */
+    public RegisteredProject updateProject(ProjectConfig newConfig) throws ForbiddenException,
+                                                                           ServerException,
+                                                                           NotFoundException,
+                                                                           ConflictException,
+                                                                           IOException {
+        String path = newConfig.getPath();
+
+        if (path == null) {
+            throw new ConflictException("Project path is not defined");
+        }
+
+        final FolderEntry baseFolder = asFolder(path);
+
+        // If a project does not exist in the target path, create a new one
+        if (baseFolder == null) {
+            throw new NotFoundException(String.format("Folder '%s' doesn't exist.", path));
+        }
+
+        final RegisteredProject project = projectRegistry.putProject(newConfig, baseFolder, true, false);
+
+        projectRegistry.fireInitHandlers(project);
+
+        // TODO move to register?
+        reindexProject(project);
+
+        return project;
+    }
+

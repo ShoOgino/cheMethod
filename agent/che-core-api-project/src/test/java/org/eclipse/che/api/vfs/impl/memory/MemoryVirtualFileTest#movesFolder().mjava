@@ -1,0 +1,34 @@
+    @Test
+    public void movesFolder() throws Exception {
+        VirtualFile folder = getRoot().createFolder(generateFolderName());
+        createFileTree(folder, 3);
+        List<VirtualFile> originalTree = getFileTreeAsList(folder);
+        for (int i = 0; i < originalTree.size(); i++) {
+            originalTree.get(i).setProperty("property" + i, "value" + i);
+        }
+        List<Path> originalTreePaths = originalTree.stream().map(VirtualFile::getPath).collect(toList());
+        VirtualFile targetFolder = getRoot().createFolder(generateFolderName());
+
+        VirtualFile movedFolder = folder.moveTo(targetFolder);
+
+        List<VirtualFile> movedTree = getFileTreeAsList(movedFolder);
+        Iterator<Path> originalPathIterator = originalTreePaths.iterator();
+        Iterator<VirtualFile> movedIterator = movedTree.iterator();
+        int i = 0;
+        while (originalPathIterator.hasNext() && movedIterator.hasNext()) {
+            Path originalPath = originalPathIterator.next();
+            VirtualFile moved = movedIterator.next();
+            assertEquals(originalPath, moved.getPath().subPath(targetFolder.getPath()));
+
+            assertEquals(String.format("Properties of virtual file %s not copied properly", moved.getPath()),
+                         ImmutableMap.of("property" + i, "value" + i), moved.getProperties());
+            if (moved.isFile()) {
+                assertEquals(String.format("Content of file %s not copied properly", moved.getPath()),
+                             DEFAULT_CONTENT, moved.getContentAsString());
+            }
+            assertNull(String.format("Item %s must ne removed", originalPath), getRoot().getChild(originalPath));
+            i++;
+        }
+        assertFalse(originalPathIterator.hasNext() || movedIterator.hasNext());
+    }
+

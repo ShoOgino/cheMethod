@@ -1,46 +1,33 @@
-    @ApiOperation(value = "Get file or folder",
-                  response = ItemReference.class,
-                  position = 28)
-    @ApiResponses(value = {
-            @ApiResponse(code = 200, message = "OK"),
-            @ApiResponse(code = 403, message = "User not authorized to call this operation"),
-            @ApiResponse(code = 404, message = "Not found"),
-            @ApiResponse(code = 500, message = "Internal Server Error")})
     @GET
     @Path("/item/{path:.*}")
     @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Get file or folder",
+            response = ItemReference.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
     public ItemReference getItem(@ApiParam(value = "Workspace ID", required = true)
                                  @PathParam("ws-id") String workspace,
                                  @ApiParam(value = "Path to resource. Can be project or its folders", required = true)
-                                 @PathParam("path") String path)
-            throws NotFoundException, ForbiddenException, ServerException, ValueStorageException,
-                   ProjectTypeConstraintException {
+                                 @PathParam("path") String path) throws NotFoundException,
+                                                                        ForbiddenException,
+                                                                        ServerException,
+                                                                        ValueStorageException,
+                                                                        ProjectTypeConstraintException {
+        final VirtualFileEntry entry = projectManager.getProjectsRoot().getChild(path);
 
-        Project project = projectManager.getProject(workspace, projectPath(path));
-        final VirtualFileEntry entry;
-        if (project != null) {
-            // If there is a project, allow it to intercept getting file meta-data
-            entry = project.getItem(path);
-        } else {
-            // If there is no project, try to retrieve the item directly
-            FolderEntry wsRoot = projectManager.getProjectsRoot(workspace);
-            if (wsRoot != null) {
-                entry = wsRoot.getChild(path);
-            } else {
-                entry = null;
-            }
-        }
         if (entry == null) {
             throw new NotFoundException("Project " + path + " was not found");
         }
 
         final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
 
-        ItemReference item;
+        final ItemReference item;
         if (entry.isFile()) {
-            item = DtoConverter.toItemReference((FileEntry)entry, uriBuilder.clone());
+            item = DtoConverter.toItemReference((FileEntry)entry, workspace, uriBuilder.clone());
         } else {
-            item = DtoConverter.toItemReference((FolderEntry)entry, uriBuilder.clone(), projectManager);
+            item = DtoConverter.toItemReference((FolderEntry)entry, workspace, uriBuilder.clone());
         }
 
         return item;
