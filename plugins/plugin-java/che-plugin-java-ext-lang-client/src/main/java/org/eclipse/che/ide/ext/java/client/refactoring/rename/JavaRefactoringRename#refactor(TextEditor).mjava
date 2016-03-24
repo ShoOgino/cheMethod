@@ -9,44 +9,17 @@
             return;
         }
 
-        linkedEditor = (HasLinkedMode)textEditorPresenter;
-
-        if (!isActiveLinkedEditor) {
+        if (isActiveLinkedEditor) {
+            createRenameSession();
+        } else {
             textEditor = textEditorPresenter;
+
+            createLinkedRenameSession();
         }
 
-        final CreateRenameRefactoring createRenameRefactoring = createRenameRefactoringDto(textEditor);
+        isActiveLinkedEditor = !isActiveLinkedEditor;
 
+        linkedEditor = (HasLinkedMode)textEditorPresenter;
         textEditorPresenter.setFocus();
-
-        Promise<RenameRefactoringSession> createRenamePromise = refactoringServiceClient.createRenameRefactoring(createRenameRefactoring);
-        createRenamePromise.then(new Operation<RenameRefactoringSession>() {
-            @Override
-            public void apply(RenameRefactoringSession session) throws OperationException {
-                if (session.isMastShowWizard() || isActiveLinkedEditor) {
-                    renamePresenter.show(session);
-                    if (mode != null) {
-                        mode.exitLinkedMode(false);
-                    }
-                } else if (session.getLinkedModeModel() != null && textEditor instanceof HasLinkedMode) {
-                    isActiveLinkedEditor = true;
-                    activateLinkedModeIntoEditor(session, textEditor.getDocument());
-                } else {
-                    notificationManager.notify(locale.failedToRename(),
-                                               locale.renameErrorEditor(),
-                                               FAIL,
-                                               true,
-                                               textEditor.getEditorInput().getFile().getProject().getProjectConfig());
-                }
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                dialogFactory.createMessageDialog(locale.renameRename(), locale.renameOperationUnavailable(), null).show();
-                if (mode != null) {
-                    mode.exitLinkedMode(false);
-                }
-            }
-        });
     }
 
