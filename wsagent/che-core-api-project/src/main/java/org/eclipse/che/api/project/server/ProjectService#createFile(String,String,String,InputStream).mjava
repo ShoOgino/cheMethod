@@ -3,7 +3,7 @@
     @Consumes({MediaType.MEDIA_TYPE_WILDCARD})
     @Produces({MediaType.APPLICATION_JSON})
     @ApiOperation(value = "Create file",
-            notes = "Create a new file in a project. If file type isn't specified the server will resolve its type.")
+                  notes = "Create a new file in a project. If file type isn't specified the server will resolve its type.")
     @ApiResponses({@ApiResponse(code = 201, message = ""),
                    @ApiResponse(code = 403, message = "User not authorized to call this operation"),
                    @ApiResponse(code = 404, message = "Not found"),
@@ -23,15 +23,17 @@
         }
 
         final FileEntry newFile = parent.createFile(fileName, content);
-        final UriBuilder uriBuilder = getServiceContext().getServiceUriBuilder();
-        final ItemReference fileReference = DtoConverter.toItemReference(newFile, workspace, uriBuilder.clone());
-        final URI location = uriBuilder.clone().path(getClass(), "getFile").build(workspace, newFile.getPath().toString().substring(1));
 
         eventService.publish(new ProjectItemModifiedEvent(ProjectItemModifiedEvent.EventType.CREATED,
                                                           workspace, projectPath(newFile.getPath().toString()),
                                                           newFile.getPath().toString(),
                                                           false));
 
-        return Response.created(location).entity(fileReference).build();
+        final URI location = getServiceContext().getServiceUriBuilder().clone()
+                                                .path(getClass(), "getFile")
+                                                .build(workspace, newFile.getPath().toString().substring(1));
+        return Response.created(location)
+                       .entity(injectFileLinks(asDto(newFile), workspace))
+                       .build();
     }
 
