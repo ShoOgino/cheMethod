@@ -1,0 +1,87 @@
+    private void addHandlers(final MessageBusProvider messageBusProvider) {
+        eventBus.addHandler(WsAgentStateEvent.TYPE, new WsAgentStateHandler() {
+            @Override
+            public void onWsAgentStarted(WsAgentStateEvent event) {
+                messageBus = messageBusProvider.getMachineMessageBus();
+
+                restoreDebuggerInfo();
+                if (isConnected()) {
+                    Promise<DebuggerEventList> promise = service.checkEvents(javaDebuggerInfo.getId());
+                    promise.then(new Operation<DebuggerEventList>() {
+                        @Override
+                        public void apply(DebuggerEventList arg) throws OperationException {
+                            debuggerManager.setActiveDebugger(JavaDebugger.this);
+
+                            String info = javaDebuggerInfo.getVmName() + " " + javaDebuggerInfo.getVmVersion();
+                            String address = javaDebuggerInfo.getHost() + ":" + javaDebuggerInfo.getPort();
+                            DebuggerDescriptor debuggerDescriptor = new DebuggerDescriptor(info, address);
+                            JsPromise<Void> promise = Promises.resolve(null);
+
+                            for (DebuggerObserver observer : observers) {
+                                observer.onDebuggerAttached(debuggerDescriptor, promise);
+                            }
+                            startCheckingEvents();
+                        }
+                    }).catchError(new Operation<PromiseError>() {
+                        @Override
+                        public void apply(PromiseError arg) throws OperationException {
+                            invalidateDebuggerInfo();
+                            preserveDebuggerInfo();
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void onWsAgentStopped(WsAgentStateEvent event) {}
+        });
+
+        this.debuggerEventsHandler = new SubscriptionHandler<DebuggerEventList>(new DebuggerEventListUnmarshallerWS(dtoFactory)) {
+            @Override
+            public void onMessageReceived(DebuggerEventList result) {
+                onEventListReceived(result);
+            }
+
+            @Override
+            public void onErrorReceived(Throwable exception) {
+                try {
+                    messageBus.unsubscribe(debuggerEventsChannel, this);
+                } catch (WebSocketException e) {
+                    Log.error(JavaDebugger.class, e);
+                }
+
+                if (exception instanceof ServerException) {
+                    ServerException serverException = (ServerException)exception;
+                    if (HTTPStatus.INTERNAL_ERROR == serverException.getHTTPStatus()
+                        && serverException.getMessage() != null
+                        && serverException.getMessage().contains("not found")) {
+
+                        disconnectDebugger();
+                    }
+                }
+            }
+        };
+
+        this.debuggerDisconnectedHandler = new SubscriptionHandler<Void>() {
+            @Override
+            protected void onMessageReceived(Void result) {
+                try {
+                    messageBus.unsubscribe(debuggerDisconnectedChannel, this);
+                } catch (WebSocketException e) {
+                    Log.error(JavaDebugger.class, e);
+                }
+
+                disconnectDebugger();
+            }
+
+            @Override
+            protected void onErrorReceived(Throwable exception) {
+                try {
+                    messageBus.unsubscribe(debuggerDisconnectedChannel, this);
+                } catch (WebSocketException e) {
+                    Log.error(JavaDebugger.class, e);
+                }
+            }
+        };
+    }
+

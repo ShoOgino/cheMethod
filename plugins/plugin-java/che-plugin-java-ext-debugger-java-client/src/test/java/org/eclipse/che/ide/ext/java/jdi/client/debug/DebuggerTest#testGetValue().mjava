@@ -1,0 +1,34 @@
+    @Test
+    public void testGetValue() throws Exception {
+        final String variableJson = "{\"name\":\"var_name\",\"value\":\"var_value\"}";
+        final String variablesJson = "[" + variableJson + "]";
+
+        final Variable variable = mock(Variable.class);
+        final Value value = mock(Value.class);
+        final Promise<Value> promiseValue = mock(Promise.class);
+
+        doReturn(promiseValue).when(service).getValue(DEBUGGER_ID, variable);
+        doReturn(promiseValue).when(promiseValue).then((Function<Value, Object>)any());
+        doReturn(promiseValue).when(promiseValue).catchError((Operation<PromiseError>)any());
+
+        List<Variable> variables = ImmutableList.of(variable);
+        doReturn(variable).when(dtoFactory).createDtoFromJson(variableJson, Variable.class);
+        doReturn(variablesJson).when(dtoFactory).toJson(variables);
+        doReturn(variables).when(value).getVariables();
+
+        Promise<String> result = debugger.getValue(variableJson);
+        assertEquals(promiseValue, result);
+
+        verify(promiseValue).then(functionValueStringCaptor.capture());
+        assertEquals(variablesJson, functionValueStringCaptor.getValue().apply(value));
+
+        verify(promiseValue).catchError(operationPromiseErrorCaptor.capture());
+        try {
+            operationPromiseErrorCaptor.getValue().apply(promiseError);
+            fail("Operation Exception expected");
+        } catch (OperationException e) {
+            verify(promiseError).getMessage();
+            verify(promiseError).getCause();
+        }
+    }
+

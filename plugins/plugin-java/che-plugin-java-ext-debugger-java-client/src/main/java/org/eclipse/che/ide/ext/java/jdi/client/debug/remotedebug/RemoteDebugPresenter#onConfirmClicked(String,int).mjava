@@ -1,6 +1,31 @@
-    /** {@inheritDoc} */
     @Override
     public void onConfirmClicked(@NotNull String host, @Min(1) int port) {
-        debuggerPresenter.attachDebugger(host, port);
+        if (debuggerManager.getActiveDebugger() != null) {
+            dialogFactory.createMessageDialog(localizationConstant.connectToRemote(),
+                                              localizationConstant.debuggerAlreadyConnected(),
+                                              new ConfirmCallback() {
+                                                  @Override
+                                                  public void accepted() {
+                                                  }
+                                              }).show();
+            return;
+        }
+
+        final Debugger javaDebugger = debuggerManager.getDebugger(JavaDebugger.LANGUAGE);
+        if (javaDebugger != null) {
+            debuggerManager.setActiveDebugger(javaDebugger);
+
+            Map<String, String> connectionProperties = new HashMap<>(2);
+            connectionProperties.put(HOST.toString(), host);
+            connectionProperties.put(PORT.toString(), String.valueOf(port));
+
+            Promise<Void> promise = javaDebugger.attachDebugger(connectionProperties);
+            promise.catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError arg) throws OperationException {
+                    debuggerManager.setActiveDebugger(null);
+                }
+            });
+        }
     }
 
