@@ -1,0 +1,45 @@
+    /**
+     * Adds breakpoint to the list and JVM.
+     */
+    private void addBreakpoint(final VirtualFile activeFile,
+                               final int lineNumber) {
+
+        String path = activeFile.getPath();
+        Breakpoint breakpoint = new Breakpoint(Type.BREAKPOINT,
+                                               lineNumber,
+                                               activeFile.getPath(),
+                                               activeFile,
+                                               false);
+
+        List<Breakpoint> pathBreakpoints = breakpoints.get(path);
+        if (pathBreakpoints == null) {
+            pathBreakpoints = new ArrayList<>();
+            breakpoints.put(path, pathBreakpoints);
+        }
+
+        if (!pathBreakpoints.contains(breakpoint)) {
+            pathBreakpoints.add(breakpoint);
+        }
+
+        final BreakpointRenderer breakpointRenderer = getBreakpointRendererForFile(path);
+        if (breakpointRenderer != null) {
+            breakpointRenderer.addBreakpointMark(lineNumber, new LineChangeAction() {
+                @Override
+                public void onLineChange(VirtualFile file, int firstLine, int linesAdded, int linesRemoved) {
+                    BreakpointManagerImpl.this.onLineChange(file, firstLine, linesAdded, linesRemoved);
+                }
+            });
+            breakpointRenderer.setBreakpointActive(lineNumber, breakpoint.isActive());
+        }
+        preserveBreakpoints();
+
+        for (BreakpointManagerObserver observer : observers) {
+            observer.onBreakpointAdded(breakpoint);
+        }
+
+        Debugger debugger = debuggerManager.getActiveDebugger();
+        if (debugger != null) {
+            debugger.addBreakpoint(activeFile, lineNumber);
+        }
+    }
+

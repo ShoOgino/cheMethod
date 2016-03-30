@@ -1,26 +1,27 @@
-    /** {@inheritDoc} */
     @Override
     public void onExpandVariablesTree() {
         List<DebuggerVariable> rootVariables = selectedVariable.getVariables();
-        if (rootVariables.size() == 0) {
-            service.getValue(debuggerInfo.getId(), selectedVariable.getVariable(),
-                             new AsyncRequestCallback<Value>(dtoUnmarshallerFactory.newUnmarshaller(Value.class)) {
-                                 @Override
-                                 protected void onSuccess(Value result) {
-                                     List<Variable> variables = result.getVariables();
+        if (rootVariables.isEmpty()) {
+            Debugger debugger = debuggerManager.getActiveDebugger();
+            if (debugger != null) {
+                Promise<String> promise = debugger.getValue(dtoFactory.toJson(selectedVariable.getVariable()));
 
-                                     List<DebuggerVariable> debuggerVariables = getDebuggerVariables(variables);
+                promise.then(new Operation<String>() {
+                    @Override
+                    public void apply(String arg) throws OperationException {
+                        List<Variable> variables = dtoFactory.createListDtoFromJson(arg, Variable.class);
+                        List<DebuggerVariable> debuggerVariables = getDebuggerVariables(variables);
 
-                                     view.setVariablesIntoSelectedVariable(debuggerVariables);
-                                     view.updateSelectedVariable();
-                                 }
-
-                                 @Override
-                                 protected void onFailure(Throwable exception) {
-                                     notificationManager
-                                             .notify(constant.failedToGetVariableValueTitle(), exception.getMessage(), FAIL, true);
-                                 }
-                             });
+                        view.setVariablesIntoSelectedVariable(debuggerVariables);
+                        view.updateSelectedVariable();
+                    }
+                }).catchError(new Operation<PromiseError>() {
+                    @Override
+                    public void apply(PromiseError arg) throws OperationException {
+                        notificationManager.notify(constant.failedToGetVariableValueTitle(), arg.getMessage(), FAIL, true);
+                    }
+                });
+            }
         }
     }
 

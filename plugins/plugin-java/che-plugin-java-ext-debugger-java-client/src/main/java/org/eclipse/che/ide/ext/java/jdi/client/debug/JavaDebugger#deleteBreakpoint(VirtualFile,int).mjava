@@ -1,0 +1,36 @@
+    @Override
+    public void deleteBreakpoint(final VirtualFile file, final int lineNumber) {
+        if (isConnected()) {
+            Location location = dtoFactory.createDto(Location.class);
+            location.setLineNumber(lineNumber + 1);
+
+            String mediaType = fileTypeRegistry.getFileTypeByFile(file).getMimeTypes().get(0);
+            final FqnResolver resolver = fqnResolverFactory.getResolver(mediaType);
+            if (resolver != null) {
+                location.setClassName(resolver.resolveFqn(file));
+            } else {
+                Log.warn(JavaDebugger.class, "FqnResolver is not found");
+            }
+
+            BreakPoint jdiBreakPoint = dtoFactory.createDto(BreakPoint.class);
+            jdiBreakPoint.setLocation(location);
+            jdiBreakPoint.setEnabled(true);
+
+            Promise<Void> promise = service.deleteBreakpoint(javaDebuggerInfo.getId(), jdiBreakPoint);
+            promise.then(new Operation<Void>() {
+                @Override
+                public void apply(Void arg) throws OperationException {
+                    for (DebuggerObserver observer : observers) {
+                        Breakpoint breakpoint = new Breakpoint(Breakpoint.Type.BREAKPOINT, lineNumber, file.getPath(), file, false);
+                        observer.onBreakpointDeleted(breakpoint);
+                    }
+                }
+            }).catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError arg) throws OperationException {
+                    Log.error(JavaDebugger.class, arg.getMessage());
+                }
+            });
+        }
+    }
+

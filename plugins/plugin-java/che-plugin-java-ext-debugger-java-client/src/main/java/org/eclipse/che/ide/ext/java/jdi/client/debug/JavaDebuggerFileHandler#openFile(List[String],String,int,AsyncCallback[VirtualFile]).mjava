@@ -1,0 +1,34 @@
+    public void openFile(final List<String> filePaths,
+                         final String className,
+                         final int lineNumber,
+                         final AsyncCallback<VirtualFile> callback) {
+        if (debuggerManager.getActiveDebugger() != debuggerManager.getDebugger(JavaDebugger.LANGUAGE)) {
+            callback.onFailure(null);
+            return;
+        }
+
+        VirtualFile activeFile = null;
+        final EditorPartPresenter activeEditor = editorAgent.getActiveEditor();
+        if (activeEditor != null) {
+            activeFile = activeEditor.getEditorInput().getFile();
+        }
+
+        if (activeFile == null || !filePaths.contains(activeFile.getPath())) {
+            openFile(className, filePaths, 0, new AsyncCallback<VirtualFile>() {
+                @Override
+                public void onSuccess(VirtualFile result) {
+                    scrollEditorToExecutionPoint((EmbeddedTextEditorPresenter)editorAgent.getActiveEditor(), lineNumber);
+                    callback.onSuccess(result);
+                }
+
+                @Override
+                public void onFailure(Throwable caught) {
+                    callback.onFailure(caught);
+                }
+            });
+        } else {
+            scrollEditorToExecutionPoint((EmbeddedTextEditorPresenter)activeEditor, lineNumber);
+            callback.onSuccess(activeFile);
+        }
+    }
+

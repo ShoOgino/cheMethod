@@ -1,24 +1,38 @@
     @Before
     public void setUp() {
+        MockitoAnnotations.initMocks(this);
+
         super.setUp();
 
-        when(file.getData()).thenReturn(fileReference);
-        when(dtoFactory.createDto(Location.class)).thenReturn(mock(Location.class));
-        when(dtoFactory.createDto(BreakPoint.class)).thenReturn(mock(BreakPoint.class));
-        when(resolverFactory.getResolver(anyString())).thenReturn(mock(FqnResolver.class));
-        when(appContext.getCurrentProject()).thenReturn(currentProject);
-        when(currentProject.getRootProject()).thenReturn(project);
-        when(messageBusProvider.getMachineMessageBus()).thenReturn(messageBus);
+        doReturn(location).when(dtoFactory).createDto(Location.class);
+        doReturn(jdiBreakpoint).when(dtoFactory).createDto(BreakPoint.class);
 
-        when(localStorageProvider.get()).thenReturn(localStorage);
-        when(localStorage.getItem(DebuggerPresenter.LOCAL_STORAGE_DEBUGGER_KEY)).thenReturn(DEBUG_INFO);
-        when(dtoFactory.createDtoFromJson(DEBUG_INFO, DebuggerInfo.class)).thenReturn(debuggerInfo);
 
+        doReturn(messageBus).when(messageBusProvider).getMachineMessageBus();
+
+        doReturn(localStorage).when(localStorageProvider).get();
+        doReturn(DEBUG_INFO).when(localStorage).getItem(JavaDebugger.LOCAL_STORAGE_DEBUGGER_KEY);
+        doReturn(javaDebuggerInfo).when(dtoFactory).createDtoFromJson(DEBUG_INFO, JavaDebuggerInfo.class);
+
+        doReturn(fgnResolver).when(fqnResolverFactory).getResolver(anyString());
+        doReturn(FQN).when(fgnResolver).resolveFqn(file);
+
+        doReturn(PATH).when(file).getPath();
+
+        debugger = new JavaDebugger(service, dtoFactory, localStorageProvider, messageBusProvider, eventBus, fqnResolverFactory, appContext,
+                                    javaDebuggerFileHandler,
+                                    debuggerManager, fileTypeRegistry);
+        doReturn(promiseEventList).when(service).checkEvents(DEBUGGER_ID);
+        doReturn(promiseEventList).when(promiseEventList).then(any(Operation.class));
+
+        // setup messageBus
         verify(eventBus).addHandler(eq(WsAgentStateEvent.TYPE), extServerStateHandlerCaptor.capture());
         extServerStateHandlerCaptor.getValue().onWsAgentStarted(WsAgentStateEvent.createWsAgentStartedEvent());
 
+        debugger.addObserver(observer);
+
         FileType fileType = mock(FileType.class);
-        when(fileType.getMimeTypes()).thenReturn(Collections.singletonList("application/java"));
-        when(fileTypeRegistry.getFileTypeByFile(eq(file))).thenReturn(fileType);
+        doReturn(Collections.singletonList("application/java")).when(fileType).getMimeTypes();
+        doReturn(fileType).when(fileTypeRegistry).getFileTypeByFile(eq(file));
     }
 
