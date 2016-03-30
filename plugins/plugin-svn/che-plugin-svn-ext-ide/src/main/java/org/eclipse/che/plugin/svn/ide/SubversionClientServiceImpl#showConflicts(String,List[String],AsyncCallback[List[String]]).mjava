@@ -1,0 +1,36 @@
+    @Override
+    public void showConflicts(final String projectPath, final List<String> paths, final AsyncCallback<List<String>> callback) {
+        final Unmarshallable<CLIOutputResponse> unmarshaller = dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class);
+
+        final StatusRequest request =
+                dtoFactory.createDto(StatusRequest.class)
+                          .withVerbose(false)
+                          .withChangeLists(Collections.<String>emptyList())
+                          .withDepth(Depth.FULLY_RECURSIVE.getValue())
+                          .withIgnoreExternals(false)
+                          .withPaths(paths)
+                          .withProjectPath(projectPath)
+                          .withShowIgnored(false)
+                          .withShowUnversioned(false)
+                          .withShowUpdates(false);
+
+        //don't add loader to async request factory, this method calls only when menu item updates.
+        asyncRequestFactory.createPostRequest(baseHttpUrl + "/status", request)
+                           .send(new AsyncRequestCallback<CLIOutputResponse>(unmarshaller) {
+                               @Override
+                               protected void onSuccess(CLIOutputResponse result) {
+                                   if (result != null) {
+                                       List<String> conflictsList = parseConflictsList(result.getOutput());
+                                       callback.onSuccess(conflictsList);
+                                   } else {
+                                       callback.onFailure(new Exception("showConflicts : no SvnResponse."));
+                                   }
+                               }
+
+                               @Override
+                               protected void onFailure(Throwable exception) {
+                                   callback.onFailure(exception);
+                               }
+                           });
+    }
+

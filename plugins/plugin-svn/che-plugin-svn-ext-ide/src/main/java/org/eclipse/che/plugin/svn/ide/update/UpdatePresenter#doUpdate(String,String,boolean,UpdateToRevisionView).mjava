@@ -1,0 +1,39 @@
+    protected void doUpdate(final String revision, final String depth, final boolean ignoreExternals,
+                            final UpdateToRevisionView view) {
+        final String projectPath = getCurrentProjectPath();
+        if (projectPath == null) {
+            return;
+        }
+
+        final StatusNotification notification = new StatusNotification(constants.updateToRevisionStarted(revision), PROGRESS, true);
+        notificationManager.notify(notification);
+
+        // TODO: Add UI widget for "Accept" part of update
+
+        service.update(projectPath, getSelectedPaths(), revision, depth, ignoreExternals, "postpone",
+                       new AsyncRequestCallback<CLIOutputWithRevisionResponse>(
+                               dtoUnmarshallerFactory.newUnmarshaller(CLIOutputWithRevisionResponse.class)) {
+                           @Override
+                           protected void onSuccess(final CLIOutputWithRevisionResponse response) {
+                               printResponse(response.getCommand(), response.getOutput(), response.getErrOutput());
+
+                               notification.setTitle(constants.updateSuccessful(Long.toString(response.getRevision())));
+                               notification.setStatus(SUCCESS);
+
+                               if (view != null) {
+                                   view.close();
+                               }
+
+                               eventBus.fireEvent(new SubversionProjectUpdatedEvent(response.getRevision()));
+                           }
+
+                           @Override
+                           protected void onFailure(final Throwable exception) {
+                               String errorMessage = exception.getMessage();
+
+                               notification.setTitle(constants.updateFailed() + ": " + errorMessage);
+                               notification.setStatus(FAIL);
+                           }
+                       });
+    }
+

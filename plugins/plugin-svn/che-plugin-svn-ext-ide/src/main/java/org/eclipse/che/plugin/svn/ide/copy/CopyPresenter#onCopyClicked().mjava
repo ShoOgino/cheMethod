@@ -1,0 +1,38 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onCopyClicked() {
+        final String projectPath = getCurrentProjectPath();
+
+        if (projectPath == null) {
+            return;
+        }
+
+        final String src = view.isSourceCheckBoxSelected() ? view.getSourcePath() : relPath(projectPath, getStorableNodePath(sourceNode));
+        final String target = view.isTargetCheckBoxSelected() ? view.getTargetUrl() : relPath(projectPath, targetHolder.normalize());
+        final String comment = view.isTargetCheckBoxSelected() ? view.getComment() : null;
+
+        final StatusNotification notification = new StatusNotification(constants.copyNotificationStarted(src), PROGRESS, true);
+        notificationManager.notify(notification);
+
+        view.hide();
+
+        service.copy(projectPath, src, target, comment,
+                     new AsyncRequestCallback<CLIOutputResponse>(dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class)) {
+                         @Override
+                         protected void onSuccess(CLIOutputResponse result) {
+                             printResponse(result.getCommand(), result.getOutput(), result.getErrOutput());
+
+                             notification.setTitle(constants.copyNotificationSuccessful());
+                             notification.setStatus(SUCCESS);
+                         }
+
+                         @Override
+                         protected void onFailure(Throwable exception) {
+                             String errorMessage = exception.getMessage();
+
+                             notification.setTitle(constants.copyNotificationFailed() + ": " + errorMessage);
+                             notification.setStatus(FAIL);
+                         }
+                     });
+    }
+

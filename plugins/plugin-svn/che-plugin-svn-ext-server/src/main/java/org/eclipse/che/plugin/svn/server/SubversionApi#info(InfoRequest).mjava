@@ -1,0 +1,73 @@
+    /**
+     * Returns information about specified target.
+     *
+     * @param request
+     *         request
+     * @return response containing list of subversion items
+     * @throws SubversionException
+     * @throws IOException
+     */
+    public InfoResponse info(final InfoRequest request) throws SubversionException, IOException {
+        final List<String> args = defaultArgs();
+
+        if (request.getRevision() != null && !request.getRevision().trim().isEmpty()) {
+            addOption(args, "--revision", request.getRevision());
+        }
+
+        if (true == request.getChildren()) {
+            addOption(args, "--depth", "immediates");
+        }
+
+        args.add("info");
+
+        List<String> paths = new ArrayList<String>();
+        paths.add(request.getTarget());
+        final CommandLineResult result = runCommand(null, args, new File(request.getProjectPath()),
+                                                    addWorkingCopyPathIfNecessary(paths));
+
+        final InfoResponse response = DtoFactory.getInstance().createDto(InfoResponse.class)
+                                                .withCommand(result.getCommandLine().toString())
+                                                .withOutput(result.getStdout())
+                                                .withErrorOutput(result.getStderr());
+
+        if (result.getExitCode() == 0) {
+            List<SubversionItem> items = new ArrayList<SubversionItem>();
+            response.withItems(items);
+
+            Iterator<String> iterator = result.getStdout().iterator();
+            List<String> itemProperties = new ArrayList<String>();
+
+            while (iterator.hasNext()) {
+                String propertyLine = iterator.next();
+
+                if (propertyLine.isEmpty()) {
+                    // create Subversion item filling properties from the list
+                    final SubversionItem item = DtoFactory.getInstance().createDto(SubversionItem.class)
+                                                          .withPath(InfoUtils.getPath(itemProperties))
+                                                          .withName(InfoUtils.getName(itemProperties))
+                                                          .withURL(InfoUtils.getUrl(itemProperties))
+                                                          .withRelativeURL(InfoUtils.getRelativeUrl(itemProperties))
+                                                          .withRepositoryRoot(InfoUtils.getRepositoryRoot(itemProperties))
+                                                          .withRepositoryUUID(InfoUtils.getRepositoryUUID(itemProperties))
+                                                          .withRevision(InfoUtils.getRevision(itemProperties))
+                                                          .withNodeKind(InfoUtils.getNodeKind(itemProperties))
+                                                          .withSchedule(InfoUtils.getSchedule(itemProperties))
+                                                          .withLastChangedRev(InfoUtils.getLastChangedRev(itemProperties))
+                                                          .withLastChangedDate(InfoUtils.getLastChangedDate(itemProperties));
+                    items.add(item);
+
+                    // clear item properties
+                    itemProperties.clear();
+                } else {
+                    // add property line to property list
+                    itemProperties.add(propertyLine);
+                }
+            }
+
+        } else {
+            response.withErrorOutput(result.getStderr());
+        }
+
+        return response;
+    }
+

@@ -1,0 +1,35 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onMoveClicked() {
+        if (projectPath == null) {
+            return;
+        }
+
+        final List<String> source = getSource();
+        final String target = getTarget();
+        final String comment = view.isURLSelected() ? view.getComment() : null;
+
+        final StatusNotification notification =
+                new StatusNotification(locale.moveNotificationStarted(Joiner.on(',').join(source)), PROGRESS, true);
+        notificationManager.notify(notification);
+
+        Unmarshallable<CLIOutputResponse> unmarshaller = dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class);
+        service.move(projectPath, source, target, comment, new AsyncRequestCallback<CLIOutputResponse>(unmarshaller) {
+            @Override
+            protected void onSuccess(CLIOutputResponse result) {
+                notification.setTitle(locale.moveNotificationSuccessful());
+                notification.setStatus(SUCCESS);
+            }
+
+            @Override
+            protected void onFailure(Throwable exception) {
+                String errorMessage = exception.getMessage();
+
+                notification.setTitle(locale.moveNotificationFailed() + ": " + errorMessage);
+                notification.setStatus(FAIL);
+            }
+        });
+
+        view.onClose();
+    }
+
