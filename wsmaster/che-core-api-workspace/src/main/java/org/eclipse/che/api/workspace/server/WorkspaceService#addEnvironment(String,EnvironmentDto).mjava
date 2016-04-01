@@ -11,25 +11,20 @@
                    @ApiResponse(code = 404, message = "The workspace not found"),
                    @ApiResponse(code = 409, message = "Environment with such name already exists"),
                    @ApiResponse(code = 500, message = "Internal server error occurred")})
-    public UsersWorkspaceDto addEnvironment(@ApiParam("The workspace id")
-                                            @PathParam("id")
-                                            String id,
-                                            @ApiParam(value = "The new environment", required = true)
-                                            EnvironmentDto newEnvironment) throws ServerException,
-                                                                                  BadRequestException,
-                                                                                  NotFoundException,
-                                                                                  ConflictException,
-                                                                                  ForbiddenException {
+    public WorkspaceDto addEnvironment(@ApiParam("The workspace id")
+                                       @PathParam("id")
+                                       String id,
+                                       @ApiParam(value = "The new environment", required = true)
+                                       EnvironmentDto newEnvironment) throws ServerException,
+                                                                             BadRequestException,
+                                                                             NotFoundException,
+                                                                             ConflictException,
+                                                                             ForbiddenException {
         requiredNotNull(newEnvironment, "New environment");
-        final UsersWorkspaceImpl workspace = workspaceManager.getWorkspace(id);
+        final WorkspaceImpl workspace = workspaceManager.getWorkspace(id);
         ensureUserIsWorkspaceOwner(workspace);
-        if (workspace.getConfig()
-                     .getEnvironments()
-                     .stream()
-                     .anyMatch(env -> env.getName().equals(newEnvironment.getName()))) {
-            throw new ConflictException("Environment '" + newEnvironment.getName() + "' already exists");
-        }
         workspace.getConfig().getEnvironments().add(new EnvironmentImpl(newEnvironment));
-        return injectLinks(asDto(workspaceManager.updateWorkspace(id, workspace.getConfig())));
+        validator.validateConfig(workspace.getConfig());
+        return injectLinks(asDto(workspaceManager.updateWorkspace(id, workspace)));
     }
 

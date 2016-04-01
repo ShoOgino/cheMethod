@@ -1,0 +1,37 @@
+    @POST
+    @Path("/runtime")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed({"user", "temp-user"})
+    @ApiOperation(value = "Start the temporary workspace from the given configuration",
+                  notes = "This operation can be performed only by the authorized user or temp user." +
+                          "The workspace starts synchronously")
+    @ApiResponses({@ApiResponse(code = 200, message = "The workspace is starting"),
+                   @ApiResponse(code = 400, message = "The update config is not valid"),
+                   @ApiResponse(code = 404, message = "The workspace with specified id doesn't exist"),
+                   @ApiResponse(code = 403, message = "The user is not workspace owner" +
+                                                      "The operation is not allowed for the user"),
+                   @ApiResponse(code = 409, message = "Any conflict occurs during the workspace start" +
+                                                      "(e.g. workspace with such name already exists"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public WorkspaceDto startFromConfig(@ApiParam(value = "The configuration to start the workspace from", required = true)
+                                        WorkspaceConfigDto cfg,
+                                        @ApiParam("Weather this workspace is temporary or not")
+                                        @QueryParam("temporary")
+                                        Boolean isTemporary,
+                                        @ApiParam("The account id related to this operation")
+                                        @QueryParam("account")
+                                        String accountId) throws BadRequestException,
+                                                                 ForbiddenException,
+                                                                 NotFoundException,
+                                                                 ServerException,
+                                                                 ConflictException {
+        requiredNotNull(cfg, "Workspace configuration");
+        permissionManager.checkPermission(START_WORKSPACE, getCurrentUserId(), "accountId", accountId);
+        validator.validateConfig(cfg);
+        return injectLinks(asDto(workspaceManager.startWorkspace(cfg,
+                                                                 getCurrentUserId(),
+                                                                 firstNonNull(isTemporary, false),
+                                                                 accountId)));
+    }
+

@@ -1,0 +1,30 @@
+    /**
+     * Stops workspace by destroying all its machines and removing it from in memory storage.
+     */
+    private void destroyRuntime(String wsId, WorkspaceRuntimeImpl workspace) throws NotFoundException, ServerException {
+        publishEvent(EventType.STOPPING, wsId, null);
+        final List<MachineImpl> machines = new ArrayList<>(workspace.getMachines());
+        final MachineImpl devMachine = rmFirst(machines, m -> m.getConfig().isDev());
+        // destroying all non-dev machines
+        for (MachineImpl machine : machines) {
+            try {
+                machineManager.destroy(machine.getId(), false);
+            } catch (RuntimeException | NotFoundException | MachineException ex) {
+                LOG.error(format("Could not destroy machine '%s' of workspace '%s'",
+                                 machine.getId(),
+                                 machine.getWorkspaceId()),
+                          ex);
+            }
+        }
+        // destroying dev-machine
+        try {
+            machineManager.destroy(devMachine.getId(), false);
+            publishEvent(EventType.STOPPED, wsId, null);
+        } catch (RuntimeException | NotFoundException | ServerException ex) {
+            publishEvent(EventType.ERROR, wsId, ex.getLocalizedMessage());
+            throw ex;
+        } finally {
+            removeRuntime(wsId);
+        }
+    }
+

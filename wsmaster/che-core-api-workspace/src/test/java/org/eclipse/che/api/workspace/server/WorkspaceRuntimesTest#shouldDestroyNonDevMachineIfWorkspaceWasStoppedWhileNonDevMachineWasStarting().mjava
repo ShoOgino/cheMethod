@@ -1,0 +1,21 @@
+    @Test
+    public void shouldDestroyNonDevMachineIfWorkspaceWasStoppedWhileNonDevMachineWasStarting() throws Exception {
+        final WorkspaceImpl workspace = createWorkspace();
+
+        doAnswer(invocation -> {
+            final MachineConfig machineCfg = (MachineConfig)invocation.getArguments()[0];
+            if (!machineCfg.isDev()) {
+                runtimes.stop(workspace.getId());
+            }
+            return createMachine((MachineConfig)invocation.getArguments()[0]);
+        }).when(machineManagerMock).createMachineSync(any(), anyString(), anyString());
+
+        try {
+            runtimes.start(workspace, workspace.getConfig().getDefaultEnv());
+        } catch (ConflictException ex) {
+            assertEquals(ex.getMessage(), "Workspace '" + workspace.getId() + "' start interrupted. " +
+                                          "Workspace was stopped before all its machines were started");
+        }
+        verify(machineManagerMock, times(2)).destroy(any(), anyBoolean());
+    }
+

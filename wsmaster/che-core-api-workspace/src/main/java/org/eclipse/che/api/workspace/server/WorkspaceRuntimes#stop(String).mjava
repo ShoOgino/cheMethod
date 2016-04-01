@@ -1,0 +1,52 @@
+    /**
+     * Stops running workspace runtime.
+     *
+     * <p>Stops all running machines one by one,
+     * non-dev machines first. During the stop of the workspace
+     * its runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status.
+     * Workspace may be stopped only if its status is {@link WorkspaceStatus#RUNNING}.
+     *
+     * <p>If workspace has runtime with dev-machine running
+     * and other machines starting then the runtime can still
+     * be stopped which will also interrupt starting process.
+     *
+     * <p>Note that it doesn't provide any events for machines stop,
+     * Machine API is responsible for it.
+     *
+     * @param workspaceId
+     *         identifier of workspace which should be stopped
+     * @throws NotFoundException
+     *         when workspace with specified identifier is not running
+     * @throws ServerException
+     *         when any error occurs during workspace stopping
+     * @throws ConflictException
+     *         when running workspace status is different from {@link WorkspaceStatus#RUNNING}
+     * @see MachineManager#destroy(String, boolean)
+     * @see WorkspaceStatus#STOPPING
+     */
+    public void stop(String workspaceId) throws NotFoundException, ServerException, ConflictException {
+        ensurePreDestroyIsNotExecuted();
+        rwLock.writeLock().lock();
+        final WorkspaceRuntimeImpl runtime;
+        try {
+            ensurePreDestroyIsNotExecuted();
+            final RuntimeDescriptor descriptor = descriptors.get(workspaceId);
+            if (descriptor == null) {
+                throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
+            }
+            if (descriptor.getRuntimeStatus() != WorkspaceStatus.RUNNING) {
+                throw new ConflictException(format("Couldn't stop '%s' workspace because its status is '%s'",
+                                                   workspaceId,
+                                                   descriptor.getRuntimeStatus()));
+            }
+            descriptor.setStopping();
+            // remove the workspace from the queue to prevent start
+            // of another not started machines(if such exist)
+            startQueues.remove(workspaceId);
+            runtime = descriptor.getRuntime();
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+        destroyRuntime(workspaceId, runtime);
+    }
+

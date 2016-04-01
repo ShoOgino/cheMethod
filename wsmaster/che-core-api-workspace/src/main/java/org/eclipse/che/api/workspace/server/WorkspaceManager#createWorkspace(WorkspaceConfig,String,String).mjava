@@ -1,45 +1,36 @@
     /**
-     * Creates a new {@link UsersWorkspace} instance based on the given configuration.
+     * Creates a new {@link WorkspaceImpl} instance based on the given configuration.
      *
      * @param config
      *         the workspace config to create the new workspace instance
-     * @param owner
-     *         the id of the user who will be the workspace owner
+     * @param namespace
+     *         workspace name is unique in this namespace
      * @param accountId
      *         the account id, which is used to verify if the user has required
      *         permissions to create the new workspace
      * @return new workspace instance
+     * @throws NullPointerException
+     *         when either {@code config} or {@code owner} is null
      * @throws NotFoundException
      *         when account with given id was not found
-     * @throws ForbiddenException
-     *         when user doesn't have access to create workspace
-     * @throws BadRequestException
-     *         when either {@code config} or {@code owner} is null
-     * @throws BadRequestException
-     *         when {@code config} is not valid
      * @throws ConflictException
      *         when any conflict occurs (e.g Workspace with such name already exists for {@code owner})
      * @throws ServerException
      *         when any other error occurs
-     * @see WorkspaceHooks#beforeCreate(UsersWorkspace, String)
-     * @see WorkspaceHooks#afterCreate(UsersWorkspace, String)
+     * @see WorkspaceHooks#beforeCreate(Workspace, String)
+     * @see WorkspaceHooks#afterCreate(Workspace, String)
      */
-    public UsersWorkspaceImpl createWorkspace(WorkspaceConfig config, String owner, @Nullable String accountId) throws ForbiddenException,
-                                                                                                                       ServerException,
-                                                                                                                       BadRequestException,
-                                                                                                                       ConflictException,
-                                                                                                                       NotFoundException {
-        final UsersWorkspaceImpl newWorkspace = fromConfig(config, owner);
-
-        hooks.beforeCreate(newWorkspace, accountId);
-        workspaceDao.create(newWorkspace);
-        hooks.afterCreate(newWorkspace, accountId);
-
-        // TODO move 'analytics' logs to the appropriate interceptors
-        LOG.info("EVENT#workspace-created# WS#{}# WS-ID#{}# USER#{}#",
-                 newWorkspace.getConfig().getName(),
-                 newWorkspace.getId(),
-                 getCurrentUserId());
-        return normalizeState(newWorkspace);
+    public WorkspaceImpl createWorkspace(WorkspaceConfig config,
+                                         String namespace,
+                                         @Nullable String accountId) throws ServerException,
+                                                                            ConflictException,
+                                                                            NotFoundException {
+        requireNonNull(config, "Required non-null config");
+        requireNonNull(namespace, "Required non-null namespace");
+        return normalizeState(doCreateWorkspace(config,
+                                                namespace,
+                                                emptyMap(),
+                                                false,
+                                                accountId));
     }
 

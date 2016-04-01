@@ -1,0 +1,39 @@
+    @PUT
+    @Path("/{id}/project/{path:.*}")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed("user")
+    @ApiOperation(value = "Update the workspace project by replacing it with a new one",
+                  notes = "This operation can be performed only by the workspace owner")
+    @ApiResponses({@ApiResponse(code = 200, message = "The project successfully updated"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "The user does not have access to update the project"),
+                   @ApiResponse(code = 404, message = "The workspace or the project not found"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public WorkspaceDto updateProject(@ApiParam("The workspace id")
+                                      @PathParam("id")
+                                      String id,
+                                      @ApiParam("The path to the project")
+                                      @PathParam("path")
+                                      String path,
+                                      @ApiParam(value = "The project update", required = true)
+                                      ProjectConfigDto update) throws ServerException,
+                                                                      BadRequestException,
+                                                                      NotFoundException,
+                                                                      ConflictException,
+                                                                      ForbiddenException {
+        requiredNotNull(update, "Project config");
+        final WorkspaceImpl workspace = workspaceManager.getWorkspace(id);
+        ensureUserIsWorkspaceOwner(workspace);
+        final List<ProjectConfigImpl> projects = workspace.getConfig().getProjects();
+        final String normalizedPath = path.startsWith("/") ? path : '/' + path;
+        if (!projects.removeIf(project -> project.getPath().equals(normalizedPath))) {
+            throw new NotFoundException(format("Workspace '%s' doesn't contain project with path '%s'",
+                                               id,
+                                               normalizedPath));
+        }
+        projects.add(new ProjectConfigImpl(update));
+        validator.validateConfig(workspace.getConfig());
+        return injectLinks(asDto(workspaceManager.updateWorkspace(id, workspace)));
+    }
+
