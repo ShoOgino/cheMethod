@@ -1,0 +1,22 @@
+    private void startQueue(String wsId, String envName, boolean recover) throws ServerException,
+                                                                                 NotFoundException,
+                                                                                 ConflictException {
+        publishEvent(EventType.STARTING, wsId, null);
+        MachineConfigImpl config = getPeekConfig(wsId);
+        while (config != null) {
+            startMachine(config, wsId, envName, recover);
+            config = getPeekConfig(wsId);
+        }
+
+        // Clean up the start queue when all the machines successfully started
+        rwLock.writeLock().lock();
+        try {
+            final Queue<MachineConfigImpl> queue = startQueues.get(wsId);
+            if (queue != null && queue.isEmpty()) {
+                startQueues.remove(wsId);
+            }
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+

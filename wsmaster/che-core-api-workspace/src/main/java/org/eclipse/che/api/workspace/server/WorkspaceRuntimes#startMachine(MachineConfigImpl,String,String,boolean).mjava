@@ -1,0 +1,62 @@
+    private void startMachine(MachineConfigImpl config,
+                              String wsId,
+                              String envName,
+                              boolean recover) throws ServerException,
+                                                      NotFoundException,
+                                                      ConflictException {
+        // Trying to start machine from the given configuration
+        MachineImpl machine = null;
+        try {
+            machine = createMachine(config, wsId, envName, recover);
+        } catch (RuntimeException | MachineException | NotFoundException | SnapshotException | ConflictException ex) {
+            if (config.isDev()) {
+                publishEvent(EventType.ERROR, wsId, ex.getLocalizedMessage());
+                cleanupStartResources(wsId);
+                throw ex;
+            }
+            LOG.error(format("Error while creating non-dev machine '%s' in workspace '%s', environment '%s'",
+                             config.getName(),
+                             wsId,
+                             envName),
+                      ex);
+        }
+
+        // Machine destroying is an expensive operation which must be
+        // performed outside of the lock, this section checks if
+        // the workspace wasn't stopped while it is starting and sets
+        // polled flag to true if the workspace wasn't stopped plus
+        // polls the proceeded machine configuration from the queue
+        boolean queuePolled = false;
+        rwLock.readLock().lock();
+        try {
+            ensurePreDestroyIsNotExecuted();
+            final Queue<MachineConfigImpl> queue = startQueues.get(wsId);
+            if (queue != null) {
+                queue.poll();
+                queuePolled = true;
+                if (machine != null) {
+                    final WorkspaceRuntimeImpl runtime = descriptors.get(wsId).getRuntime();
+                    if (config.isDev()) {
+                        runtime.setDevMachine(machine);
+                        publishEvent(EventType.RUNNING, wsId, null);
+                    }
+                    runtime.getMachines().add(machine);
+                }
+            }
+        } finally {
+            rwLock.readLock().unlock();
+        }
+
+        // If machine config is not polled from the queue
+        // then stop method was executed and the machine which
+        // has been just created must be destroyed
+        if (!queuePolled) {
+            if (machine != null) {
+                machineManager.destroy(machine.getId(), false);
+            }
+            throw new ConflictException(format("Workspace '%s' start interrupted. " +
+                                               "Workspace was stopped before all its machines were started",
+                                               wsId));
+        }
+    }
+

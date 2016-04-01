@@ -1,0 +1,26 @@
+    @Test
+    public void errorEventShouldBePublishedIfDevMachineFailedToStop() throws Exception {
+        final WorkspaceImpl workspace = createWorkspace();
+        runtimes = spy(new WorkspaceRuntimes(machineManagerMock, eventService));
+        doNothing().when(runtimes).publishEvent(any(), any(), any());
+
+        doAnswer(invocation -> {
+            if ((runtimes.get(workspace.getId())
+                         .getRuntime()
+                         .getDevMachine()
+                         .getId()
+                         .equals(invocation.getArguments()[0]))) {
+                throw new MachineException("Stop error");
+            }
+            return null;
+        }).when(machineManagerMock).destroy(anyString(), anyBoolean());
+
+        runtimes.start(workspace, workspace.getConfig().getDefaultEnv());
+
+        try {
+            runtimes.stop(workspace.getId());
+        } catch (MachineException ex) {
+            verify(runtimes).publishEvent(EventType.ERROR, workspace.getId(), ex.getLocalizedMessage());
+        }
+    }
+

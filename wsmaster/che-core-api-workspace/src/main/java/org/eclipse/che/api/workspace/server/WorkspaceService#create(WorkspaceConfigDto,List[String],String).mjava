@@ -1,0 +1,42 @@
+    @POST
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @RolesAllowed("user")
+    @GenerateLink(rel = LINK_REL_CREATE_WORKSPACE)
+    @ApiOperation(value = "Create a new workspace based on the configuration",
+                  notes = "This operation can be performed only by authorized user," +
+                          "this user will be the owner of the created workspace",
+                  response = WorkspaceConfigDto.class)
+    @ApiResponses({@ApiResponse(code = 201, message = "The workspace successfully created"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "The user does not have access to create a new workspace"),
+                   @ApiResponse(code = 409, message = "Conflict error occurred during the workspace creation" +
+                                                      "(e.g. The workspace with such name already exists)"),
+                   @ApiResponse(code = 500, message = "Internal server error occurred")})
+    public Response create(@ApiParam(value = "The configuration to create the new workspace", required = true)
+                           WorkspaceConfigDto config,
+                           @ApiParam(value = "Workspace attribute defined in 'attrName:attrValue' format. " +
+                                             "The first ':' is considered as attribute name and value separator",
+                                     examples = @Example({@ExampleProperty("stackId:stack123"),
+                                                          @ExampleProperty("attrName:value-with:colon")}))
+                           @QueryParam("attribute")
+                           List<String> attrsList,
+                           @ApiParam("The account id related to this operation")
+                           @QueryParam("account")
+                           String accountId) throws ConflictException,
+                                                    ServerException,
+                                                    BadRequestException,
+                                                    ForbiddenException,
+                                                    NotFoundException {
+        requiredNotNull(config, "Workspace configuration");
+        final Map<String, String> attributes = parseAttrs(attrsList);
+        validator.validateAttributes(attributes);
+        validator.validateConfig(config);
+        return Response.status(201)
+                       .entity(injectLinks(asDto(workspaceManager.createWorkspace(config,
+                                                                                  getCurrentUserId(),
+                                                                                  attributes,
+                                                                                  accountId))))
+                       .build();
+    }
+

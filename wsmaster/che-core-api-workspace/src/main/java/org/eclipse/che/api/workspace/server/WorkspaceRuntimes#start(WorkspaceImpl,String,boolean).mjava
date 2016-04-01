@@ -1,0 +1,63 @@
+    /**
+     * Starts all machines from specified workspace environment,
+     * creates workspace runtime instance based on that environment.
+     *
+     * <p>Dev-machine always starts before the other machines.
+     * If dev-machine start failed then method will throw appropriate
+     * {@link ServerException}. During the start of the workspace its
+     * runtime is visible with {@link WorkspaceStatus#STARTING} status.
+     *
+     * <p>If {@link #stop} method executed after dev machine is started but
+     * another machines haven't been started yet then {@link ConflictException}
+     * will be thrown and start process will be interrupted.
+     *
+     * <p>Note that it doesn't provide any events for
+     * machines start, Machine API is responsible for it.
+     *
+     * @param workspace
+     *         workspace which environment should be started
+     * @param envName
+     *         the name of the environment to start
+     * @param recover
+     *         whether machines should be recovered(true) or not(false)
+     * @return the workspace runtime instance with machines set.
+     * @throws ConflictException
+     *         when workspace is already running
+     * @throws ConflictException
+     *         when start is interrupted
+     * @throws NotFoundException
+     *         when any not found exception occurs during environment start
+     * @throws ServerException
+     *         when component {@link #isPreDestroyInvoked is stopped} or any
+     *         other error occurs during environment start
+     * @see MachineManager#createMachineSync(MachineConfig, String, String)
+     * @see WorkspaceStatus#STARTING
+     * @see WorkspaceStatus#RUNNING
+     */
+    public RuntimeDescriptor start(WorkspaceImpl workspace, String envName, boolean recover) throws ServerException,
+                                                                                                    ConflictException,
+                                                                                                    NotFoundException {
+        final EnvironmentImpl activeEnv = new EnvironmentImpl(workspace.getConfig().getEnvironment(envName).get());
+        ensurePreDestroyIsNotExecuted();
+        rwLock.writeLock().lock();
+        try {
+            ensurePreDestroyIsNotExecuted();
+            final RuntimeDescriptor descriptor = descriptors.get(workspace.getId());
+            if (descriptor != null) {
+                throw new ConflictException(format("Could not start workspace '%s' because its status is '%s'",
+                                                   workspace.getConfig().getName(),
+                                                   descriptor.getRuntimeStatus()));
+            }
+            descriptors.put(workspace.getId(), new RuntimeDescriptor(new WorkspaceRuntimeImpl(envName)));
+            // Dev machine goes first in the start queue
+            final List<MachineConfigImpl> machineConfigs = activeEnv.getMachineConfigs();
+            final MachineConfigImpl devCfg = rmFirst(machineConfigs, MachineConfig::isDev);
+            machineConfigs.add(0, devCfg);
+            startQueues.put(workspace.getId(), new ArrayDeque<>(machineConfigs));
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+        startQueue(workspace.getId(), activeEnv.getName(), recover);
+        return get(workspace.getId());
+    }
+

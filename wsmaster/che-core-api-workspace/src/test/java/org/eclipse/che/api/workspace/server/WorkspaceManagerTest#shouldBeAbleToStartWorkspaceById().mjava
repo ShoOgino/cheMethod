@@ -1,21 +1,15 @@
     @Test
     public void shouldBeAbleToStartWorkspaceById() throws Exception {
-        final UsersWorkspaceImpl workspace = workspaceManager.createWorkspace(createConfig(), "user123", "account");
+        final WorkspaceImpl workspace = workspaceManager.createWorkspace(createConfig(), "user123", "account");
         when(workspaceDao.get(workspace.getId())).thenReturn(workspace);
-        doReturn(createRuntime(workspace)).when(workspaceManager).performSyncStart(any(), anyString(), anyBoolean(), anyString());
-        when(registry.get(any())).thenThrow(new NotFoundException(""));
+        when(runtimes.get(any())).thenThrow(new NotFoundException(""));
 
-        final UsersWorkspace result = workspaceManager.startWorkspaceById(workspace.getId(),
-                                                                          workspace.getConfig().getDefaultEnv(),
-                                                                          "account");
+        workspaceManager.startWorkspace(workspace.getId(),
+                                        workspace.getConfig().getDefaultEnv(),
+                                        "account");
 
-        assertEquals(result.getStatus(), STARTING);
-        assertFalse(result.isTemporary());
-        assertNotNull(result.getConfig()
-                            .getEnvironments()
-                            .get(0)
-                            .getMachineConfigs()
-                            .get(0));
-        verify(workspaceManager).performAsyncStart(workspace, workspace.getConfig().getDefaultEnv(), false, "account");
+        verify(runtimes, timeout(2000)).start(workspace, workspace.getConfig().getDefaultEnv(), false);
+        verify(workspaceHooks, timeout(2000)).beforeStart(workspace, workspace.getConfig().getDefaultEnv(), "account");
+        assertNotNull(workspace.getAttributes().get(UPDATED_ATTRIBUTE_NAME));
     }
 

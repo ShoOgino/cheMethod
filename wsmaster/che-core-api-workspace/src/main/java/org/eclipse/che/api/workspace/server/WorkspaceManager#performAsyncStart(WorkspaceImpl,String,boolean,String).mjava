@@ -1,0 +1,56 @@
+    /** Asynchronously starts given workspace. */
+    @VisibleForTesting
+    WorkspaceImpl performAsyncStart(WorkspaceImpl workspace,
+                                    String envName,
+                                    boolean recover,
+                                    @Nullable String accountId) throws ConflictException, NotFoundException, ServerException {
+        if (envName != null && !workspace.getConfig()
+                                         .getEnvironments()
+                                         .stream()
+                                         .anyMatch(env -> env.getName().equals(envName))) {
+            throw new NotFoundException(format("Workspace '%s:%s' doesn't contain environment '%s'",
+                                               workspace.getNamespace(),
+                                               workspace.getConfig().getName(),
+                                               envName));
+        }
+        // WorkspaceRuntimes performs this check as well
+        // but this check needed here because permanent workspace start performed asynchronously
+        // which means that even if registry won't start workspace client receives workspace object
+        // with starting status, this check prevents it and throws appropriate exception
+        try {
+            final RuntimeDescriptor descriptor = runtimes.get(workspace.getId());
+            throw new ConflictException(format("Could not start workspace '%s' because its status is '%s'",
+                                               workspace.getConfig().getName(),
+                                               descriptor.getRuntimeStatus()));
+        } catch (NotFoundException ignored) {
+            // it is okay if workspace does not exist
+        }
+
+        workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
+        workspaceDao.update(workspace);
+
+        executor.execute(ThreadLocalPropagateContext.wrap(() -> {
+            try {
+                final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
+                hooks.beforeStart(workspace, env, accountId);
+                runtimes.start(workspace, env, recover);
+                LOG.info("Workspace '{}:{}' started by user '{}'",
+                         workspace.getNamespace(),
+                         workspace.getConfig().getName(),
+                         sessionUser().getName());
+            } catch (RuntimeException | ServerException | NotFoundException | ConflictException | ForbiddenException ex) {
+                if (workspace.isTemporary()) {
+                    try {
+                        removeWorkspace(workspace.getId());
+                    } catch (ConflictException | ServerException rmEx) {
+                        LOG.error("Couldn't remove temporary workspace {}, because : {}",
+                                  workspace.getId(),
+                                  rmEx.getLocalizedMessage());
+                    }
+                }
+                LOG.error(ex.getLocalizedMessage(), ex);
+            }
+        }));
+        return normalizeState(workspace);
+    }
+

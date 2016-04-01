@@ -1,12 +1,13 @@
     @Test
     public void shouldBeAbleToStartTemporaryWorkspace() throws Exception {
-        final WorkspaceConfigDto config = createConfig();
-        final UsersWorkspaceImpl workspace = workspaceManager.createWorkspace(config, "user123", "account");
-        when(registry.start(workspaceCaptor.capture(), anyString(), anyBoolean())).thenReturn(createRuntime(workspace));
+        final WorkspaceConfigImpl config = createConfig();
+        when(runtimes.start(any(), anyString(), anyBoolean())).thenReturn(mock(RuntimeDescriptor.class));
+        when(runtimes.get(any())).thenThrow(new NotFoundException(""));
 
-        final RuntimeWorkspaceImpl runtime = workspaceManager.startTemporaryWorkspace(config, "account");
+        final WorkspaceImpl runtime = workspaceManager.startWorkspace(createConfig(), "user123", true, "account");
 
-        final UsersWorkspaceImpl captured = workspaceCaptor.getValue();
+        verify(runtimes, timeout(2000)).start(workspaceCaptor.capture(), anyString(), anyBoolean());
+        final WorkspaceImpl captured = workspaceCaptor.getValue();
         assertTrue(captured.isTemporary());
         assertNotNull(captured.getConfig()
                               .getEnvironments()
@@ -16,6 +17,6 @@
         verify(workspaceHooks).beforeCreate(captured, "account");
         verify(workspaceHooks).afterCreate(runtime, "account");
         verify(workspaceHooks).beforeStart(captured, config.getDefaultEnv(), "account");
-        verify(workspaceManager).performSyncStart(captured, config.getDefaultEnv(), false, "account");
+        verify(workspaceManager).performAsyncStart(captured, captured.getConfig().getDefaultEnv(), false, "account");
     }
 

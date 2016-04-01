@@ -1,0 +1,24 @@
+    @Test
+    public void shouldAddEnvironment() throws Exception {
+        final WorkspaceImpl workspace = createWorkspace(createConfigDto());
+        when(wsManager.getWorkspace(workspace.getId())).thenReturn(workspace);
+        when(wsManager.updateWorkspace(any(), any())).thenReturn(workspace);
+        final EnvironmentDto envDto = createEnvDto().withName("new-env");
+        final int envsSizeBefore = workspace.getConfig().getEnvironments().size();
+
+        final Response response = given().auth()
+                                         .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                         .contentType("application/json")
+                                         .body(envDto)
+                                         .when()
+                                         .post(SECURE_PATH + "/workspace/" + workspace.getId() + "/environment");
+
+        assertEquals(response.getStatusCode(), 200);
+        assertEquals(new WorkspaceImpl(unwrapDto(response, WorkspaceDto.class))
+                             .getConfig()
+                             .getEnvironments()
+                             .size(), envsSizeBefore + 1);
+        verify(validator).validateConfig(workspace.getConfig());
+        verify(wsManager).updateWorkspace(any(), any());
+    }
+
