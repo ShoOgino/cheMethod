@@ -1,0 +1,24 @@
+    /**
+     * Filters workspace projects, removes projects which don't have location set.
+     * If all workspace projects don't have location throws {@link BadRequestException}.
+     */
+    private void excludeProjectsWithoutLocation(WorkspaceImpl usersWorkspace, String projectPath) throws BadRequestException {
+        final boolean notEmptyPath = projectPath != null;
+        //Condition for sifting valid project in user's workspace
+        Predicate<ProjectConfigImpl> predicate = projectConfig -> !(notEmptyPath && !projectPath.equals(projectConfig.getPath()))
+                                                                  && projectConfig.getSource() != null
+                                                                  && !isNullOrEmpty(projectConfig.getSource().getType())
+                                                                  && !isNullOrEmpty(projectConfig.getSource().getLocation());
+        //Filtered out projects by path and source storage presence.
+        final List<ProjectConfigImpl> filtered = usersWorkspace.getConfig()
+                                                               .getProjects()
+                                                               .stream()
+                                                               .filter(predicate)
+                                                               .collect(toList());
+        if (filtered.isEmpty()) {
+            throw new BadRequestException("Unable to create factory from this workspace, " +
+                                          "because it does not contains projects with source storage set and/or specified path");
+        }
+        usersWorkspace.getConfig().setProjects(filtered);
+    }
+
