@@ -1,0 +1,75 @@
+    private MachineImpl createMachine(MachineConfigImpl machineConfig,
+                                      String workspaceId,
+                                      String environmentName,
+                                      MachineInstanceCreator instanceCreator,
+                                      SnapshotImpl snapshot)
+            throws NotFoundException,
+                   SnapshotException,
+                   ConflictException,
+                   BadRequestException,
+                   MachineException {
+        final InstanceProvider instanceProvider = machineInstanceProviders.getProvider(machineConfig.getType());
+
+        // Backward compatibility for source type 'Recipe'.
+        // Only 'dockerfile' impl of source type existed when 'Recipe' was valid source type.
+        // Changed in 4.2.0-RC1
+        // todo remove that several versions later
+        if ("Recipe".equals(machineConfig.getSource().getType())) {
+            machineConfig.getSource().setType("dockerfile");
+        }
+        if (!instanceProvider.getRecipeTypes().contains(machineConfig.getSource().getType().toLowerCase())) {
+            throw new UnsupportedRecipeException(format("Recipe type %s of %s machine is unsupported",
+                                                        machineConfig.getSource().getType(),
+                                                        machineConfig.getName()));
+        }
+
+        Recipe recipe = null;
+        InstanceKey instanceKey = null;
+        if (snapshot != null) {
+            instanceKey = snapshot.getInstanceKey();
+        } else {
+            recipe = recipeDownloader.getRecipe(machineConfig);
+        }
+
+        if (!MACHINE_DISPLAY_NAME_PATTERN.matcher(machineConfig.getName()).matches()) {
+            throw new BadRequestException("Invalid machine name " + machineConfig.getName());
+        }
+
+        for (MachineImpl machine : machineRegistry.getMachines()) {
+            if (machine.getWorkspaceId().equals(workspaceId) && machine.getConfig().getName().equals(machineConfig.getName())) {
+                throw new ConflictException("Machine with name " + machineConfig.getName() + " already exists");
+            }
+        }
+
+        final String machineId = generateMachineId();
+        final String creator = EnvironmentContext.getCurrent().getUser().getId();
+
+        if (machineConfig.getLimits().getRam() == 0) {
+            machineConfig.setLimits(new LimitsImpl(defaultMachineMemorySizeMB));
+        }
+
+        final MachineImpl machine = new MachineImpl(machineConfig,
+                                                    machineId,
+                                                    workspaceId,
+                                                    environmentName,
+                                                    creator,
+                                                    MachineStatus.CREATING,
+                                                    null);
+
+        createMachineLogsDir(machineId);
+        final LineConsumer machineLogger = getMachineLogger(machineId, getMachineChannels(machine.getConfig().getName(),
+                                                                                          machine.getWorkspaceId(),
+                                                                                          machine.getEnvName())
+                .getOutput());
+
+        try {
+            machineRegistry.addMachine(machine);
+
+            instanceCreator.createInstance(instanceProvider, recipe, instanceKey, machine, machineLogger);
+
+            return machine;
+        } catch (ConflictException e) {
+            throw new MachineException(e.getLocalizedMessage(), e);
+        }
+    }
+
