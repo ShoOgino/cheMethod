@@ -4,28 +4,67 @@
         final String projectPath = getCurrentProjectPath();
 
         if (projectPath == null) {
+            notificationManager.notify(constants.exportFailedNoProjectPath(), FAIL, true);
             return;
         }
 
-        final String exportPath = Strings.emptyToNull(relPath(projectPath, selectedNode.getStorablePath()));
-        final String revision = view.isRevisionSpecified() ? view.getRevision() : null;
+        final String nullableExportPath = emptyToNull(relPath(projectPath, selectedNode.getStorablePath()));
+        final String exportPath = (nullableExportPath != null ? nullableExportPath : ".");
+        final String givenRevision = view.isRevisionSpecified() ? view.getRevision() : null;
 
-        notificationManager.notify(constants.exportStarted(exportPath));
+        final StatusNotification notification = new StatusNotification(constants.exportStarted(exportPath), PROGRESS, true);
+        notificationManager.notify(notification);
 
         view.onClose();
 
-        char prefix = '?';
-        StringBuilder url = new StringBuilder(baseHttpUrl + "/export" + projectPath);
+        if (!isNullOrEmpty(givenRevision)) {
+            final String path = getSelectedPaths().get(0);
+            subversionClientService.getRevisions(getActiveProject().getRootProject().getPath(), path, "1:HEAD",
+                                                 new AsyncRequestCallback<GetRevisionsResponse>(
+                                                         dtoUnmarshallerFactory.newUnmarshaller(GetRevisionsResponse.class)) {
+                                                     @Override
+                                                     protected void onSuccess(GetRevisionsResponse result) {
+                                                         final List<String> pathRevisions = result.getRevisions();
 
-        if (!Strings.isNullOrEmpty(exportPath)) {
-            url.append(prefix).append("path").append('=').append(exportPath);
-            prefix = '&';
+                                                         if (pathRevisions.size() > 0) {
+                                                             final String pathFirstRevision = pathRevisions.get(0);
+                                                             final String pathLastRevision = pathRevisions.get(pathRevisions.size() - 1);
+
+                                                             final int givenRevisionNb = Integer.valueOf(givenRevision);
+                                                             final int pathFirstRevisionNb =
+                                                                     Integer.valueOf(pathFirstRevision.substring(1));
+                                                             final int pathLastRevisionNb = Integer.valueOf(pathLastRevision.substring(1));
+
+                                                             final List<String> errOutput = result.getErrOutput();
+                                                             if (errOutput != null && !errOutput.isEmpty()) {
+                                                                 printErrors(errOutput, constants.commandInfo());
+                                                                 notification.setTitle(constants.exportCommandExecutionError());
+                                                                 notification.setStatus(FAIL);
+
+                                                             } else if (givenRevisionNb < pathFirstRevisionNb ||
+                                                                        givenRevisionNb > pathLastRevisionNb) {
+                                                                 notification.setTitle(
+                                                                         constants.exportRevisionDoNotExistForPath(givenRevision, path));
+                                                                 notification.setStatus(FAIL);
+
+                                                             } else {
+                                                                 openExportPopup(projectPath, exportPath, givenRevision, notification);
+                                                             }
+                                                         } else {
+                                                             notification.setTitle(constants.exportNoRevisionForPath(exportPath));
+                                                             notification.setStatus(FAIL);
+                                                         }
+                                                     }
+
+                                                     @Override
+                                                     protected void onFailure(Throwable exception) {
+                                                         notification.setTitle(constants.exportCommandExecutionError() + "\n" +
+                                                                               exception.getLocalizedMessage());
+                                                         notification.setStatus(FAIL);
+                                                     }
+                                                 });
+        } else {
+            openExportPopup(projectPath, exportPath, notification);
         }
-
-        if (!Strings.isNullOrEmpty(revision)) {
-            url.append(prefix).append("revision").append('=').append(revision);
-        }
-
-        Window.open(url.toString(), "_self", "");
     }
 
