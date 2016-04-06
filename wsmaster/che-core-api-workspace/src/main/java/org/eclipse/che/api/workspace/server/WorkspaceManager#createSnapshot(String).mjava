@@ -20,36 +20,15 @@
      *         when runtime workspace with given id does not exist
      * @throws ServerException
      *         when any other error occurs
+     * @throws ConflictException
+     *         when workspace is not running
      */
-    public void createSnapshot(String workspaceId) throws NotFoundException, ServerException {
+    public void createSnapshot(String workspaceId) throws NotFoundException, ServerException, ConflictException {
         requireNonNull(workspaceId, "Required non-null workspace id");
-
-        final WorkspaceImpl workspace = workspaceDao.get(workspaceId);
-        final WorkspaceRuntimeImpl runtime = runtimes.get(workspaceId).getRuntime();
+        final WorkspaceImpl workspace = normalizeState(workspaceDao.get(workspaceId));
+        checkWorkspaceBeforeCreatingSnapshot(workspace);
         executor.execute(ThreadLocalPropagateContext.wrap(() -> {
-            String devMachineSnapshotFailMessage = null;
-            for (MachineImpl machine : runtime.getMachines()) {
-                try {
-                    machineManager.saveSync(machine.getId(),
-                                            workspace.getNamespace(),
-                                            runtime.getActiveEnv());
-                } catch (ApiException apiEx) {
-                    if (machine.getConfig().isDev()) {
-                        devMachineSnapshotFailMessage = apiEx.getLocalizedMessage();
-                    }
-                    LOG.error(apiEx.getLocalizedMessage(), apiEx);
-                }
-            }
-            if (devMachineSnapshotFailMessage != null) {
-                eventService.publish(newDto(WorkspaceStatusEvent.class)
-                                             .withEventType(SNAPSHOT_CREATION_ERROR)
-                                             .withWorkspaceId(workspaceId)
-                                             .withError(devMachineSnapshotFailMessage));
-            } else {
-                eventService.publish(newDto(WorkspaceStatusEvent.class)
-                                             .withEventType(SNAPSHOT_CREATED)
-                                             .withWorkspaceId(workspaceId));
-            }
+            createSnapshotSync(workspace.getRuntime(), workspace.getNamespace(), workspaceId);
         }));
     }
 

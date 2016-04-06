@@ -21,6 +21,11 @@
                                                           @ExampleProperty("attrName:value-with:colon")}))
                            @QueryParam("attribute")
                            List<String> attrsList,
+                           @ApiParam("If true then the workspace will be immediately " +
+                                     "started after it is successfully created")
+                           @QueryParam("start-after-create")
+                           @DefaultValue("false")
+                           Boolean startAfterCreate,
                            @ApiParam("The account id related to this operation")
                            @QueryParam("account")
                            String accountId) throws ConflictException,
@@ -32,11 +37,15 @@
         final Map<String, String> attributes = parseAttrs(attrsList);
         validator.validateAttributes(attributes);
         validator.validateConfig(config);
+        final WorkspaceImpl workspace = workspaceManager.createWorkspace(config,
+                                                                         getCurrentUserId(),
+                                                                         attributes,
+                                                                         accountId);
+        if (startAfterCreate) {
+            workspaceManager.startWorkspace(workspace.getId(), null, accountId);
+        }
         return Response.status(201)
-                       .entity(injectLinks(asDto(workspaceManager.createWorkspace(config,
-                                                                                  getCurrentUserId(),
-                                                                                  attributes,
-                                                                                  accountId))))
+                       .entity(injectLinks(asDto(workspace)))
                        .build();
     }
 
