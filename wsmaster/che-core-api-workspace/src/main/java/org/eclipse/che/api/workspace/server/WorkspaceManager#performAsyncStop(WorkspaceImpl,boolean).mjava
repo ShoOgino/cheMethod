@@ -1,0 +1,33 @@
+    /**
+     * Asynchronously creates a snapshot(if {@code createSnapshot} is true)
+     * and then stops the workspace(even if snapshot creation failed).
+     */
+    @VisibleForTesting
+    void performAsyncStop(WorkspaceImpl workspace, boolean createSnapshot) throws ConflictException {
+        if (createSnapshot) {
+            checkWorkspaceBeforeCreatingSnapshot(workspace);
+        }
+        executor.execute(ThreadLocalPropagateContext.wrap(() -> {
+            if (createSnapshot && !createSnapshotSync(workspace.getRuntime(), workspace.getNamespace(), workspace.getId())) {
+                LOG.warn("Could not create a snapshot of the workspace '{}:{}'. The workspace will be stopped",
+                         workspace.getNamespace(),
+                         workspace.getConfig().getName());
+            }
+            try {
+                runtimes.stop(workspace.getId());
+                if (workspace.isTemporary()) {
+                    workspaceDao.remove(workspace.getId());
+                } else {
+                    workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
+                    workspaceDao.update(workspace);
+                }
+                LOG.info("Workspace '{}:{}' stopped by user '{}'",
+                         workspace.getNamespace(),
+                         workspace.getConfig().getName(),
+                         sessionUser().getName());
+            } catch (RuntimeException | ConflictException | NotFoundException | ServerException ex) {
+                LOG.error(ex.getLocalizedMessage(), ex);
+            }
+        }));
+    }
+
