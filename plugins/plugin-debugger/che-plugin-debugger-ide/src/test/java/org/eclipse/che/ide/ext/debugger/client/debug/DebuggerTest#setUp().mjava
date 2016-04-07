@@ -1,0 +1,39 @@
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+
+        super.setUp();
+
+        debuggerDescriptor = new DebuggerDescriptor(NAME + " " + VERSION, HOST + ":" + PORT);
+
+        doReturn(location).when(dtoFactory).createDto(Location.class);
+        doReturn(breakpoint).when(dtoFactory).createDto(org.eclipse.che.ide.ext.debugger.shared.Breakpoint.class);
+
+
+        doReturn(messageBus).when(messageBusProvider).getMachineMessageBus();
+
+        doReturn(localStorage).when(localStorageProvider).get();
+        doReturn(DEBUG_INFO).when(localStorage).getItem(debugger.LOCAL_STORAGE_DEBUGGER_KEY);
+        doReturn(debuggerInfo).when(dtoFactory).createDtoFromJson(DEBUG_INFO, DebuggerInfo.class);
+
+        doReturn(fgnResolver).when(fqnResolverFactory).getResolver(anyString());
+        doReturn(FQN).when(fgnResolver).resolveFqn(file);
+
+        doReturn(PATH).when(file).getPath();
+
+        debugger = new TestDebugger(service, dtoFactory, localStorageProvider, messageBusProvider, eventBus, fqnResolverFactory,
+                                    activeFileHandler, debuggerManager, fileTypeRegistry, "id", "channel");
+        doReturn(promiseEventList).when(service).getInfo(DEBUGGER_ID);
+        doReturn(promiseEventList).when(promiseEventList).then(any(Operation.class));
+
+        // setup messageBus
+        verify(eventBus).addHandler(eq(WsAgentStateEvent.TYPE), extServerStateHandlerCaptor.capture());
+        extServerStateHandlerCaptor.getValue().onWsAgentStarted(WsAgentStateEvent.createWsAgentStartedEvent());
+
+        debugger.addObserver(observer);
+
+        FileType fileType = mock(FileType.class);
+        doReturn(Collections.singletonList("application/java")).when(fileType).getMimeTypes();
+        doReturn(fileType).when(fileTypeRegistry).getFileTypeByFile(eq(file));
+    }
+

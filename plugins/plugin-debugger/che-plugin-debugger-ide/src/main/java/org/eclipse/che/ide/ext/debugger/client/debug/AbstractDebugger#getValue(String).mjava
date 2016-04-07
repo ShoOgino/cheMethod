@@ -1,0 +1,22 @@
+    @Override
+    public Promise<String> getValue(String variable) {
+        if (!isConnected()) {
+            return Promises.reject(JsPromiseError.create("Debugger is not connected"));
+        }
+
+        Promise<Value> promise = service.getValue(debuggerInfo.getId(), dtoFactory.createDtoFromJson(variable, Variable.class));
+        return promise.then(new Function<Value, String>() {
+            @Override
+            public String apply(Value arg) throws FunctionException {
+                List<Variable> variables = arg.getVariables();
+                return dtoFactory.toJson(variables);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                Log.error(AbstractDebugger.class, arg.getMessage());
+                throw new OperationException(arg.getCause());
+            }
+        });
+    }
+

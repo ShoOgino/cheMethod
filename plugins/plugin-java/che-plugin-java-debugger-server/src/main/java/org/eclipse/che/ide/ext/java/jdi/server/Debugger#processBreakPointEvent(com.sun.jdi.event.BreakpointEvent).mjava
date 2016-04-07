@@ -1,0 +1,37 @@
+    private boolean processBreakPointEvent(com.sun.jdi.event.BreakpointEvent event) throws DebuggerException {
+        setCurrentThread(event.thread());
+        boolean hitBreakpoint;
+        ExpressionParser parser =
+                (ExpressionParser)event.request().getProperty("org.eclipse.che.ide.java.debug.condition.expression.parser");
+        if (parser != null) {
+            com.sun.jdi.Value result = evaluate(parser);
+            hitBreakpoint = result instanceof com.sun.jdi.BooleanValue && ((com.sun.jdi.BooleanValue)result).value();
+        } else {
+            // If there is no expression.
+            hitBreakpoint = true;
+        }
+
+        if (hitBreakpoint) {
+            com.sun.jdi.Location location = event.location();
+            BreakpointEvent breakPointEvent;
+            synchronized (events) {
+                Location locationDto = newDto(Location.class).withClassName(location.declaringType().name())
+                                                             .withLineNumber(location.lineNumber());
+                // Breakpoint always enabled at the moment. Managing states of breakpoint is not supported for now.
+                breakPointEvent =
+                        (BreakpointEvent)newDto(BreakpointEvent.class).withBreakpoint(newDto(Breakpoint.class).withEnabled(true)
+                                                                                                              .withLocation(locationDto))
+                                                                      .withType(DebuggerEvent.BREAKPOINT);
+                events.add(breakPointEvent);
+            }
+
+            List<DebuggerEvent> eventsList = new ArrayList<>();
+            eventsList.add(breakPointEvent);
+            publishWebSocketMessage(newDto(DebuggerEventList.class).withEvents(eventsList), EVENTS_CHANNEL + id);
+        }
+
+        // Left target JVM in suspended state if result of evaluation of expression is boolean value and true
+        // or if condition expression is not set.
+        return !hitBreakpoint;
+    }
+

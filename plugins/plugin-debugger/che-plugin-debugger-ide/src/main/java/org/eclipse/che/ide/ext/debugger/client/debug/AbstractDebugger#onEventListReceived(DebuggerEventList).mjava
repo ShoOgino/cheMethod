@@ -1,0 +1,53 @@
+    private void onEventListReceived(@NotNull DebuggerEventList eventList) {
+        Location location;
+
+        List<DebuggerEvent> events = eventList.getEvents();
+        for (DebuggerEvent event : events) {
+            switch (event.getType()) {
+                case STEP:
+                    location = ((StepEvent)event).getLocation();
+                    break;
+                case BREAKPOINT_ACTIVATED:
+                    org.eclipse.che.ide.ext.debugger.shared.Breakpoint breakpoint = ((BreakpointActivatedEvent)event).getBreakpoint();
+                    onBreakpointActivated(breakpoint.getLocation());
+                    return;
+                case BREAKPOINT:
+                    location = ((BreakpointEvent)event).getBreakpoint().getLocation();
+                    break;
+                case DISCONNECTED:
+                    disconnectDebugger();
+                    return;
+                default:
+                    Log.error(AbstractDebugger.class, "Unknown type of debugger event: " + event.getType());
+                    return;
+            }
+
+            final Location fLocation = location;
+            if (location != null) {
+                currentLocation = location;
+                activeFileHandler.openFile(resolveFilePathByLocation(location),
+                                           location.getClassName(),
+                                           location.getLineNumber(),
+                                           new AsyncCallback<VirtualFile>() {
+                                               @Override
+                                               public void onFailure(Throwable caught) {
+                                                   for (DebuggerObserver observer : observers) {
+                                                       observer.onBreakpointStopped(fLocation.getClassName(),
+                                                                                    fLocation.getClassName(),
+                                                                                    fLocation.getLineNumber());
+                                                   }
+                                               }
+
+                                               @Override
+                                               public void onSuccess(VirtualFile result) {
+                                                   for (DebuggerObserver observer : observers) {
+                                                       observer.onBreakpointStopped(result.getPath(),
+                                                                                    fLocation.getClassName(),
+                                                                                    fLocation.getLineNumber());
+                                                   }
+                                               }
+                                           });
+            }
+        }
+    }
+

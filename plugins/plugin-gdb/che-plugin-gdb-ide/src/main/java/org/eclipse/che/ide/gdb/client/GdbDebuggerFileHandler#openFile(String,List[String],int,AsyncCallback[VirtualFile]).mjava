@@ -1,0 +1,34 @@
+    /**
+     * Tries to open file from the project.
+     * If fails then method will try to find resource from external dependencies.
+     */
+    private void openFile(@NotNull final String className,
+                          final List<String> filePaths,
+                          final int pathNumber,
+                          final AsyncCallback<VirtualFile> callback) {
+        if (pathNumber == filePaths.size()) {
+            Log.error(DebuggerPresenter.class, "Can't open resource " + className);
+            return;
+        }
+
+        String filePath = filePaths.get(pathNumber);
+
+        projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(filePath)).then(new Operation<Node>() {
+            @Override
+            public void apply(final Node node) throws OperationException {
+                if (!(node instanceof FileReferenceNode)) {
+                    return;
+                }
+
+                handleActivateFile((VirtualFile)node, callback);
+                eventBus.fireEvent(new FileEvent((VirtualFile)node, OPEN));
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                // try another path
+                openFile(className, filePaths, pathNumber + 1, callback);
+            }
+        });
+    }
+
