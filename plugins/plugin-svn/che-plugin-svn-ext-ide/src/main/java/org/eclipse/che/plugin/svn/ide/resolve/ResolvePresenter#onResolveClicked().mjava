@@ -11,27 +11,34 @@
         }
 
         HashMap<String, String> filesConflictResolutionActions = new HashMap<String, String>();
-        for (String path : conflictsPaths) {
+        Iterator<String> iterConflicts = conflictsPaths.iterator();
+
+        while (iterConflicts.hasNext()) {
+            String path = iterConflicts.next();
             String resolutionActionText = view.getConflictResolutionAction(path);
-            filesConflictResolutionActions.put(path, resolutionActionText);
+            if (!resolutionActionText.equals(ConflictResolutionAction.POSTPONE.getText())) {
+                filesConflictResolutionActions.put(path, resolutionActionText);
+                iterConflicts.remove();
+            }
         }
 
-        subversionClientService.resolve(project.getPath(), filesConflictResolutionActions, "infinity",
-                                        new AsyncCallback<CLIOutputResponseList>() {
-                                            @Override
-                                            public void onSuccess(CLIOutputResponseList result) {
-                                                for (CLIOutputResponse outputResponse : result.getCLIOutputResponses()) {
-                                                    printResponse(outputResponse.getCommand(), outputResponse.getOutput(), null,
-                                                                  constants.commandResolve());
+        if (filesConflictResolutionActions.size() > 0) {
+            subversionClientService.resolve(project.getPath(), filesConflictResolutionActions, "infinity",
+                                            new AsyncCallback<CLIOutputResponseList>() {
+                                                @Override
+                                                public void onSuccess(CLIOutputResponseList result) {
+                                                    for (CLIOutputResponse outputResponse : result.getCLIOutputResponses()) {
+                                                        printResponse(outputResponse.getCommand(), outputResponse.getOutput(), null,
+                                                                      constants.commandResolve());
+                                                    }
                                                 }
-                                            }
 
-                                            @Override
-                                            public void onFailure(Throwable exception) {
-                                                notificationManager.notify(exception.getMessage(), FAIL, true);
-                                            }
-                                        });
+                                                @Override
+                                                public void onFailure(Throwable exception) {
+                                                    notificationManager.notify(exception.getMessage(), FAIL, true);
+                                                }
+                                            });
+        }
         view.close();
-        conflictsPaths.clear();
     }
 
