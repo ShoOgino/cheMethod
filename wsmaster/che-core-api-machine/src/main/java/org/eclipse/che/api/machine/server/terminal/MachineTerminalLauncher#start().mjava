@@ -1,0 +1,26 @@
+    @PostConstruct
+    public void start() {
+        eventService.subscribe(new EventSubscriber<MachineStatusEvent>() {
+            @Override
+            public void onEvent(MachineStatusEvent event) {
+                if (event.getEventType() == MachineStatusEvent.EventType.RUNNING) {
+                    try {
+                        final Instance machine = machineManager.getInstance(event.getMachineId());
+
+                        MachineImplSpecificTerminalLauncher machineImplSpecificTerminalLauncher = terminalLaunchers.get(machine.getConfig().getType());
+                        if (machineImplSpecificTerminalLauncher == null) {
+                            LOG.warn("Terminal launcher implementation was not found for machine {} with type {}.",
+                                     machine.getId(),
+                                     machine.getConfig().getType());
+                        } else {
+                            machineImplSpecificTerminalLauncher.launchTerminal(machine);
+                        }
+                    } catch (MachineException | NotFoundException e) {
+                        LOG.error(e.getLocalizedMessage(), e);
+                        // TODO send event that terminal is unavailable
+                    }
+                }
+            }
+        });
+    }
+
