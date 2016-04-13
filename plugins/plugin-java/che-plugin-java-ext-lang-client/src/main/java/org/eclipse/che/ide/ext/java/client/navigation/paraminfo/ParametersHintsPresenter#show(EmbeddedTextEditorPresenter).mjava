@@ -1,0 +1,40 @@
+    /**
+     * The method gets method parameters via {@link JavaNavigationService} and then call special method on view to display them.
+     *
+     * @param activeEditor
+     *         active editor which contains method or constructor for which parameters will be displayed
+     */
+    public void show(final EmbeddedTextEditorPresenter activeEditor) {
+        final int offset = activeEditor.getCursorOffset();
+
+        if (!isCursorInRightPlace(activeEditor, offset)) {
+            return;
+        }
+
+        VirtualFile file = activeEditor.getEditorInput().getFile();
+
+        String projectPath = file.getProject().getProjectConfig().getPath();
+        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+
+        int lineStartOffset = getLineStartOffset(activeEditor, offset);
+
+        Promise<List<MethodParameters>> promise = navigationService.getMethodParametersHints(projectPath, fqn, offset, lineStartOffset);
+        promise.then(new Operation<List<MethodParameters>>() {
+            @Override
+            public void apply(List<MethodParameters> parameters) throws OperationException {
+                if (parameters.isEmpty()) {
+                    return;
+                }
+
+                PositionConverter.PixelCoordinates coordinates = activeEditor.getPositionConverter().offsetToPixel(offset);
+
+                view.show(parameters, coordinates.getX(), coordinates.getY());
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                Log.error(getClass(), error.getMessage());
+            }
+        });
+    }
+
