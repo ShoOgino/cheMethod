@@ -1,0 +1,40 @@
+    /**
+     * Closes the connection to the selected target.
+     * Destroys a machine based on the selected recipe.
+     */
+    private void disconnect() {
+        if (selectedTarget == null || !selectedTarget.isConnected()) {
+            return;
+        }
+
+        String machineId = null;
+        for (MachineDto machine : machines) {
+            if (machine.getConfig().getName().equals(selectedTarget.getName()) &&
+                    "ssh".equals(machine.getConfig().getType()) &&
+                    machine.getStatus() == MachineStatus.RUNNING) {
+                machineId = machine.getId();
+                break;
+            }
+        }
+
+        if (machineId == null) {
+            return;
+        }
+
+        view.setConnectButtonText(null);
+
+        machineService.destroyMachine(machineId).then(new Operation<Void>() {
+            @Override
+            public void apply(Void arg) throws OperationException {
+                notificationManager.notify(machineLocale.targetsViewDisconnectSuccess(selectedTarget.getName()), StatusNotification.Status.SUCCESS, true);
+                updateTargets(selectedTarget.getName());
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                notificationManager.notify(machineLocale.targetsViewDisconnectError(selectedTarget.getName()), StatusNotification.Status.FAIL, true);
+                updateTargets(selectedTarget.getName());
+            }
+        });
+    }
+
