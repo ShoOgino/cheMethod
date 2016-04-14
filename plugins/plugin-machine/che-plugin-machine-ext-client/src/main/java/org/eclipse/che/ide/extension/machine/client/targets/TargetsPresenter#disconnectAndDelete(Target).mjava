@@ -1,0 +1,35 @@
+    private void disconnectAndDelete(final Target target) {
+        String machineId = null;
+        for (MachineDto machine : machines) {
+            if (machine.getConfig().getName().equals(target.getName()) &&
+                    "ssh".equals(machine.getConfig().getType()) &&
+                    machine.getStatus() == MachineStatus.RUNNING) {
+                machineId = machine.getId();
+                break;
+            }
+        }
+
+        if (machineId == null) {
+            return;
+        }
+
+        machineService.destroyMachine(machineId).then(new Operation<Void>() {
+            @Override
+            public void apply(Void arg) throws OperationException {
+                notificationManager.notify(machineLocale.targetsViewDisconnectSuccess(target.getName()), StatusNotification.Status.SUCCESS, true);
+                new Timer() {
+                    @Override
+                    public void run() {
+                        deleteTarget(target);
+                    }
+                }.schedule(1000);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                notificationManager.notify(machineLocale.targetsViewDisconnectError(target.getName()), StatusNotification.Status.FAIL, true);
+                updateTargets(target.getName());
+            }
+        });
+    }
+

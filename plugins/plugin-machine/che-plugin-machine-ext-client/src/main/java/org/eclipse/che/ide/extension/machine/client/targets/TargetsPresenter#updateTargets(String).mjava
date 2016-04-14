@@ -1,0 +1,47 @@
+    /**
+     * Fetches all recipes from the server, makes a list of targets and selects specified target.
+     */
+    private void updateTargets(final String targetToSelect) {
+        targets.clear();
+        machines.clear();
+
+        machineService.getMachines(appContext.getWorkspaceId()).then(new Operation<List<MachineDto>>() {
+            @Override
+            public void apply(List<MachineDto> list) throws OperationException {
+                machines.addAll(list);
+
+                recipeServiceClient.getAllRecipes().then(new Operation<List<RecipeDescriptor>>() {
+                    @Override
+                    public void apply(List<RecipeDescriptor> recipeList) throws OperationException {
+                        for (RecipeDescriptor recipe : recipeList) {
+                            // Display only "ssh" recipes
+                            if (!"ssh".equalsIgnoreCase(recipe.getType())) {
+                                continue;
+                            }
+
+                            Target target = new Target(recipe.getName(), recipe.getType(), recipe);
+                            target.setRecipe(recipe);
+                            targets.add(target);
+
+                            target.setConnected(isMachineRunning(recipe.getName()));
+
+                            restoreTarget(target);
+                        }
+
+                        view.showTargets(targets);
+
+                        if (targetToSelect != null) {
+                            for (Target target : targets) {
+                                if (target.getName().equals(targetToSelect)) {
+                                    view.selectTarget(target);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+
+            }
+        });
+    }
+
