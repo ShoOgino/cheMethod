@@ -3,6 +3,8 @@
      *
      * @param object
      *         - object to validate factory parameters
+     * @param object
+     *         - parent object
      * @param methodsProvider
      *         - class that provides methods with {@link org.eclipse.che.api.core.factory.FactoryParameter}
      *         annotations
@@ -15,12 +17,13 @@
      * @throws org.eclipse.che.api.core.ConflictException
      */
     void validateCompatibility(Object object,
+                               Object parent,
                                Class methodsProvider,
                                Class allowedMethodsProvider,
                                Version version,
                                String parentName) throws ConflictException {
         // validate source
-        if (SourceStorageDto.class.equals(methodsProvider)) {
+        if (SourceStorageDto.class.equals(methodsProvider) && !hasSubprojectInPath(parent)) {
             sourceStorageParametersValidator.validate((SourceStorage)object, version);
         }
 
@@ -73,7 +76,7 @@
                 // use recursion if parameter is DTO object
                 if (method.getReturnType().isAnnotationPresent(DTO.class)) {
                     // validate inner objects such Git ot ProjectAttributes
-                    validateCompatibility(parameterValue, method.getReturnType(), method.getReturnType(), version, fullName);
+                    validateCompatibility(parameterValue, object, method.getReturnType(), method.getReturnType(), version, fullName);
                 } else if (Map.class.isAssignableFrom(method.getReturnType())) {
                     Type tp = ((ParameterizedType)method.getGenericReturnType()).getActualTypeArguments()[1];
 
@@ -82,7 +85,7 @@
                         if (secMapParamClass.isAnnotationPresent(DTO.class)) {
                             Map<Object, Object> map = (Map)parameterValue;
                             for (Map.Entry<Object, Object> entry : map.entrySet()) {
-                                validateCompatibility(entry.getValue(), secMapParamClass, secMapParamClass, version,
+                                validateCompatibility(entry.getValue(), object, secMapParamClass, secMapParamClass, version,
                                                       fullName + "." + entry.getKey());
                             }
                         } else {
@@ -97,7 +100,7 @@
                         if (secListParamClass.isAnnotationPresent(DTO.class)) {
                             List<Object> list = (List)parameterValue;
                             for (Object entry : list) {
-                                validateCompatibility(entry, secListParamClass, secListParamClass, version, fullName);
+                                validateCompatibility(entry, object, secListParamClass, secListParamClass, version, fullName);
                             }
                         } else {
                             throw new RuntimeException("This type of fields is not supported by factory.");
