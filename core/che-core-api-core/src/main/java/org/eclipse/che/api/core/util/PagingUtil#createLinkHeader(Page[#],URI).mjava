@@ -1,0 +1,36 @@
+    /**
+     * Generates link header value from the page object and base uri.
+     * <a href="https://tools.ietf.org/html/rfc5988">The Link header spec</a>
+     *
+     * @param page
+     *         the page used to generate link
+     * @param uri
+     *         the uri which is used for adding {@code skipCount} & {@code maxItems} query parameters
+     * @return 'Link' header value
+     * @throws NullPointerException
+     *         when either {@code page} or {@code uri} is null
+     */
+    public static String createLinkHeader(Page<?> page, URI uri) {
+        requireNonNull(page, "Required non-null page");
+        requireNonNull(uri, "Required non-null uri");
+        final ArrayList<Pair<String, Page.PageRef>> pageRefs = new ArrayList<>(4);
+        pageRefs.add(Pair.of("first", page.getFirstPageRef()));
+        pageRefs.add(Pair.of("last", page.getLastPageRef()));
+        if (page.hasPreviousPage()) {
+            pageRefs.add(Pair.of("prev", page.getPreviousPageRef().get()));
+        }
+        if (page.hasNextPage()) {
+            pageRefs.add(Pair.of("next", page.getNextPageRef().get()));
+        }
+        final UriBuilder ub = UriBuilder.fromUri(uri);
+        return pageRefs.stream()
+                       .map(refPair -> format("<%s>; rel=\"%s\"",
+                                              ub.clone()
+                                                .replaceQueryParam("skipCount", refPair.second.getItemsBefore())
+                                                .replaceQueryParam("maxItems", refPair.second.getPageSize())
+                                                .build()
+                                                .toString(),
+                                              refPair.first))
+                       .collect(joining(LINK_HEADER_SEPARATOR));
+    }
+
