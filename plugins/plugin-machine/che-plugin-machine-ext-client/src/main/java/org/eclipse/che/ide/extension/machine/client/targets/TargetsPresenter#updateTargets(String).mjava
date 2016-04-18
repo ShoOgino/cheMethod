@@ -3,27 +3,37 @@
      */
     private void updateTargets(final String targetToSelect) {
         targets.clear();
-        machines.clear();
+        machinesByNameMap.clear();
 
         machineService.getMachines(appContext.getWorkspaceId()).then(new Operation<List<MachineDto>>() {
             @Override
-            public void apply(List<MachineDto> list) throws OperationException {
-                machines.addAll(list);
+            public void apply(List<MachineDto> machineList) throws OperationException {
+                for (MachineDto machine : machineList) {
+                    machinesByNameMap.put(machine.getConfig().getName(), machine);
+                }
 
                 recipeServiceClient.getAllRecipes().then(new Operation<List<RecipeDescriptor>>() {
                     @Override
                     public void apply(List<RecipeDescriptor> recipeList) throws OperationException {
                         for (RecipeDescriptor recipe : recipeList) {
-                            // Display only "ssh" recipes
-//                            if (!"ssh".equalsIgnoreCase(recipe.getType())) {
-//                                continue;
-//                            }
-
-                            Target target = new Target(recipe.getName(), recipe.getType(), recipe);
+/*                            // Display only SSH_CATEGORY recipes
+                           if (!SSH_CATEGORY.equalsIgnoreCase(recipe.getType())) {
+                                continue;
+                            }
+*/
+                            final MachineDto machine = machinesByNameMap.get(recipe.getName());
+                            final String targetType;
+                            if (machine == null) {
+                                targetType = recipe.getType();
+                            } else {
+                                final MachineConfigDto machineConfig = machine.getConfig();
+                                targetType = machineConfig.isDev() ? machineLocale.devMachineCategory() : machineConfig.getType();
+                            }
+                            final Target target = new Target(recipe.getName(), targetType, recipe);
                             target.setRecipe(recipe);
                             targets.add(target);
 
-                            target.setConnected(isMachineRunning(recipe.getName()));
+                            target.setConnected(isMachineRunning(machine));
 
                             restoreTarget(target);
                         }
