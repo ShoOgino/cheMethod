@@ -1,17 +1,23 @@
     @Override
     public void startWsAgent(String workspaceId) throws NotFoundException, MachineException, InterruptedException {
         final Machine devMachine = getMachineManager().getDevMachine(workspaceId);
+        final String wsAgentPingUrl = devMachine.getRuntime()
+                                                .getServers()
+                                                .get(Constants.WS_AGENT_PORT)
+                                                .getUrl();
         try {
             getMachineManager().exec(devMachine.getId(),
                                      new CommandImpl(WS_AGENT_PROCESS_NAME, wsAgentStartCommandLine, "Arbitrary"),
                                      getWsAgentProcessOutputChannel(workspaceId));
 
-            final HttpJsonRequest wsAgentPingRequest = createPingRequest(devMachine);
 
+            final HttpJsonRequest wsAgentPingRequest = httpJsonRequestFactory.fromUrl(wsAgentPingUrl)
+                                                                             .setMethod(HttpMethod.GET)
+                                                                             .setTimeout(wsAgentPingConnectionTimeoutMs);
             long pingStartTimestamp = System.currentTimeMillis();
             LOG.debug("Starts pinging ws agent. Workspace ID:{}. Url:{}. Timestamp:{}",
                       workspaceId,
-                      wsAgentPingRequest,
+                      wsAgentPingUrl,
                       pingStartTimestamp);
 
             while (System.currentTimeMillis() - pingStartTimestamp < wsAgentMaxStartTimeMs) {
@@ -24,6 +30,7 @@
         } catch (BadRequestException wsAgentLaunchingExc) {
             throw new MachineException(wsAgentLaunchingExc.getLocalizedMessage(), wsAgentLaunchingExc);
         }
+        LOG.error("Fail pinging ws agent. Workspace ID:{}. Url:{}. Timestamp:{}", workspaceId, wsAgentPingUrl);
         throw new MachineException(pingTimedOutErrorMessage);
     }
 
