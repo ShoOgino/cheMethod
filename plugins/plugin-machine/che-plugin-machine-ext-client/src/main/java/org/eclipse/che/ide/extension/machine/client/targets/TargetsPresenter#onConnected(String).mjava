@@ -1,26 +1,22 @@
     /**
      * Ensures machine is started.
      */
-    private void ensureMachineIsStarted(final String machineId) {
+    private void onConnected(final String machineId) {
         machineService.getMachine(machineId).then(new Operation<MachineDto>() {
             @Override
             public void apply(MachineDto machineDto) throws OperationException {
                 if (machineDto.getStatus() == RUNNING) {
                     eventBus.fireEvent(new MachineStateEvent(machineDto, MachineStateEvent.MachineAction.RUNNING));
-                    onConnected();
+                    connectNotification.setTitle(machineLocale.targetsViewConnectSuccess(machineDto.getConfig().getName()));
+                    connectNotification.setStatus(StatusNotification.Status.SUCCESS);
+                    updateTargets(machineDto.getConfig().getName());
                 } else {
-                    new Timer() {
-                        @Override
-                        public void run() {
-                            ensureMachineIsStarted(machineId);
-                        }
-                    }.schedule(1000);
                 }
             }
         }).catchError(new Operation<PromiseError>() {
             @Override
             public void apply(PromiseError arg) throws OperationException {
-                onConnectingFailed();
+                onConnectingFailed(null);
             }
         });
     }
