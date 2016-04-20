@@ -1,23 +1,19 @@
-    private int execAndGetCode(String command) throws JSchException {
-        ChannelExec exec = null;
-        try {
-            exec = (ChannelExec)session.openChannel("exec");
-            exec.setCommand(command);
+    private int execAndGetCode(String command) throws JSchException, IOException {
+        ChannelExec exec = (ChannelExec)session.openChannel("exec");
+        exec.setCommand(command);
+
+        try (InputStream inStream = exec.getInputStream();
+             InputStream erStream = exec.getErrStream()) {
+
             exec.connect(connectionTimeout);
 
-            // todo fix that
-            // this method is used to run commands such as "pwd" or "mkdir -p /some/path"
-            // And we need to wait to check if it return 0. If command is still running method returns -1.
-            try {
-                // workaround exit code -1
-                Thread.sleep(1000);
-            } catch (InterruptedException ignored) {
-            }
-            return exec.getExitStatus();
+            // read streams to wait until command finishes its work
+            IoUtil.readStream(inStream);
+            IoUtil.readStream(erStream);
         } finally {
-            if (exec != null) {
-                exec.disconnect();
-            }
+            exec.disconnect();
         }
+
+        return exec.getExitStatus();
     }
 
