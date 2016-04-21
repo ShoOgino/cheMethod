@@ -1,13 +1,31 @@
     private void doDestroy(Instance machine) throws MachineException, NotFoundException {
-        LOG.info("Destroying machine [ws = {}: env = {}: machine = {}]",
+        LOG.info("Destroying machine [ws = {}: env = {}: machine name = {}: machine id = {}]",
                  machine.getWorkspaceId(),
                  machine.getEnvName(),
-                 machine.getConfig().getName());
-        machine.destroy();
-        LOG.info("Machine [ws = {}: env = {}: machine = {}] was successfully destroyed",
-                 machine.getWorkspaceId(),
-                 machine.getEnvName(),
-                 machine.getConfig().getName());
-        cleanupOnDestroy(machine, null);
+                 machine.getConfig().getName(),
+                 machine.getId());
+
+        try {
+            machineRegistry.remove(machine.getId());
+        } finally {
+            try {
+                machine.destroy();
+
+                LOG.info("Machine [ws = {}: env = {}: machine name = {}: machine id = {}] was successfully destroyed",
+                         machine.getWorkspaceId(),
+                         machine.getEnvName(),
+                         machine.getConfig().getName(),
+                         machine.getId());
+            } catch (MachineException e) {
+                LOG.error(e.getLocalizedMessage(), e);
+            }
+        }
+
+        eventService.publish(newDto(MachineStatusEvent.class)
+                                     .withEventType(MachineStatusEvent.EventType.DESTROYED)
+                                     .withDev(machine.getConfig().isDev())
+                                     .withMachineId(machine.getId())
+                                     .withWorkspaceId(machine.getWorkspaceId())
+                                     .withMachineName(machine.getConfig().getName()));
     }
 

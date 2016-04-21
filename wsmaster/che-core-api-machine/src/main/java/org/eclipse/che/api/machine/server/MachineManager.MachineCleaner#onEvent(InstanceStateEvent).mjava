@@ -3,6 +3,9 @@
             if ((event.getType() == OOM) || (event.getType() == DIE)) {
                 try {
                     final Instance machine = getInstance(event.getMachineId());
+
+                    machineRegistry.remove(machine.getId());
+
                     String message = "Machine is destroyed. ";
                     if (event.getType() == OOM) {
                         message = message +
@@ -12,9 +15,22 @@
                                   "the workspace RAM limit in the user dashboard.";
                     }
 
-                    cleanupOnDestroy(machine, message);
+                    try {
+                        if (!Strings.isNullOrEmpty(message)) {
+                            machine.getLogger().writeLine(message);
+                        }
+                        machine.getLogger().close();
+                    } catch (IOException ignore) {
+                    }
+
+                    eventService.publish(newDto(MachineStatusEvent.class)
+                                                 .withEventType(MachineStatusEvent.EventType.DESTROYED)
+                                                 .withDev(machine.getConfig().isDev())
+                                                 .withMachineId(machine.getId())
+                                                 .withWorkspaceId(machine.getWorkspaceId())
+                                                 .withMachineName(machine.getConfig().getName()));
                 } catch (NotFoundException | MachineException e) {
-                    LOG.debug(e.getLocalizedMessage(), e);
+                    LOG.warn(e.getLocalizedMessage(), e);
                 }
             }
         }
