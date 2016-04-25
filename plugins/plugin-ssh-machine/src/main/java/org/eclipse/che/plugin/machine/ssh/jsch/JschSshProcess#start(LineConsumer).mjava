@@ -1,22 +1,21 @@
     @Override
     public void start(LineConsumer output) throws MachineException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(exec.getInputStream()));
-             BufferedReader errReader = new BufferedReader(new InputStreamReader(exec.getErrStream()))) {
+        try (PipedOutputStream pipedOS = new PipedOutputStream();
+             PipedInputStream pipedIS = new PipedInputStream(pipedOS);
+             BufferedReader outReader = new BufferedReader(new InputStreamReader(pipedIS))) {
 
+            exec.setOutputStream(pipedOS);
+            exec.setExtOutputStream(pipedOS);
             exec.connect();
 
-            String line;
-            while ((line = reader.readLine()) != null) {
-                // todo format output as it is done in docker impl
-                // todo use async streams?
-                // todo how to manage disconnections due to network failures?
-                output.writeLine(line);
-            }
-            while ((line = errReader.readLine()) != null) {
-                output.writeLine(line);
+            String outLine;
+            while ((outLine = outReader.readLine()) != null) {
+                output.writeLine(outLine);
             }
         } catch (IOException | JSchException e) {
             throw new MachineException("Ssh machine command execution error:" + e.getLocalizedMessage());
+        } finally {
+            exec.disconnect();
         }
     }
 
