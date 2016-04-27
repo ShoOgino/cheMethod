@@ -4,22 +4,24 @@
             @Override
             public void onEvent(MachineStatusEvent event) {
                 if (event.getEventType() == MachineStatusEvent.EventType.RUNNING) {
-                    try {
-                        final Instance machine = machineManager.getInstance(event.getMachineId());
+                    executor.execute(() -> {
+                        try {
+                            final Instance machine = machineManager.getInstance(event.getMachineId());
 
-                        MachineImplSpecificTerminalLauncher terminalLauncher = terminalLaunchers.get(machine.getConfig()
-                                                                                                            .getType());
-                        if (terminalLauncher == null) {
-                            LOG.warn("Terminal launcher implementation was not found for machine {} with type {}.",
-                                     machine.getId(),
-                                     machine.getConfig().getType());
-                        } else {
-                            terminalLauncher.launchTerminal(machine);
+                            MachineImplSpecificTerminalLauncher terminalLauncher = terminalLaunchers.get(machine.getConfig()
+                                                                                                                .getType());
+                            if (terminalLauncher == null) {
+                                LOG.warn("Terminal launcher implementation was not found for machine {} with type {}.",
+                                         machine.getId(),
+                                         machine.getConfig().getType());
+                            } else {
+                                terminalLauncher.launchTerminal(machine);
+                            }
+                        } catch (MachineException | NotFoundException e) {
+                            LOG.error(e.getLocalizedMessage(), e);
+                            // TODO send event that terminal is unavailable
                         }
-                    } catch (MachineException | NotFoundException e) {
-                        LOG.error(e.getLocalizedMessage(), e);
-                        // TODO send event that terminal is unavailable
-                    }
+                    });
                 }
             }
         });
