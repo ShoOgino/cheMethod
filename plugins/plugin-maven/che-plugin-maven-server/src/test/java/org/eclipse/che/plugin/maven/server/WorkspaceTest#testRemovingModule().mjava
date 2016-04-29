@@ -1,0 +1,32 @@
+    @Test
+    public void testRemovingModule() throws Exception {
+        FolderEntry parentFolder = createMultimoduleProject();
+
+        IProject parent = ResourcesPlugin.getWorkspace().getRoot().getProject("parent");
+        mavenWorkspace.update(Collections.singletonList(parent));
+        mavenWorkspace.waitForUpdate();
+
+        assertThat(projectRegistry.getProjects()).hasSize(3).onProperty("path")
+                                                 .containsOnly("/parent", "/parent/module1", "/parent/module2");
+
+
+        VirtualFile parentPom = parentFolder.getChild("pom.xml").getVirtualFile();
+        Model model = Model.readFrom(parentPom);
+        List<String> modules = new ArrayList<>(model.getModules());
+        ListIterator<String> listIterator = modules.listIterator();
+        while (listIterator.hasNext()) {
+            if("module2".equals(listIterator.next())){
+                listIterator.remove();
+                break;
+            }
+        }
+        model.setModules(modules);
+        model.writeTo(parentPom);
+
+        mavenWorkspace.update(Collections.singletonList(parent));
+        mavenWorkspace.waitForUpdate();
+
+        assertThat(projectRegistry.getProjects()).hasSize(2).onProperty("path")
+                                                 .containsOnly("/parent", "/parent/module1");
+    }
+

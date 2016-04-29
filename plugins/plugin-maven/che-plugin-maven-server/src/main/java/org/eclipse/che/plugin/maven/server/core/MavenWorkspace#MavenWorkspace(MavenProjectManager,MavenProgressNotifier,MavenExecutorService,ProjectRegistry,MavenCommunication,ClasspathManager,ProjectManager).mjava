@@ -1,0 +1,39 @@
+    @Inject
+    public MavenWorkspace(MavenProjectManager manager,
+                          MavenProgressNotifier notifier,
+                          MavenExecutorService executorService,
+                          ProjectRegistry projectRegistry,
+                          MavenCommunication communication,
+                          ClasspathManager classpathManager,
+                          ProjectManager projectManager) {
+        this.projectRegistry = projectRegistry;
+        this.communication = communication;
+        this.classpathManager = classpathManager;
+        this.manager = manager;
+        this.projectManager = projectManager;
+        resolveExecutor = new MavenTaskExecutor(executorService, notifier);
+        manager.addListener(new MavenProjectListener() {
+            @Override
+            public void projectResolved(MavenProject project, MavenProjectModifications modifications) {
+//                communication.sendUpdateMassage(Collections.emptySet(), Collections.emptyList());
+            }
+
+            @Override
+            public void projectUpdated(Map<MavenProject, MavenProjectModifications> updated,
+                                       List<MavenProject> removed) {
+                removeProjects(removed);
+                createNewProjects(updated.keySet());
+
+                List<MavenProject> allChangedProjects = new ArrayList<>(updated.keySet().size() + removed.size());
+                allChangedProjects.addAll(updated.keySet());
+                allChangedProjects.addAll(removed);
+                List<MavenProject> needResolve = manager.findDependentProjects(allChangedProjects);
+                needResolve.addAll(updated.keySet());
+
+                addResolveProjects(needResolve);
+
+                communication.sendUpdateMassage(updated.keySet(), removed);
+            }
+        });
+    }
+

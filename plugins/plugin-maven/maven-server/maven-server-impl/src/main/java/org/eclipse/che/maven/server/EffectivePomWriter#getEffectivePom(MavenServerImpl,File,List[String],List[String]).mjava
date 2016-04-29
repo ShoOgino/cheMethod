@@ -1,0 +1,26 @@
+    public static String getEffectivePom(MavenServerImpl server, final File pom, List<String> activeProfiles,
+                                         List<String> inactiveProfiles) {
+        StringWriter stringWriter = new StringWriter();
+        try {
+            MavenExecutionRequest request = server.newMavenRequest(pom, activeProfiles, inactiveProfiles, Collections.emptyList());
+            server.runMavenRequest(request, () -> {
+                try {
+                    ProjectBuilder builder = server.getMavenComponent(ProjectBuilder.class);
+                    ProjectBuildingResult projectBuildingResult =
+                            builder.build(new File(pom.getPath()), request.getProjectBuildingRequest());
+                    MavenProject project = projectBuildingResult.getProject();
+                    XMLWriter writer = new PrettyPrintXMLWriter(stringWriter, "    ");
+                    writeHeader(writer);
+                    writeEffectivePom(project, writer);
+                } catch (ProjectBuildingException | MojoExecutionException e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
+            });
+
+        }catch (Exception e){
+            return null;
+        }
+        return stringWriter.toString();
+    }
+

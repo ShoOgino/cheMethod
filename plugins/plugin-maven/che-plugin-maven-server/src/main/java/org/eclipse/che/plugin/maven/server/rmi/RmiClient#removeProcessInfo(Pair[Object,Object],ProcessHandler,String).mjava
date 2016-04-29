@@ -1,0 +1,29 @@
+    private boolean removeProcessInfo(Pair<Object, Object> key, ProcessHandler handler, String message) {
+        ProcessInfo info;
+        synchronized (infoMap) {
+            info = infoMap.get(key);
+            if (info != null && (handler == null || info.processHandler == handler)) {
+                infoMap.remove(key);
+                infoMap.notifyAll();
+            } else {
+                info = null;
+            }
+        }
+
+        if (info instanceof PendingInfo) {
+            PendingInfo pendingInfo = (PendingInfo)info;
+            if (pendingInfo.stderr.length() > 0 || pendingInfo.ref.isNull()) {
+                if (message != null) {
+                    pendingInfo.stderr.append(message);
+                }
+                pendingInfo.ref.setValue(new RunningInfo(null, -1, pendingInfo.stderr.toString()));
+            }
+
+            synchronized (pendingInfo.ref) {
+                pendingInfo.ref.notifyAll();
+            }
+        }
+
+        return info != null;
+    }
+

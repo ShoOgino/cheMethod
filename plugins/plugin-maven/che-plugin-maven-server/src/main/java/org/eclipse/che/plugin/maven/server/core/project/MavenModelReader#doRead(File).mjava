@@ -1,0 +1,70 @@
+    private ModelReadingResult doRead(File pom) {
+        List<MavenProjectProblem> problems = new ArrayList<>();
+        Set<String> enabledProfiles = new HashSet<>();
+        MavenModel result = new MavenModel();
+
+        Model model = null;
+        try {
+            model = Model.readFrom(pom);
+        } catch (IOException e) {
+            problems.add(MavenProjectProblem.newProblem(pom.getPath(), e.getMessage(), MavenProblemType.SYNTAX));
+        }
+
+        if (model == null) {
+            result.setMavenKey(new MavenKey("unknown", "unknown", "unknown"));
+            result.setPackaging("jar");
+            return new ModelReadingResult(result, problems, enabledProfiles);
+        }
+
+        MavenKey parentKey;
+
+        if (model.getParent() == null) {
+            parentKey = new MavenKey("unknown", "unknown", "unknown");
+            result.setParent(new MavenParent(parentKey, "../pom.xml"));
+        } else {
+            Parent modelParent = model.getParent();
+            parentKey = new MavenKey(modelParent.getGroupId(), modelParent.getArtifactId(), modelParent.getVersion());
+            MavenParent parent =
+                    new MavenParent(parentKey, modelParent.getRelativePath());
+            result.setParent(parent);
+        }
+
+        MavenKey mavenKey =
+                new MavenKey(getNotNull(model.getGroupId(), parentKey.getGroupId()), model.getArtifactId(),
+                             getNotNull(model.getVersion(), parentKey.getVersion()));
+        result.setMavenKey(mavenKey);
+
+        result.setPackaging(model.getPackaging() == null ? "jar" : model.getPackaging());
+        result.setName(model.getName());
+        result.setModules(model.getModules() == null ? Collections.emptyList() : new ArrayList<>(model.getModules()));
+
+        Map<String, String> properties = model.getProperties();
+        Properties prop = new Properties();
+        if (properties != null) {
+            prop.putAll(properties);
+        }
+        result.setProperties(prop);
+
+        Build build = model.getBuild();
+        if (build == null) {
+            result.getBuild().setSources(Collections.singletonList("src/main/java"));
+            result.getBuild().setTestSources(Collections.singletonList("src/test/java"));
+            result.getBuild().setResources(Collections.singletonList(
+                    new MavenResource("src/main/resources", false, null, Collections.emptyList(), Collections.emptyList())));
+            result.getBuild().setTestResources(Collections.singletonList(
+                    new MavenResource("src/test/resources", false, null, Collections.emptyList(), Collections.emptyList())));
+        } else {
+            String sourceDirectory = build.getSourceDirectory();
+            if (sourceDirectory == null) {
+                sourceDirectory = "src/main/java";
+            }
+            result.getBuild().setSources(Collections.singletonList(sourceDirectory));
+            result.getBuild().setTestSources(Collections.singletonList(build.getTestSourceDirectory()));
+            result.getBuild().setResources(convertResources(build.getResources()));
+            //TODO add test sources
+//            result.getBuild().setTestSources(convertResources(build.getPlugins()));
+        }
+        //TODO add profiles
+        return new ModelReadingResult(result, problems, enabledProfiles);
+    }
+

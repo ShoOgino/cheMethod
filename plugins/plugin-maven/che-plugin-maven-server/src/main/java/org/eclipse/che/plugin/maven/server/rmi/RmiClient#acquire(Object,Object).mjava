@@ -1,0 +1,28 @@
+    public Remote acquire(Object target, Object param) throws Exception {
+        Ref<RunningInfo> ref = Ref.ofNull();
+        Pair<Object, Object> key = Pair.of(target, param);
+        if (!getInfo(ref, key)) {
+            startProcess(key);
+            if (ref.isNull()) {
+                try {
+                    synchronized (ref) {
+                        while (ref.isNull()) {
+                            ref.wait(1000);
+                        }
+                    }
+                } catch (InterruptedException ignored) {
+                }
+            }
+        }
+
+        if (ref.isNull()) {
+            throw new RuntimeException("Can't get remote proxy for: " + target.toString());
+        }
+        RunningInfo info = ref.getValue();
+        if (info.processHandler == null) {
+            throw new Exception(info.name);
+        }
+
+        return acquire(info);
+    }
+

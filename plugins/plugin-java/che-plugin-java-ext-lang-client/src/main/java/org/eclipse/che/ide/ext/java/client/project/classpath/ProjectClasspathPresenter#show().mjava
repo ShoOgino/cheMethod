@@ -1,0 +1,37 @@
+    /** Show dialog. */
+    public void show() {
+        CurrentProject currentProject = appContext.getCurrentProject();
+        if (currentProject == null) {
+            return;
+        }
+
+        String projectPath = currentProject.getProjectConfig().getPath();
+        service.getClasspath(projectPath).then(new Operation<List<ClasspathEntryDTO>>() {
+            @Override
+            public void apply(List<ClasspathEntryDTO> arg) throws OperationException {
+                classpathResolver.resolveClasspathEntries(arg);
+                if (propertiesMap == null) {
+                    propertiesMap = new HashMap<>();
+                    for (ClasspathPagePresenter page : classpathPages) {
+                        Set<ClasspathPagePresenter> pages = propertiesMap.get(page.getCategory());
+                        if (pages == null) {
+                            pages = new HashSet<>();
+                            propertiesMap.put(page.getCategory(), pages);
+                        }
+                        pages.add(page);
+                    }
+
+                    view.setPages(propertiesMap);
+                }
+                view.show();
+                view.selectPage(propertiesMap.entrySet().iterator().next().getValue().iterator().next());
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                notificationManager.notify("Problems with getting classpath", arg.getMessage(), FAIL, EMERGE_MODE);
+            }
+        });
+
+    }
+
