@@ -1,0 +1,37 @@
+    /**
+     * Get docker events.
+     * Parameter {@code untilSecond} does nothing if {@code sinceSecond} is 0.<br>
+     * If {@code untilSecond} and {@code sinceSecond} are 0 method gets new events only (streaming mode).<br>
+     * If {@code untilSecond} and {@code sinceSecond} are not 0 (but less that current date)
+     * methods get events that were generated between specified dates.<br>
+     * If {@code untilSecond} is 0 but {@code sinceSecond} is not method gets old events and streams new ones.<br>
+     * If {@code sinceSecond} is 0 no old events will be got.<br>
+     * With some connection implementations method can fail due to connection timeout in streaming mode.
+     *
+     * @param messageProcessor
+     *         processor of all found events that satisfy specified parameters
+     * @throws IOException
+     *          when a problem occurs with docker api calls
+     */
+    public void getEvents(final GetEventsParams params, MessageProcessor<Event> messageProcessor) throws IOException {
+        final Filters filters = params.getFilters();
+
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("GET")
+                                                            .path("/events")) {
+            addQueryParamIfNotNull(connection, "since", params.getSinceSecond());
+            addQueryParamIfNotNull(connection, "until", params.getUntilSecond());
+            if (filters != null) {
+                connection.query("filters", urlPathSegmentEscaper().escape(JsonHelper.toJson(filters.getFilters())));
+            }
+            final DockerResponse response = connection.request();
+            if (OK.getStatusCode() != response.getStatus()) {
+                throw getDockerException(response);
+            }
+
+            try (InputStream responseStream = response.getInputStream()) {
+                new MessagePumper<>(new JsonMessageReader<>(responseStream, Event.class), messageProcessor).start();
+            }
+        }
+    }
+

@@ -1,26 +1,9 @@
+    /**
+     * @deprecated use {@link #createExec(CreateExecParams)} instead
+     */
+    @Deprecated
     public Exec createExec(String container, boolean detach, String... cmd) throws IOException {
-        final ExecConfig execConfig = new ExecConfig().withCmd(cmd);
-        if (!detach) {
-            execConfig.withAttachStderr(true).withAttachStdout(true);
-        }
-        final List<Pair<String, ?>> headers = new ArrayList<>(2);
-        final String entity = JsonHelper.toJson(execConfig, FIRST_LETTER_LOWERCASE);
-        headers.add(Pair.of("Content-Type", MediaType.APPLICATION_JSON));
-        headers.add(Pair.of("Content-Length", entity.getBytes().length));
-
-        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("POST")
-                                                            .path("/containers/" + container + "/exec")
-                                                            .headers(headers)
-                                                            .entity(entity)) {
-            final DockerResponse response = connection.request();
-            final int status = response.getStatus();
-            if (status / 100 != 2) {
-                throw getDockerException(response);
-            }
-            return new Exec(cmd, parseResponseStreamAndClose(response.getInputStream(), ExecCreated.class).getId());
-        } catch (JsonParseException e) {
-            throw new IOException(e.getLocalizedMessage(), e);
-        }
+        return createExec(CreateExecParams.from(container, cmd)
+                                          .withDetach(detach));
     }
 

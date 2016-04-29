@@ -1,0 +1,39 @@
+    /**
+     * Puts files into specified container.
+     *
+     * @throws IOException
+     *          when a problem occurs with docker api calls, or during file system operations
+     * @apiNote this method implements 1.20 docker API and requires docker not less than 1.8 version
+     */
+    public void putResource(final PutResourceParams params) throws IOException {
+        File tarFile;
+        long length;
+        try (InputStream sourceData = params.getSourceStream()) {
+            // TODO according to http spec http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4,
+            // it is possible to send request without specifying content length if chunked encoding header is set
+            // Investigate is it possible to write the stream to request directly
+
+            // we save stream to file, because we have to know its length
+            Path tarFilePath = Files.createTempFile("compressed-resources", ".tar");
+            tarFile = tarFilePath.toFile();
+            length = Files.copy(sourceData, tarFilePath, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        try (InputStream tarStream = new BufferedInputStream(new FileInputStream(tarFile));
+             DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("PUT")
+                                                            .path("/containers/" + params.getContainer() + "/archive")
+                                                            .query("path", params.getTargetPath())
+                                                            .header("Content-Type", ExtMediaType.APPLICATION_X_TAR)
+                                                            .header("Content-Length", length)
+                                                            .entity(tarStream)) {
+            addQueryParamIfNotNull(connection, "noOverwriteDirNonDir", params.isNoOverwriteDirNonDir());
+            final DockerResponse response = connection.request();
+            if (response.getStatus() != OK.getStatusCode()) {
+                throw getDockerException(response);
+            }
+        } finally {
+            FileCleaner.addFile(tarFile);
+        }
+    }
+

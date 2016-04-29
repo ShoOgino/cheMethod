@@ -11,38 +11,17 @@
      *         If "false" then it will be an error if unpacking the given content would cause
      *         an existing directory to be replaced with a non-directory or other resource and vice versa.
      * @throws IOException
-     *         when problems occurs with docker api calls, or during file system operations
+     *          when a problem occurs with docker api calls, or during file system operations
      * @apiNote this method implements 1.20 docker API and requires docker not less than 1.8 version
+     * @deprecated use {@link #putResource(PutResourceParams)} instead
      */
+    @Deprecated
     public void putResource(String container,
                             String targetPath,
                             InputStream sourceStream,
                             boolean noOverwriteDirNonDir) throws IOException {
-        File tarFile;
-        long length;
-        try (InputStream sourceData = sourceStream) {
-            Path tarFilePath = Files.createTempFile("compressed-resources", ".tar");
-            tarFile = tarFilePath.toFile();
-            length = Files.copy(sourceData, tarFilePath, StandardCopyOption.REPLACE_EXISTING);
-        }
-
-        List<Pair<String, ?>> headers = Arrays.asList(Pair.of("Content-Type", ExtMediaType.APPLICATION_X_TAR),
-                                                      Pair.of("Content-Length", length));
-        try (InputStream tarStream = new BufferedInputStream(new FileInputStream(tarFile));
-             DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("PUT")
-                                                            .path("/containers/" + container + "/archive")
-                                                            .query("path", targetPath)
-                                                            .query("noOverwriteDirNonDir", noOverwriteDirNonDir ? 0 : 1)
-                                                            .headers(headers)
-                                                            .entity(tarStream)) {
-            final DockerResponse response = connection.request();
-            final int status = response.getStatus();
-            if (status != OK.getStatusCode()) {
-                throw getDockerException(response);
-            }
-        } finally {
-            FileCleaner.addFile(tarFile);
-        }
+       putResource(PutResourceParams.from(container, targetPath)
+                                    .withSourceStream(sourceStream)
+                                    .withNoOverwriteDirNonDir(noOverwriteDirNonDir));
     }
 

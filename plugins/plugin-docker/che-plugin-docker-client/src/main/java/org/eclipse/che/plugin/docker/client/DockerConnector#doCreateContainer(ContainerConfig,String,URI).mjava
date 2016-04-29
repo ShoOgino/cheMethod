@@ -1,27 +1,16 @@
+    /**
+     * The same as {@link #createContainer(CreateContainerParams)} but with docker service uri parameter
+     *
+     * @param dockerDaemonUri
+     *         docker service URI
+     * @deprecated use {@link #createContainer(CreateContainerParams)} instead
+     */
+    @Deprecated
     protected ContainerCreated doCreateContainer(ContainerConfig containerConfig,
                                                  String containerName,
                                                  URI dockerDaemonUri) throws IOException {
-        final List<Pair<String, ?>> headers = new ArrayList<>(2);
-        headers.add(Pair.of("Content-Type", MediaType.APPLICATION_JSON));
-        final String entity = JsonHelper.toJson(containerConfig, FIRST_LETTER_LOWERCASE);
-        headers.add(Pair.of("Content-Length", entity.getBytes().length));
-
-        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("POST")
-                                                            .path("/containers/create")
-                                                            .headers(headers)
-                                                            .entity(entity)) {
-            if (containerName != null) {
-                connection.query("name", containerName);
-            }
-            final DockerResponse response = connection.request();
-            final int status = response.getStatus();
-            if (CREATED.getStatusCode() != status) {
-                throw getDockerException(response);
-            }
-            return parseResponseStreamAndClose(response.getInputStream(), ContainerCreated.class);
-        } catch (JsonParseException e) {
-            throw new IOException(e.getLocalizedMessage(), e);
-        }
+        return createContainer(CreateContainerParams.from(containerConfig)
+                                                    .withContainerName(containerName),
+                               dockerDaemonUri);
     }
 
