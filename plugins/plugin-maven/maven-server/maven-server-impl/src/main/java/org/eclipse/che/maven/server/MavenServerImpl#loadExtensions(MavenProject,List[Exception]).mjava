@@ -1,0 +1,22 @@
+    private void loadExtensions(MavenProject project, List<Exception> exceptions) {
+        ClassLoader currentClassLoader = Thread.currentThread().getContextClassLoader();
+        Collection<AbstractMavenLifecycleParticipant> participants = getLifecycleParticipants(Collections.singletonList(project));
+        if (!participants.isEmpty()) {
+            LegacySupport legacySupport = getMavenComponent(LegacySupport.class);
+            MavenSession session = legacySupport.getSession();
+            session.setCurrentProject(project);
+            session.setProjects(Collections.singletonList(project));
+
+            for (AbstractMavenLifecycleParticipant participant : participants) {
+                Thread.currentThread().setContextClassLoader(participant.getClass().getClassLoader());
+                try {
+                    participant.afterProjectsRead(session);
+                } catch (MavenExecutionException e) {
+                    exceptions.add(e);
+                } finally {
+                    Thread.currentThread().setContextClassLoader(currentClassLoader);
+                }
+            }
+        }
+    }
+

@@ -1,0 +1,51 @@
+    @BeforeMethod
+    protected void initProjectApi() throws Exception {
+        mavenServerManager = new MavenServerManager(mavenServerPath);
+        workspaceHolder = new TestWorkspaceHolder();
+
+        if (root == null)
+            root = new File(wsPath);
+
+        if (root.exists()) {
+            IoUtil.deleteRecursive(root);
+        }
+        root.mkdir();
+
+        File indexDir = new File(INDEX_PATH);
+
+        if (indexDir.exists()) {
+            IoUtil.deleteRecursive(indexDir);
+        }
+        indexDir.mkdir();
+        Set<PathMatcher> filters = new HashSet<>();
+        filters.add(path -> true);
+        FSLuceneSearcherProvider sProvider = new FSLuceneSearcherProvider(indexDir, filters);
+
+        vfsProvider = new LocalVirtualFileSystemProvider(root, sProvider);
+
+
+        projectTypeRegistry = new ProjectTypeRegistry(new HashSet<>());
+        projectTypeRegistry.registerProjectType(new TestProjectType());
+        projectTypeRegistry.registerProjectType(new JavaProjectType(new JavaValueProviderFactory()));
+        projectTypeRegistry.registerProjectType(new MavenProjectType(new MavenValueProviderFactory()));
+
+        projectHandlerRegistry = new ProjectHandlerRegistry(new HashSet<>());
+
+        projectRegistry = new ProjectRegistry(workspaceHolder, vfsProvider, projectTypeRegistry, projectHandlerRegistry);
+        projectRegistry.initProjects();
+
+        importerRegistry = new ProjectImporterRegistry(new HashSet<>());
+
+        fileWatcherNotificationHandler = new DefaultFileWatcherNotificationHandler(vfsProvider);
+        fileTreeWatcher = new FileTreeWatcher(root, new HashSet<>(), fileWatcherNotificationHandler);
+
+        pm = new ProjectManager(vfsProvider, eventService, projectTypeRegistry, projectRegistry, projectHandlerRegistry,
+                                importerRegistry, fileWatcherNotificationHandler, fileTreeWatcher);
+
+        plugin = new ResourcesPlugin("target/index", wsPath, () -> projectRegistry, () -> pm);
+
+        plugin.start();
+        javaPlugin.start();
+
+    }
+

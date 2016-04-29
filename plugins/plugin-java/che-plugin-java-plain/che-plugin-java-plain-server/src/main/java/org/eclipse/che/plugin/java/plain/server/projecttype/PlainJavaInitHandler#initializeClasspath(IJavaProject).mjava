@@ -1,0 +1,38 @@
+    @Override
+    protected void initializeClasspath(IJavaProject javaProject) throws ServerException {
+        IClasspathEntry[] projectClasspath;
+        try {
+            projectClasspath = javaProject.getRawClasspath();
+        } catch (JavaModelException e) {
+            LOG.warn("Can't get classpath for: " + javaProject.getProject().getFullPath().toOSString(), e);
+            throw new ServerException(e);
+        }
+
+        //default classpath
+        IClasspathEntry[] defaultClasspath = new IClasspathEntry[]{JavaCore.newSourceEntry(javaProject.getPath())};
+        if (!Arrays.equals(defaultClasspath, projectClasspath)) {
+            //classpath is already initialized
+            return;
+        }
+
+        List<IClasspathEntry> classpathEntries = new ArrayList<>();
+        //create classpath container for default JRE
+        IClasspathEntry jreContainer = JavaCore.newContainerEntry(new Path(JREContainerInitializer.JRE_CONTAINER));
+        classpathEntries.add(jreContainer);
+
+        //by default in simple java project sources placed in 'src' folder
+        IFolder src = javaProject.getProject().getFolder(DEFAULT_SOURCE_FOLDER_VALUE);
+        //if 'src' folder exist add this folder as source classpath entry
+        if (src.exists()) {
+            IClasspathEntry sourceEntry = JavaCore.newSourceEntry(src.getFullPath());
+            classpathEntries.add(sourceEntry);
+        }
+
+        try {
+            javaProject.setRawClasspath(classpathEntries.toArray(new IClasspathEntry[classpathEntries.size()]), null);
+        } catch (JavaModelException e) {
+            LOG.warn("Can't set classpath for: " + javaProject.getProject().getFullPath().toOSString(), e);
+            throw new ServerException(e);
+        }
+    }
+

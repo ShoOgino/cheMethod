@@ -1,0 +1,52 @@
+    @Test
+    public void testAddingNewModule() throws Exception {
+        String pom = "<groupId>test</groupId>" +
+                     "<artifactId>testArtifact</artifactId>" +
+                     "<version>42</version>" +
+                     "<modules>" +
+                     "    <module>module1</module>" +
+                     "</modules>";
+        FolderEntry parentFolder = createTestProject("parent", pom);
+        String pomModule1 = "<groupId>test</groupId>" +
+                            "<artifactId>testModule1</artifactId>" +
+                            "<version>1</version>" +
+                            "<dependencies>" +
+                            "    <dependency>" +
+                            "        <groupId>junit</groupId>" +
+                            "        <artifactId>junit</artifactId>" +
+                            "        <version>4.12</version>" +
+                            "    </dependency>" +
+                            "</dependencies>";
+        createTestProject("parent/module1", pomModule1);
+
+        IProject parent = ResourcesPlugin.getWorkspace().getRoot().getProject("parent");
+        mavenWorkspace.update(Collections.singletonList(parent));
+        mavenWorkspace.waitForUpdate();
+        assertThat(projectRegistry.getProjects()).hasSize(2).onProperty("path").containsOnly("/parent", "/parent/module1");
+
+        VirtualFile parentPom = parentFolder.getChild("pom.xml").getVirtualFile();
+        Model model = Model.readFrom(parentPom);
+        List<String> modules = new ArrayList<>(model.getModules());
+        modules.add("module2");
+        model.setModules(modules);
+        model.writeTo(parentPom);
+
+        String pomModule2 = "<groupId>module2</groupId>" +
+                            "<artifactId>testModule2</artifactId>" +
+                            "<version>2</version>" +
+                            "<dependencies>" +
+                            "    <dependency>" +
+                            "        <groupId>junit</groupId>" +
+                            "        <artifactId>junit</artifactId>" +
+                            "        <version>4.12</version>" +
+                            "    </dependency>" +
+                            "</dependencies>";
+        createTestProject("parent/module2", pomModule2);
+
+        mavenWorkspace.update(Collections.singletonList(parent));
+        mavenWorkspace.waitForUpdate();
+        assertThat(projectRegistry.getProjects()).hasSize(3).onProperty("path")
+                                                 .containsOnly("/parent", "/parent/module1", "/parent/module2");
+
+    }
+

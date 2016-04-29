@@ -1,0 +1,46 @@
+    public void startNotify() {
+        addProcessListener(new ProcessListener() {
+            @Override
+            public void onStart(ProcessEvent event) {
+                try {
+                    OutputReader stdOutReader = createStdOutReader();
+                    stdOutReader.start();
+
+                    OutputReader stdErrReader = createStdErrReader();
+                    stdErrReader.start();
+
+                    waitForProcess.setEndCallback(exitCode -> {
+                        try {
+                            stdErrReader.stop();
+                            stdOutReader.stop();
+                            try {
+                                stdErrReader.waitFor();
+                                stdOutReader.waitFor();
+                            } catch (InterruptedException ignore) {
+                            }
+                        } finally {
+                            ProcessHandler.this.onProcessTerminated(exitCode);
+                            latch.countDown();
+                        }
+                    });
+                } finally {
+                    removeProcessListener(this);
+                }
+            }
+
+            @Override
+            public void onText(ProcessEvent event, ProcessOutputType outputType) {
+            }
+
+            @Override
+            public void onProcessTerminated(ProcessEvent event) {
+            }
+
+            @Override
+            public void onProcessWillTerminate(ProcessEvent event) {
+            }
+        });
+        state = ProcessState.RUNNING;
+        listenerNotifier.onStart(new ProcessEvent(this));
+    }
+

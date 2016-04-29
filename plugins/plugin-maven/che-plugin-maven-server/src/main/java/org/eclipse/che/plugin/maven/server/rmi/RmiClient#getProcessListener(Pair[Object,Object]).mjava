@@ -1,0 +1,70 @@
+    private ProcessListener getProcessListener(Pair<Object, Object> key) {
+        return new ProcessListener() {
+            @Override
+            public void onStart(ProcessEvent event) {
+                ProcessHandler processHandler = event.getProcessHandler();
+                synchronized (infoMap) {
+                    ProcessInfo info = infoMap.get(key);
+                    if (info instanceof PendingInfo) {
+                        infoMap.put(key, new PendingInfo(processHandler, ((PendingInfo)info).ref));
+                    }
+                }
+            }
+
+            @Override
+            public void onText(ProcessEvent event, ProcessOutputType outputType) {
+                String text = event.getText();
+                if (text == null) {
+                    text = "";
+                }
+                if (outputType == ProcessOutputType.STDERR) {
+                    LOG.error(text);
+                } else {
+                    LOG.info(text);
+                }
+
+                RunningInfo runningInfo = null;
+                PendingInfo pendingInfo = null;
+                synchronized (infoMap) {
+                    ProcessInfo info = infoMap.get(key);
+                    if (info instanceof PendingInfo) {
+                        pendingInfo = (PendingInfo)info;
+                        if (outputType == ProcessOutputType.STDOUT) {
+                            String prefix = "Port/Name:";
+                            if (text.startsWith(prefix)) {
+                                String portName = text.substring(prefix.length()).trim();
+                                int i = portName.indexOf('/');
+                                runningInfo = new RunningInfo(pendingInfo.processHandler, Integer.parseInt(portName.substring(0, i)),
+                                                              portName.substring(i + 1));
+                                infoMap.put(key, runningInfo);
+                                infoMap.notifyAll();
+                            }
+                        } else if (outputType == ProcessOutputType.STDERR) {
+                            pendingInfo.stderr.append(text);
+                        }
+                    }
+                }
+
+                if (runningInfo != null) {
+                    synchronized (pendingInfo.ref) {
+                        pendingInfo.ref.setValue(runningInfo);
+                        pendingInfo.ref.notifyAll();
+                    }
+                    // todo add ping there
+                }
+
+
+            }
+
+            @Override
+            public void onProcessTerminated(ProcessEvent event) {
+                removeProcessInfo(key, event.getProcessHandler(), null);
+            }
+
+            @Override
+            public void onProcessWillTerminate(ProcessEvent event) {
+                removeProcessInfo(key, event.getProcessHandler(), null);
+            }
+        };
+    }
+

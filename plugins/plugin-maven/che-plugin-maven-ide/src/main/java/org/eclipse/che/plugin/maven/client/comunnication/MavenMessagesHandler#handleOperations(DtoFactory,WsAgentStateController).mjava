@@ -1,0 +1,48 @@
+    private void handleOperations(final DtoFactory factory, final WsAgentStateController agentStateController) {
+        eventBus.addHandler(WsAgentStateEvent.TYPE, new WsAgentStateHandler() {
+            @Override
+            public void onWsAgentStarted(WsAgentStateEvent event) {
+                agentStateController.getMessageBus().then(new Operation<MessageBus>() {
+                    @Override
+                    public void apply(MessageBus messageBus) throws OperationException {
+                        try {
+                            messageBus.subscribe(MavenAttributes.MAVEN_CHANEL_NAME, new MessageHandler() {
+                                @Override
+                                public void onMessage(String message) {
+                                    Jso jso = Jso.deserialize(message);
+                                    int type = jso.getFieldCastedToInteger("$type");
+                                    MessageType messageType = MessageType.valueOf(type);
+                                    switch (messageType) {
+                                        case NOTIFICATION:
+                                            NotificationMessage dto = factory.createDtoFromJson(message, NotificationMessage.class);
+                                            handleNotification(dto);
+                                            break;
+
+                                        case UPDATE:
+                                            handleUpdate(factory.createDtoFromJson(message, ProjectsUpdateMessage.class));
+                                            break;
+
+                                        case START_STOP:
+                                            handleStartStop(factory.createDtoFromJson(message, StartStopNotification.class));
+                                            break;
+
+                                        default:
+                                            Log.error(getClass(), "Unknown message type:" + messageType);
+                                    }
+                                }
+                            });
+                        } catch (WebSocketException e) {
+                            dependencyResolver.hide();
+                            Log.error(getClass(), e);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onWsAgentStopped(WsAgentStateEvent event) {
+                dependencyResolver.hide();
+            }
+        });
+    }
+

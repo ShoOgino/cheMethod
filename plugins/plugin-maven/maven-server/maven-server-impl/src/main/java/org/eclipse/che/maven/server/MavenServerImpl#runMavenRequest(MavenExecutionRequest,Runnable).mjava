@@ -1,0 +1,20 @@
+    public void runMavenRequest(MavenExecutionRequest request, Runnable runnable) {
+        DefaultMaven maven = (DefaultMaven)getMavenComponent(Maven.class);
+        RepositorySystemSession repositorySystemSession = maven.newRepositorySession(request);
+        request.getProjectBuildingRequest().setRepositorySession(repositorySystemSession);
+        MavenSession mavenSession = new MavenSession(container, repositorySystemSession, request, new DefaultMavenExecutionResult());
+        LegacySupport legacySupport = getMavenComponent(LegacySupport.class);
+        MavenSession previousSession = legacySupport.getSession();
+        legacySupport.setSession(mavenSession);
+        try {
+            for (AbstractMavenLifecycleParticipant participant : getLifecycleParticipants(Collections.emptyList())) {
+                participant.afterSessionStart(mavenSession);
+            }
+            runnable.run();
+        } catch (MavenExecutionException e) {
+            throw new RuntimeException(e);
+        } finally {
+            legacySupport.setSession(previousSession);
+        }
+    }
+

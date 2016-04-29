@@ -1,0 +1,22 @@
+    private void handleUpdate(ProjectsUpdateMessage dto) {
+        List<String> updatedProjects = dto.getUpdatedProjects();
+        Set<String> projectToRefresh = computeUniqueHiLevelProjects(updatedProjects);
+        for (String path : projectToRefresh) {
+            final String projectPath = path;
+            Promise<ProjectConfigDto> promise = projectServiceClient.getProject(context.getDevMachine(), path);
+            promise.then(new Operation<ProjectConfigDto>() {
+                @Override
+                public void apply(ProjectConfigDto arg) throws OperationException {
+                    eventBus.fireEvent(new ProjectUpdatedEvent(projectPath, arg));
+                }
+            });
+        }
+        for (String path : dto.getDeletedProjects()) {
+            if (!updatedProjects.contains(path)) {
+                notificationManager.notify("Maven", "Module was deleted: " + path, StatusNotification.Status.SUCCESS, EMERGE_MODE);
+            }
+        }
+
+        pomEditorReconciler.reconcilePoms(updatedProjects);
+    }
+

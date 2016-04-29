@@ -1,0 +1,92 @@
+    public MavenServerImpl(MavenSettings settings) throws RemoteException {
+        BasicConfigurator.configure();
+        Logger.getRootLogger().setLevel(getLog4jLogLevel(settings.getLoggingLevel()));
+        File mavenHome = settings.getMavenHome();
+        if (mavenHome != null) {
+            System.setProperty("maven.home", mavenHome.getPath());
+        }
+
+        terminalLogger = new MavenServerTerminalLogger();
+        terminalLogger.setThreshold(settings.getLoggingLevel());
+        ClassWorld classWorld = new ClassWorld("plexus.core", Thread.currentThread().getContextClassLoader());
+        MavenCli cli = new MavenCli(classWorld) {
+            @Override
+            protected void customizeContainer(PlexusContainer container) {
+                ((DefaultPlexusContainer)container).setLoggerManager(new BaseLoggerManager() {
+                    @Override
+                    protected org.codehaus.plexus.logging.Logger createLogger(String s) {
+                        return terminalLogger;
+                    }
+                });
+            }
+        };
+
+
+        //maven 3.2.2 has org.apache.maven.cli.MavenCli$CliRequest class
+        //but maven 3.3.3 has org.apache.maven.cli.CliRequest so try to support both classes
+        Class<?> cliRequestClass;
+        SettingsBuilder settingsBuilder = null;
+        try {
+            cliRequestClass = MavenCli.class.getClassLoader().loadClass("org.apache.maven.cli.CliRequest");
+            System.setProperty("maven.multiModuleProjectDirectory", new File("").getPath());
+            settingsBuilder = new DefaultSettingsBuilderFactory().newInstance();
+        } catch (ClassNotFoundException e) {
+            try {
+                cliRequestClass = MavenCli.class.getClassLoader().loadClass("org.apache.maven.cli.MavenCli$CliRequest");
+            } catch (ClassNotFoundException cnfe) {
+                throw new RuntimeException(cnfe);
+            }
+        }
+
+
+        Object request;
+        List<String> commandLine = new ArrayList<>(settings.getUserProperties().size());
+        commandLine.addAll(settings.getUserProperties().entrySet().stream().map(entry -> "-D" + entry.getKey() + "=" + entry.getValue())
+                                   .collect(Collectors.toList()));
+
+        if (settings.getLoggingLevel() == MavenTerminal.LEVEL_DEBUG) {
+            commandLine.add("-X");
+            commandLine.add("-e");
+        }
+        if (settings.getLoggingLevel() == MavenTerminal.LEVEL_DISABLED) {
+            commandLine.add("-q");
+        }
+        if (commandLine.contains("-U") || commandLine.contains("--update-snapshots")) {
+            updateSnapshots = true;
+        }
+
+        try {
+            Constructor constructor = cliRequestClass.getDeclaredConstructor(String[].class, ClassWorld.class);
+            constructor.setAccessible(true);
+            request = constructor.newInstance(commandLine.toArray(new String[commandLine.size()]), classWorld);
+
+            for (String method : CLI_METHODS) {
+                Method m = MavenCli.class.getDeclaredMethod(method, cliRequestClass);
+                m.setAccessible(true);
+                m.invoke(cli, request);
+            }
+
+            Method containerMethod = MavenCli.class.getDeclaredMethod("container", cliRequestClass);
+            containerMethod.setAccessible(true);
+            container = (DefaultPlexusContainer)containerMethod.invoke(cli, request);
+            container.getLoggerManager().setThreshold(settings.getLoggingLevel());
+            Field systemProperties = cliRequestClass.getDeclaredField("systemProperties");
+            systemProperties.setAccessible(true);
+
+            properties = (Properties)systemProperties.get(request);
+            Field userPropertiesField = cliRequestClass.getDeclaredField("userProperties");
+            userPropertiesField.setAccessible(true);
+            Properties userProperties = (Properties)userPropertiesField.get(request);
+            this.settings = getSettings(settingsBuilder, settings, properties, userProperties);
+        } catch (NoSuchMethodException | NoSuchFieldException | IllegalAccessException | InvocationTargetException | InstantiationException e) {
+            throw new RuntimeException(e);
+        }
+
+        try {
+            localRepository = new File(this.settings.getLocalRepository());
+            localRepo = getMavenComponent(RepositorySystem.class).createLocalRepository(localRepository);
+        } catch (InvalidRepositoryException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
