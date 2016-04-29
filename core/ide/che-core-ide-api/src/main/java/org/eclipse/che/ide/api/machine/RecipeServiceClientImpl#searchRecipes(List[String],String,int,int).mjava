@@ -1,23 +1,24 @@
-    /** {@inheritDoc} */
     @Override
     public Promise<List<RecipeDescriptor>> searchRecipes(@NotNull final List<String> tags,
                                                          @Nullable final String type,
                                                          final int skipCount,
                                                          final int maxItems) {
-        return newPromise(new RequestCall<List<RecipeDescriptor>>() {
-            @Override
-            public void makeCall(AsyncCallback<List<RecipeDescriptor>> callback) {
-                searchRecipes(tags, type, skipCount, maxItems, callback);
-            }
-        }).then(new Function<List<RecipeDescriptor>, List<RecipeDescriptor>>() {
-            @Override
-            public List<RecipeDescriptor> apply(List<RecipeDescriptor> arg) throws FunctionException {
-                final ArrayList<RecipeDescriptor> descriptors = new ArrayList<>();
-                for (RecipeDescriptor descriptor : arg) {
-                    descriptors.add(descriptor);
-                }
-                return descriptors;
-            }
-        });
+        final StringBuilder tagsParam = new StringBuilder();
+        for (String tag : tags) {
+            tagsParam.append("&tags=").append(tag);
+        }
+
+        String url = baseHttpUrl + "?skipCount=" + skipCount +
+                     "&maxItems=" + maxItems +
+                     tagsParam.toString();
+
+        if (type != null) {
+            url += "type=" + type;
+        }
+
+        return asyncRequestFactory.createGetRequest(url)
+                                  .header(ACCEPT, APPLICATION_JSON)
+                                  .loader(loaderFactory.newLoader("Searching recipes..."))
+                                  .send(dtoUnmarshallerFactory.newListUnmarshaller(RecipeDescriptor.class));
     }
 
