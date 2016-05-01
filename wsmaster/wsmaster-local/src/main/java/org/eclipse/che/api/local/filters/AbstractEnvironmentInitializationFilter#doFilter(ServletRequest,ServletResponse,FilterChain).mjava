@@ -1,0 +1,23 @@
+    @Override
+    public final void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain) throws IOException,
+                                                                                                                 ServletException {
+        final HttpServletRequest httpRequest = (HttpServletRequest)request;
+
+        final List<String> roles = new LinkedList<>();
+        Collections.addAll(roles, "workspace/admin", "workspace/developer", "system/admin", "system/manager", "user");
+        User user = new UserImpl("che", "che", "dummy_token", roles, false);
+        HttpSession session = httpRequest.getSession();
+        session.setAttribute("codenvy_user", user);
+
+        final EnvironmentContext environmentContext = EnvironmentContext.getCurrent();
+
+        try {
+            environmentContext.setUser(user);
+            environmentContext.setWorkspaceId(getWorkspaceId(request));
+
+            filterChain.doFilter(addUserInRequest(httpRequest, user), response);
+        } finally {
+            EnvironmentContext.reset();
+        }
+    }
+
