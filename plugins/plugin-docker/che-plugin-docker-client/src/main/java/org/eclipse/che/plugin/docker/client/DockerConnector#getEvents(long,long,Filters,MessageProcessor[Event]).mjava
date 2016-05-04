@@ -18,32 +18,17 @@
      * @param messageProcessor
      *         processor of all found events that satisfy specified parameters
      * @throws IOException
+     * @deprecated use {@link #getEvents(GetEventsParams, MessageProcessor)} instead
      */
+    @Deprecated
     public void getEvents(long sinceSecond,
                           long untilSecond,
                           Filters filters,
                           MessageProcessor<Event> messageProcessor) throws IOException {
-        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("GET")
-                                                            .path("/events")) {
-            if (sinceSecond != 0) {
-                connection.query("since", sinceSecond);
-            }
-            if (untilSecond != 0) {
-                connection.query("until", untilSecond);
-            }
-            if (filters != null) {
-                connection.query("filters", urlPathSegmentEscaper().escape(JsonHelper.toJson(filters.getFilters())));
-            }
-            final DockerResponse response = connection.request();
-            final int status = response.getStatus();
-            if (OK.getStatusCode() != status) {
-                throw getDockerException(response);
-            }
-
-            try (InputStream responseStream = response.getInputStream()) {
-                new MessagePumper<>(new JsonMessageReader<>(responseStream, Event.class), messageProcessor).start();
-            }
-        }
+        getEvents(GetEventsParams.from()
+                                 .withSinceSecond(sinceSecond)
+                                 .withUntilSecond(untilSecond)
+                                 .withFilters(filters),
+                  messageProcessor);
     }
 

@@ -1,0 +1,27 @@
+    /**
+     * Gets files from the specified container.
+     *
+     * @return stream of resources from the specified container filesystem, with retention connection
+     * @throws IOException
+     *          when a problem occurs with docker api calls
+     * @apiNote this method implements 1.20 docker API and requires docker not less than 1.8.0 version
+     */
+    public InputStream getResource(final GetResourceParams params) throws IOException {
+        DockerConnection connection = null;
+        try {
+            connection = connectionFactory.openConnection(dockerDaemonUri)
+                                          .method("GET")
+                                          .path("/containers/" + params.getContainer() + "/archive")
+                                          .query("path", params.getSourcePath());
+
+            final DockerResponse response = connection.request();
+            if (response.getStatus() != OK.getStatusCode()) {
+                throw getDockerException(response);
+            }
+            return new CloseConnectionInputStream(response.getInputStream(), connection);
+        } catch (IOException io) {
+            connection.close();
+            throw io;
+        }
+    }
+

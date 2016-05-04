@@ -1,0 +1,24 @@
+    /**
+     * Starts docker container.
+     *
+     * @throws IOException
+     *          when a problem occurs with docker api calls
+     */
+    public void startContainer(final StartContainerParams params) throws IOException {
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("POST")
+                                                            .path("/containers/" + params.getContainer() + "/start")) {
+            final DockerResponse response = connection.request();
+            final int status = response.getStatus();
+            if (NO_CONTENT.getStatusCode() != status && NOT_MODIFIED.getStatusCode() != status) {
+                final DockerException dockerException = getDockerException(response);
+                if (OK.getStatusCode() == status) {
+                    // docker API 1.20 returns 200 with warning message about usage of loopback docker backend
+                    LOG.warn(dockerException.getLocalizedMessage());
+                } else {
+                    throw dockerException;
+                }
+            }
+        }
+    }
+

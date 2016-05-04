@@ -1,0 +1,34 @@
+    @Test
+    public void shouldBeAbleToBuildImage() throws IOException, InterruptedException {
+        AuthConfigs authConfigs = DtoFactory.newDto(AuthConfigs.class);
+        AuthConfig authConfig = DtoFactory.newDto(AuthConfig.class);
+        Map<String, AuthConfig> auth = new HashMap<>();
+        auth.put("auth", authConfig);
+        authConfigs.setConfigs(auth);
+        String imageId = "37a7da3b7edc";
+
+        BuildImageParams getEventsParams = BuildImageParams.from(dockerfile)
+                                                           .withAuthConfigs(authConfigs);
+
+        doReturn(new ByteArrayInputStream(("{\"stream\":\"Successfully built " + imageId + "\"}").getBytes()))
+                .when(dockerResponse).getInputStream();
+
+        String returnedImageId =
+                dockerConnector.buildImage(getEventsParams, progressMonitor);
+
+        verify(dockerConnectionFactory).openConnection(any(URI.class));
+        verify(dockerConnection).method(REQUEST_METHOD_POST);
+        verify(dockerConnection).path("/build");
+        verify(dockerConnection).query("rm", 1);
+        verify(dockerConnection).query("forcerm", 1);
+        verify(dockerConnection).header("Content-Type", "application/x-compressed-tar");
+        verify(dockerConnection).header(eq("Content-Length"), anyInt());
+        verify(dockerConnection).header(eq("X-Registry-Config"), any(byte[].class));
+        verify(dockerConnection).entity(any(InputStream.class));
+        verify(dockerConnection).request();
+        verify(dockerResponse).getStatus();
+        verify(dockerResponse).getInputStream();
+
+        assertEquals(returnedImageId, imageId);
+    }
+
