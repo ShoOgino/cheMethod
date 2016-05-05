@@ -20,7 +20,9 @@
      * @throws IOException
      * @throws InterruptedException
      *         if build process was interrupted
+     * @deprecated use {@link #buildImage(BuildImageParams, ProgressMonitor)} instead
      */
+    @Deprecated
     protected String doBuildImage(String repository,
                                   File tar,
                                   final ProgressMonitor progressMonitor,
@@ -29,80 +31,14 @@
                                   boolean doForcePull,
                                   long memoryLimit,
                                   long memorySwapLimit) throws IOException, InterruptedException {
-        if (authConfigs == null) {
-            authConfigs = initialAuthConfig.getAuthConfigs();
-        }
-        final List<Pair<String, ?>> headers = new ArrayList<>(3);
-        headers.add(Pair.of("Content-Type", "application/x-compressed-tar"));
-        headers.add(Pair.of("Content-Length", tar.length()));
-        headers.add(Pair.of("X-Registry-Config", Base64.encodeBase64String(JsonHelper.toJson(authConfigs).getBytes())));
-
-        try (InputStream tarInput = new FileInputStream(tar);
-             DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("POST")
-                                                            .path("/build")
-                                                            .query("rm", 1)
-                                                            .query("forcerm", 1)
-                                                            .query("pull", doForcePull)
-                                                            .headers(headers)
-                                                            .entity(tarInput)) {
-            if (repository != null) {
-                connection.query("t", repository);
-            }
-            if (memoryLimit != 0 ) {
-                connection.query("memory", memoryLimit);
-            }
-            if (memorySwapLimit != 0) {
-                connection.query("memswap", memorySwapLimit);
-            }
-            final DockerResponse response = connection.request();
-            final int status = response.getStatus();
-            if (OK.getStatusCode() != status) {
-                throw getDockerException(response);
-            }
-            try (InputStream responseStream = response.getInputStream()) {
-                JsonMessageReader<ProgressStatus> progressReader = new JsonMessageReader<>(responseStream, ProgressStatus.class);
-
-                final ValueHolder<IOException> errorHolder = new ValueHolder<>();
-                final ValueHolder<String> imageIdHolder = new ValueHolder<>();
-                // Here do some trick to be able interrupt build process. Basically for now it is not possible interrupt docker daemon while
-                // it's building images but here we need just be able to close connection to the unix socket. Thread is blocking while read
-                // from the socket stream so need one more thread that is able to close socket. In this way we can release thread that is
-                // blocking on i/o.
-                final Runnable runnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            ProgressStatus progressStatus;
-                            while ((progressStatus = progressReader.next()) != null) {
-                                final String buildImageId = getBuildImageId(progressStatus);
-                                if (buildImageId != null) {
-                                    imageIdHolder.set(buildImageId);
-                                }
-                                progressMonitor.updateProgress(progressStatus);
-                            }
-                        } catch (IOException e) {
-                            errorHolder.set(e);
-                        }
-                        synchronized (this) {
-                            notify();
-                        }
-                    }
-                };
-                executor.execute(runnable);
-                // noinspection SynchronizationOnLocalVariableOrMethodParameter
-                synchronized (runnable) {
-                    runnable.wait();
-                }
-                final IOException ioe = errorHolder.get();
-                if (ioe != null) {
-                    throw ioe;
-                }
-                if (imageIdHolder.get() == null) {
-                    throw new IOException("Docker image build failed");
-                }
-                return imageIdHolder.get();
-            }
-        }
+        return buildImage(BuildImageParams.from(new File[]{new File(".")}) // used tar instead it
+                                          .withRepository(repository)
+                                          .withAuthConfigs(authConfigs)
+                                          .withDoForcePull(doForcePull)
+                                          .withMemoryLimit(memoryLimit)
+                                          .withMemorySwapLimit(memorySwapLimit),
+                          progressMonitor,
+                          tar,
+                          dockerDaemonUri);
     }
 
