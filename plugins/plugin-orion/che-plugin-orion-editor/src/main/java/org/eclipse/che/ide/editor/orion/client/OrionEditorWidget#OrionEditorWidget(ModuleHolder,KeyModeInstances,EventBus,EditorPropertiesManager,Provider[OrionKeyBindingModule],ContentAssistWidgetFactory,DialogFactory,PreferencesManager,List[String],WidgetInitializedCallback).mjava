@@ -1,0 +1,46 @@
+    @AssistedInject
+    public OrionEditorWidget(final ModuleHolder moduleHolder,
+                             final KeyModeInstances keyModeInstances,
+                             final EventBus eventBus,
+                             final EditorPropertiesManager editorPropertiesManager,
+                             final Provider<OrionKeyBindingModule> keyBindingModuleProvider,
+                             final ContentAssistWidgetFactory contentAssistWidgetFactory,
+                             final DialogFactory dialogFactory,
+                             final PreferencesManager preferencesManager,
+                             @Assisted final List<String> editorModes,
+                             @Assisted final WidgetInitializedCallback widgetInitializedCallback) {
+        this.keyBindingModuleProvider = keyBindingModuleProvider;
+        this.contentAssistWidgetFactory = contentAssistWidgetFactory;
+        this.moduleHolder = moduleHolder;
+        this.keyModeInstances = keyModeInstances;
+        this.eventBus = eventBus;
+        this.dialogFactory = dialogFactory;
+        this.preferencesManager = preferencesManager;
+        initWidget(UIBINDER.createAndBindUi(this));
+
+        this.editorPropertiesManager = editorPropertiesManager;
+
+        this.codeEditWidgetModule = moduleHolder.getModule("CodeEditWidget").cast();
+        this.uiUtilsOverlay = moduleHolder.getModule("UiUtils");
+
+        // just first choice for the moment
+        if (editorModes != null && !editorModes.isEmpty()) {
+            setMode(editorModes.get(0));
+        }
+
+        panel.getElement().setId("orion-parent-" + Document.get().createUniqueId());
+        panel.getElement().addClassName(this.editorElementStyle.editorParent());
+
+        codeEditWidgetModule.createEditorView(panel.getElement(), JavaScriptObject.createObject())
+                            .then(new EditorViewCreatedOperation(widgetInitializedCallback));
+
+        registerPromptFunction();
+        eventBus.addHandler(EditorSettingsChangedEvent.TYPE, new EditorSettingsChangedHandler() {
+            @Override
+            public void onEditorSettingsChanged(EditorSettingsChangedEvent event) {
+                final JSONObject properties = editorPropertiesManager.getJsonEditorProperties();
+                editorViewOverlay.updateSettings(properties.getJavaScriptObject());
+            }
+        });
+    }
+
