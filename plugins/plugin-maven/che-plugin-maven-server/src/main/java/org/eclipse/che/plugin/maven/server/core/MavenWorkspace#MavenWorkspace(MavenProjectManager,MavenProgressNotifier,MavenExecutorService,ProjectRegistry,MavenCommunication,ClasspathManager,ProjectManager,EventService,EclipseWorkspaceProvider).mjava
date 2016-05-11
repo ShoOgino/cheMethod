@@ -5,13 +5,22 @@
                           ProjectRegistry projectRegistry,
                           MavenCommunication communication,
                           ClasspathManager classpathManager,
-                          ProjectManager projectManager) {
+                          ProjectManager projectManager,
+                          EventService eventService,
+                          EclipseWorkspaceProvider workspaceProvider) {
         this.projectRegistry = projectRegistry;
         this.communication = communication;
         this.classpathManager = classpathManager;
         this.manager = manager;
         this.projectManager = projectManager;
         resolveExecutor = new MavenTaskExecutor(executorService, notifier);
+        eventService.subscribe(new EventSubscriber<ProjectDeletedEvent>() {
+            @Override
+            public void onEvent(ProjectDeletedEvent event) {
+                IProject project = workspaceProvider.get().getRoot().getProject(event.getProjectPath());
+                manager.delete(Collections.singletonList(project));
+            }
+        });
         manager.addListener(new MavenProjectListener() {
             @Override
             public void projectResolved(MavenProject project, MavenProjectModifications modifications) {
