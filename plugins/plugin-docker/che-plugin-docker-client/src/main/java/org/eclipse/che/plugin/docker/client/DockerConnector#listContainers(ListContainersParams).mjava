@@ -1,0 +1,31 @@
+    /**
+     * Method returns list of docker containers which was filtered by {@link ListContainersParams}
+     *
+     * @throws IOException
+     *         when problems occurs with docker api calls
+     */
+    public List<ContainerListEntry> listContainers(ListContainersParams params) throws IOException {
+        final Filters filters = params.getFilters();
+
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("GET")
+                                                            .path("/containers/json")) {
+            addQueryParamIfNotNull(connection, "all", params.isAll());
+            addQueryParamIfNotNull(connection, "size", params.isSize());
+            addQueryParamIfNotNull(connection, "limit", params.getLimit());
+            addQueryParamIfNotNull(connection, "since", params.getSince());
+            addQueryParamIfNotNull(connection, "before", params.getBefore());
+            if (filters != null) {
+                connection.query("filters", urlPathSegmentEscaper().escape(JsonHelper.toJson(filters)));
+            }
+            DockerResponse response = connection.request();
+            final int status = response.getStatus();
+            if (OK.getStatusCode() != status) {
+                throw getDockerException(response);
+            }
+            return parseResponseStreamAsListAndClose(response.getInputStream(), new TypeToken<List<ContainerListEntry>>() {}.getType());
+        } catch (JsonParseException e) {
+            throw new IOException(e.getLocalizedMessage(), e);
+        }
+    }
+
