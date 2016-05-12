@@ -1,0 +1,37 @@
+    @Override
+    public Promise<Void> connect(Map<String, String> connectionProperties) {
+        if (isConnected()) {
+            return Promises.reject(JsPromiseError.create("Debugger already connected"));
+        }
+
+        Promise<DebugSessionDto> connect = service.connect(debuggerType, connectionProperties);
+        final DebuggerDescriptor debuggerDescriptor = toDescriptor(connectionProperties);
+
+        Promise<Void> promise = connect.then(new Function<DebugSessionDto, Void>() {
+            @Override
+            public Void apply(final DebugSessionDto arg) throws FunctionException {
+                DebuggerInfo debuggerInfo = arg.getDebuggerInfo();
+                debuggerDescriptor.setInfo(debuggerInfo.getName() + " " + debuggerInfo.getVersion());
+
+                setDebugSession(arg);
+                preserveDebuggerState();
+                startCheckingEvents();
+                startDebuggerWithDelay(arg);
+
+                return null;
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                Log.error(AbstractDebugger.class, arg.getMessage());
+                throw new OperationException(arg.getCause());
+            }
+        });
+
+        for (DebuggerObserver observer : observers) {
+            observer.onDebuggerAttached(debuggerDescriptor, promise);
+        }
+
+        return promise;
+    }
+

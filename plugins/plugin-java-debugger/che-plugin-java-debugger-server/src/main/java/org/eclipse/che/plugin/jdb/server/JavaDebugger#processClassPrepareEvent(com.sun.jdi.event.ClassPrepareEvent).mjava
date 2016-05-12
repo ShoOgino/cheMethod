@@ -1,0 +1,24 @@
+    private boolean processClassPrepareEvent(com.sun.jdi.event.ClassPrepareEvent event) throws DebuggerException {
+        setCurrentThread(event.thread());
+        final String className = event.referenceType().name();
+
+        // add deferred breakpoints
+        List<Breakpoint> breakpointsToAdd = deferredBreakpoints.get(className);
+        if (breakpointsToAdd != null) {
+
+            for (Breakpoint b : breakpointsToAdd) {
+                addBreakpoint(b);
+                debuggerCallback.onEvent(new BreakpointActivatedEventImpl(b));
+            }
+            deferredBreakpoints.remove(className);
+
+            // All deferred breakpoints for className have been already added,
+            // so no need to listen for an appropriate ClassPrepareRequests any more.
+            ClassPrepareRequest request = classPrepareRequests.remove(className);
+            if (request != null) {
+                getEventManager().deleteEventRequest(request);
+            }
+        }
+        return true;
+    }
+

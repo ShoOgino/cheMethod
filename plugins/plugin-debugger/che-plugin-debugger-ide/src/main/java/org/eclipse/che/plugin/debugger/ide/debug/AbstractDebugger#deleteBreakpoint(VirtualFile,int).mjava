@@ -1,0 +1,30 @@
+    @Override
+    public void deleteBreakpoint(final VirtualFile file, final int lineNumber) {
+        if (isConnected()) {
+            LocationDto locationDto = dtoFactory.createDto(LocationDto.class);
+            locationDto.setLineNumber(lineNumber + 1);
+
+            String fqn = pathToFqn(file);
+            if (fqn == null) {
+                return;
+            }
+            locationDto.setTarget(fqn);
+
+            Promise<Void> promise = service.deleteBreakpoint(debugSessionDto.getId(), locationDto);
+            promise.then(new Operation<Void>() {
+                @Override
+                public void apply(Void arg) throws OperationException {
+                    for (DebuggerObserver observer : observers) {
+                        Breakpoint breakpoint = new Breakpoint(Breakpoint.Type.BREAKPOINT, lineNumber, file.getPath(), file, false);
+                        observer.onBreakpointDeleted(breakpoint);
+                    }
+                }
+            }).catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError arg) throws OperationException {
+                    Log.error(AbstractDebugger.class, arg.getMessage());
+                }
+            });
+        }
+    }
+

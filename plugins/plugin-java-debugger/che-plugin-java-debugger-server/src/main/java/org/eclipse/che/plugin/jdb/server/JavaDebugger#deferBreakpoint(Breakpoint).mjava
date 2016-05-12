@@ -1,0 +1,21 @@
+    private void deferBreakpoint(Breakpoint breakpoint) throws DebuggerException {
+        final String className = breakpoint.getLocation().getTarget();
+        List<Breakpoint> newList = new ArrayList<>();
+        List<Breakpoint> list = deferredBreakpoints.putIfAbsent(className, newList);
+        if (list == null) {
+            list = newList;
+        }
+        list.add(breakpoint);
+
+        // start listening for the load of the type
+        if (!classPrepareRequests.containsKey(className)) {
+            ClassPrepareRequest request = getEventManager().createClassPrepareRequest();
+            // set class filter in order to reduce the amount of event traffic sent from the target VM to the debugger VM
+            request.addClassFilter(className);
+            request.enable();
+            classPrepareRequests.put(className, request);
+        }
+
+        LOG.debug("Deferred breakpoint: {}", breakpoint.getLocation());
+    }
+

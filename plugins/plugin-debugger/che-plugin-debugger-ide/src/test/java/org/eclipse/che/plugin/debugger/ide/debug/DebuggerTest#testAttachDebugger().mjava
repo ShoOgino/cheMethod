@@ -1,0 +1,36 @@
+    @Test
+    public void testAttachDebugger() throws Exception {
+        debugger.setDebugSession(null);
+
+        final String debugSessionJson = "debugSession";
+        doReturn(debugSessionJson).when(dtoFactory).toJson(debugSessionDto);
+
+        Map<String, String> connectionProperties = mock(Map.class);
+        Promise<DebugSessionDto> promiseDebuggerInfo = mock(Promise.class);
+
+        doReturn(promiseDebuggerInfo).when(service).connect("id", connectionProperties);
+        doReturn(promiseVoid).when(promiseDebuggerInfo).then((Function<DebugSessionDto, Void>)any());
+        doReturn(promiseVoid).when(promiseVoid).catchError((Operation<PromiseError>)any());
+
+        Promise<Void> result = debugger.connect(connectionProperties);
+        assertEquals(promiseVoid, result);
+
+        verify(promiseDebuggerInfo).then(argumentCaptorFunctionJavaDebugSessionVoid.capture());
+        argumentCaptorFunctionJavaDebugSessionVoid.getValue().apply(debugSessionDto);
+
+        verify(promiseVoid).catchError(operationPromiseErrorCaptor.capture());
+        try {
+            operationPromiseErrorCaptor.getValue().apply(promiseError);
+            fail("Operation Exception expected");
+        } catch (OperationException e) {
+            verify(promiseError).getMessage();
+            verify(promiseError).getCause();
+        }
+
+        verify(observer).onDebuggerAttached(debuggerDescriptor, promiseVoid);
+
+        assertTrue(debugger.isConnected());
+        verify(localStorage).setItem(eq(AbstractDebugger.LOCAL_STORAGE_DEBUGGER_SESSION_KEY), eq(debugSessionJson));
+        verify(messageBus).subscribe(eq("id:events:"), any(SubscriptionHandler.class));
+    }
+

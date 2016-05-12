@@ -1,0 +1,24 @@
+    /**
+     * Instantiates a new debugger of given type.
+     * @see DebuggerFactory#create(Map, Debugger.DebuggerCallback)
+     * @return session identifier
+     */
+    public String create(String debuggerType, Map<String, String> properties) throws DebuggerException {
+        DebuggerFactory factory = factories.get(debuggerType);
+        if (factory == null) {
+            throw new DebuggerNotFoundException("Debugger factory type '" + debuggerType + "' is not registered");
+        }
+
+        final long id = sessionId.incrementAndGet();
+        Debugger debugger = factory.create(properties, event -> {
+            if (DebuggerEvent.TYPE.DISCONNECT == event.getType()) {
+                debuggers.remove(id);
+            }
+
+            eventService.publish(new DebuggerMessage(event, debuggerType));
+        });
+        debuggers.put(id, Pair.of(debuggerType, debugger));
+
+        return String.valueOf(id);
+    }
+
