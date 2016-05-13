@@ -1,0 +1,25 @@
+    @SuppressWarnings("unchecked")
+    @Test
+    public void testSearchTextWhenExcludeSomeText() throws Exception {
+        String queryToSearch = "?text=" +
+                               "question" + URL_ENCODED_SPACE + NOT_OPERATOR + URL_ENCODED_SPACE + URL_ENCODED_QUOTES +
+                               "attention!" + URL_ENCODED_QUOTES;
+        RegisteredProject myProject = pm.getProject("my_project");
+        myProject.getBaseFolder().createFolder("x/y").createFile("containsSearchText.txt", "To be or not to be that is the question".getBytes());
+        myProject.getBaseFolder().createFolder("b")
+                 .createFile("notContainsSearchText", "Pay attention! To be or not to be that is the question".getBytes());
+        myProject.getBaseFolder().createFolder("c").createFile("alsoNotContainsSearchText", "To be or to not be that is the ...".getBytes());
+
+        ContainerResponse response =
+                launcher.service(GET, String.format("http://localhost:8080/api/project/%s/search/my_project", workspace) + queryToSearch,
+                                 "http://localhost:8080/api", null, null, null);
+        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+        List<ItemReference> result = (List<ItemReference>)response.getEntity();
+        assertEquals(result.size(), 1);
+        Set<String> paths = new LinkedHashSet<>(1);
+        paths.addAll(result.stream().map(ItemReference::getPath).collect(Collectors.toList()));
+        Assert.assertTrue(paths.contains("/my_project/x/y/containsSearchText.txt"));
+        Assert.assertFalse(paths.contains("/my_project/b/notContainsSearchText.txt"));
+        Assert.assertFalse(paths.contains("/my_project/c/alsoContainsSearchText"));
+    }
+
