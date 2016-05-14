@@ -1,0 +1,34 @@
+    @Test
+    public void testOnDeleteTarget() throws Exception {
+        final String deletingTargetName = "deletingTargetName";
+        final String deleteProposal = "Are you sure you want to delete target " + deletingTargetName + " ?";
+        final String deletingMachineId = "deletingMachineId";
+        final String deleteSuccessMessage = "Successfully disconnected from machine " + deletingTargetName;
+        final DockerMachineTarget target = Mockito.mock(DockerMachineTarget.class);
+        final MachineDto machine = Mockito.mock(MachineDto.class);
+        when(machineLocale.targetsViewDisconnectSuccess(deletingTargetName)).thenReturn(deleteSuccessMessage);
+        when(target.getName()).thenReturn(deletingTargetName);
+        when(targetsTreeManager.getMachineByName(deletingTargetName)).thenReturn(machine);
+        when(machine.getId()).thenReturn(deletingMachineId);
+        when(machine.getStatus()).thenReturn(RUNNING);
+        when(machineLocale.targetsViewDeleteConfirm(deletingTargetName)).thenReturn(deleteProposal);
+        when(machineService.destroyMachine(deletingMachineId)).thenReturn(promise);
+
+
+        arbitraryCategoryPresenter.onDeleteClicked(target);
+
+        verify(dialogFactory).createConfirmDialog(anyString(), eq(deleteProposal), confirmCaptor.capture(),
+                                                  Matchers.<CancelCallback>anyObject());
+
+        confirmCaptor.getValue().accepted();
+
+        verify(targetsTreeManager).getMachineByName(deletingTargetName);
+        verify(machineService).destroyMachine(deletingMachineId);
+
+        operationSuccessCapture.getValue().apply(null);
+
+        verify(eventBus).fireEvent(Matchers.<MachineStateEvent>anyObject());
+        verify(notificationManager).notify(eq(deleteSuccessMessage), eq(SUCCESS), eq(FLOAT_MODE));
+        verify(targetsTreeManager).updateTargets(null);
+    }
+

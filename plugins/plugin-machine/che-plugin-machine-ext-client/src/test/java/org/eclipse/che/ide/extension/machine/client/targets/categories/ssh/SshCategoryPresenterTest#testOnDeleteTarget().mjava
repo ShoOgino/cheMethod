@@ -1,0 +1,32 @@
+    @Test
+    public void testOnDeleteTarget() throws Exception {
+        final String deletingTargetName = "deletingTargetName";
+        final String recipeId = "deletingTargetRecipeId";
+        final String deleteProposal = "Are you sure you want to delete target " + deletingTargetName + " ?";
+        final String deleteSuccessMessage = "Target recipe " + deletingTargetName + " successfully deleted";
+        final SshMachineTarget target = Mockito.mock(SshMachineTarget.class);
+        final RecipeDescriptor recipe = Mockito.mock(RecipeDescriptor.class);
+        when(target.getName()).thenReturn(deletingTargetName);
+        when(target.getRecipe()).thenReturn(recipe);
+        when(recipe.getId()).thenReturn(recipeId);
+        when(recipeServiceClient.removeRecipe(recipeId)).thenReturn(promise);
+        when(machineLocale.targetsViewDeleteConfirm(deletingTargetName)).thenReturn(deleteProposal);
+        when(machineLocale.targetsRecipeDeleteSuccess(deletingTargetName)).thenReturn(deleteSuccessMessage);
+
+        arbitraryCategoryPresenter.onDeleteClicked(target);
+
+        verify(dialogFactory).createConfirmDialog(anyString(), eq(deleteProposal), confirmCaptor.capture(),
+                                                  Matchers.<CancelCallback>anyObject());
+
+        confirmCaptor.getValue().accepted();
+
+        verify(recipeServiceClient).removeRecipe(recipeId);
+        verify(promise).then(operationSuccessCapture.capture());
+
+        operationSuccessCapture.getValue().apply(null);
+
+        verify(notificationManager).notify(eq(deleteSuccessMessage), eq(SUCCESS), eq(FLOAT_MODE));
+        verify(target).isConnected();
+        verify(targetsTreeManager).updateTargets(null);
+    }
+
