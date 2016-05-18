@@ -1,0 +1,44 @@
+    @POST
+    @Path("/move/{path:.*}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Move resource",
+                  notes = "Move resource to a new location which is specified in a query parameter")
+    @ApiResponses({@ApiResponse(code = 201, message = ""),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 409, message = "Resource already exists"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    public Response move(@ApiParam("Path to a resource to be moved") @PathParam("path") String path,
+                         @ApiParam("Path to a new location") @QueryParam("to") String newParent,
+                         MoveOptions moveOptions) throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+        final VirtualFileEntry entry = projectManager.asVirtualFileEntry(path);
+
+        // used to indicate over write of destination
+        boolean isOverWrite = false;
+        // used to hold new name set in request body
+        String newName = entry.getName();
+        if (moveOptions != null) {
+            if (moveOptions.getOverWrite() != null) {
+                isOverWrite = moveOptions.getOverWrite();
+            }
+            if (moveOptions.getName() != null) {
+                newName = moveOptions.getName();
+            }
+        }
+
+        final VirtualFileEntry move = projectManager.moveTo(path, newParent, newName, isOverWrite);
+
+        final URI location = getServiceContext().getServiceUriBuilder()
+                                                .path(getClass(), move.isFile() ? "getFile" : "getChildren")
+                                                .build(move.getPath().toString().substring(1));
+
+        eventService.publish(new ProjectItemModifiedEvent(ProjectItemModifiedEvent.EventType.MOVED,
+                                                          workspace,
+                                                          entry.getProject(),
+                                                          entry.getPath().toString(),
+                                                          entry.isFolder(),
+                                                          path));
+
+        return Response.created(location).build();
+    }
+

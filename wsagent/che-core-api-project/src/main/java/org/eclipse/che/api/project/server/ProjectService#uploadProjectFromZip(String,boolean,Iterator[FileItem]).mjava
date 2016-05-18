@@ -1,0 +1,64 @@
+    @POST
+    @Path("/upload/zipproject/{path:.*}")
+    @Consumes({MediaType.MULTIPART_FORM_DATA})
+    @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Upload zip project",
+                  notes = "Upload project from local zip",
+                  response = ProjectConfigDto.class)
+    @ApiResponses({@ApiResponse(code = 200, message = ""),
+                   @ApiResponse(code = 401, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 403, message = "Forbidden operation"),
+                   @ApiResponse(code = 409, message = "Resource already exists"),
+                   @ApiResponse(code = 500, message = "Unsupported source type")})
+    public List<SourceEstimation> uploadProjectFromZip(@ApiParam(value = "Path in the project", required = true)
+                                                       @PathParam("path") String path,
+                                                       @ApiParam(value = "Force rewrite existing project", allowableValues = "true,false")
+                                                       @QueryParam("force") boolean force,
+                                                       Iterator<FileItem> formData) throws ServerException,
+                                                                                           IOException,
+                                                                                           ConflictException,
+                                                                                           ForbiddenException,
+                                                                                           NotFoundException,
+                                                                                           BadRequestException {
+        // Not all importers uses virtual file system API. In this case virtual file system API doesn't get events and isn't able to set
+        final FolderEntry baseProjectFolder = (FolderEntry)getVirtualFile(path, force);
+
+        int stripNumber = 0;
+        String projectName = "";
+        String projectDescription = "";
+        FileItem contentItem = null;
+
+        while (formData.hasNext()) {
+            FileItem item = formData.next();
+            if (!item.isFormField()) {
+                if (contentItem == null) {
+                    contentItem = item;
+                } else {
+                    throw new ServerException("More then one upload file is found but only one is expected. ");
+                }
+            } else {
+                switch (item.getFieldName()) {
+                    case ("name"):
+                        projectName = item.getString().trim();
+                        break;
+                    case ("description"):
+                        projectDescription = item.getString().trim();
+                        break;
+                    case ("skipFirstLevel"):
+                        stripNumber = Boolean.parseBoolean(item.getString().trim()) ? 1 : 0;
+                        break;
+                }
+            }
+        }
+
+        if (contentItem == null) {
+            throw new ServerException("Cannot find zip file for upload.");
+        }
+
+        try (InputStream zip = contentItem.getInputStream()) {
+            baseProjectFolder.getVirtualFile().unzip(zip, true, stripNumber);
+        }
+
+        return resolveSources(path);
+    }
+

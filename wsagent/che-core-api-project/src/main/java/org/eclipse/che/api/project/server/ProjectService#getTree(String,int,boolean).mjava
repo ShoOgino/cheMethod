@@ -1,0 +1,25 @@
+    @GET
+    @Path("/tree/{parent:.*}")
+    @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Get project tree",
+                  notes = "Get project tree. Depth is specified in a query parameter",
+                  response = TreeElement.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
+                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+                   @ApiResponse(code = 404, message = "Not found"),
+                   @ApiResponse(code = 500, message = "Internal Server Error")})
+    public TreeElement getTree(@ApiParam(value = "Path to resource. Can be project or its folders", required = true)
+                               @PathParam("parent") String path,
+                               @ApiParam(value = "Tree depth. This parameter can be dropped. If not specified ?depth=1 is used by default")
+                               @DefaultValue("1") @QueryParam("depth") int depth,
+                               @ApiParam(value = "include children files (in addition to children folders). This parameter can be dropped" +
+                                                 ". If not specified ?includeFiles=false is used by default")
+                               @DefaultValue("false") @QueryParam("includeFiles") boolean includeFiles) throws NotFoundException,
+                                                                                                               ForbiddenException,
+                                                                                                               ServerException {
+        final FolderEntry folder = projectManager.asFolder(path);
+
+        return newDto(TreeElement.class).withNode(injectFolderLinks(asDto(folder)))
+                                        .withChildren(getTree(folder, depth, includeFiles));
+    }
+
