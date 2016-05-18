@@ -1,30 +1,29 @@
     @Override
-    public void go(AcceptsOneWidget container) {
-        view.clear();
-
-        isMaven = "maven".equals(appContext.getCurrentProject().getProjectConfig().getType());
+    public void go(final AcceptsOneWidget container) {
+        ProjectConfigDto projectConfig = appContext.getCurrentProject().getProjectConfig();
+        isPlainJava = "plainJava".equals(projectConfig.getType());
 
         setReadOnlyMod();
 
-        boolean dirtyState = dirty;
-        if (pageNodes.isEmpty()) {
-            for (String con : classpathResolver.getContainers()) {
-                addNode(con, ClasspathEntryKind.CONTAINER, javaResources.externalLibraries());
-            }
-            for (String lib : classpathResolver.getLibs()) {
-                addNode(lib, ClasspathEntryKind.LIBRARY, lib.endsWith(".jar") ? javaResources.jarFileIcon() : nodesResources.simpleFolder());
-            }
-        } else {
-            for (NodeWidget node : pageNodes.values()) {
-                view.addNode(node);
-            }
-        }
-
-        if (dirtyState != dirty) {
-            dirty = dirtyState;
-            delegate.onDirtyChanged();
-        }
-
         container.setWidget(view);
+
+        if (!categories.isEmpty()) {
+            view.renderLibraries();
+            return;
+        }
+
+        classpathContainer.getClasspathEntries(projectConfig.getPath()).then(new Operation<List<ClasspathEntryDto>>() {
+            @Override
+            public void apply(List<ClasspathEntryDto> arg) throws OperationException {
+                categories.clear();
+                for (ClasspathEntryDto entry : arg) {
+                    if (CONTAINER == entry.getEntryKind() || LIBRARY == entry.getEntryKind()) {
+                        categories.put(entry.getPath(), entry);
+                    }
+                }
+                view.setData(categories);
+                view.renderLibraries();
+            }
+        });
     }
 
