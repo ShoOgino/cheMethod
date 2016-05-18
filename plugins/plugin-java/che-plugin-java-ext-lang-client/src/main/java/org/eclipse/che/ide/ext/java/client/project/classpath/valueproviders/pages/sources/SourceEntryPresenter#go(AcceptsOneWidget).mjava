@@ -1,27 +1,29 @@
     @Override
     public void go(AcceptsOneWidget container) {
-        view.clear();
-
-        isMaven = "maven".equals(appContext.getCurrentProject().getProjectConfig().getType());
+        ProjectConfigDto projectConfig = appContext.getCurrentProject().getProjectConfig();
+        isPlainJava = "plainJava".equals(projectConfig.getType());
 
         setReadOnlyMod();
 
-        boolean dirtyState = dirty;
-        if (pageNodes.isEmpty()) {
-            for (String source : classpathResolver.getSources()) {
-                addNode(source, ClasspathEntryKind.SOURCE, javaResources.sourceFolder());
-            }
-        } else {
-            for (NodeWidget node : pageNodes.values()) {
-                view.addNode(node);
-            }
-        }
-
-        if (dirtyState != dirty) {
-            dirty = dirtyState;
-            delegate.onDirtyChanged();
-        }
-
         container.setWidget(view);
+
+        if (!categories.isEmpty()) {
+            view.renderNodes();
+            return;
+        }
+
+        classpathContainer.getClasspathEntries(projectConfig.getPath()).then(new Operation<List<ClasspathEntryDto>>() {
+            @Override
+            public void apply(List<ClasspathEntryDto> entries) throws OperationException {
+                categories.clear();
+                for (ClasspathEntryDto entry : entries) {
+                    if (SOURCE == entry.getEntryKind()) {
+                        categories.put(entry.getPath(), entry);
+                    }
+                }
+                view.setData(categories);
+                view.renderNodes();
+            }
+        });
     }
 
