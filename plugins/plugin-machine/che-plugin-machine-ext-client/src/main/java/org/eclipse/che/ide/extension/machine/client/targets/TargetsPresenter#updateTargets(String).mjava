@@ -1,53 +1,47 @@
     /**
      * Fetches all recipes from the server, makes a list of targets and selects specified target.
      */
-    private void updateTargets(final String targetToSelect) {
+    @Override
+    public void updateTargets(final String preselectTargetName) {
+        final Map<String, Target> targetByName = new HashMap<>();
         targets.clear();
         machines.clear();
 
         machineService.getMachines(appContext.getWorkspaceId()).then(new Operation<List<MachineDto>>() {
             @Override
             public void apply(List<MachineDto> machineList) throws OperationException {
+
+                //create Target objects from all machines except machines with ssh type
                 for (MachineDto machine : machineList) {
-                    machines.put(machine.getConfig().getName(), machine);
+                    final MachineConfigDto machineConfig = machine.getConfig();
+                    machines.put(machineConfig.getName(), machine);
+                    final String targetCategory = machineConfig.isDev() ? machineLocale.devMachineCategory() : machineConfig.getType();
+                    final Target target = createTarget(machineConfig.getName(), targetCategory);
+                    target.setConnected(isMachineRunning(machine));
+                    targetByName.put(target.getName(), target);
                 }
 
+                //create Target objects from recipe with ssh type
                 recipeServiceClient.getAllRecipes().then(new Operation<List<RecipeDescriptor>>() {
                     @Override
                     public void apply(List<RecipeDescriptor> recipeList) throws OperationException {
                         for (RecipeDescriptor recipe : recipeList) {
-/*                            // Display only SSH_CATEGORY recipes
-                           if (!SSH_CATEGORY.equalsIgnoreCase(recipe.getType())) {
+                            //only for SSH recipes
+                            if (!machineLocale.targetsViewCategorySsh().equalsIgnoreCase(recipe.getType())) {
                                 continue;
                             }
-*/
-                            final MachineDto machine = machines.get(recipe.getName());
-                            final String targetType;
-                            if (machine == null) {
-                                targetType = recipe.getType();
-                            } else {
-                                final MachineConfigDto machineConfig = machine.getConfig();
-                                targetType = machineConfig.isDev() ? machineLocale.devMachineCategory() : machineConfig.getType();
+                            Target target = targetByName.get(recipe.getName());
+                            if (target == null) {
+                                target = createTarget(recipe.getName(), recipe.getType());
                             }
-                            final Target target = new Target(recipe.getName(), targetType, recipe);
                             target.setRecipe(recipe);
-                            targets.add(target);
-
-                            target.setConnected(isMachineRunning(machine));
-
-                            restoreTarget(target);
+                            categoryPageRegistry.getCategoryPage(target.getCategory()).getTargetManager().restoreTarget(target);
+                            targetByName.put(target.getName(), target);
                         }
-
+                        targets.addAll(targetByName.values());
                         view.showTargets(targets);
 
-                        if (targetToSelect != null) {
-                            for (Target target : targets) {
-                                if (target.getName().equals(targetToSelect)) {
-                                    view.selectTarget(target);
-                                    break;
-                                }
-                            }
-                        }
+                        selectTarget(preselectTargetName == null ? selectedTarget : targetByName.get(preselectTargetName));
                     }
                 });
 
