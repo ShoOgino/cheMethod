@@ -1,22 +1,13 @@
     @Override
     public void startWsAgent(String workspaceId) throws NotFoundException, MachineException, InterruptedException {
         final Machine devMachine = getMachineManager().getDevMachine(workspaceId);
-        String wsAgentPingUrl = devMachine.getRuntime()
-                                                .getServers()
-                                                .get(Constants.WS_AGENT_PORT)
-                                                .getUrl();
-        if (!wsAgentPingUrl.endsWith("/"))
-            wsAgentPingUrl = wsAgentPingUrl.concat("/");
+        final HttpJsonRequest wsAgentPingRequest = createPingRequest(devMachine);
+        final String wsAgentPingUrl = wsAgentPingRequest.getUrl();
         try {
             getMachineManager().exec(devMachine.getId(),
                                      new CommandImpl(WS_AGENT_PROCESS_NAME, wsAgentStartCommandLine, "Arbitrary"),
                                      getWsAgentProcessOutputChannel(workspaceId));
-
-
-            final HttpJsonRequest wsAgentPingRequest = httpJsonRequestFactory.fromUrl(wsAgentPingUrl)
-                                                                             .setMethod(HttpMethod.GET)
-                                                                             .setTimeout(wsAgentPingConnectionTimeoutMs);
-            long pingStartTimestamp = System.currentTimeMillis();
+            final long pingStartTimestamp = System.currentTimeMillis();
             LOG.debug("Starts pinging ws agent. Workspace ID:{}. Url:{}. Timestamp:{}",
                       workspaceId,
                       wsAgentPingUrl,
