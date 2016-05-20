@@ -1,0 +1,54 @@
+    /**
+     * Download file with redirection if got status 301, 302, 303.
+     * Will useful in case redirection http -> https
+     *
+     * @param parent
+     *         parent directory, may be <code>null</code> then use 'java.io.tmpdir'
+     * @param prefix
+     *         prefix of temporary file name, may not be <code>null</code> and must be at least three characters long
+     * @param suffix
+     *         suffix of temporary file name, may be <code>null</code>
+     * @param url
+     *         URL for download
+     * @return downloaded file
+     * @throws java.io.IOException
+     *         if any i/o error occurs
+     */
+    public static File downloadFileWithRedirect(File parent, String prefix, String suffix, URL url) throws IOException {
+        File file = File.createTempFile(prefix, suffix, parent);
+        URLConnection conn = null;
+        final String protocol = url.getProtocol().toLowerCase(Locale.ENGLISH);
+        try {
+            conn = url.openConnection();
+            boolean redirect = false;
+            if ("http".equals(protocol) || "https".equals(protocol)) {
+                HttpURLConnection http = (HttpURLConnection)conn;
+                http.setRequestMethod(HttpMethod.GET);
+                int status = http.getResponseCode();
+                if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM ||
+                    status == HttpURLConnection.HTTP_SEE_OTHER) {
+                    redirect = true;
+                }
+                if (redirect) {
+                    String newUrl = conn.getHeaderField("Location");
+                    // open the new connection again
+                    http = (HttpURLConnection)new URL(newUrl).openConnection();
+                    http.setRequestMethod(HttpMethod.GET);
+                }
+            }
+            try (InputStream input = conn.getInputStream();
+                 FileOutputStream fOutput = new FileOutputStream(file)) {
+                byte[] b = new byte[8192];
+                int r;
+                while ((r = input.read(b)) != -1) {
+                    fOutput.write(b, 0, r);
+                }
+            }
+        } finally {
+            if (conn != null && ("http".equals(protocol) || "https".equals(protocol))) {
+                ((HttpURLConnection)conn).disconnect();
+            }
+        }
+        return file;
+    }
+
