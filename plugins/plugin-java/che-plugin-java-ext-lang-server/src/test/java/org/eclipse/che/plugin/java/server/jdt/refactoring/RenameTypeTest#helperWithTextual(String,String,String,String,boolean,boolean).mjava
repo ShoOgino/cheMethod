@@ -1,0 +1,30 @@
+	private String[] helperWithTextual(String oldCuName, String oldName, String newName, String newCUName, boolean updateReferences, boolean updateTextualMatches) throws Exception{
+		ICompilationUnit cu= createCUfromTestFile(getPackageP(), oldCuName);
+		IType classA= getType(cu, oldName);
+		IJavaElement[] classAMembers= classA.getChildren();
+
+		IPackageFragment pack= (IPackageFragment)cu.getParent();
+		String[] renameHandles= null;
+		if (classA.getDeclaringType() == null && cu.getElementName().startsWith(classA.getElementName())) {
+			renameHandles= ParticipantTesting.createHandles(classA, cu, cu.getResource());
+		} else {
+			renameHandles= ParticipantTesting.createHandles(classA);
+		}
+		RenameJavaElementDescriptor descriptor= createRefactoringDescriptor(classA, newName);
+		descriptor.setUpdateReferences(updateReferences);
+		descriptor.setUpdateTextualOccurrences(updateTextualMatches);
+		Refactoring refactoring= createRefactoring(descriptor);
+		assertEquals("was supposed to pass", null, performRefactoring(refactoring));
+		ICompilationUnit newcu= pack.getCompilationUnit(newCUName + ".java");
+		TestCase.assertTrue("cu " + newcu.getElementName() + " does not exist", newcu.exists());
+		assertEqualLines("invalid renaming", getFileContents(getOutputTestFileName(newCUName)), newcu.getSource());
+
+		INameUpdating nameUpdating= ((INameUpdating)refactoring.getAdapter(INameUpdating.class));
+		IType newElement = (IType) nameUpdating.getNewElement();
+		TestCase.assertTrue("new element does not exist:\n" + newElement.toString(), newElement.exists());
+
+		checkMappers(refactoring, classA, newCUName + ".java", classAMembers);
+
+		return renameHandles;
+	}
+
