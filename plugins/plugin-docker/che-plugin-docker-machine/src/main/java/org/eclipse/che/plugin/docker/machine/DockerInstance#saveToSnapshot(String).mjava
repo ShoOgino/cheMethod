@@ -1,19 +1,18 @@
     @Override
-    public InstanceKey saveToSnapshot(String owner) throws MachineException {
+    public MachineSource saveToSnapshot(String owner) throws MachineException {
         try {
             final String repository = generateRepository();
-            final String tag = "latest";
             if(!snapshotUseRegistry) {
-                commitContainer(owner, repository, tag);
-                return new DockerInstanceKey(repository, tag);
+                commitContainer(owner, repository, LATEST_TAG);
+                return new DockerMachineSource(repository).withTag(LATEST_TAG);
             }
             final String repositoryName = registry + '/' + repository;
-            commitContainer(owner, repositoryName, tag);
+            commitContainer(owner, repositoryName, LATEST_TAG);
             //TODO fix this workaround. Docker image is not visible after commit when using swarm
             Thread.sleep(2000);
             final ProgressLineFormatterImpl lineFormatter = new ProgressLineFormatterImpl();
             final String digest = docker.push(PushParams.create(repository)
-                                                        .withTag(tag)
+                                                        .withTag(LATEST_TAG)
                                                         .withRegistry(registry),
                                               progressMonitor -> {
                                                   try {
@@ -22,7 +21,7 @@
                                                   }
                                               });
             docker.removeImage(RemoveImageParams.create(repositoryName).withForce(false));
-            return new DockerInstanceKey(repository, tag, registry, digest);
+            return new DockerMachineSource(repository).withRegistry(registry).withDigest(digest).withTag(LATEST_TAG);
         } catch (IOException ioEx) {
             throw new MachineException(ioEx);
         } catch (InterruptedException e) {

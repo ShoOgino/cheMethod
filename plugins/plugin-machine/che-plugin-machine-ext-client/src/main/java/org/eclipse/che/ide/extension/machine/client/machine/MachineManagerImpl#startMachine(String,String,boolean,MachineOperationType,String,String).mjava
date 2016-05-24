@@ -14,46 +14,7 @@
                               final MachineOperationType operationType,
                               final String sourceType,
                               final String machineType) {
-
-        LimitsDto limitsDto = dtoFactory.createDto(LimitsDto.class).withRam(1024);
-        if (isDev) {
-            limitsDto.withRam(3072);
-        }
         MachineSourceDto sourceDto = dtoFactory.createDto(MachineSourceDto.class).withType(sourceType).withLocation(recipeURL);
-
-        MachineConfigDto configDto = dtoFactory.createDto(MachineConfigDto.class)
-                                               .withDev(isDev)
-                                               .withName(displayName)
-                                               .withSource(sourceDto)
-                                               .withLimits(limitsDto)
-                                               .withType(machineType);
-
-        Promise<MachineDto> machinePromise = workspaceServiceClient.createMachine(appContext.getWorkspace().getId(), configDto);
-
-        machinePromise.then(new Operation<MachineDto>() {
-            @Override
-            public void apply(final MachineDto machineDto) throws OperationException {
-                eventBus.fireEvent(new MachineStateEvent(machineDto, MachineStateEvent.MachineAction.CREATING));
-
-                subscribeToChannel(machineDto.getConfig()
-                                             .getLink(LINK_REL_GET_MACHINE_LOGS_CHANNEL)
-                                             .getParameter("channel")
-                                             .getDefaultValue(),
-                                   outputHandler);
-
-                RunningListener runningListener = null;
-
-                if (isDev) {
-                    runningListener = new RunningListener() {
-                        @Override
-                        public void onRunning() {
-                            onMachineRunning(machineDto.getId());
-                        }
-                    };
-                }
-
-                machineStatusNotifier.trackMachine(machineDto, runningListener, operationType);
-            }
-        });
+        startMachine(sourceDto, displayName, isDev, operationType, machineType);
     }
 

@@ -23,14 +23,6 @@
                                                         machineConfig.getName()));
         }
 
-        Recipe recipe = null;
-        InstanceKey instanceKey = null;
-        if (snapshot != null) {
-            instanceKey = snapshot.getInstanceKey();
-        } else {
-            recipe = recipeDownloader.getRecipe(machineConfig);
-        }
-
         if (!MACHINE_DISPLAY_NAME_PATTERN.matcher(machineConfig.getName()).matches()) {
             throw new BadRequestException("Invalid machine name " + machineConfig.getName());
         }
@@ -39,6 +31,11 @@
             if (machine.getWorkspaceId().equals(workspaceId) && machine.getConfig().getName().equals(machineConfig.getName())) {
                 throw new ConflictException("Machine with name " + machineConfig.getName() + " already exists");
             }
+        }
+
+        // recover key from snapshot if there is one
+        if (snapshot != null) {
+            machineConfig.setSource(snapshot.getMachineSource());
         }
 
         final String machineId = generateMachineId();
@@ -65,7 +62,7 @@
         try {
             machineRegistry.addMachine(machine);
 
-            instanceCreator.createInstance(instanceProvider, recipe, instanceKey, machine, machineLogger);
+            instanceCreator.createInstance(instanceProvider, machine, machineLogger);
 
             return machine;
         } catch (ConflictException e) {

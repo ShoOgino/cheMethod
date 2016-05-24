@@ -1,0 +1,64 @@
+    /**
+     * Creates instance from scratch or by reusing a previously one by using specified {@link MachineSource}
+     * data in {@link MachineConfig}.
+     *
+     * @param machine
+     *         machine description
+     * @param creationLogsOutput
+     *         output for instance creation logs
+     * @return newly created {@link Instance}
+     * @throws UnsupportedRecipeException
+     *         if specified {@code recipe} is not supported
+     * @throws InvalidRecipeException
+     *         if {@code recipe} is invalid
+     * @throws NotFoundException
+     *         if instance described by {@link MachineSource} doesn't exists
+     * @throws MachineException
+     *         if other error occurs
+     */
+    @Override
+    public Instance createInstance(final Machine machine, final LineConsumer creationLogsOutput)
+            throws UnsupportedRecipeException, InvalidRecipeException, NotFoundException, MachineException {
+
+        // based on machine source, do the right steps
+        MachineConfig machineConfig = machine.getConfig();
+        MachineSource machineSource = machineConfig.getSource();
+        String type = machineSource.getType();
+
+        // create container machine name
+        final String userName = EnvironmentContext.getCurrent().getSubject().getUserName();
+        final String machineContainerName = containerNameGenerator.generateContainerName(machine.getWorkspaceId(),
+                                                                                         machine.getId(),
+                                                                                         userName,
+                                                                                         machine.getConfig().getName());
+        // get recipe
+        // - it's a dockerfile type:
+        //    - location defined : download this location and get script as recipe
+        //    - content defined  : use this content as recipe script
+        // - it's an image:
+        //    - use location of image ([registry:port]/<repository-image>[:tag][@digest])
+        final Recipe recipe;
+        if (DOCKER_FILE_TYPE.equals(type)) {
+            recipe = this.recipeRetriever.getRecipe(machineConfig);
+        } else if (DOCKER_IMAGE_TYPE.equals(type)) {
+            if (isNullOrEmpty(machineSource.getLocation())) {
+                throw new InvalidRecipeException(String.format("The type '%s' needs to be used with a location, not with any other parameter. Found '%s'.", type, machineSource));
+            }
+            return createInstanceFromImage(machine, machineContainerName, creationLogsOutput);
+        } else {
+            // not supported
+            throw new UnsupportedRecipeException("The type '" + type + "' is not supported");
+        }
+        final Dockerfile dockerfile = parseRecipe(recipe);
+
+        final String machineImageName = "eclipse-che/" + machineContainerName;
+        final long memoryLimit = (long)machine.getConfig().getLimits().getRam() * 1024 * 1024;
+
+        buildImage(dockerfile, creationLogsOutput, machineImageName, doForcePullOnBuild, memoryLimit, -1);
+
+        return createInstance(machineContainerName,
+                              machine,
+                              machineImageName,
+                              creationLogsOutput);
+    }
+

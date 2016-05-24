@@ -1,0 +1,30 @@
+    protected Instance createInstanceFromImage(final Machine machine, String machineContainerName,
+                                        final LineConsumer creationLogsOutput) throws NotFoundException, MachineException {
+        final DockerMachineSource dockerMachineSource = new DockerMachineSource(machine.getConfig().getSource());
+
+        if (snapshotUseRegistry) {
+            pullImage(dockerMachineSource, creationLogsOutput);
+        }
+
+        final String machineImageName = "eclipse-che/" + machineContainerName;
+        final String fullNameOfPulledImage = dockerMachineSource.getLocation(false);
+        try {
+            // tag image with generated name to allow sysadmin recognize it
+            docker.tag(TagParams.create(fullNameOfPulledImage, machineImageName));
+        } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+            throw new MachineException("Can't create machine from snapshot.");
+        }
+        try {
+            // remove unneeded tag
+            docker.removeImage(fullNameOfPulledImage, false);
+        } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+        }
+
+        return createInstance(machineContainerName,
+                              machine,
+                              machineImageName,
+                              creationLogsOutput);
+    }
+
