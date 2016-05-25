@@ -2,30 +2,29 @@
     public InstanceKey saveToSnapshot(String owner) throws MachineException {
         try {
             final String repository = generateRepository();
-            String comment = format("Suspended at %1$ta %1$tb %1$td %1$tT %1$tZ %1$tY", System.currentTimeMillis());
-            if (owner != null) {
-                comment = comment + " by " + owner;
+            final String tag = "latest";
+            if(!snapshotUseRegistry) {
+                commitContainer(owner, repository, tag);
+                return new DockerInstanceKey(repository, tag);
             }
-            // !! We SHOULD NOT pause container before commit because all execs will fail
-            // to push image to private registry it should be tagged with registry in repo name
-            // https://docs.docker.com/reference/api/docker_remote_api_v1.16/#push-an-image-on-the-registry
-            docker.commit(container, registry + '/' + repository, "latest", comment, owner);
+            final String repositoryName = registry + '/' + repository;
+            commitContainer(owner, repositoryName, tag);
             //TODO fix this workaround. Docker image is not visible after commit when using swarm
             Thread.sleep(2000);
-
-            final ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
-            String digest = docker.push(repository, "latest", registry, currentProgressStatus -> {
-                try {
-                    outputConsumer.writeLine(progressLineFormatter.format(currentProgressStatus));
-                } catch (IOException ignored) {
-                }
-            });
-
-            docker.removeImage(registry + '/' + repository, false);
-
-            return new DockerInstanceKey(repository, "latest", registry, digest);
-        } catch (IOException e) {
-            throw new MachineException(e);
+            final ProgressLineFormatterImpl lineFormatter = new ProgressLineFormatterImpl();
+            final String digest = docker.push(PushParams.create(repository)
+                                                        .withTag(tag)
+                                                        .withRegistry(registry),
+                                              progressMonitor -> {
+                                                  try {
+                                                      outputConsumer.writeLine(lineFormatter.format(progressMonitor));
+                                                  } catch (IOException ignored) {
+                                                  }
+                                              });
+            docker.removeImage(RemoveImageParams.create(repositoryName).withForce(false));
+            return new DockerInstanceKey(repository, tag, registry, digest);
+        } catch (IOException ioEx) {
+            throw new MachineException(ioEx);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new MachineException(e.getLocalizedMessage(), e);
