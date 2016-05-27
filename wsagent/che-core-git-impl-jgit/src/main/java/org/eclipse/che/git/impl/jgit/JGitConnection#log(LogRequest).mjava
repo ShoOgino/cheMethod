@@ -1,0 +1,34 @@
+    @Override
+    public LogPage log(LogRequest request) throws GitException {
+        LogCommand logCommand = getGit().log();
+        try {
+            setRevisionRange(logCommand, request);
+
+            request.getFileFilter().forEach(logCommand::addPath);
+
+            Iterator<RevCommit> revIterator = logCommand.call().iterator();
+            List<Revision> commits = new ArrayList<>();
+
+            while (revIterator.hasNext()) {
+                RevCommit commit = revIterator.next();
+                PersonIdent committerIdentity = commit.getCommitterIdent();
+
+                GitUser gitUser = newDto(GitUser.class).withName(committerIdentity.getName())
+                                                       .withEmail(committerIdentity.getEmailAddress());
+
+                Revision revision = newDto(Revision.class).withId(commit.getId().getName())
+                                                          .withMessage(commit.getFullMessage())
+                                                          .withCommitTime(MILLISECONDS.convert(commit.getCommitTime(), SECONDS))
+                                                          .withCommitter(gitUser);
+                commits.add(revision);
+            }
+            return new LogPage(commits);
+        } catch (GitAPIException | IOException exception) {
+            String errorMessage = exception.getMessage();
+            if (ERROR_NO_HEAD_EXISTS.equals(errorMessage)) {
+                throw new GitException(errorMessage, ErrorCodes.INIT_COMMIT_WAS_NOT_PERFORMED);
+            }
+            throw new GitException(errorMessage, exception);
+        }
+    }
+

@@ -1,0 +1,87 @@
+    @Override
+    public void remoteUpdate(RemoteUpdateRequest request) throws GitException {
+        String remoteName = request.getName();
+        if (isNullOrEmpty(remoteName)) {
+            throw new IllegalArgumentException(ERROR_UPDATE_REMOTE_NAME_MISSING);
+        }
+
+        StoredConfig config = repository.getConfig();
+        Set<String> remoteNames = config.getSubsections(ConfigConstants.CONFIG_KEY_REMOTE);
+        if (!remoteNames.contains(remoteName)) {
+            throw new IllegalArgumentException("Remote " + remoteName + " not found. ");
+        }
+
+        RemoteConfig remoteConfig;
+        try {
+            remoteConfig = new RemoteConfig(config, remoteName);
+        } catch (URISyntaxException e) {
+            throw new GitException(e.getMessage(), e);
+        }
+
+        List<String> branches = request.getBranches();
+        if (!branches.isEmpty()) {
+            if (!request.isAddBranches()) {
+                remoteConfig.setFetchRefSpecs(Collections.emptyList());
+                remoteConfig.setPushRefSpecs(Collections.emptyList());
+            } else {
+                // Replace wildcard refSpec if any.
+                remoteConfig.removeFetchRefSpec(
+                        new RefSpec(Constants.R_HEADS + "*" + ":" + Constants.R_REMOTES + remoteName + "/*")
+                                .setForceUpdate(true));
+                remoteConfig.removeFetchRefSpec(
+                        new RefSpec(Constants.R_HEADS + "*" + ":" + Constants.R_REMOTES + remoteName + "/*"));
+            }
+
+            // Add new refSpec.
+            for (String branch : branches) {
+                remoteConfig.addFetchRefSpec(
+                        new RefSpec(Constants.R_HEADS + branch + ":" + Constants.R_REMOTES + remoteName + "/" + branch)
+                                .setForceUpdate(true));
+            }
+        }
+
+        // Remove URLs first.
+        for (String url : request.getRemoveUrl()) {
+            try {
+                remoteConfig.removeURI(new URIish(url));
+            } catch (URISyntaxException e) {
+                LOG.debug(ERROR_REMOVING_INVALID_URL);
+            }
+        }
+
+        // Add new URLs.
+        for (String url : request.getAddUrl()) {
+            try {
+                remoteConfig.addURI(new URIish(url));
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException("Remote url " + url + " is invalid. ");
+            }
+        }
+
+        // Remove URLs for pushing.
+        for (String url : request.getRemovePushUrl()) {
+            try {
+                remoteConfig.removePushURI(new URIish(url));
+            } catch (URISyntaxException e) {
+                LOG.debug(ERROR_REMOVING_INVALID_URL);
+            }
+        }
+
+        // Add URLs for pushing.
+        for (String url : request.getAddPushUrl()) {
+            try {
+                remoteConfig.addPushURI(new URIish(url));
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException("Remote push url " + url + " is invalid. ");
+            }
+        }
+
+        remoteConfig.update(config);
+
+        try {
+            config.save();
+        } catch (IOException exception) {
+            throw new GitException(exception.getMessage(), exception);
+        }
+    }
+

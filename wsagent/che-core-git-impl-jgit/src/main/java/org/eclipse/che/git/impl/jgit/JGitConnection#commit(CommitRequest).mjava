@@ -1,0 +1,45 @@
+    @Override
+    public Revision commit(CommitRequest request) throws GitException {
+        try {
+            String message = request.getMessage();
+            GitUser committer = getUser();
+            if (message == null) {
+                throw new GitException("Message wasn't set");
+            }
+            if (committer == null) {
+                throw new GitException("Committer can't be null");
+            }
+            String committerName = committer.getName();
+            String committerEmail = committer.getEmail();
+            if (committerName == null || committerEmail == null) {
+                throw new GitException("Git user name and (or) email wasn't set", ErrorCodes.NO_COMMITTER_NAME_OR_EMAIL_DEFINED);
+            }
+            if (!repository.getRepositoryState().canCommit()) {
+                Revision rev = newDto(Revision.class);
+                rev.setMessage(String.format(MESSAGE_COMMIT_NOT_POSSIBLE, repository.getRepositoryState().getDescription()));
+                return rev;
+            }
+
+            if (request.isAmend() && !repository.getRepositoryState().canAmend()) {
+                Revision rev = newDto(Revision.class);
+                rev.setMessage(String.format(MESSAGE_AMEND_NOT_POSSIBLE, repository.getRepositoryState().getDescription()));
+                return rev;
+            }
+
+            CommitCommand commitCommand = getGit().commit()
+                                                  .setCommitter(committerName, committerEmail).setAuthor(committerName, committerEmail)
+                                                  .setMessage(message)
+                                                  .setAll(request.isAll())
+                                                  .setAmend(request.isAmend());
+
+            RevCommit result = commitCommand.call();
+            GitUser gitUser = newDto(GitUser.class).withName(committerName).withEmail(committerEmail);
+
+            return newDto(Revision.class).withBranch(getCurrentBranch())
+                                         .withId(result.getId().getName()).withMessage(result.getFullMessage())
+                                         .withCommitTime(MILLISECONDS.convert(result.getCommitTime(), SECONDS)).withCommitter(gitUser);
+        } catch (GitAPIException exception) {
+            throw new GitException(exception.getMessage(), exception);
+        }
+    }
+

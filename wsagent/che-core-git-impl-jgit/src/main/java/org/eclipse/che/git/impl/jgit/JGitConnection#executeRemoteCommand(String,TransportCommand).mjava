@@ -1,0 +1,68 @@
+    /**
+     * Execute remote jgit command.
+     *
+     * @param remoteUrl
+     *         remote url
+     * @param command
+     *         command to execute
+     * @return executed command
+     * @throws GitException
+     * @throws GitAPIException
+     * @throws UnauthorizedException
+     */
+    private Object executeRemoteCommand(String remoteUrl, TransportCommand command)
+            throws GitException, GitAPIException, UnauthorizedException {
+        String sshKeyDirectoryPath = "";
+        try {
+            if (GitUrlUtils.isSSH(remoteUrl)) {
+                File keyDirectory = Files.createTempDir();
+                sshKeyDirectoryPath = keyDirectory.getPath();
+                File sshKey = writePrivateKeyFile(remoteUrl, keyDirectory);
+
+                SshSessionFactory sshSessionFactory = new JschConfigSessionFactory() {
+                    @Override
+                    protected void configure(OpenSshConfig.Host host, Session session) {
+                        session.setConfig("StrictHostKeyChecking", "no");
+                    }
+
+                    @Override
+                    protected JSch getJSch(final OpenSshConfig.Host hc, FS fs) throws JSchException {
+                        JSch jsch = super.getJSch(hc, fs);
+                        jsch.removeAllIdentity();
+                        jsch.addIdentity(sshKey.getAbsolutePath());
+                        return jsch;
+                    }
+                };
+                command.setTransportConfigCallback(new TransportConfigCallback() {
+                    @Override
+                    public void configure(Transport transport) {
+                        SshTransport sshTransport = (SshTransport)transport;
+                        sshTransport.setSshSessionFactory(sshSessionFactory);
+                    }
+                });
+            } else {
+                UserCredential credentials = credentialsLoader.getUserCredential(remoteUrl);
+                if (credentials != null) {
+                    command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(credentials.getUserName(),
+                                                                                           credentials.getPassword()));
+                }
+            }
+            return command.call();
+        } catch (GitException | TransportException exception) {
+            if ("Unable get private ssh key".equals(exception.getMessage())
+                || exception.getMessage().contains(ERROR_AUTHENTICATION_REQUIRED)) {
+                throw new UnauthorizedException(exception.getMessage());
+            } else {
+                throw exception;
+            }
+        } finally {
+            if (!sshKeyDirectoryPath.isEmpty()) {
+                try {
+                    FileUtils.delete(new File(sshKeyDirectoryPath), FileUtils.RECURSIVE);
+                } catch (IOException exception) {
+                    throw new GitException("Can't remove SSH key directory", exception);
+                }
+            }
+        }
+    }
+

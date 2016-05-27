@@ -1,0 +1,44 @@
+    public void clone(CloneRequest request) throws GitException, UnauthorizedException {
+        String remoteUri;
+        boolean removeIfFailed = false;
+        try {
+            if (request.getRemoteName() == null) {
+                request.setRemoteName(Constants.DEFAULT_REMOTE_NAME);
+            }
+            if (request.getWorkingDir() == null) {
+                request.setWorkingDir(repository.getWorkTree().getCanonicalPath());
+            }
+
+            // If clone fails and the .git folder didn't exist we want to remove it.
+            // We have to do this here because the clone command doesn't revert its own changes in case of failure.
+            removeIfFailed = !repository.getDirectory().exists();
+
+            remoteUri = request.getRemoteUri();
+            CloneCommand cloneCommand = Git.cloneRepository()
+                                           .setDirectory(new File(request.getWorkingDir()))
+                                           .setRemote(request.getRemoteName())
+                                           .setURI(remoteUri);
+            if (request.getBranchesToFetch().isEmpty()) {
+                cloneCommand.setCloneAllBranches(true);
+            } else {
+                cloneCommand.setBranchesToClone(request.getBranchesToFetch());
+            }
+
+            executeRemoteCommand(remoteUri, cloneCommand);
+
+            StoredConfig repositoryConfig = getRepository().getConfig();
+            GitUser gitUser = getUser();
+            if (gitUser != null) {
+                repositoryConfig.setString(ConfigConstants.CONFIG_USER_SECTION, null, ConfigConstants.CONFIG_KEY_NAME, gitUser.getName());
+                repositoryConfig.setString(ConfigConstants.CONFIG_USER_SECTION, null, ConfigConstants.CONFIG_KEY_EMAIL, gitUser.getEmail());
+            }
+            repositoryConfig.save();
+        } catch (IOException | GitAPIException exception) {
+            // Delete .git directory in case it was created
+            if (removeIfFailed) {
+                deleteRepositoryFolder();
+            }
+            throw new GitException(exception.getMessage(), exception);
+        }
+    }
+

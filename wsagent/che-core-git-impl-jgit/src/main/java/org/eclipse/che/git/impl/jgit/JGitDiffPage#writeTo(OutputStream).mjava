@@ -1,0 +1,39 @@
+    @Override
+    public final void writeTo(OutputStream out) throws IOException {
+        DiffFormatter formatter = new DiffFormatter(new BufferedOutputStream(out));
+        formatter.setRepository(repository);
+        List<String> rawFileFilter = request.getFileFilter();
+        TreeFilter pathFilter = (rawFileFilter != null && rawFileFilter.size() > 0)
+                                ? PathFilterGroup.createFromStrings(rawFileFilter) : TreeFilter.ALL;
+        formatter.setPathFilter(AndTreeFilter.create(TreeFilter.ANY_DIFF, pathFilter));
+
+        try {
+            String commitA = request.getCommitA();
+            String commitB = request.getCommitB();
+            boolean cached = request.isCached();
+
+            List<DiffEntry> diff;
+            if (commitA == null && commitB == null && !cached) {
+                diff = indexToWorkingTree(formatter);
+            } else if (commitA != null && commitB == null && !cached) {
+                diff = commitToWorkingTree(commitA, formatter);
+            } else if (commitB == null) {
+                diff = commitToIndex(commitA, formatter);
+            } else {
+                diff = commitToCommit(commitA, commitB, formatter);
+            }
+
+            DiffType type = request.getType();
+            if (type == DiffType.NAME_ONLY) {
+                writeNames(diff, out);
+            } else if (type == DiffType.NAME_STATUS) {
+                writeNamesAndStatus(diff, out);
+            } else {
+                writeRawDiff(diff, formatter);
+            }
+        } finally {
+            formatter.close();
+            repository.close();
+        }
+    }
+
