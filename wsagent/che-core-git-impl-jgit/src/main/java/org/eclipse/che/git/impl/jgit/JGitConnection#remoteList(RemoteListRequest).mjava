@@ -1,0 +1,23 @@
+    @Override
+    public List<Remote> remoteList(RemoteListRequest request) throws GitException {
+        StoredConfig config = repository.getConfig();
+        Set<String> remoteNames = new HashSet<>(config.getSubsections(ConfigConstants.CONFIG_KEY_REMOTE));
+        String remote = request.getRemote();
+
+        if (remote != null && remoteNames.contains(remote)) {
+            remoteNames.clear();
+            remoteNames.add(remote);
+        }
+
+        List<Remote> result = new ArrayList<>(remoteNames.size());
+        for (String remoteName : remoteNames) {
+            try {
+                List<URIish> uris = new RemoteConfig(config, remoteName).getURIs();
+                result.add(newDto(Remote.class).withName(remoteName).withUrl(uris.isEmpty() ? null : uris.get(0).toString()));
+            } catch (URISyntaxException exception) {
+                throw new GitException(exception.getMessage(), exception);
+            }
+        }
+        return result;
+    }
+

@@ -1,0 +1,26 @@
+    /**
+     * Writes private SSH key into file.
+     *
+     * @return file that contains SSH key
+     * @throws GitException
+     *         if other error occurs
+     */
+    private File writePrivateKeyFile(String url, File keyDirectory) throws GitException {
+        final File keyFile = new File(keyDirectory, "identity");
+        try (FileOutputStream fos = new FileOutputStream(keyFile)) {
+            byte[] sshKey = sshKeyProvider.getPrivateKey(url);
+            fos.write(sshKey);
+        } catch (IOException | ServerException exception) {
+            String errorMessage = "Can't store ssh key. ".concat(exception.getMessage());
+            LOG.error(errorMessage, exception);
+            throw new GitException(errorMessage, exception);
+        }
+        Set<PosixFilePermission> permissions = EnumSet.of(OWNER_READ, OWNER_WRITE);
+        try {
+            java.nio.file.Files.setPosixFilePermissions(keyFile.toPath(), permissions);
+        } catch (IOException exception) {
+            throw new GitException(exception.getMessage(), exception);
+        }
+        return keyFile;
+    }
+

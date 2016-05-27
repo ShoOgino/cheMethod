@@ -1,0 +1,38 @@
+    /**
+     * Show changes between index and working tree.
+     *
+     * @param formatter
+     *            diff formatter
+     * @return list of diff entries
+     * @throws IOException
+     *             if any i/o errors occurs
+     */
+    private List<DiffEntry> indexToWorkingTree(DiffFormatter formatter) throws IOException {
+        DirCache dirCache = null;
+        ObjectReader reader = repository.newObjectReader();
+        List<DiffEntry> diff;
+        try {
+            dirCache = repository.lockDirCache();
+            DirCacheIterator iterA = new DirCacheIterator(dirCache);
+            FileTreeIterator iterB = new FileTreeIterator(repository);
+            // Seems bug in DiffFormatter when work with working. Disable detect
+            // renames by formatter and do it later.
+            formatter.setDetectRenames(false);
+            diff = formatter.scan(iterA, iterB);
+            if (!request.isNoRenames()) {
+                // Detect renames.
+                RenameDetector renameDetector = createRenameDetector();
+                ContentSource.Pair sourcePairReader = new ContentSource.Pair(ContentSource.create(reader),
+                                                                             ContentSource.create(iterB));
+                renameDetector.addAll(diff);
+                diff = renameDetector.compute(sourcePairReader, NullProgressMonitor.INSTANCE);
+            }
+        } finally {
+            reader.close();
+            if (dirCache != null) {
+                dirCache.unlock();
+            }
+        }
+        return diff;
+    }
+

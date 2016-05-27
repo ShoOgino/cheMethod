@@ -1,0 +1,96 @@
+    @Override
+    public PullResponse pull(PullRequest request) throws GitException, UnauthorizedException {
+        String remoteName = request.getRemote();
+        String remoteUri;
+        try {
+            if (repository.getRepositoryState().equals(RepositoryState.MERGING)) {
+                throw new GitException(ERROR_PULL_MERGING);
+            }
+            String fullBranch = repository.getFullBranch();
+            if (!fullBranch.startsWith(Constants.R_HEADS)) {
+                throw new DetachedHeadException(ERROR_PULL_HEAD_DETACHED);
+            }
+
+            String branch = fullBranch.substring(Constants.R_HEADS.length());
+
+            StoredConfig config = repository.getConfig();
+            if (remoteName == null) {
+                remoteName = config.getString(ConfigConstants.CONFIG_BRANCH_SECTION, branch,
+                                              ConfigConstants.CONFIG_KEY_REMOTE);
+                if (remoteName == null) {
+                    remoteName = Constants.DEFAULT_REMOTE_NAME;
+                }
+            }
+            remoteUri = config.getString(ConfigConstants.CONFIG_REMOTE_SECTION, remoteName, ConfigConstants.CONFIG_KEY_URL);
+
+            String remoteBranch;
+            RefSpec fetchRefSpecs = null;
+            String refSpec = request.getRefSpec();
+            if (refSpec != null) {
+                fetchRefSpecs = (refSpec.indexOf(':') < 0) //
+                                ? new RefSpec(Constants.R_HEADS + refSpec + ":" + fullBranch) //
+                                : new RefSpec(refSpec);
+                remoteBranch = fetchRefSpecs.getSource();
+            } else {
+                remoteBranch = config.getString(ConfigConstants.CONFIG_BRANCH_SECTION, branch,
+                                                ConfigConstants.CONFIG_KEY_MERGE);
+            }
+
+            if (remoteBranch == null) {
+                remoteBranch = fullBranch;
+            }
+
+            FetchCommand fetchCommand = getGit().fetch();
+            fetchCommand.setRemote(remoteName);
+            if (fetchRefSpecs != null) {
+                fetchCommand.setRefSpecs(fetchRefSpecs);
+            }
+            int timeout = request.getTimeout();
+            if (timeout > 0) {
+                fetchCommand.setTimeout(timeout);
+            }
+
+            FetchResult fetchResult = (FetchResult)executeRemoteCommand(remoteUri, fetchCommand);
+
+            Ref remoteBranchRef = fetchResult.getAdvertisedRef(remoteBranch);
+            if (remoteBranchRef == null) {
+                remoteBranchRef = fetchResult.getAdvertisedRef(Constants.R_HEADS + remoteBranch);
+            }
+            if (remoteBranchRef == null) {
+                throw new GitException(String.format(ERROR_PULL_REF_MISSING, remoteBranch));
+            }
+            org.eclipse.jgit.api.MergeResult mergeResult = getGit().merge().include(remoteBranchRef).call();
+            if (mergeResult.getMergeStatus().equals(org.eclipse.jgit.api.MergeResult.MergeStatus.ALREADY_UP_TO_DATE)) {
+                return newDto(PullResponse.class).withCommandOutput("Already up-to-date");
+            }
+
+            if (mergeResult.getConflicts() != null) {
+                StringBuilder message = new StringBuilder(ERROR_PULL_MERGE_CONFLICT_IN_FILES);
+                message.append(lineSeparator());
+                Map<String, int[][]> allConflicts = mergeResult.getConflicts();
+                for (String path : allConflicts.keySet()) {
+                    message.append(path).append(lineSeparator());
+                }
+                message.append(ERROR_PULL_AUTO_MERGE_FAILED);
+                throw new GitException(message.toString());
+            }
+        } catch (CheckoutConflictException exception) {
+            StringBuilder message = new StringBuilder(ERROR_CHECKOUT_CONFLICT);
+            message.append(lineSeparator());
+            for (String path : exception.getConflictingPaths()) {
+                message.append(path).append(lineSeparator());
+            }
+            message.append(ERROR_PULL_COMMIT_BEFORE_MERGE);
+            throw new GitException(message.toString(), exception);
+        } catch (IOException | GitAPIException exception) {
+            String errorMessage;
+            if (exception.getMessage().equals("Invalid remote: " + remoteName)) {
+                errorMessage = ERROR_NO_REMOTE_REPOSITORY;
+            } else {
+                errorMessage = exception.getMessage();
+            }
+            throw new GitException(errorMessage, exception);
+        }
+        return newDto(PullResponse.class).withCommandOutput("Successfully pulled from " + remoteUri);
+    }
+

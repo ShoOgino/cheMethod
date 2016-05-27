@@ -1,0 +1,50 @@
+    @Override
+    public PushResponse push(PushRequest request) throws GitException, UnauthorizedException {
+        String remoteName = request.getRemote();
+        String remoteUri = getRepository().getConfig().getString(ConfigConstants.CONFIG_REMOTE_SECTION, remoteName,
+                                                                 ConfigConstants.CONFIG_KEY_URL);
+
+        try {
+            PushCommand pushCommand = getGit().push();
+
+            if (request.getRemote() != null) {
+                pushCommand.setRemote(remoteName);
+            }
+            List<String> refSpec = request.getRefSpec();
+            if (!refSpec.isEmpty()) {
+                List<RefSpec> refSpecInst = new ArrayList<>(refSpec.size());
+                refSpecInst.addAll(refSpec.stream().map(RefSpec::new).collect(Collectors.toList()));
+                pushCommand.setRefSpecs(refSpecInst);
+            }
+
+            pushCommand.setForce(request.isForce());
+
+            int timeout = request.getTimeout();
+            if (timeout > 0) {
+                pushCommand.setTimeout(timeout);
+            }
+
+            @SuppressWarnings("unchecked")
+            Iterable<PushResult> list = (Iterable<PushResult>)executeRemoteCommand(remoteUri, pushCommand);
+            for (PushResult pushResult : list) {
+                Collection<RemoteRefUpdate> refUpdates = pushResult.getRemoteUpdates();
+                for (RemoteRefUpdate remoteRefUpdate : refUpdates) {
+                    if (!RemoteRefUpdate.Status.OK.equals(remoteRefUpdate.getStatus())) {
+                        if (RemoteRefUpdate.Status.UP_TO_DATE.equals(remoteRefUpdate.getStatus())) {
+                            return newDto(PushResponse.class).withCommandOutput("Everything up-to-date");
+                        } else {
+                            throw new GitException(remoteRefUpdate.getStatus().toString());
+                        }
+                    }
+                }
+            }
+        } catch (GitAPIException exception) {
+            if ("origin: not found.".equals(exception.getMessage())) {
+                throw new GitException(ERROR_NO_REMOTE_REPOSITORY, exception);
+            } else {
+                throw new GitException(exception.getMessage(), exception);
+            }
+        }
+        return newDto(PushResponse.class).withCommandOutput("Successfully pushed to " + remoteUri);
+    }
+
