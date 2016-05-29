@@ -1,0 +1,31 @@
+    /**
+     * Gets head config from the queue associated with the given {@code workspaceId}.
+     *
+     * <p>Note that this method won't actually poll the queue.
+     *
+     * <p>Fails if workspace start was interrupted by stop(queue doesn't exist).
+     *
+     * @return machine config which is in the queue head, or null
+     * if there are no machine configs left
+     * @throws ConflictException
+     *         when queue doesn't exist which means that {@link #stop(String)} executed
+     *         before all the machines started
+     * @throws ServerException
+     *         only if pre destroy has been invoked before peek config retrieved
+     */
+    private MachineConfigImpl queuePeekOrFail(String workspaceId) throws ConflictException, ServerException {
+        acquireReadLock(workspaceId);
+        try {
+            ensurePreDestroyIsNotExecuted();
+            final Queue<MachineConfigImpl> queue = startQueues.get(workspaceId);
+            if (queue == null) {
+                throw new ConflictException(format("Workspace '%s' start interrupted. " +
+                                                   "Workspace was stopped before all its machines were started",
+                                                   workspaceId));
+            }
+            return queue.peek();
+        } finally {
+            releaseReadLock(workspaceId);
+        }
+    }
+

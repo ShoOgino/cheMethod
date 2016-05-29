@@ -1,22 +1,100 @@
-    private void startQueue(String wsId, String envName, boolean recover) throws ServerException,
-                                                                                 NotFoundException,
-                                                                                 ConflictException {
-        publishEvent(EventType.STARTING, wsId, null);
-        MachineConfigImpl config = getPeekConfig(wsId);
+    private void startQueue(String workspaceId,
+                            String envName,
+                            boolean recover) throws ServerException,
+                                                    NotFoundException,
+                                                    ConflictException {
+        publishEvent(EventType.STARTING, workspaceId, null);
+
+        // Starting all the machines one by one by getting configs
+        // from the corresponding starting queue.
+        // Config will be null only if there are no machines left in the queue
+        MachineConfigImpl config = queuePeekOrFail(workspaceId);
         while (config != null) {
-            startMachine(config, wsId, envName, recover);
-            config = getPeekConfig(wsId);
+
+            // According to WorkspaceStatus specification the workspace start
+            // is failed when dev-machine start is failed, so if any error
+            // occurs during machine creation and the machine is dev-machine
+            // then start fail is reported and start resources such as queue
+            // and descriptor must be cleaned up
+            MachineImpl machine = null;
+            try {
+                machine = startMachine(config, workspaceId, envName, recover);
+            } catch (RuntimeException | ServerException | ConflictException | NotFoundException x) {
+                if (config.isDev()) {
+                    publishEvent(EventType.ERROR, workspaceId, x.getLocalizedMessage());
+                    cleanupStartResources(workspaceId);
+                    throw x;
+                }
+                LOG.error(format("Error while creating non-dev machine '%s' in workspace '%s', environment '%s'",
+                                 config.getName(),
+                                 workspaceId,
+                                 envName),
+                          x);
+            }
+
+            // Machine destroying is an expensive operation which must be
+            // performed outside of the lock, this section checks if
+            // the workspace wasn't stopped while it is starting and sets
+            // polled flag to true if the workspace wasn't stopped plus
+            // polls the proceeded machine configuration from the queue
+            boolean queuePolled = false;
+            acquireWriteLock(workspaceId);
+            try {
+                ensurePreDestroyIsNotExecuted();
+                final Queue<MachineConfigImpl> queue = startQueues.get(workspaceId);
+                if (queue != null) {
+                    queue.poll();
+                    queuePolled = true;
+                    if (machine != null) {
+                        final RuntimeDescriptor descriptor = descriptors.get(workspaceId);
+                        if (config.isDev()) {
+                            descriptor.getRuntime().setDevMachine(machine);
+                            descriptor.setRuntimeStatus(WorkspaceStatus.RUNNING);
+                        }
+                        descriptor.getRuntime().getMachines().add(machine);
+                    }
+                }
+            } finally {
+                releaseWriteLock(workspaceId);
+            }
+
+            // Event publication should be performed outside of the lock
+            // as it may take some time to notify subscribers
+            if (machine != null && config.isDev()) {
+                publishEvent(EventType.RUNNING, workspaceId, null);
+            }
+
+            // If machine config is not polled from the queue
+            // then workspace was stopped and newly created machine
+            // must be destroyed(if such exists)
+            if (!queuePolled) {
+                if (machine != null) {
+                    machineManager.destroy(machine.getId(), false);
+                }
+                throw new ConflictException(format("Workspace '%s' start interrupted. " +
+                                                   "Workspace stopped before all its machines started",
+                                                   workspaceId));
+            }
+
+            config = queuePeekOrFail(workspaceId);
         }
 
-        // Clean up the start queue when all the machines successfully started
-        rwLock.writeLock().lock();
+        // All the machines tried to start which means that queue
+        // should be empty and can be normally removed, but in the case of
+        // some unlucky timing, the workspace may be stopped and started again
+        // so the queue, which is guarded by the same lock as workspace descriptor
+        // may be initialized again with a new batch of machines to start,
+        // that's why queue should be removed only if it is not empty.
+        // On the other hand queue may not exist because workspace has been stopped
+        // just before queue utilization, which considered as a normal behaviour
+        acquireWriteLock(workspaceId);
         try {
-            final Queue<MachineConfigImpl> queue = startQueues.get(wsId);
+            final Queue<MachineConfigImpl> queue = startQueues.get(workspaceId);
             if (queue != null && queue.isEmpty()) {
-                startQueues.remove(wsId);
+                startQueues.remove(workspaceId);
             }
         } finally {
-            rwLock.writeLock().unlock();
+            releaseWriteLock(workspaceId);
         }
     }
 
