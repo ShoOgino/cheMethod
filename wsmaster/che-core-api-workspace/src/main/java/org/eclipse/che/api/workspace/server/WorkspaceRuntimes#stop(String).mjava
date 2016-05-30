@@ -25,8 +25,11 @@
      * @see WorkspaceStatus#STOPPING
      */
     public void stop(String workspaceId) throws NotFoundException, ServerException, ConflictException {
+        // This check allows to exit with an appropriate exception before blocking on lock.
+        // The double check is required as it is still possible to get unlucky timing
+        // between locking and stopping workspace.
         ensurePreDestroyIsNotExecuted();
-        rwLock.writeLock().lock();
+        acquireWriteLock(workspaceId);
         final WorkspaceRuntimeImpl runtime;
         try {
             ensurePreDestroyIsNotExecuted();
@@ -35,17 +38,28 @@
                 throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
             }
             if (descriptor.getRuntimeStatus() != WorkspaceStatus.RUNNING) {
-                throw new ConflictException(format("Couldn't stop '%s' workspace because its status is '%s'",
-                                                   workspaceId,
-                                                   descriptor.getRuntimeStatus()));
+                throw new ConflictException(
+                        format("Couldn't stop '%s' workspace because its status is '%s'. Workspace can be stopped only if it is 'RUNNING'",
+                               workspaceId,
+                               descriptor.getRuntimeStatus()));
             }
-            descriptor.setStopping();
-            // remove the workspace from the queue to prevent start
-            // of another not started machines(if such exist)
+
+            // According to the WorkspaceStatus specification workspace runtime
+            // must visible with STOPPING status until dev-machine is not stopped
+            descriptor.setRuntimeStatus(WorkspaceStatus.STOPPING);
+
+            // At this point of time starting queue must be removed
+            // to prevent start of another machines which are not started yet.
+            // In this case workspace start will be interrupted and
+            // interruption will be reported, machine which is currently starting(if such exists)
+            // will be destroyed by workspace starting thread.
             startQueues.remove(workspaceId);
-            runtime = descriptor.getRuntime();
+
+            // Create deep  copy of the currently running workspace to prevent
+            // out of the lock instance modifications and stale data effects
+            runtime = new WorkspaceRuntimeImpl(descriptor.getRuntime());
         } finally {
-            rwLock.writeLock().unlock();
+            releaseWriteLock(workspaceId);
         }
         destroyRuntime(workspaceId, runtime);
     }
