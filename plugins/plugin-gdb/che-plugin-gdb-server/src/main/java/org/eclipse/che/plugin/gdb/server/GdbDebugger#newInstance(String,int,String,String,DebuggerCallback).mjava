@@ -3,8 +3,16 @@
                                           String file,
                                           String srcDirectory,
                                           DebuggerCallback debuggerCallback) throws DebuggerException {
-        Gdb gdb;
+        Gdb gdb = null;
         try {
+            if (!exists(Paths.get(file))) {
+                throw new IOException("Binary " + file + " not found");
+            }
+
+            if (!exists(Paths.get(srcDirectory))) {
+                throw new IOException("Source directory " + srcDirectory + " does not exist");
+            }
+
             gdb = Gdb.start();
             GdbDirectory directory = gdb.directory(srcDirectory);
             LOG.debug("Source directories: " + directory.getDirectories());
@@ -13,8 +21,15 @@
             if (port > 0) {
                 gdb.targetRemote(host, port);
             }
-        } catch (IOException | GdbParseException | InterruptedException e) {
-            throw new DebuggerException("Can't initialize GDB", e);
+        } catch (DebuggerException | IOException | GdbParseException | InterruptedException e) {
+            if (gdb != null) {
+                try {
+                    gdb.quit();
+                } catch (IOException e1) {
+                    LOG.error("Can't stop GDB: " + e1.getMessage(), e);
+                }
+            }
+            throw new DebuggerException("Can't start GDB: " + e.getMessage(), e);
         }
 
         GdbVersion gdbVersion = gdb.getGdbVersion();
