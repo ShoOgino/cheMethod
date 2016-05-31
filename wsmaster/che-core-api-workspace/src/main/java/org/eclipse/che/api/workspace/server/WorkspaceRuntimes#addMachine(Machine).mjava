@@ -1,0 +1,72 @@
+    /**
+     * Tries to add the machine to the WorkspaceRuntime.
+     *
+     * @return true if machine is added or will be added to the corresponding WorkspaceRuntime,
+     * returns false when incoming machine can't be added and should be destroyed.
+     */
+    @VisibleForTesting
+    boolean addMachine(Machine machine) throws NotFoundException, MachineException {
+        final String workspaceId = machine.getWorkspaceId();
+
+        acquireWriteLock(workspaceId);
+        try {
+            final RuntimeDescriptor descriptor = descriptors.get(workspaceId);
+
+            // Ensure that workspace runtime exists for such machine
+            // if it is not, then the machine should be immediately destroyed
+            if (descriptor == null) {
+                LOG.warn("Could not add machine '{}' to the workspace '{}' because workspace is in not running",
+                         machine.getId(),
+                         workspaceId);
+                return false;
+            }
+
+            // This may happen when either dev-machine started by WorkspaceRuntimes,
+            // or dev-machine started by direct call to MachineManager before WorkspaceRuntimes
+            // started it. In this case WorkspaceRuntimes#startMachine will fail & then if such
+            // machine exists it will be added to the corresponding WorkspaceRuntime.
+            if (machine.getConfig().isDev()) {
+                if (descriptor.getRuntimeStatus() == WorkspaceStatus.STARTING) {
+                    return true;
+                }
+                LOG.warn("Could not add another dev-machine '{}' to the workspace '{}'",
+                         machine.getId(),
+                         workspaceId);
+                return false;
+            }
+
+            // When workspace is not running then started machine must be immediately destroyed
+            // Example: status == STARTING & machine is non-dev
+            if (descriptor.getRuntimeStatus() != WorkspaceStatus.RUNNING) {
+                LOG.warn("Could not add machine '{}' to the workspace '{}' because workspace status is '{}'",
+                         machine.getId(),
+                         workspaceId,
+                         descriptor.getRuntimeStatus());
+                return false;
+            }
+
+            // Workspace is RUNNING and there is no start queue
+            // which means that machine can be added to the workspace
+            if (!startQueues.containsKey(workspaceId)) {
+                descriptor.getRuntime().getMachines().add(new MachineImpl(machine));
+                return true;
+            }
+
+            // These are configs of machines which are not started yet
+            final Queue<MachineConfigImpl> machineConfigs = startQueues.get(workspaceId);
+
+            // If there is no config equal to the machine config
+            // then the machine can be added to the workspace runtime
+            // otherwise it will be added later, after WorkspaceRuntimes starts it
+            if (!machineConfigs.stream().anyMatch(m -> m.equals(machine.getConfig()))) {
+                descriptor.getRuntime().getMachines().add(new MachineImpl(machine));
+            }
+
+            // All the cases are covered, in this case machine will be added
+            // directly by WorkspaceRuntimes, after it fails on #startMachine
+            return true;
+        } finally {
+            releaseWriteLock(workspaceId);
+        }
+    }
+

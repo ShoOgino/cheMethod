@@ -1,0 +1,21 @@
+    @Test
+    public void shouldReuseRunningMachineIfFailedToStart() throws Exception {
+        // prepare workspace
+        final WorkspaceImpl workspace = createWorkspace();
+        // prepare machine
+        final MachineImpl machine = createMachine(true);
+        machine.setStatus(MachineStatus.RUNNING);
+        when(machineManager.getMachines()).thenReturn(singletonList(machine));
+        // force machine manager to throw conflict exception
+        final RuntimeDescriptor descriptorMock = mock(RuntimeDescriptor.class);
+        when(descriptorMock.getRuntimeStatus()).thenReturn(WorkspaceStatus.RUNNING);
+        doThrow(new ConflictException("already exists")).when(machineManager).createMachineSync(machine.getConfig(),
+                                                                                                machine.getWorkspaceId(),
+                                                                                                workspace.getConfig().getDefaultEnv());
+
+        final RuntimeDescriptor descriptor = runtimes.start(workspace, workspace.getConfig().getDefaultEnv());
+
+        assertEquals(descriptor.getRuntime().getDevMachine(), machine);
+        verify(machineManager).getMachines();
+    }
+
