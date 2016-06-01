@@ -4,12 +4,30 @@
         applyModelPromise.then(new Operation<RefactoringResult>() {
             @Override
             public void apply(RefactoringResult result) throws OperationException {
-                if (result.getSeverity() > WARNING) {
-                    undoChanges();
+                switch (result.getSeverity()) {
+                    case OK:
+                    case INFO:
+                        RefactorInfo refactorInfo = RefactorInfo.of(RefactoredItemType.JAVA_ELEMENT, null);
 
-                    notificationManager.notify(locale.failedToRename(), result.getEntries().get(0).getMessage(), FAIL, FLOAT_MODE);
-                } else {
-                    onTargetRenamed(result);
+                        refactoringUpdater.updateAfterRefactoring(refactorInfo, result.getChanges());
+                        String projectPath = textEditor.getDocument().getFile().getProject().getProjectConfig().getPath();
+                        refactoringServiceClient.reindexProject(projectPath);
+                        break;
+                    case WARNING:
+                    case ERROR:
+                        enableAutoSave();
+
+                        undoChanges();
+
+                        showWarningDialog();
+                        break;
+                    case FATAL:
+                        undoChanges();
+
+                        notificationManager.notify(locale.failedToRename(), result.getEntries().get(0).getMessage(), FAIL, FLOAT_MODE);
+                        break;
+                    default:
+                        break;
                 }
             }
         }).catchError(new Operation<PromiseError>() {
