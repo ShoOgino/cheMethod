@@ -1,5 +1,7 @@
     @BeforeMethod
     public void setUp() throws Exception {
+        Provider<ProjectRegistry> projectRegistryProvider = (Provider<ProjectRegistry>)mock(Provider.class);
+        when(projectRegistryProvider.get()).thenReturn(projectRegistry);
         MavenServerManagerTest.MyMavenServerProgressNotifier mavenNotifier = new MavenServerManagerTest.MyMavenServerProgressNotifier();
         MavenTerminal terminal = new MavenTerminal() {
             @Override
@@ -10,8 +12,36 @@
                 }
             }
         };
+
+        File localRepository = new File(new File("target/localRepo").getAbsolutePath());
+        localRepository.mkdirs();
+        mavenServerManager.setLocalRepository(localRepository);
+
         MavenWrapperManager wrapperManager = new MavenWrapperManager(mavenServerManager);
-        projectManager = new MavenProjectManager(wrapperManager, mavenServerManager, terminal, mavenNotifier, new EclipseWorkspaceProvider());
+        projectManager =
+                new MavenProjectManager(wrapperManager, mavenServerManager, terminal, mavenNotifier, new EclipseWorkspaceProvider());
+
+
+        ClasspathManager classpathManager =
+                new ClasspathManager(root.getAbsolutePath(), wrapperManager, projectManager, terminal, mavenNotifier);
+
+        mavenWorkspace = new MavenWorkspace(projectManager, mavenNotifier, new MavenExecutorService(), projectRegistryProvider,
+                                            new MavenCommunication() {
+                                                @Override
+                                                public void sendUpdateMassage(Set<MavenProject> updated, List<MavenProject> removed) {
+
+                                                }
+
+                                                @Override
+                                                public void sendNotification(NotificationMessage message) {
+                                                    System.out.println(message.toString());
+                                                }
+
+                                                @Override
+                                                public void send(JsonObject object, MessageType type) {
+
+                                                }
+                                            }, classpathManager, eventService, new EclipseWorkspaceProvider());
 
     }
 
