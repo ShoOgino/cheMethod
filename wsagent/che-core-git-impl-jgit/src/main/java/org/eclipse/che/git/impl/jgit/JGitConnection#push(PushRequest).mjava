@@ -2,8 +2,8 @@
     public PushResponse push(PushRequest request) throws GitException, UnauthorizedException {
         String remoteName = request.getRemote();
         String remoteUri = getRepository().getConfig().getString(ConfigConstants.CONFIG_REMOTE_SECTION, remoteName,
-                                                                 ConfigConstants.CONFIG_KEY_URL);
-
+                ConfigConstants.CONFIG_KEY_URL);
+        PushResponse pushResponseDto = newDto(PushResponse.class);
         try {
             PushCommand pushCommand = getGit().push();
 
@@ -25,19 +25,9 @@
             }
 
             @SuppressWarnings("unchecked")
-            Iterable<PushResult> list = (Iterable<PushResult>)executeRemoteCommand(remoteUri, pushCommand);
-            for (PushResult pushResult : list) {
-                Collection<RemoteRefUpdate> refUpdates = pushResult.getRemoteUpdates();
-                for (RemoteRefUpdate remoteRefUpdate : refUpdates) {
-                    if (!RemoteRefUpdate.Status.OK.equals(remoteRefUpdate.getStatus())) {
-                        if (RemoteRefUpdate.Status.UP_TO_DATE.equals(remoteRefUpdate.getStatus())) {
-                            return newDto(PushResponse.class).withCommandOutput("Everything up-to-date");
-                        } else {
-                            throw new GitException(remoteRefUpdate.getStatus().toString());
-                        }
-                    }
-                }
-            }
+            Iterable<PushResult> pushResults = (Iterable<PushResult>)executeRemoteCommand(remoteUri, pushCommand);
+            PushResult pushResult = pushResults.iterator().next();
+            return addCommandOutputUpdates(pushResponseDto, request, pushResult);
         } catch (GitAPIException exception) {
             if ("origin: not found.".equals(exception.getMessage())) {
                 throw new GitException(ERROR_NO_REMOTE_REPOSITORY, exception);
@@ -45,6 +35,5 @@
                 throw new GitException(exception.getMessage(), exception);
             }
         }
-        return newDto(PushResponse.class).withCommandOutput("Successfully pushed to " + remoteUri);
     }
 
