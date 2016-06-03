@@ -1,5 +1,5 @@
     @Override
-    public void apply(DebugConfiguration debugConfiguration) {
+    public void apply(final DebugConfiguration debugConfiguration) {
         if (debugConfiguration == null) {
             return;
         }
@@ -15,15 +15,17 @@
         if (debugger != null) {
             debuggerManager.setActiveDebugger(debugger);
 
-            Map<String, String> connectionProperties = new HashMap<>(2 + debugConfiguration.getConnectionProperties().size());
-            connectionProperties.put("HOST", debugConfiguration.getHost());
-            connectionProperties.put("PORT", String.valueOf(debugConfiguration.getPort()));
-            connectionProperties.putAll(debugConfiguration.getConnectionProperties());
-
-            debugger.connect(connectionProperties).catchError(new Operation<PromiseError>() {
+            currentProjectPathProvider.getValue().then(new Operation<String>() {
                 @Override
-                public void apply(PromiseError arg) throws OperationException {
-                    debuggerManager.setActiveDebugger(null);
+                public void apply(String arg) throws OperationException {
+                    Map<String, String> connectionProperties = prepareConnectionProperties(debugConfiguration, arg);
+
+                    debugger.connect(connectionProperties).catchError(new Operation<PromiseError>() {
+                        @Override
+                        public void apply(PromiseError arg) throws OperationException {
+                            debuggerManager.setActiveDebugger(null);
+                        }
+                    });
                 }
             });
         }

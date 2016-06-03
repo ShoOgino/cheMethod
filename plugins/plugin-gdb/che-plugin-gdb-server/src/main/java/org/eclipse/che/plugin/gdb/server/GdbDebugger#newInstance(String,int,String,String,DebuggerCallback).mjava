@@ -3,42 +3,22 @@
                                           String file,
                                           String srcDirectory,
                                           DebuggerCallback debuggerCallback) throws DebuggerException {
-        Gdb gdb = null;
-        try {
-            if (!exists(Paths.get(file))) {
-                throw new IOException("Binary " + file + " not found");
-            }
-
-            if (!exists(Paths.get(srcDirectory))) {
-                throw new IOException("Source directory " + srcDirectory + " does not exist");
-            }
-
-            gdb = Gdb.start();
-            GdbDirectory directory = gdb.directory(srcDirectory);
-            LOG.debug("Source directories: " + directory.getDirectories());
-
-            gdb.file(file);
-            if (port > 0) {
-                gdb.targetRemote(host, port);
-            }
-        } catch (DebuggerException | IOException | GdbParseException | InterruptedException e) {
-            if (gdb != null) {
-                try {
-                    gdb.quit();
-                } catch (IOException e1) {
-                    LOG.error("Can't stop GDB: " + e1.getMessage(), e);
-                }
-            }
-            throw new DebuggerException("Can't start GDB: " + e.getMessage(), e);
+        if (!exists(Paths.get(file))) {
+            throw new DebuggerException("Can't start GDB: binary " + file + " not found");
         }
 
-        GdbVersion gdbVersion = gdb.getGdbVersion();
-        return new GdbDebugger(host,
-                               port,
-                               gdbVersion.getVersion(),
-                               gdbVersion.getName(),
-                               file,
-                               gdb,
-                               debuggerCallback);
+        if (!exists(Paths.get(srcDirectory))) {
+            throw new DebuggerException("Can't start GDB: source directory " + srcDirectory + " does not exist");
+        }
+
+        for (int i = 0; i < CONNECTION_ATTEMPTS - 1; i++) {
+            try {
+                return init(host, port, file, srcDirectory, debuggerCallback);
+            } catch (DebuggerException e) {
+                LOG.error("Connection attempt " + i + ": " + e.getMessage(), e);
+            }
+        }
+
+        return init(host, port, file, srcDirectory, debuggerCallback);
     }
 
