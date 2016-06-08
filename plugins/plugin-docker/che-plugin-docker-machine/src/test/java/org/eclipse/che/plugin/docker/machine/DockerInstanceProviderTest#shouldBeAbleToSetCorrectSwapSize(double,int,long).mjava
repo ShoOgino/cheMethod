@@ -1,5 +1,6 @@
-    @Test
-    public void shouldCreateContainerWithPrivilegeMode() throws Exception {
+    @Test(dataProvider = "swapTestProvider")
+    public void shouldBeAbleToSetCorrectSwapSize(double swapMultiplier, int memoryMB, long expectedSwapSize) throws Exception {
+        // given
         dockerInstanceProvider = spy(new DockerInstanceProvider(dockerConnector,
                                                                 dockerConnectorConfiguration,
                                                                 dockerMachineFactory,
@@ -18,11 +19,14 @@
                                                                 Collections.emptySet(),
                                                                 Collections.emptySet(),
                                                                 SNAPSHOT_USE_REGISTRY,
-                                                                MEMORY_SWAP_MULTIPLIER));
+                                                                swapMultiplier));
 
-        createInstanceFromRecipe();
+        // when
+        createInstanceFromRecipe(memoryMB);
 
-        verify(dockerConnector).createContainer(containerConfigArgumentCaptor.capture(), anyString());
-        assertTrue(containerConfigArgumentCaptor.getValue().getHostConfig().isPrivileged());
+        // then
+        ArgumentCaptor<ContainerConfig> createContainerCaptor = ArgumentCaptor.forClass(ContainerConfig.class);
+        verify(dockerConnector).createContainer(createContainerCaptor.capture(), anyString());
+        assertEquals(createContainerCaptor.getValue().getHostConfig().getMemorySwap(), expectedSwapSize);
     }
 
