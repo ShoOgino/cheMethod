@@ -1,8 +1,8 @@
     /**
      * Creates new user and profile.
-     * <p/>
-     * When current user is in 'system/admin' role then {@code userDescriptor} parameter
-     * will be used for user creation, otherwise method uses {@code token} and {@link #tokenValidator}.
+     *
+     * <p>User will be created from {@code token} parameter or from {@code userDescriptor}
+     * when {@code token} is null
      *
      * @param token
      *         authentication token
@@ -33,9 +33,8 @@
     @GenerateLink(rel = LINK_REL_CREATE_USER)
     @ApiOperation(value = "Create a new user",
                   notes = "Create a new user in the system. There are two ways to create a user: " +
-                          "through a regular registration workflow and by system/admin. In the former case, " +
-                          "auth token is sent to user's mailbox, while system/admin can create a user directly " +
-                          "with predefined name and password",
+                          "through a regular registration workflow when auth token is sent to user's mailbox" +
+                          "and directly with predefined name and password. ",
                   response = UserDescriptor.class)
     @ApiResponses({@ApiResponse(code = 201, message = "Created"),
                    @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
@@ -51,19 +50,13 @@
                            @ApiParam(value = "User type")
                            @QueryParam("temporary")
                            @DefaultValue("false")
-                           Boolean isTemporary,
-                           @Context
-                           SecurityContext context) throws ForbiddenException,
-                                                           BadRequestException,
-                                                           UnauthorizedException,
-                                                           ConflictException,
-                                                           ServerException,
-                                                           NotFoundException {
-        if (!context.isUserInRole("system/admin") && !userSelfCreationAllowed) {
-            throw new ForbiddenException("Currently only admins can create accounts. Please contact our Admin Team for further info.");
-        }
-
-        final User user = context.isUserInRole("system/admin") ? fromEntity(userDescriptor) : fromToken(token);
+                           Boolean isTemporary) throws ForbiddenException,
+                                                       BadRequestException,
+                                                       UnauthorizedException,
+                                                       ConflictException,
+                                                       ServerException,
+                                                       NotFoundException {
+        final User user = isNullOrEmpty(token) ? fromEntity(userDescriptor) : fromToken(token);
         if (!isValidUserName(user.getName())) {
             throw new BadRequestException("Username must contain only letters and digits");
         }
