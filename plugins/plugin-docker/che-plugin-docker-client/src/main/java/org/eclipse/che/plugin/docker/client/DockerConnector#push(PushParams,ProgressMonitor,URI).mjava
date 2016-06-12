@@ -1,13 +1,16 @@
     private String push(final PushParams params, final ProgressMonitor progressMonitor, URI dockerDaemonUri)
             throws IOException, InterruptedException {
-        final String fullRepo = (params.getRegistry() != null) ?
-                                params.getRegistry() + '/' + params.getRepository() : params.getRepository();
-        final ValueHolder<String> digestHolder = new ValueHolder<>();
+        final String registry = params.getRegistry();
+        final String fullRepo = params.getFullRepo();
 
+        final ValueHolder<String> digestHolder = new ValueHolder<>();
         try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
                                                             .method("POST")
                                                             .path("/images/" + fullRepo + "/push")
-                                                            .header("X-Registry-Auth", initialAuthConfig.getAuthConfigHeader())) {
+                                                            .header("X-Registry-Auth",
+                                                                    authManager.getXRegistryAuthHeaderValue(
+                                                                            firstNonNull(registry, DEFAULT_REGISTRY_VALUE),
+                                                                            params.getAuthConfigs()))) {
             addQueryParamIfNotNull(connection, "tag", params.getTag());
             final DockerResponse response = connection.request();
             if (OK.getStatusCode() != response.getStatus()) {
