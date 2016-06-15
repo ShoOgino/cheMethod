@@ -25,22 +25,28 @@
                         messageBus.removeOnOpenHandler(this);
                         subscribeToWorkspaceStatusWebSocket(workspace);
 
-                        if (!RUNNING.equals(workspace.getStatus())) {
-                            workspaceServiceClient.getSnapshot(workspace.getId()).then(new Operation<List<SnapshotDto>>() {
-                                @Override
-                                public void apply(List<SnapshotDto> snapshots) throws OperationException {
-                                    if (snapshots.isEmpty()) {
-                                        handleWsStart(workspaceServiceClient.startById(workspace.getId(),
-                                                                                       workspace.getConfig().getDefaultEnv()));
-                                    } else {
-                                        showRecoverWorkspaceConfirmDialog(workspace);
+                        WorkspaceStatus workspaceStatus = workspace.getStatus();
+                        switch (workspaceStatus) {
+                            case STARTING:
+                                handleWsStart(workspace);
+                                break;
+                            case RUNNING:
+                                initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), SUCCESS);
+                                setCurrentWorkspace(workspace);
+                                eventBus.fireEvent(new WorkspaceStartedEvent(workspace));
+                                break;
+                            default:
+                                workspaceServiceClient.getSnapshot(workspace.getId()).then(new Operation<List<SnapshotDto>>() {
+                                    @Override
+                                    public void apply(List<SnapshotDto> snapshots) throws OperationException {
+                                        if (snapshots.isEmpty()) {
+                                            handleWsStart(workspaceServiceClient.startById(workspace.getId(),
+                                                                                           workspace.getConfig().getDefaultEnv()));
+                                        } else {
+                                            showRecoverWorkspaceConfirmDialog(workspace);
+                                        }
                                     }
-                                }
-                            });
-                        } else {
-                            initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), SUCCESS);
-                            setCurrentWorkspace(workspace);
-                            eventBus.fireEvent(new WorkspaceStartedEvent(workspace));
+                                });
                         }
                     }
                 });
