@@ -1,50 +1,35 @@
     /**
-     * Looks for auth header for specified registry and encode it in base64.
-     * First searches in the params and then in the initial auth config.
-     * If nothing found empty encoded json will be returned.
+     * Looks for auth credentials for specified registry and encode it in base64.
+     * First searches in the passed params and then in the configured credentials.
+     * If nothing found, empty encoded json will be returned.
      *
      * @param registry
      *         registry to which API call will be applied
-     * @param paramsAuthConfigs
-     *         auth data for current API call
+     * @param paramAuthConfigs
+     *         credentials for provided registry
      * @return base64 encoded X-Registry-Auth header value
      */
-    public String getXRegistryAuthHeaderValue(String registry, @Nullable AuthConfigs paramsAuthConfigs) {
-        Map<String, AuthConfig> authConfigsMap = null;
-        if (paramsAuthConfigs != null) {
-            authConfigsMap = paramsAuthConfigs.getConfigs();
-        }
-
-        if (DEFAULT_REGISTRY.contains(registry)) {
-            registry = DEFAULT_REGISTRY_VALUE;
+    public String getXRegistryAuthHeaderValue(@Nullable String registry, @Nullable AuthConfigs paramAuthConfigs) {
+        if (DEFAULT_REGISTRY_SYNONYMS.contains(registry)) {
+            registry = DEFAULT_REGISTRY;
         }
 
         AuthConfig authConfig = null;
-        if (authConfigsMap != null) {
-            for(Map.Entry<String, AuthConfig> entry : authConfigsMap.entrySet()) {
-                AuthConfig value = entry.getValue();
-                if (value.getServeraddress().contains(registry)) {
-                    authConfig = value;
-                    break;
-                }
-            }
+        if (paramAuthConfigs != null && paramAuthConfigs.getConfigs() != null) {
+            authConfig = paramAuthConfigs.getConfigs().get(registry);
         }
-
         if (authConfig == null) {
-            for(Map.Entry<String, AuthConfig> entry : initialAuthConfig.getAuthConfigs().getConfigs().entrySet()) {
-                AuthConfig value = entry.getValue();
-                if (value.getServeraddress().contains(registry)) {
-                    authConfig = value;
-                    break;
-                }
-            }
+            authConfig = initialAuthConfig.getAuthConfigs().getConfigs().get(registry);
         }
 
-        if (authConfig != null) {
-            XRegistryAuthUnit auth = new XRegistryAuthUnit(authConfig.getUsername(), authConfig.getPassword());
-            return Base64.encodeBase64String(JsonHelper.toJson(auth).getBytes());
+        String authConfigJson;
+        if (authConfig == null) {
+            // empty auth config
+            authConfigJson = "{}";
+        } else {
+            authConfigJson = JsonHelper.toJson(authConfig);
         }
 
-        return Base64.encodeBase64String("{}".getBytes());
+        return Base64.getEncoder().encodeToString(authConfigJson.getBytes());
     }
 
