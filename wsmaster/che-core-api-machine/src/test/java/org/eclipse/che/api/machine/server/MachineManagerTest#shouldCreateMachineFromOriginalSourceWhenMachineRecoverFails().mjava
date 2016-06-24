@@ -1,0 +1,23 @@
+    @Test
+    public void shouldCreateMachineFromOriginalSourceWhenMachineRecoverFails() throws Exception {
+        final SnapshotImpl snapshot = createSnapshot();
+        final MachineConfigImpl config = createMachineConfig();
+        when(manager.generateMachineId()).thenReturn(MACHINE_ID);
+        final MachineImpl machine = new MachineImpl(config,
+                                                    MACHINE_ID,
+                                                    WS_ID,
+                                                    ENVIRONMENT_NAME,
+                                                    CREATOR.getUserId(),
+                                                    MachineStatus.CREATING,
+                                                    null);
+        machine.getConfig().setSource(snapshot.getMachineSource());
+        when(snapshotDao.getSnapshot(WS_ID, ENVIRONMENT_NAME, config.getName())).thenReturn(snapshot);
+        when(instanceProvider.createInstance(eq(machine), any(LineConsumer.class))).thenThrow(new SourceNotFoundException(""));
+        when(machineRegistry.getMachine(MACHINE_ID)).thenReturn(machine);
+
+        final MachineImpl result = manager.recoverMachine(config, WS_ID, ENVIRONMENT_NAME);
+
+        machine.getConfig().setSource(config.getSource());
+        assertEquals(result, machine);
+    }
+
