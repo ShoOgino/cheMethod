@@ -1,26 +1,21 @@
     @Inject
     public InitialAuthConfig(ConfigurationProperties configurationProperties) {
-        String username = null, password = null;
-        for (Map.Entry<String, String> e : configurationProperties.getProperties(CONFIGURATION_PREFIX_PATTERN).entrySet()) {
-            final String classifier = e.getKey().replaceFirst(CONFIGURATION_PREFIX, "");
-            switch (classifier) {
-                case "url": {
-                    serverAddress = e.getValue();
-                    break;
-                }
-                case "username": {
-                    username = e.getValue();
-                    break;
-                }
-                case "password": {
-                    password = e.getValue();
-                    break;
-                }
-            }
+        Map<String, String> authProperties = configurationProperties.getProperties(CONFIGURATION_PREFIX_PATTERN);
+
+        Set<String> registryPrefixes = authProperties.entrySet()
+                                                     .stream()
+                                                     .map(property -> getRegistryPrefix(property.getKey()))
+                                                     .collect(Collectors.toSet());
+
+        Map<String, AuthConfig> configMap = newHashMapWithExpectedSize(registryPrefixes.size());
+        for (String regPrefix : registryPrefixes) {
+            String url = getPropertyValue(authProperties, regPrefix + URL);
+            String userName = getPropertyValue(authProperties, regPrefix + USER_NAME);
+            String password = getPropertyValue(authProperties, regPrefix + PASSWORD);
+
+            configMap.put(url, newDto(AuthConfig.class).withUsername(userName).withPassword(password));
         }
-        if (!isNullOrEmpty(serverAddress) && !isNullOrEmpty(username) && !isNullOrEmpty(password)) {
-            predefinedConfig = DtoFactory.newDto(AuthConfig.class).withUsername(username)
-                                                                  .withPassword(password);
-        }
+
+        authConfigs = newDto(AuthConfigs.class).withConfigs(configMap);
     }
 
