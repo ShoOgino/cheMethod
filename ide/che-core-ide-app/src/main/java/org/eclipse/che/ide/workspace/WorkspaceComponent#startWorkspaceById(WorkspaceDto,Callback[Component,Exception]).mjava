@@ -26,27 +26,26 @@
                         subscribeToWorkspaceStatusWebSocket(workspace);
 
                         WorkspaceStatus workspaceStatus = workspace.getStatus();
+
                         switch (workspaceStatus) {
                             case STARTING:
                                 handleWsStart(workspace);
                                 break;
+
                             case RUNNING:
-                                initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), SUCCESS);
                                 setCurrentWorkspace(workspace);
-                                eventBus.fireEvent(new WorkspaceStartedEvent(workspace));
-                                break;
-                            default:
-                                workspaceServiceClient.getSnapshot(workspace.getId()).then(new Operation<List<SnapshotDto>>() {
+                                Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
                                     @Override
-                                    public void apply(List<SnapshotDto> snapshots) throws OperationException {
-                                        if (snapshots.isEmpty()) {
-                                            handleWsStart(workspaceServiceClient.startById(workspace.getId(),
-                                                                                           workspace.getConfig().getDefaultEnv()));
-                                        } else {
-                                            showRecoverWorkspaceConfirmDialog(workspace);
-                                        }
+                                    public void execute() {
+                                        initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), SUCCESS);
+                                        notificationManager.notify(locale.startedWs(), StatusNotification.Status.SUCCESS, FLOAT_MODE);
+                                        eventBus.fireEvent(new WorkspaceStartedEvent(workspace));
                                     }
                                 });
+                                break;
+
+                            default:
+                                checkWorkspaceForSnapshots(workspace);
                         }
                     }
                 });
