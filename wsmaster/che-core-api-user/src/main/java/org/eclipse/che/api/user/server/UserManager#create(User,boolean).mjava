@@ -1,30 +1,48 @@
     /**
-     * Creates new user.
+     * Creates new user and his profile.
      *
-     * @param user
-     *         POJO representation of user entity
+     * @param newUser
+     *         created user
+     * @throws NullPointerException
+     *         when {@code newUser} is null
      * @throws ConflictException
-     *         when given user cannot be created
+     *         when user with such name/email/alias already exists
      * @throws ServerException
      *         when any other error occurs
      */
-    public void create(User user, boolean isTemporary) throws ConflictException, ServerException {
-        if (reservedNames.contains(user.getName().toLowerCase())) {
-            throw new ConflictException(String.format("Username \"%s\" is reserved", user.getName()));
+    public User create(User newUser, boolean isTemporary) throws ConflictException, ServerException {
+        requireNonNull(newUser, "Required non-null user");
+        if (reservedNames.contains(newUser.getName().toLowerCase())) {
+            throw new ConflictException(String.format("Username '%s' is reserved", newUser.getName()));
         }
-        user.withId(generate("user", ID_LENGTH))
-            .withPassword(firstNonNull(user.getPassword(), generate("", PASSWORD_LENGTH)));
-        userDao.create(user);
-
-        profileDao.create(new Profile(user.getId()));
-
-        final Map<String, String> preferences = new HashMap<>(4);
-        preferences.put("temporary", Boolean.toString(isTemporary));
-        preferences.put("codenvy:created", Long.toString(System.currentTimeMillis()));
+        final UserImpl user = new UserImpl(generate("user", ID_LENGTH),
+                                           newUser.getEmail(),
+                                           newUser.getName(),
+                                           firstNonNull(newUser.getPassword(), generate("", PASSWORD_LENGTH)),
+                                           newUser.getAliases());
         try {
-            preferenceDao.setPreferences(user.getId(), preferences);
-        } catch (NotFoundException e) {
-            LOG.warn(format("Cannot set creation time preferences for user %s.", user.getId()), e);
+            userDao.create(user);
+            profileDao.create(new ProfileImpl(user.getId()));
+            preferencesDao.setPreferences(user.getId(), ImmutableMap.of("temporary", Boolean.toString(isTemporary),
+                                                                        "codenvy:created", Long.toString(currentTimeMillis())));
+        } catch (ConflictException | ServerException x) {
+            // optimistic rollback(won't remove profile if userDao.remove failed)
+            // remove operation is not-found-safe so if any exception
+            // during the either user or profile creation occurs remove all entities
+            // NOTE: this logic must be replaced with transaction management
+            try {
+                userDao.remove(user.getId());
+                profileDao.remove(user.getId());
+                preferencesDao.remove(user.getId());
+            } catch (ConflictException | ServerException rollbackEx) {
+                LOG.error(format("An attempt to clean up resources due to user creation failure was unsuccessful." +
+                                 "Now the system may be in inconsistent state. " +
+                                 "User with id '%s' must not exist",
+                                 user.getId()),
+                          rollbackEx);
+            }
+            throw x;
         }
+        return user;
     }
 

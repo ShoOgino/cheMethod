@@ -1,0 +1,32 @@
+    /**
+     * Updates the preferences of the user by merging given {@code preferences}
+     * with the existing preferences. If user doesn't have any preferences
+     * then the given {@code preferences} will be associated with the user.
+     *
+     * @param userId
+     *         the user whose preferences should be updated
+     * @param preferences
+     *         preferences update
+     * @return all the user's preferences including the update
+     * @throws NullPointerException
+     *         when either {@code userId} or {@code preferences} is null
+     * @throws ServerException
+     *         when any error occurs
+     */
+    public Map<String, String> update(String userId, Map<String, String> preferences) throws ServerException {
+        requireNonNull(userId, "Required non-null user id");
+        requireNonNull(preferences, "Required non-null preferences");
+        // Holding reference to prevent garbage collection
+        // this reentrantLock helps to avoid race-conditions when parallel updates are applied
+        final Lock reentrantLock = UPDATE_REENTRANT_LOCKS.get(userId);
+        reentrantLock.lock();
+        try {
+            final Map<String, String> found = preferenceDao.getPreferences(userId);
+            found.putAll(preferences);
+            preferenceDao.setPreferences(userId, found);
+            return found;
+        } finally {
+            reentrantLock.unlock();
+        }
+    }
+
