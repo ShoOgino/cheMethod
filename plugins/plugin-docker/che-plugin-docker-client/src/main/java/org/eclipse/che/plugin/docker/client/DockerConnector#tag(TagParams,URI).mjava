@@ -1,4 +1,5 @@
-    private void tag(final TagParams params, URI dockerDaemonUri) throws IOException {
+    private void tag(final TagParams params, URI dockerDaemonUri) throws ImageNotFoundException,
+                                                                         IOException {
         try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
                                                             .method("POST")
                                                             .path("/images/" + params.getImage() + "/tag")
@@ -6,7 +7,9 @@
             addQueryParamIfNotNull(connection, "force", params.isForce());
             addQueryParamIfNotNull(connection, "tag", params.getTag());
             final DockerResponse response = connection.request();
-            if (response.getStatus() / 100 != 2) {
+            if (response.getStatus() == 404) {
+                throw new ImageNotFoundException(IoUtil.readStream(response.getInputStream()));
+            } else if (response.getStatus() / 100 != 2) {
                 throw getDockerException(response);
             }
         }
