@@ -1,33 +1,73 @@
     @Override
     public PushResponse push(PushRequest request) throws GitException, UnauthorizedException {
+        List<Map<String, String>> updates = new ArrayList<>();
+        String currentBranch = getCurrentBranch();
         String remoteName = request.getRemote();
         String remoteUri = getRepository().getConfig().getString(ConfigConstants.CONFIG_REMOTE_SECTION, remoteName,
-                ConfigConstants.CONFIG_KEY_URL);
-        PushResponse pushResponseDto = newDto(PushResponse.class);
+                                                                 ConfigConstants.CONFIG_KEY_URL);
+        PushCommand pushCommand = getGit().push();
+        if (request.getRemote() != null) {
+            pushCommand.setRemote(remoteName);
+        }
+        List<String> refSpec = request.getRefSpec();
+        if (!refSpec.isEmpty()) {
+            pushCommand.setRefSpecs(refSpec.stream()
+                                           .map(RefSpec::new)
+                                           .collect(Collectors.toList()));
+        }
+        pushCommand.setForce(request.isForce());
+        int timeout = request.getTimeout();
+        if (timeout > 0) {
+            pushCommand.setTimeout(timeout);
+        }
         try {
-            PushCommand pushCommand = getGit().push();
-
-            if (request.getRemote() != null) {
-                pushCommand.setRemote(remoteName);
-            }
-            List<String> refSpec = request.getRefSpec();
-            if (!refSpec.isEmpty()) {
-                List<RefSpec> refSpecInst = new ArrayList<>(refSpec.size());
-                refSpecInst.addAll(refSpec.stream().map(RefSpec::new).collect(Collectors.toList()));
-                pushCommand.setRefSpecs(refSpecInst);
-            }
-
-            pushCommand.setForce(request.isForce());
-
-            int timeout = request.getTimeout();
-            if (timeout > 0) {
-                pushCommand.setTimeout(timeout);
-            }
-
             @SuppressWarnings("unchecked")
             Iterable<PushResult> pushResults = (Iterable<PushResult>)executeRemoteCommand(remoteUri, pushCommand);
             PushResult pushResult = pushResults.iterator().next();
-            return addCommandOutputUpdates(pushResponseDto, request, pushResult);
+            String commandOutput = pushResult.getMessages();
+            Collection<RemoteRefUpdate> refUpdates = pushResult.getRemoteUpdates();
+
+            for (RemoteRefUpdate remoteRefUpdate : refUpdates) {
+                final String remoteRefName = remoteRefUpdate.getRemoteName();
+                // check status only for branch given in the URL or tags - (handle special "refs/for" case)
+                String shortenRefFor = remoteRefName.startsWith("refs/for/") ?
+                                       remoteRefName.substring("refs/for/".length()) :
+                                       remoteRefName;
+                if (!currentBranch.equals(Repository.shortenRefName(remoteRefName)) && !currentBranch.equals(shortenRefFor)
+                    && !remoteRefName.startsWith(Constants.R_TAGS)) {
+                    continue;
+                }
+                Map<String, String> update = new HashMap<>();
+                RemoteRefUpdate.Status status = remoteRefUpdate.getStatus();
+                if (status != RemoteRefUpdate.Status.OK) {
+                    List<String> refSpecs = request.getRefSpec();
+                    if (remoteRefUpdate.getStatus() == RemoteRefUpdate.Status.UP_TO_DATE) {
+                        commandOutput = INFO_PUSH_IGNORED_UP_TO_DATE;
+                    } else {
+                        String remoteBranch = !refSpecs.isEmpty() ? refSpecs.get(0).split(REFSPEC_COLON)[1] : "master";
+                        String errorMessage =
+                                String.format(ERROR_PUSH_CONFLICTS_PRESENT, currentBranch + BRANCH_REFSPEC_SEPERATOR + remoteBranch, remoteUri);
+                        if (remoteRefUpdate.getMessage() != null) {
+                            errorMessage += "\nError errorMessage: " + remoteRefUpdate.getMessage() + ".";
+                        }
+                        throw new GitException(errorMessage);
+                    }
+                }
+                if (status != RemoteRefUpdate.Status.UP_TO_DATE || !remoteRefName.startsWith(Constants.R_TAGS)) {
+                    update.put(KEY_COMMIT_MESSAGE, remoteRefUpdate.getMessage());
+                    update.put(KEY_RESULT, status.name());
+                    TrackingRefUpdate refUpdate = remoteRefUpdate.getTrackingRefUpdate();
+                    if (refUpdate != null) {
+                        update.put(KEY_REMOTENAME, Repository.shortenRefName(refUpdate.getLocalName()));
+                        update.put(KEY_LOCALNAME, Repository.shortenRefName(refUpdate.getRemoteName()));
+                    } else {
+                        update.put(KEY_REMOTENAME, Repository.shortenRefName(remoteRefUpdate.getSrcRef()));
+                        update.put(KEY_LOCALNAME, Repository.shortenRefName(remoteRefUpdate.getRemoteName()));
+                    }
+                    updates.add(update);
+                }
+            }
+            return newDto(PushResponse.class).withCommandOutput(commandOutput).withUpdates(updates);
         } catch (GitAPIException exception) {
             if ("origin: not found.".equals(exception.getMessage())) {
                 throw new GitException(ERROR_NO_REMOTE_REPOSITORY, exception);
