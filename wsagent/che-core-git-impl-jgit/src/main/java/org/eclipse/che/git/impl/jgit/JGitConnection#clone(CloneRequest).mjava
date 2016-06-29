@@ -24,6 +24,35 @@
                 cloneCommand.setBranchesToClone(request.getBranchesToFetch());
             }
 
+            LineConsumer lineConsumer = lineConsumerFactory.newLineConsumer();
+            cloneCommand.setProgressMonitor(new BatchingProgressMonitor() {
+                @Override
+                protected void onUpdate(String taskName, int workCurr) {
+                    try {
+                        lineConsumer.writeLine(taskName + ": " + workCurr + " completed");
+                    } catch (IOException exception) {
+                        LOG.error(exception.getMessage(), exception);
+                    }
+                }
+
+                @Override
+                protected void onEndTask(String taskName, int workCurr) {
+                }
+
+                @Override
+                protected void onUpdate(String taskName, int workCurr, int workTotal, int percentDone) {
+                    try {
+                        lineConsumer.writeLine(taskName + ": " + workCurr + " of " + workTotal + " completed, " + percentDone + "% done");
+                    } catch (IOException exception) {
+                        LOG.error(exception.getMessage(), exception);
+                    }
+                }
+
+                @Override
+                protected void onEndTask(String taskName, int workCurr, int workTotal, int percentDone) {
+                }
+            });
+
             executeRemoteCommand(remoteUri, cloneCommand);
 
             StoredConfig repositoryConfig = getRepository().getConfig();
