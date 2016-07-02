@@ -1,31 +1,28 @@
     /** {@inheritDoc} */
     @Override
     public void onMoveClicked() {
-        if (projectPath == null) {
-            return;
-        }
+        final Project project = appContext.getRootProject();
 
-        final List<String> source = getSource();
-        final String target = getTarget();
+        checkState(project != null);
+
+        final Path source = getSource();
+        final Path target = getTarget();
         final String comment = view.isURLSelected() ? view.getComment() : null;
 
         final StatusNotification notification =
-                new StatusNotification(locale.moveNotificationStarted(Joiner.on(',').join(source)), PROGRESS, FLOAT_MODE);
+                new StatusNotification(locale.moveNotificationStarted(source.toString()), PROGRESS, FLOAT_MODE);
         notificationManager.notify(notification);
 
-        Unmarshallable<CLIOutputResponse> unmarshaller = dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class);
-        service.move(projectPath, source, target, comment, new AsyncRequestCallback<CLIOutputResponse>(unmarshaller) {
+        service.move(project.getLocation(), source, target, comment).then(new Operation<CLIOutputResponse>() {
             @Override
-            protected void onSuccess(CLIOutputResponse result) {
+            public void apply(CLIOutputResponse response) throws OperationException {
                 notification.setTitle(locale.moveNotificationSuccessful());
                 notification.setStatus(SUCCESS);
             }
-
+        }).catchError(new Operation<PromiseError>() {
             @Override
-            protected void onFailure(Throwable exception) {
-                String errorMessage = exception.getMessage();
-
-                notification.setTitle(locale.moveNotificationFailed() + ": " + errorMessage);
+            public void apply(PromiseError arg) throws OperationException {
+                notification.setTitle(locale.moveNotificationFailed());
                 notification.setStatus(FAIL);
             }
         });

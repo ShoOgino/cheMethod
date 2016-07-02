@@ -1,21 +1,24 @@
     @Test
     public void testOnCreateClickedWhenBranchCreateRequestIsSuccessful() throws Exception {
+        when(service.branchCreate(anyObject(), any(Path.class), anyString(), anyString())).thenReturn(branchPromise);
+        when(branchPromise.then(any(Operation.class))).thenReturn(branchPromise);
+        when(branchPromise.catchError(any(Operation.class))).thenReturn(branchPromise);
+
         InputDialog inputDialog = mock(InputDialog.class);
         when(dialogFactory.createInputDialog(anyString(), anyString(), anyObject(), anyObject())).thenReturn(inputDialog);
 
-        presenter.showBranches();
+        presenter.showBranches(project);
         presenter.onCreateClicked();
 
         verify(dialogFactory).createInputDialog(anyString(), anyString(), inputCallbackCaptor.capture(), anyObject());
         InputCallback inputCallback = inputCallbackCaptor.getValue();
         inputCallback.accepted(BRANCH_NAME);
 
-        verify(service).branchCreate(eq(devMachine), anyObject(), anyString(), anyString(), createBranchCallbackCaptor.capture());
-        AsyncRequestCallback<Branch> createBranchCallback = createBranchCallbackCaptor.getValue();
-        GwtReflectionUtils.callOnSuccess(createBranchCallback, selectedBranch);
+        verify(branchPromise).then(branchCaptor.capture());
+        branchCaptor.getValue().apply(selectedBranch);
 
         verify(constant).branchTypeNew();
-        verify(service).branchCreate(eq(devMachine), eq(rootProjectConfig), anyString(), anyString(), anyObject());
-        verify(service, times(2)).branchList(eq(devMachine), eq(rootProjectConfig), eq(LIST_ALL), anyObject());
+        verify(service).branchCreate(anyObject(), any(Path.class), anyString(), anyString());
+        verify(service, times(2)).branchList(anyObject(), anyObject(), eq(LIST_ALL));
     }
 

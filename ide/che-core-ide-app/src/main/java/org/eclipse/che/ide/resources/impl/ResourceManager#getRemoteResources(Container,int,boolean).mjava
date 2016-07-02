@@ -1,0 +1,109 @@
+    Promise<Resource[]> getRemoteResources(final Container container, final int depth, boolean includeFiles) {
+        checkArgument(depth > -2, "Invalid depth");
+
+        if (depth == DEPTH_ZERO) {
+            return promises.resolve(NO_RESOURCES);
+        }
+
+        final Optional<Resource[]> descendants = store.getAll(container.getLocation());
+
+        return ps.getTree(container.getLocation(), depth, includeFiles).then(new Function<TreeElement, Resource[]>() {
+            @Override
+            public Resource[] apply(TreeElement tree) throws FunctionException {
+
+                class Visitor implements ResourceVisitor {
+                    Resource[] resources;
+
+                    private int size    = 0; //size of total items
+                    private int incStep = 50; //step to increase resource array
+
+                    private Visitor() {
+                        this.resources = NO_RESOURCES;
+                    }
+
+                    @Override
+                    public void visit(Resource resource) {
+                        if (resource.getResourceType() == PROJECT) {
+                            final Optional<ProjectConfigDto> optionalConfig = findProjectConfigDto(resource.getLocation());
+
+                            if (optionalConfig.isPresent()) {
+                                final Optional<ProblemProjectMarker> optionalMarker = getProblemMarker(optionalConfig.get());
+
+                                if (optionalMarker.isPresent()) {
+                                    resource.addMarker(optionalMarker.get());
+                                }
+                            }
+                        }
+
+                        if (size > resources.length - 1) { //check load factor and increase resource array
+                            resources = copyOf(resources, resources.length + incStep);
+                        }
+
+                        resources[size++] = resource;
+                    }
+
+                }
+
+                final Visitor visitor = new Visitor();
+                traverse(tree, visitor);
+
+                return copyOf(visitor.resources, visitor.size);
+            }
+        }).then(new Function<Resource[], Resource[]>() {
+            @Override
+            public Resource[] apply(Resource[] reloaded) throws FunctionException {
+
+                Resource[] result = new Resource[0];
+
+                if (descendants.isPresent()) {
+                    Resource[] outdated = descendants.get();
+
+                    final Resource[] removed = removeAll(outdated, reloaded, false);
+                    for (Resource resource : removed) {
+                        store.dispose(resource.getLocation(), false);
+                        eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, REMOVED)));
+                    }
+
+                    final Resource[] updated = removeAll(outdated, reloaded, true);
+                    for (Resource resource : updated) {
+                        store.register(resource);
+
+                        eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, UPDATED)));
+
+                        final Optional<Resource> registered = store.getResource(resource.getLocation());
+                        if (registered.isPresent()) {
+                            result = Arrays.add(result, registered.get());
+                        }
+                    }
+
+                    final Resource[] added = removeAll(reloaded, outdated, false);
+                    for (Resource resource : added) {
+                        store.register(resource);
+
+                        eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, ADDED)));
+
+                        final Optional<Resource> registered = store.getResource(resource.getLocation());
+                        if (registered.isPresent()) {
+                            result = Arrays.add(result, registered.get());
+                        }
+                    }
+
+
+                } else {
+                    for (Resource resource : reloaded) {
+                        store.register(resource);
+
+                        eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, ADDED)));
+
+                        final Optional<Resource> registered = store.getResource(resource.getLocation());
+                        if (registered.isPresent()) {
+                            result = Arrays.add(result, registered.get());
+                        }
+                    }
+                }
+
+                return result;
+            }
+        });
+    }
+

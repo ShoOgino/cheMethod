@@ -1,20 +1,33 @@
-    public void parse() {
+    void parse() {
         if (first) {
             codeAssistProcessor.disableCodeAssistant();
             first = false;
         }
 
+        if (getFile() instanceof Resource) {
+            final Optional<Project> project = ((Resource)getFile()).getRelatedProject();
 
-        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
-        client.reconcile(file.getProject().getProjectConfig().getPath(), fqn, new JavaReconcileClient.ReconcileCallback() {
-            @Override
-            public void onReconcile(ReconcileResult result) {
-                if (result == null) {
-                    return;
-                }
-                doReconcile(result.getProblems());
-                highlighter.reconcile(result.getHighlightedPositions());
+            if (!project.isPresent()) {
+                return;
             }
-        });
+
+            try {
+                client.reconcile(project.get().getLocation().toString(), JavaUtil.resolveFQN(getFile()),
+                                 new JavaReconcileClient.ReconcileCallback() {
+                                     @Override
+                                     public void onReconcile(ReconcileResult result) {
+                                         if (result == null) {
+                                             return;
+                                         }
+                                         doReconcile(result.getProblems());
+                                         highlighter.reconcile(result.getHighlightedPositions());
+                                     }
+                                 });
+            } catch (RuntimeException e) {
+                Log.info(getClass(), e.getMessage());
+            }
+        }
+
+
     }
 

@@ -1,17 +1,54 @@
     /** {@inheritDoc} */
     @Override
     public void onSubmitComplete(String result) {
-        projectExplorer.reloadChildren(getResourceBasedNode());
-        if (result != null && !result.isEmpty()) {
+        if (!isNullOrEmpty(result)) {
             view.closeDialog();
             notificationManager.notify(locale.failedToUploadFiles(), parseMessage(result), StatusNotification.Status.FAIL, FLOAT_MODE);
             return;
         }
 
-        if (view.isOverwriteFileSelected()) {
-            String path = ((HasStorablePath)getResourceBasedNode()).getStorablePath() + "/" + view.getFileName();
-            eventBus.fireEvent(new FileContentUpdateEvent(path));
-        }
-        view.closeDialog();
+        container.getFile(Path.valueOf(view.getFileName())).then(new Operation<Optional<File>>() {
+            @Override
+            public void apply(final Optional<File> file) throws OperationException {
+
+                if (file.isPresent()) {
+
+                    final NotificationListener notificationListener = new NotificationListener() {
+                        boolean clicked = false;
+
+                        @Override
+                        public void onClick(Notification notification) {
+                            if (!clicked) {
+                                eventBus.fireEvent(new FileEvent(file.get(), OPEN));
+                                clicked = true;
+                                notification.setListener(null);
+                                notification.setContent("");
+                            }
+                        }
+
+                        @Override
+                        public void onDoubleClick(Notification notification) {
+                            //stub
+                        }
+
+                        @Override
+                        public void onClose(Notification notification) {
+                            //stub
+                        }
+                    };
+
+                    notificationManager.notify("File '" + view.getFileName() + "' has uploaded successfully", "Click here to open it",
+                                               StatusNotification.Status.SUCCESS, FLOAT_MODE, notificationListener);
+
+                    view.closeDialog();
+                }
+            }
+        });
+
+        //TODO this should process editor agent
+//        if (view.isOverwriteFileSelected()) {
+//            String path = ((HasStorablePath)getResourceBasedNode()).getStorablePath() + "/" + view.getFileName();
+//            eventBus.fireEvent(new FileContentUpdateEvent(path));
+//        }
     }
 

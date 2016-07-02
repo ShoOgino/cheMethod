@@ -11,10 +11,23 @@
             return;
         }
 
-        projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(pathToOpen), true)
-                       .then(selectNode())
-                       .then(openNode())
-                       .then(actionComplete())
-                       .catchError(onFailedToLocate(pathToOpen));
+        appContext.getWorkspaceRoot().getFile(pathToOpen).then(new Operation<Optional<File>>() {
+            @Override
+            public void apply(Optional<File> optionalFile) throws OperationException {
+                if (optionalFile.isPresent()) {
+                    if (actionCompletedCallback != null) {
+                        actionCompletedCallback.onSuccess(null);
+                    }
+
+                    eventBus.fireEvent(new FileEvent(optionalFile.get(), OPEN));
+                } else {
+                    if (actionCompletedCallback != null) {
+                        actionCompletedCallback.onFailure(null);
+                    }
+
+                    notificationManager.notify(localization.unableOpenResource(pathToOpen), FAIL, FLOAT_MODE);
+                }
+            }
+        });
     }
 

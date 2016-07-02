@@ -1,50 +1,30 @@
     @Override
     public void onCheckoutClicked(final String reference) {
-        view.close();
-        final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
-        service.checkout(appContext.getDevMachine(),
-                         project,
-                         dtoFactory.createDto(CheckoutRequest.class)
-                                   .withName(reference)
-                                   .withCreateNew(false),
-                         new AsyncRequestCallback<String>() {
-                             @Override
-                             protected void onSuccess(String result) {
-                                 //In this case we can have unconfigured state of the project,
-                                 //so we must repeat the logic which is performed when we open a project
-                                 Unmarshallable<ProjectConfigDto> unmarshaller =
-                                         dtoUnmarshallerFactory.newUnmarshaller(ProjectConfigDto.class);
-                                 projectService.getProject(appContext.getDevMachine(), project.getPath(),
-                                                           new AsyncRequestCallback<ProjectConfigDto>(unmarshaller) {
-                                                               @Override
-                                                               protected void onSuccess(final ProjectConfigDto result) {
-                                                                   if (!result.getProblems().isEmpty()) {
-                                                                       eventBus.fireEvent(new OpenProjectEvent(result));
-                                                                   } else {
-                                                                       projectExplorer.reloadChildren();
 
-                                                                       updateOpenedFiles();
-                                                                   }
-                                                               }
-
-                                                               @Override
-                                                               protected void onFailure(Throwable exception) {
-                                                                   Log.error(getClass(), "Can't get project by path");
-                                                               }
-                                                           });
-                             }
-
-                             @Override
-                             protected void onFailure(Throwable exception) {
-                                 final String errorMessage = (exception.getMessage() != null)
-                                                             ? exception.getMessage()
-                                                             : constant.checkoutFailed();
-                                 GitOutputConsole console = gitOutputConsoleFactory.create(CHECKOUT_COMMAND_NAME);
-                                 console.printError(errorMessage);
-                                 consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                                 notificationManager.notify(constant.checkoutFailed(), FAIL, FLOAT_MODE, project);
-                             }
-                         }
-                        );
+        service.checkout(appContext.getDevMachine(), project.getLocation(), dtoFactory.createDto(CheckoutRequest.class).withName(reference))
+               .then(new Operation<Void>() {
+                   @Override
+                   public void apply(Void arg) throws OperationException {
+                       project.synchronize().then(new Operation<Resource[]>() {
+                           @Override
+                           public void apply(Resource[] arg) throws OperationException {
+                               view.close();
+                           }
+                       });
+                   }
+               })
+               .catchError(new Operation<PromiseError>() {
+                   @Override
+                   public void apply(PromiseError error) throws OperationException {
+                       final String errorMessage = (error.getMessage() != null)
+                                                   ? error.getMessage()
+                                                   : constant.checkoutFailed();
+                       GitOutputConsole console = gitOutputConsoleFactory.create(CHECKOUT_COMMAND_NAME);
+                       console.printError(errorMessage);
+                       consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                       notificationManager.notify(constant.checkoutFailed(), FAIL, FLOAT_MODE);
+                       view.close();
+                   }
+               });
     }
 

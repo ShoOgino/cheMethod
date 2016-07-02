@@ -1,0 +1,60 @@
+    @Inject
+    public SelectNodeViewImpl(CoreLocalizationConstant locale,
+                              JavaResources javaResources,
+                              SelectPathViewImplUiBinder uiBinder,
+                              NodesResources nodesResources) {
+        this.javaResources = javaResources;
+        this.nodesResources = nodesResources;
+        setTitle(locale.selectPathWindowTitle());
+
+        Widget widget = uiBinder.createAndBindUi(this);
+        setWidget(widget);
+
+        Set<NodeInterceptor> interceptors = new HashSet<>();
+        interceptors.add(interceptor);
+        NodeLoader loader = new NodeLoader(interceptors);
+        NodeStorage nodeStorage = new NodeStorage();
+
+        tree = new Tree(nodeStorage, loader);
+        tree.setAutoSelect(true);
+        tree.getSelectionModel().setSelectionMode(SINGLE);
+        treeContainer.add(tree);
+
+        tree.getSelectionModel().addSelectionChangedHandler(new SelectionChangedEvent.SelectionChangedHandler() {
+            @Override
+            public void onSelectionChanged(SelectionChangedEvent event) {
+                if (event.getSelection().isEmpty()) {
+                    return;
+                }
+                acceptButton.setEnabled(interceptor.isNodeValid(event.getSelection().get(0)));
+            }
+        });
+
+        KeyboardNavigationHandler handler = new KeyboardNavigationHandler() {
+            @Override
+            public void onEnter(NativeEvent evt) {
+                evt.preventDefault();
+                acceptButtonClicked();
+            }
+        };
+
+        handler.bind(tree);
+
+        cancelButton = createButton(locale.cancel(), "select-path-cancel-button", new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                hide();
+            }
+        });
+
+        acceptButton = createPrimaryButton(locale.ok(), "select-path-ok-button", new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                acceptButtonClicked();
+            }
+        });
+
+        addButtonToFooter(acceptButton);
+        addButtonToFooter(cancelButton);
+    }
+

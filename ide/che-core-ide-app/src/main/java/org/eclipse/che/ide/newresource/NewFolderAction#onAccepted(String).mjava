@@ -1,12 +1,19 @@
     private void onAccepted(String value) {
-        final ResourceBasedNode<?> parent = getResourceBasedNode();
+        Resource resource = appContext.getResource();
 
-        if (parent == null) {
-            throw new IllegalStateException("No selected parent.");
+        if (!(resource instanceof Container)) {
+            final Optional<Container> parent = resource.getParent();
+
+            checkState(!parent.isPresent(), "Parent should be a container");
+
+            resource = parent.get();
         }
 
-        final String folderPath = ((HasStorablePath)parent).getStorablePath() + '/' + value;
-
-        projectServiceClient.createFolder(appContext.getDevMachine(), folderPath, createCallback(parent));
+        ((Container)resource).newFolder(value).then(new Operation<Folder>() {
+            @Override
+            public void apply(Folder folder) throws OperationException {
+                eventBus.fireEvent(new RevealResourceEvent(folder));
+            }
+        });
     }
 

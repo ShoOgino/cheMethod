@@ -1,0 +1,73 @@
+    @Inject
+    public SelectNodeViewImpl(CoreLocalizationConstant locale,
+                              ClassNodeInterceptor classNodeInterceptor,
+                              SelectPathViewImplUiBinder uiBinder,
+                              JavaPackageConnector javaPackageConnector,
+                              SkipHiddenNodesInterceptor skipHiddenNodesInterceptor) {
+        this.classNodeInterceptor = classNodeInterceptor;
+        this.javaPackageConnector = javaPackageConnector;
+        this.skipHiddenNodesInterceptor = skipHiddenNodesInterceptor;
+
+        setTitle(locale.selectPathWindowTitle());
+
+        Widget widget = uiBinder.createAndBindUi(this);
+        setWidget(widget);
+
+        Set<NodeInterceptor> interceptors = new HashSet<>();
+        interceptors.add(classNodeInterceptor);
+        NodeLoader loader = new NodeLoader(interceptors);
+        NodeStorage nodeStorage = new NodeStorage();
+
+        tree = new Tree(nodeStorage, loader);
+        tree.setAutoSelect(true);
+        tree.getSelectionModel().setSelectionMode(SINGLE);
+        treeContainer.add(tree);
+
+        tree.getSelectionModel().addSelectionChangedHandler(new SelectionChangedEvent.SelectionChangedHandler() {
+            @Override
+            public void onSelectionChanged(SelectionChangedEvent event) {
+                if (event.getSelection().isEmpty()) {
+                    return;
+                }
+
+                Node node = event.getSelection().get(0);
+
+                if (!(node instanceof ResourceNode)) {
+                    acceptButton.setEnabled(false);
+                    return;
+                }
+
+                ResourceNode selectedNode = (ResourceNode)node;
+
+                acceptButton.setEnabled(selectedNode.getData().getLocation().toString().endsWith(".java"));
+            }
+        });
+
+        KeyboardNavigationHandler handler = new KeyboardNavigationHandler() {
+            @Override
+            public void onEnter(NativeEvent evt) {
+                evt.preventDefault();
+                acceptButtonClicked();
+            }
+        };
+
+        handler.bind(tree);
+
+        cancelButton = createButton(locale.cancel(), "select-path-cancel-button", new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                hide();
+            }
+        });
+
+        acceptButton = createPrimaryButton(locale.ok(), "select-path-ok-button", new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                acceptButtonClicked();
+            }
+        });
+
+        addButtonToFooter(acceptButton);
+        addButtonToFooter(cancelButton);
+    }
+

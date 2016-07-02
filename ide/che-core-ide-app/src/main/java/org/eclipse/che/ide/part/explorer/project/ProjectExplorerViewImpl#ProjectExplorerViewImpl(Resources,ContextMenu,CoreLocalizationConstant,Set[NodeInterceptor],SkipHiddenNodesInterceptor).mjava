@@ -1,0 +1,66 @@
+    @Inject
+    public ProjectExplorerViewImpl(final Resources resources,
+                                   final ContextMenu contextMenu,
+                                   final CoreLocalizationConstant coreLocalizationConstant,
+                                   final Set<NodeInterceptor> nodeInterceptorSet,
+                                   SkipHiddenNodesInterceptor skipHiddenNodesInterceptor) {
+        super(resources);
+        this.skipHiddenNodesInterceptor = skipHiddenNodesInterceptor;
+
+        setTitle(coreLocalizationConstant.projectExplorerTitleBarText());
+
+        NodeStorage nodeStorage = new NodeStorage();
+
+        NodeLoader nodeLoader = new NodeLoader(nodeInterceptorSet);
+        nodeLoader.getNodeInterceptors().add(skipHiddenNodesInterceptor);
+
+        tree = new Tree(nodeStorage, nodeLoader);
+        tree.setContextMenuInvocationHandler(new Tree.ContextMenuInvocationHandler() {
+            @Override
+            public void onInvokeContextMenu(int x, int y) {
+                contextMenu.show(x, y);
+            }
+        });
+
+        tree.getNodeStorage().addSortInfo(new StoreSortInfo(new NodeTypeComparator(), SortDir.ASC));
+        tree.getNodeStorage().addSortInfo(new StoreSortInfo(new Comparator<Node>() {
+            @Override
+            public int compare(Node o1, Node o2) {
+                if (o1 instanceof ResourceNode && o2 instanceof ResourceNode) {
+                    return ((ResourceNode)o1).compareTo((ResourceNode)o2);
+                }
+
+                return 0;
+            }
+        }, SortDir.ASC));
+
+        if (tree.getGoInto() != null) {
+            tree.getGoInto().addGoIntoHandler(this);
+        }
+
+        tree.setPresentationRenderer(new ProjectExplorerRenderer(tree.getTreeStyles()));
+        tree.ensureDebugId(PROJECT_TREE_WIDGET_ID);
+        tree.setAutoSelect(true);
+        tree.getNodeLoader().setUseCaching(false);
+
+        setContentWidget(tree);
+
+        ToolButton collapseAllButton = new ToolButton(FontAwesome.COMPRESS);
+        collapseAllButton.addClickHandler(new ClickHandler() {
+            @Override
+            public void onClick(ClickEvent event) {
+                if (tree.getGoInto().isActive()) {
+                    Node lastNode = tree.getGoInto().getLastUsed();
+                    tree.setExpanded(lastNode, false, true);
+                    return;
+                }
+
+                tree.collapseAll();
+            }
+        });
+        Tooltip.create((elemental.dom.Element)collapseAllButton.getElement(), BOTTOM, MIDDLE, "Collapse All");
+        collapseAllButton.ensureDebugId(COLLAPSE_ALL_BUTTON_ID);
+        collapseAllButton.setVisible(true);
+        addToolButton(collapseAllButton);
+    }
+

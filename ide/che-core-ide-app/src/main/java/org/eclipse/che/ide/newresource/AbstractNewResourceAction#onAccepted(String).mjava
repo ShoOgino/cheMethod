@@ -1,15 +1,27 @@
     private void onAccepted(String value) {
         final String name = getExtension().isEmpty() ? value : value + '.' + getExtension();
-        final ResourceBasedNode<?> parent = getResourceBasedNode();
 
-        if (parent == null) {
-            throw new IllegalStateException("Invalid parent node.");
+        Resource resource = appContext.getResource();
+
+        if (!(resource instanceof Container)) {
+            final Optional<Container> parent = resource.getParent();
+
+            checkState(!parent.isPresent(), "Parent should be a container");
+
+            resource = parent.get();
         }
 
-        projectServiceClient.createFile(appContext.getDevMachine(),
-                                        ((HasStorablePath)parent).getStorablePath(),
-                                        name,
-                                        getDefaultContent(),
-                                        createCallback(parent));
+        ((Container)resource).newFile(name, getDefaultContent()).then(new Operation<File>() {
+            @Override
+            public void apply(File newFile) throws OperationException {
+                eventBus.fireEvent(new FileEvent(newFile, OPEN));
+                eventBus.fireEvent(new RevealResourceEvent(newFile));
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                notificationManager.notify("Failed to create resource", error.getMessage(), FAIL, FLOAT_MODE);
+            }
+        });
     }
 

@@ -1,11 +1,18 @@
     private void onAccepted(String value) {
-        final FolderReferenceNode parent = (FolderReferenceNode)getResourceBasedNode();
-        if (parent == null) {
-            throw new IllegalStateException("No selected parent.");
-        }
+        final Resource resource = appContext.getResource();
 
-        final String path = parent.getStorablePath() + '/' + value.replace('.', '/');
+        checkState(resource instanceof Container, "Parent should be a container");
 
-        projectServiceClient.createFolder(appContext.getDevMachine(), path, createCallback());
+        ((Container)resource).newFolder(value.replace('.', '/')).then(new Operation<Folder>() {
+            @Override
+            public void apply(Folder pkg) throws OperationException {
+                eventBus.fireEvent(new RevealResourceEvent(pkg));
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                dialogFactory.createMessageDialog(coreLocalizationConstant.invalidName(), error.getMessage(), null).show();
+            }
+        });
     }
 

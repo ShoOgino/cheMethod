@@ -2,37 +2,28 @@
     @Override
     public void onRemoveClicked() {
         final GitOutputConsole console = gitOutputConsoleFactory.create(REMOVE_FROM_INDEX_COMMAND_NAME);
-        service.remove(appContext.getDevMachine(), project.getRootProject(), getFilePatterns(), view.isRemoved(),
-                       new AsyncRequestCallback<String>() {
-                           @Override
-                           protected void onSuccess(String result) {
-                               console.print(constant.removeFilesSuccessfull());
-                               consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                               notificationManager.notify(constant.removeFilesSuccessfull(), project.getRootProject());
 
-                               if (!view.isRemoved()) {
-                                   projectExplorer.reloadChildren(getResourceBasedNode());
+        final Resource[] resources = appContext.getResources();
 
-                                   if (projectExplorer.getSelection().getHeadElement() instanceof FileReferenceNode) {
-                                       FileReferenceNode selectFile = ((FileReferenceNode)projectExplorer.getSelection().getHeadElement());
-                                       //to close selected file if it open
-                                       EditorPartPresenter openedEditor =
-                                               editorAgent.getOpenedEditor(Path.valueOf(selectFile.getStorablePath()));
-                                       if (openedEditor != null) {
-                                           VirtualFile openedFile = openedEditor.getEditorInput().getFile();
-                                           eventBus.fireEvent(new FileEvent(openedFile, FileEvent.FileOperation.CLOSE));
-                                       }
-                                   }
-                               }
-                           }
+        checkState(!isNullOrEmpty(resources));
 
-                           @Override
-                           protected void onFailure(Throwable exception) {
-                               handleError(exception, console);
-                               consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                           }
-                       }
-                      );
+        service.remove(appContext.getDevMachine(), project.getLocation(), toRelativePaths(resources), view.isRemoved()).then(new Operation<Void>() {
+            @Override
+            public void apply(Void ignored) throws OperationException {
+                console.print(constant.removeFilesSuccessfull());
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                notificationManager.notify(constant.removeFilesSuccessfull());
+
+                project.synchronize();
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                handleError(error.getCause(), console);
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+            }
+        });
+
         view.close();
     }
 

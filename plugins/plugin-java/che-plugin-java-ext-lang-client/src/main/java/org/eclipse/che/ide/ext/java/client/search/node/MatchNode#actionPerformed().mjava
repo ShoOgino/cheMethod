@@ -8,23 +8,44 @@
                 return;
             }
 
-            projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(compilationUnit.getPath()))
-                           .then(selectNode())
-                           .then(openNode());
+            appContext.getWorkspaceRoot().getFile(compilationUnit.getPath()).then(new Operation<Optional<File>>() {
+                @Override
+                public void apply(Optional<File> file) throws OperationException {
+                    if (file.isPresent()) {
+                        editorAgent.openEditor(file.get(), new OpenEditorCallbackImpl() {
+                            @Override
+                            public void onEditorOpened(EditorPartPresenter editor) {
+                                fileOpened(editor);
+                            }
+                        });
+                    }
+                }
+            });
         } else if (classFile != null) {
-            String className = classFile.getElementName();
+            final String className = classFile.getElementName();
 
-            JarEntry jarEntry = dtoFactory.createDto(JarEntry.class);
-            jarEntry.setName(className);
-            jarEntry.setType(JarEntry.JarEntryType.CLASS_FILE);
-            jarEntry.setPath(classFile.getPath());
+            final Resource resource = appContext.getResource();
 
-            JarFileNode jarFileNode = javaNodeManager.getJavaNodeFactory()
-                                                     .newJarFileNode(jarEntry,
-                                                                     null,
-                                                                     appContext.getCurrentProject().getProjectConfig(),
-                                                                     javaNodeManager.getJavaSettingsProvider().getSettings());
-            openFile(jarFileNode);
+            if (resource == null) {
+                return;
+            }
+
+            final Project project = resource.getRelatedProject().get();
+
+            service.getContent(project.getLocation(), className)
+                   .then(new Operation<ClassContent>() {
+                       @Override
+                       public void apply(ClassContent content) throws OperationException {
+                           final VirtualFile file = new SyntheticFile(Path.valueOf(className.replace('.', '/')).lastSegment(),
+                                                                      content.getContent());
+                           editorAgent.openEditor(file, new OpenEditorCallbackImpl() {
+                               @Override
+                               public void onEditorOpened(EditorPartPresenter editor) {
+                                   fileOpened(editor);
+                               }
+                           });
+                       }
+                   });
         }
     }
 

@@ -1,11 +1,21 @@
     @Inject
     private void handleFileOperations(EventBus eventBus) {
 
-        eventBus.addHandler(ResourceNodeDeletedEvent.getType(), new ResourceNodeDeletedEvent.ResourceNodeDeletedHandler() {
+        eventBus.addHandler(ResourceChangedEvent.getType(), new ResourceChangedEvent.ResourceChangedHandler() {
             @Override
-            public void onResourceEvent(ResourceNodeDeletedEvent event) {
-                ResourceBasedNode node = event.getNode();
-                if (node instanceof PackageNode || node instanceof JavaFileNode) {
+            public void onResourceChanged(ResourceChangedEvent event) {
+                if (event.getDelta().getKind() != REMOVED) {
+                    return;
+                }
+
+                if ((event.getDelta().getFlags() & DERIVED) == 0) {
+                    return;
+                }
+
+                final Resource resource = event.getDelta().getResource();
+                final Optional<Resource> srcFolder = resource.getParentWithMarker(SourceFolderMarker.ID);
+
+                if (srcFolder.isPresent()) {
                     reparseAllOpenedFiles();
                 }
             }

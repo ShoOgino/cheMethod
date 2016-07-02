@@ -10,26 +10,34 @@
         this.document = ((TextEditor)editor).getDocument();
         this.file = editor.getEditorInput().getFile();
 
+        if (file instanceof Resource) {
+            final Optional<Project> project = ((Resource)file).getRelatedProject();
 
-        final String projectPath = file.getProject().getProjectConfig().getPath();
-        final String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+            final Optional<Resource> srcFolder = ((Resource)file).getParentWithMarker(SourceFolderMarker.ID);
 
-        javaCodeAssistClient.organizeImports(projectPath, fqn)
-                            .then(new Operation<List<ConflictImportDTO>>() {
-                                @Override
-                                public void apply(List<ConflictImportDTO> choices) throws OperationException {
-                                    if (!choices.isEmpty()) {
-                                        show(choices);
-                                    } else {
-                                        applyChanges(file);
+            if (!srcFolder.isPresent()) {
+                return;
+            }
+
+            final String fqn = JavaUtil.resolveFQN((Container)srcFolder.get(), (Resource)file);
+
+            javaCodeAssistClient.organizeImports(project.get().getLocation().toString(), fqn)
+                                .then(new Operation<List<ConflictImportDTO>>() {
+                                    @Override
+                                    public void apply(List<ConflictImportDTO> choices) throws OperationException {
+                                        if (!choices.isEmpty()) {
+                                            show(choices);
+                                        } else {
+                                            applyChanges(file);
+                                        }
                                     }
-                                }
-                            })
-                            .catchError(new Operation<PromiseError>() {
-                                @Override
-                                public void apply(PromiseError arg) throws OperationException {
-                                    notificationManager.notify(locale.failedToProcessOrganizeImports(), arg.getMessage(), FAIL, FLOAT_MODE);
-                                }
-                            });
+                                })
+                                .catchError(new Operation<PromiseError>() {
+                                    @Override
+                                    public void apply(PromiseError arg) throws OperationException {
+                                        notificationManager.notify(locale.failedToProcessOrganizeImports(), arg.getMessage(), FAIL, FLOAT_MODE);
+                                    }
+                                });
+        }
     }
 

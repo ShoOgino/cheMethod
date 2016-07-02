@@ -1,39 +1,34 @@
     /** {@inheritDoc} */
     @Override
     public void onPullClicked() {
-        String remoteName = view.getRepositoryName();
-        final String remoteUrl = view.getRepositoryUrl();
         view.close();
 
-        final List<EditorPartPresenter> openedEditors = editorAgent.getOpenedEditors();
-
         final StatusNotification notification =
-                notificationManager.notify(constant.pullProcess(), PROGRESS, FLOAT_MODE, project.getRootProject());
+                notificationManager.notify(constant.pullProcess(), PROGRESS, FLOAT_MODE);
 
-        gitServiceClient.pull(appContext.getDevMachine(), project.getRootProject(), getRefs(), remoteName,
-                              new AsyncRequestCallback<PullResponse>(dtoUnmarshallerFactory.newUnmarshaller(PullResponse.class)) {
-                                  @Override
-                                  protected void onSuccess(PullResponse result) {
-                                      GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
-                                      console.print(result.getCommandOutput(), GREEN_COLOR);
-                                      consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                                      notification.setStatus(SUCCESS);
-                                      if (result.getCommandOutput().contains("Already up-to-date")) {
-                                          notification.setTitle(constant.pullUpToDate());
-                                      } else {
-                                          refreshProjectNodesAndEditors(openedEditors);
-                                          notification.setTitle(constant.pullSuccess(remoteUrl));
-                                      }
-                                  }
-
-                                  @Override
-                                  protected void onFailure(Throwable exception) {
-                                      notification.setStatus(FAIL);
-                                      if (getErrorCode(exception) == ErrorCodes.MERGE_CONFLICT) {
-                                          refreshProjectNodesAndEditors(openedEditors);
-                                      }
-                                      handleError(exception, PULL_COMMAND_NAME);
-                                  }
-                              });
+        service.pull(appContext.getDevMachine(), project.getLocation(), getRefs(), view.getRepositoryName()).then(new Operation<PullResponse>() {
+            @Override
+            public void apply(PullResponse response) throws OperationException {
+                GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
+                console.print(response.getCommandOutput(), GREEN_COLOR);
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                notification.setStatus(SUCCESS);
+                if (response.getCommandOutput().contains("Already up-to-date")) {
+                    notification.setTitle(constant.pullUpToDate());
+                } else {
+                    project.synchronize();
+                    notification.setTitle(constant.pullSuccess(view.getRepositoryUrl()));
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                notification.setStatus(FAIL);
+                if (getErrorCode(error.getCause()) == ErrorCodes.MERGE_CONFLICT) {
+                    project.synchronize();
+                }
+                handleError(error.getCause(), PULL_COMMAND_NAME);
+            }
+        });
     }
 

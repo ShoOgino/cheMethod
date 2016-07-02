@@ -1,19 +1,47 @@
     @Override
     public void actionPerformed(ActionEvent event) {
-        if (selectedItems != null) {
-            RefactorInfo refactorInfo = RefactorInfo.of(renamedItemType, selectedItems);
-            renamePresenter.show(refactorInfo);
-            return;
-        }
 
-        final EditorPartPresenter editorPart = editorAgent.getActiveEditor();
-        final TextEditor textEditorPresenter;
+        if (editorInFocus) {
+            final EditorPartPresenter editorPart = editorAgent.getActiveEditor();
+            if (editorPart == null || !(editorPart instanceof TextEditor)) {
+                return;
+            }
 
-        if (editorPart instanceof TextEditor) {
-            textEditorPresenter = (TextEditor)editorPart;
+            javaRefactoringRename.refactor((TextEditor)editorPart);
         } else {
-            return;
+            final Resource[] resources = appContext.getResources();
+
+            if (resources == null || resources.length > 1) {
+                return;
+            }
+
+            final Resource resource = resources[0];
+
+            final Optional<Project> project = resource.getRelatedProject();
+
+            if (!JavaUtil.isJavaProject(project.get())) {
+                return;
+            }
+
+            final Optional<Resource> srcFolder = resource.getParentWithMarker(SourceFolderMarker.ID);
+
+            if (!srcFolder.isPresent() || resource.getLocation().equals(srcFolder.get().getLocation())) {
+                return;
+            }
+
+            RefactoredItemType renamedItemType = null;
+
+            if (resource.getResourceType() == FILE && isJavaFile((File)resource)) {
+                renamedItemType = COMPILATION_UNIT;
+            } else if (resource instanceof Container) {
+                renamedItemType = PACKAGE;
+            }
+
+            if (renamedItemType == null) {
+                return;
+            }
+
+            renamePresenter.show(RefactorInfo.of(renamedItemType, resources));
         }
-        javaRefactoringRename.refactor(textEditorPresenter);
     }
 

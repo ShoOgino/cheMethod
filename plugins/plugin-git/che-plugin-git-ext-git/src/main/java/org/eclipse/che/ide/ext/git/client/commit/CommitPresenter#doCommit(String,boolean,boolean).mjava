@@ -1,17 +1,18 @@
-    private void doCommit(final String message, final boolean all, final boolean amend) {
-        service.commit(appContext.getDevMachine(), appContext.getCurrentProject().getRootProject(), message, all, amend,
-                       new AsyncRequestCallback<Revision>(dtoUnmarshallerFactory.newUnmarshaller(Revision.class)) {
-                           @Override
-                           protected void onSuccess(final Revision result) {
-                               onCommitSuccess(result);
-                           }
-
-                           @Override
-                           protected void onFailure(final Throwable exception) {
-                               handleError(exception);
-                           }
-                       }
-                      );
-        this.view.close();
+    protected void doCommit(final String message, final boolean all, final boolean amend) {
+        service.commit(appContext.getDevMachine(), project.getLocation(), message, all, amend)
+               .then(new Operation<Revision>() {
+                   @Override
+                   public void apply(Revision revision) throws OperationException {
+                       onCommitSuccess(revision);
+                       view.close();
+                   }
+               })
+               .catchError(new Operation<PromiseError>() {
+                   @Override
+                   public void apply(PromiseError error) throws OperationException {
+                       handleError(error.getCause());
+                       view.close();
+                   }
+               });
     }
 

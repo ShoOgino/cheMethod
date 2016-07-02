@@ -1,0 +1,52 @@
+    Promise<Project> createProject(final Project.ProjectRequest createRequest) {
+        checkArgument(checkProjectName(createRequest.getBody().getName()), "Invalid project name");
+        checkArgument(typeRegistry.getProjectType(createRequest.getBody().getType()) != null, "Invalid project type");
+
+        final Path path = Path.valueOf(createRequest.getBody().getPath());
+
+        return findResource(path, true).thenPromise(new Function<Optional<Resource>, Promise<Project>>() {
+            @Override
+            public Promise<Project> apply(Optional<Resource> resource) throws FunctionException {
+
+                final ProjectConfigDto dto = dtoFactory.createDto(ProjectConfigDto.class)
+                                                       .withPath(path.toString())
+                                                       .withDescription(createRequest.getBody().getDescription())
+                                                       .withType(createRequest.getBody().getType())
+                                                       .withMixins(createRequest.getBody().getMixins())
+                                                       .withAttributes(createRequest.getBody().getAttributes());
+
+
+                if (resource.isPresent()) {
+                    if (resource.get().isProject()) {
+                        throw new IllegalStateException("Project already exists");
+                    } else if (resource.get().isFile()) {
+                        throw new IllegalStateException("File can not be converted to project");
+                    }
+
+                    return update(path, createRequest);
+                }
+
+                return ps.createProject(dto).thenPromise(new Function<ProjectConfigDto, Promise<Project>>() {
+                    @Override
+                    public Promise<Project> apply(ProjectConfigDto config) throws FunctionException {
+                        final Project newResource = resourceFactory.newProjectImpl(config, ResourceManager.this);
+                        store.register(newResource);
+
+                        return ps.getProjects().then(new Function<List<ProjectConfigDto>, Project>() {
+                            @Override
+                            public Project apply(List<ProjectConfigDto> updatedConfiguration) throws FunctionException {
+
+                                //cache new configs
+                                cachedConfigs = updatedConfiguration.toArray(new ProjectConfigDto[updatedConfiguration.size()]);
+
+                                eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(newResource, ADDED | DERIVED)));
+
+                                return newResource;
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+

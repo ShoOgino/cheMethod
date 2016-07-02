@@ -1,47 +1,45 @@
     private void openExternalResource(final Location location, final AsyncCallback<VirtualFile> callback) {
-        final NodeSettings nodeSettings = javaNodeManager.getJavaSettingsProvider().getSettings();
-        final JavaNodeFactory javaNodeFactory = javaNodeManager.getJavaNodeFactory();
+        JarEntry jarEntry = dtoFactory.createDto(JarEntry.class);
 
-        String className = extractOuterClassFqn(location.getTarget());
-        final JarEntry jarEntry = dtoFactory.createDto(JarEntry.class);
+        final String className = extractOuterClassFqn(location.getTarget());
         jarEntry.setPath(className);
         jarEntry.setName(className.substring(className.lastIndexOf(".") + 1) + ".class");
         jarEntry.setType(CLASS_FILE);
 
-        final String projectPath = location.getResourceProjectPath();
-        projectService.getProject(appContext.getDevMachine(), projectPath)
-                      .then(new Function<ProjectConfigDto, JarFileNode>() {
-                          @Override
-                          public JarFileNode apply(ProjectConfigDto projectConfigDto) throws FunctionException {
-                              return javaNodeFactory.newJarFileNode(jarEntry, null, projectConfigDto, nodeSettings);
-                          }
-                      })
-                      .then(new Operation<JarFileNode>() {
-                          @Override
-                          public void apply(final JarFileNode jarFileNode) throws OperationException {
-                              AsyncCallback<VirtualFile> downloadSourceCallback = new AsyncCallback<VirtualFile>() {
-                                  @Override
-                                  public void onSuccess(final VirtualFile result) {
-                                      if (jarFileNode.isContentGenerated()) {
-                                          handleContentGeneratedResource(result, location, callback);
-                                      } else {
-                                          handleActivatedFile(jarFileNode, callback, location.getLineNumber());
-                                      }
-                                  }
+        final Resource resource = appContext.getResource();
 
-                                  @Override
-                                  public void onFailure(Throwable caught) {
-                                      callback.onFailure(caught);
-                                  }
-                              };
-                              handleActivatedFile(jarFileNode, downloadSourceCallback, location.getLineNumber());
-                          }
-                      })
-                      .catchError(new Operation<PromiseError>() {
-                          @Override
-                          public void apply(PromiseError arg) throws OperationException {
-                              callback.onFailure(arg.getCause());
-                          }
-                      });
+        if (resource == null) {
+            callback.onFailure(new IllegalStateException());
+            return;
+        }
+
+        final Project project = resource.getRelatedProject().get();
+
+        service.getContent(project.getLocation(), className).then(new Operation<ClassContent>() {
+            @Override
+            public void apply(final ClassContent content) throws OperationException {
+                final VirtualFile file =
+                        new SyntheticFile(className.substring(className.lastIndexOf(".") + 1) + ".class", content.getContent());
+
+                AsyncCallback<VirtualFile> downloadSourceCallback = new AsyncCallback<VirtualFile>() {
+                    @Override
+                    public void onSuccess(final VirtualFile result) {
+                        if (content.isGenerated()) {
+                            handleContentGeneratedResource(result, location, callback);
+                        } else {
+                            handleActivatedFile(file, callback, location.getLineNumber());
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Throwable caught) {
+                        callback.onFailure(caught);
+                    }
+                };
+
+                handleActivatedFile(file, downloadSourceCallback, location.getLineNumber());
+                eventBus.fireEvent(new FileEvent(file, OPEN));
+            }
+        });
     }
 

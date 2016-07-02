@@ -12,36 +12,41 @@
         activeEditor = ((TextEditorPresenter)editorPartPresenter);
         final VirtualFile file = activeEditor.getEditorInput().getFile();
 
-        String projectPath = file.getProject().getProjectConfig().getPath();
-        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+        if (file instanceof Resource) {
+            final Optional<Project> project = ((Resource)file).getRelatedProject();
 
-        Promise<ImplementationsDescriptorDTO> promise = service.getImplementations(projectPath, fqn, activeEditor.getCursorOffset());
-        promise.then(new Operation<ImplementationsDescriptorDTO>() {
-            @Override
-            public void apply(ImplementationsDescriptorDTO implementationsDescriptor) throws OperationException {
-                int overridingSize = implementationsDescriptor.getImplementations().size();
+            final Optional<Resource> srcFolder = ((Resource)file).getParentWithMarker(SourceFolderMarker.ID);
 
-                String title = locale.openImplementationWindowTitle(implementationsDescriptor.getMemberName(), overridingSize);
-                NoImplementationWidget noImplementationWidget = new NoImplementationWidget(popupResources,
-                                                                                           javaResources,
-                                                                                           locale,
-                                                                                           OpenImplementationPresenter.this,
-                                                                                           title);
-                if (overridingSize == 1) {
-                    actionPerformed(implementationsDescriptor.getImplementations().get(0));
-                } else if (overridingSize > 1) {
-                    openOneImplementation(implementationsDescriptor,
-                                          noImplementationWidget,
-                                          (TextEditorPresenter)editorPartPresenter);
-                } else if (!isNullOrEmpty(implementationsDescriptor.getMemberName()) && overridingSize == 0) {
-                    showNoImplementations(noImplementationWidget, (TextEditorPresenter)editorPartPresenter);
-                }
+            if (!srcFolder.isPresent()) {
+                return;
             }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                Log.error(OpenImplementationPresenter.class, arg.getMessage());
-            }
-        });
+
+            final String fqn = JavaUtil.resolveFQN((Container)srcFolder.get(), (Resource)file);
+
+            service.getImplementations(project.get().getLocation(), fqn, activeEditor.getCursorOffset()).then(
+                    new Operation<ImplementationsDescriptorDTO>() {
+                        @Override
+                        public void apply(ImplementationsDescriptorDTO impls) throws OperationException {
+                            int overridingSize = impls.getImplementations().size();
+
+                            String title = locale.openImplementationWindowTitle(impls.getMemberName(), overridingSize);
+                            NoImplementationWidget noImplementationWidget = new NoImplementationWidget(popupResources,
+                                                                                                       javaResources,
+                                                                                                       locale,
+                                                                                                       OpenImplementationPresenter.this,
+                                                                                                       title);
+                            if (overridingSize == 1) {
+                                actionPerformed(impls.getImplementations().get(0));
+                            } else if (overridingSize > 1) {
+                                openOneImplementation(impls,
+                                                      noImplementationWidget,
+                                                      (TextEditorPresenter)editorPartPresenter);
+                            } else if (!isNullOrEmpty(impls.getMemberName()) && overridingSize == 0) {
+                                showNoImplementations(noImplementationWidget, (TextEditorPresenter)editorPartPresenter);
+                            }
+                        }
+                    });
+        }
+
     }
 

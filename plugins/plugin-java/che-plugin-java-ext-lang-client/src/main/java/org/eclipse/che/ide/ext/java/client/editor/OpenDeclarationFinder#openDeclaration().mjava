@@ -11,22 +11,27 @@
         TextEditorPresenter editor = ((TextEditorPresenter)activeEditor);
         int offset = editor.getCursorOffset();
         final VirtualFile file = editor.getEditorInput().getFile();
-        Unmarshallable<OpenDeclarationDescriptor> unmarshaller =
-                factory.newUnmarshaller(OpenDeclarationDescriptor.class);
-        navigationService
-                .findDeclaration(file.getProject().getProjectConfig().getPath(), JavaSourceFolderUtil.getFQNForFile(file), offset,
-                                 new AsyncRequestCallback<OpenDeclarationDescriptor>(unmarshaller) {
-                                     @Override
-                                     protected void onSuccess(OpenDeclarationDescriptor result) {
-                                         if (result != null) {
-                                             handleDescriptor(result);
-                                         }
-                                     }
 
-                                     @Override
-                                     protected void onFailure(Throwable exception) {
-                                         Log.error(OpenDeclarationFinder.class, exception);
-                                     }
-                                 });
+        if (file instanceof Resource) {
+            final Optional<Project> project = ((Resource)file).getRelatedProject();
+
+            final Optional<Resource> srcFolder = ((Resource)file).getParentWithMarker(SourceFolderMarker.ID);
+
+            if (!srcFolder.isPresent()) {
+                return;
+            }
+
+            final String fqn = JavaUtil.resolveFQN((Container)srcFolder.get(), (Resource)file);
+
+            navigationService.findDeclaration(project.get().getLocation(), fqn, offset).then(new Operation<OpenDeclarationDescriptor>() {
+                @Override
+                public void apply(OpenDeclarationDescriptor result) throws OperationException {
+                    if (result != null) {
+                        handleDescriptor(project.get(), result);
+                    }
+                }
+            });
+
+        }
     }
 

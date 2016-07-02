@@ -1,0 +1,72 @@
+    /** {@inheritDoc} */
+    @Override
+    public void onResourceChanged(ResourceChangedEvent event) {
+        final ResourceDelta delta = event.getDelta();
+        final Resource resource = delta.getResource();
+
+        /* Note: There is important to keep projects array in sorted state, because it is mutable and removing projects from it
+           need array to be sorted. Search specific projects realized with binary search. */
+
+        if (!(resource.getResourceType() == PROJECT && resource.getLocation().segmentCount() == 1)) {
+            return;
+        }
+
+        if (projects == null) {
+            return; //Normal situation, workspace config updated and project has not been loaded fully. Just skip this situation.
+        }
+
+        if (delta.getKind() == ADDED) {
+            Project[] newProjects = copyOf(projects, projects.length + 1);
+            newProjects[projects.length] = (Project)resource;
+            projects = newProjects;
+            sort(projects, ResourcePathComparator.getInstance());
+        } else if (delta.getKind() == REMOVED) {
+            int size = projects.length;
+            int index = java.util.Arrays.binarySearch(projects, resource, ResourcePathComparator.getInstance());
+            int numMoved = projects.length - index - 1;
+            if (numMoved > 0) {
+                System.arraycopy(projects, index + 1, projects, index, numMoved);
+            }
+            projects = copyOf(projects, --size);
+
+            if (currentResource != null && currentResource.equals(delta.getResource())) {
+                currentResource = null;
+            }
+
+            if (currentResources != null) {
+                for (Resource currentResource : currentResources) {
+                    if (currentResource.equals(delta.getResource())) {
+                        currentResources = Arrays.remove(currentResources, currentResource);
+                    }
+                }
+            }
+        } else if (delta.getKind() == UPDATED) {
+            int index = -1;
+
+            // Project may be moved to another location, so we need to remove previous one and store new project in cache.
+
+            if (delta.getFlags() == MOVED_FROM) {
+                for (int i = 0; i < projects.length; i++) {
+                    if (projects[i].getLocation().equals(delta.getFromPath())) {
+                        index = i;
+                        break;
+                    }
+                }
+            } else {
+                index = binarySearch(projects, resource);
+            }
+
+            if (index != -1) {
+                projects[index] = (Project)resource;
+            }
+
+            sort(projects, ResourcePathComparator.getInstance());
+        } else if (delta.getKind() == SYNCHRONIZED && resource.isProject() && resource.getLocation().segmentCount() == 1) {
+            for (int i = 0; i < projects.length; i++) {
+                if (projects[i].getLocation().equals(resource.getLocation())) {
+                    projects[i] = (Project)resource;
+                }
+            }
+        }
+    }
+

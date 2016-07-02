@@ -1,23 +1,20 @@
     /** Get list of branches from selected project. */
     private void getBranches() {
-        gitService.branchList(appContext.getDevMachine(), project.getRootProject(), LIST_ALL,
-                              new AsyncRequestCallback<List<Branch>>(dtoUnmarshallerFactory.newListUnmarshaller(Branch.class)) {
-                                  @Override
-                                  protected void onSuccess(List<Branch> result) {
-                                      view.setBranches(result);
-                                      view.showDialog();
-                                  }
-
-                                  @Override
-                                  protected void onFailure(Throwable exception) {
-                                      final String errorMessage =
-                                              (exception.getMessage() != null) ? exception.getMessage() : locale.branchesListFailed();
-                                      GitOutputConsole console = gitOutputConsoleFactory.create(BRANCH_LIST_COMMAND_NAME);
-                                      console.printError(errorMessage);
-                                      consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                                      notificationManager.notify(locale.branchesListFailed(), FAIL, NOT_EMERGE_MODE);
-                                  }
-                              }
-                             );
+        service.branchList(appContext.getDevMachine(), project.getLocation(), LIST_ALL).then(new Operation<List<Branch>>() {
+            @Override
+            public void apply(List<Branch> branches) throws OperationException {
+                view.setBranches(branches);
+                view.showDialog();
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                final String errorMessage = (error.getMessage() != null) ? error.getMessage() : locale.branchesListFailed();
+                GitOutputConsole console = gitOutputConsoleFactory.create(BRANCH_LIST_COMMAND_NAME);
+                console.printError(errorMessage);
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                notificationManager.notify(locale.branchesListFailed(), FAIL, NOT_EMERGE_MODE);
+            }
+        });
     }
 

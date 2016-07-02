@@ -1,29 +1,38 @@
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public void onAddClicked() {
-        boolean update = view.isUpdated();
         final GitOutputConsole console = gitOutputConsoleFactory.create(ADD_TO_INDEX_COMMAND_NAME);
+        final Resource[] resources = appContext.getResources();
 
-        try {
-            service.add(appContext.getDevMachine(), project.getRootProject(), update, getMultipleFilePatterns(), new RequestCallback<Void>() {
-                @Override
-                protected void onSuccess(final Void result) {
+        checkState(resources != null && resources.length > 0);
 
-                    console.print(constant.addSuccess());
-                    consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                    notificationManager.notify(constant.addSuccess(), project.getRootProject());
-                }
+        final Path[] paths = new Path[resources.length];
 
-                @Override
-                protected void onFailure(final Throwable exception) {
-                    handleError(exception, console);
-                }
-            });
-        } catch (final WebSocketException e) {
-            handleError(e, console);
+        for (int i = 0; i < resources.length; i++) {
+            checkState(project.getLocation().isPrefixOf(resources[i].getLocation()));
+
+            final Path tmpPath = resources[i].getLocation().removeFirstSegments(project.getLocation().segmentCount());
+
+            paths[i] = tmpPath.segmentCount() == 0 ? Path.EMPTY : tmpPath;
         }
-        view.close();
+
+        service.add(appContext.getDevMachine(), project.getLocation(), view.isUpdated(), paths).then(new Operation<Void>() {
+            @Override
+            public void apply(Void arg) throws OperationException {
+                console.print(constant.addSuccess());
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                notificationManager.notify(constant.addSuccess());
+                view.close();
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                String errorMessage = constant.addFailed();
+                console.printError(errorMessage);
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                notificationManager.notify(constant.addFailed(), FAIL, FLOAT_MODE);
+                view.close();
+            }
+        });
     }
 

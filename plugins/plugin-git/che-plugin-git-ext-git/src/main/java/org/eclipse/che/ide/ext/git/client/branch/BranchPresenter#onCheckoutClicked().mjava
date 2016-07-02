@@ -1,12 +1,6 @@
     /** {@inheritDoc} */
     @Override
     public void onCheckoutClicked() {
-        String name = selectedBranch.getDisplayName();
-
-        if (name == null) {
-            return;
-        }
-
         final CheckoutRequest checkoutRequest = dtoFactory.createDto(CheckoutRequest.class);
         if (selectedBranch.isRemote()) {
             checkoutRequest.setTrackBranch(selectedBranch.getDisplayName());
@@ -14,36 +8,17 @@
             checkoutRequest.setName(selectedBranch.getDisplayName());
         }
 
-        final ProjectConfigDto root = project.getRootProject();
-        final String path = root.getPath();
-        final String projectType = root.getType();
-
-        service.checkout(appContext.getDevMachine(), root, checkoutRequest, new AsyncRequestCallback<String>() {
+        service.checkout(appContext.getDevMachine(), project.getLocation(), checkoutRequest).then(new Operation<Void>() {
             @Override
-            protected void onSuccess(String result) {
+            public void apply(Void ignored) throws OperationException {
                 getBranches();
-                //In this case we can have unconfigured state of the project,
-                //so we must repeat the logic which is performed when we open a project
-                projectService.getProject(appContext.getDevMachine(), path,
-                                          new AsyncRequestCallback<ProjectConfigDto>(
-                                                  dtoUnmarshallerFactory.newUnmarshaller(ProjectConfigDto.class)) {
-                                              @Override
-                                              protected void onSuccess(ProjectConfigDto result) {
-                                                  result.setType(projectType);
-                                                  updateProject(result);
-                                              }
 
-                                              @Override
-                                              protected void onFailure(Throwable exception) {
-                                                  notificationManager
-                                                          .notify(exception.getLocalizedMessage(), FAIL, FLOAT_MODE, project.getProjectConfig());
-                                              }
-                                          });
+                project.synchronize();
             }
-
+        }).catchError(new Operation<PromiseError>() {
             @Override
-            protected void onFailure(Throwable exception) {
-                handleError(exception, BRANCH_CHECKOUT_COMMAND_NAME);
+            public void apply(PromiseError error) throws OperationException {
+                handleError(error.getCause(), BRANCH_CHECKOUT_COMMAND_NAME);
             }
         });
     }

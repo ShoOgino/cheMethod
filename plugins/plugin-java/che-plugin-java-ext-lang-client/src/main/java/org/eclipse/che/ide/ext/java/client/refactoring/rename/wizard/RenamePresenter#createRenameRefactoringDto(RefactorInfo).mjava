@@ -4,22 +4,36 @@
         dto.setRefactorLightweight(false);
 
         if (refactorInfo == null) {
+            final VirtualFile file = editorAgent.getActiveEditor().getEditorInput().getFile();
+
             dto.setType(JAVA_ELEMENT);
-            dto.setPath(JavaSourceFolderUtil.getFQNForFile(editorAgent.getActiveEditor().getEditorInput().getFile()));
+            dto.setPath(JavaUtil.resolveFQN(file));
             dto.setOffset(((TextEditor)editorAgent.getActiveEditor()).getCursorOffset());
+
+            if (file instanceof Resource) {
+                final Project project = ((Resource)file).getRelatedProject().get();
+
+                dto.setProjectPath(project.getLocation().toString());
+            }
         } else {
-            Object selectedElement = refactorInfo.getSelectedItems().get(0);
-            if (selectedElement instanceof JavaFileNode) {
-                dto.setPath(JavaSourceFolderUtil.getFQNForFile((JavaFileNode)selectedElement));
+            final Resource[] resources = refactorInfo.getResources();
+
+            checkState(resources != null && resources.length == 1);
+
+            final Resource resource = resources[0];
+
+            if (resource.getResourceType() == FILE) {
+                dto.setPath(JavaUtil.resolveFQN(resource));
                 dto.setType(COMPILATION_UNIT);
-            } else if (selectedElement instanceof PackageNode) {
-                dto.setPath(((PackageNode)selectedElement).getStorablePath());
+            } else if (resource instanceof Container) {
+                dto.setPath(resource.getLocation().toString());
                 dto.setType(PACKAGE);
             }
-        }
 
-        String projectPath = appContext.getCurrentProject().getProjectConfig().getPath();
-        dto.setProjectPath(projectPath);
+            final Project project = resource.getRelatedProject().get();
+
+            dto.setProjectPath(project.getLocation().toString());
+        }
 
         return dto;
     }

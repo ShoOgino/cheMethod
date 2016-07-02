@@ -1,0 +1,55 @@
+    protected Promise<List<Node>> transform(ResourceNode parent, final List<Node> children) {
+
+        if (!isSourceOrPackage(parent)) {
+            return promises.resolve(children);
+        }
+
+        if (children.size() == 1) {
+            final Node node = children.get(0);
+
+            if (node instanceof ContainerNode) {
+                return getNonEmptyPackage(((ContainerNode)node).getData()).then(new Function<Container, List<Node>>() {
+                    @Override
+                    public List<Node> apply(Container pkg) throws FunctionException {
+                        final Node packageNode = nodeFactory.newPackage(pkg, settingsProvider.getSettings());
+
+                        return singletonList(packageNode);
+                    }
+                });
+            } else {
+                return promises.resolve(children);
+            }
+
+        } else if (children.size() > 1) {
+            final Node[] nodes = new Node[children.size()];
+            Promise[] pkgPromises = new Promise[0];
+
+            for (int i = 0; i < children.size(); i++) {
+                final Node node = children.get(i);
+                final int index = i;
+
+                if (node instanceof ContainerNode) {
+                    int pkgIndex = pkgPromises.length;
+                    pkgPromises = Arrays.copyOf(pkgPromises, pkgIndex + 1);
+                    pkgPromises[pkgIndex] = getNonEmptyPackage(((ContainerNode)node).getData()).then(new Operation<Container>() {
+                        @Override
+                        public void apply(Container pkg) throws OperationException {
+                            nodes[index] = nodeFactory.newPackage(pkg, settingsProvider.getSettings());
+                        }
+                    });
+                } else {
+                    nodes[index] = node;
+                }
+            }
+
+            return promises.all(pkgPromises).then(new Function<JsArrayMixed, List<Node>>() {
+                @Override
+                public List<Node> apply(JsArrayMixed ignored) throws FunctionException {
+                    return Arrays.asList(nodes);
+                }
+            });
+        }
+
+        return promises.resolve(children);
+    }
+
