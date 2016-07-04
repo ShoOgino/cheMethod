@@ -8,6 +8,20 @@
      */
     public void tag(final TagParams params) throws ImageNotFoundException,
                                                    IOException {
-        tag(params, dockerDaemonUri);
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("POST")
+                                                            .path("/images/" + params.getImage() + "/tag")
+                                                            .query("repo", params.getRepository())) {
+            addQueryParamIfNotNull(connection, "force", params.isForce());
+            addQueryParamIfNotNull(connection, "tag", params.getTag());
+            final DockerResponse response = connection.request();
+            final int status = response.getStatus();
+            if (status == 404) {
+                throw new ImageNotFoundException(readAndCloseQuietly(response.getInputStream()));
+            }
+            if (status / 100 != 2) {
+                throw getDockerException(response);
+            }
+        }
     }
 

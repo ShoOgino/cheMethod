@@ -6,6 +6,15 @@
      *          when a problem occurs with docker api calls
      */
     public ContainerInfo inspectContainer(final InspectContainerParams params) throws IOException {
-        return inspectContainer(params, dockerDaemonUri);
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("GET")
+                                                            .path("/containers/" + params.getContainer() + "/json")) {
+            addQueryParamIfNotNull(connection, "size", params.isReturnContainerSize());
+            final DockerResponse response = connection.request();
+            if (OK.getStatusCode() != response.getStatus()) {
+                throw getDockerException(response);
+            }
+            return parseResponseStreamAndClose(response.getInputStream(), ContainerInfo.class);
+        }
     }
 

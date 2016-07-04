@@ -6,6 +6,14 @@
      *          when a problem occurs with docker api calls
      */
     public ImageInfo inspectImage(InspectImageParams params) throws IOException {
-        return inspectImage(params, dockerDaemonUri);
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("GET")
+                                                            .path("/images/" + params.getImage() + "/json")) {
+            final DockerResponse response = connection.request();
+            if (OK.getStatusCode() != response.getStatus()) {
+                throw getDockerException(response);
+            }
+            return parseResponseStreamAndClose(response.getInputStream(), ImageInfo.class);
+        }
     }
 

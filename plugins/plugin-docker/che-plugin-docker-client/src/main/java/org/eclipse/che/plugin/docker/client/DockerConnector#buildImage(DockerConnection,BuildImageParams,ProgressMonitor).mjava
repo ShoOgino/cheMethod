@@ -1,0 +1,73 @@
+    private String buildImage(final DockerConnection dockerConnection,
+                              final BuildImageParams params,
+                              final ProgressMonitor progressMonitor) throws IOException, InterruptedException {
+        final AuthConfigs authConfigs = params.getAuthConfigs();
+        final String repository = params.getRepository();
+        final String tag = params.getTag();
+
+        try (DockerConnection connection = dockerConnection.method("POST")
+                                                           .path("/build")
+                                                           .query("rm", 1)
+                                                           .query("forcerm", 1)
+                                                           .header("X-Registry-Config",
+                                                                   authResolver.getXRegistryConfigHeaderValue(authConfigs))) {
+            if (tag == null) {
+                addQueryParamIfNotNull(connection, "t", repository);
+            } else {
+                addQueryParamIfNotNull(connection, "t", repository == null ? null : repository + ':' + tag);
+            }
+            addQueryParamIfNotNull(connection, "memory", params.getMemoryLimit());
+            addQueryParamIfNotNull(connection, "memswap", params.getMemorySwapLimit());
+            addQueryParamIfNotNull(connection, "pull", params.isDoForcePull());
+            addQueryParamIfNotNull(connection, "dockerfile", params.getDockerfile());
+
+            final DockerResponse response = connection.request();
+            if (OK.getStatusCode() != response.getStatus()) {
+                throw getDockerException(response);
+            }
+            try (InputStream responseStream = response.getInputStream()) {
+                JsonMessageReader<ProgressStatus> progressReader = new JsonMessageReader<>(responseStream, ProgressStatus.class);
+
+                final ValueHolder<IOException> errorHolder = new ValueHolder<>();
+                final ValueHolder<String> imageIdHolder = new ValueHolder<>();
+                // Here do some trick to be able interrupt build process. Basically for now it is not possible interrupt docker daemon while
+                // it's building images but here we need just be able to close connection to the unix socket. Thread is blocking while read
+                // from the socket stream so need one more thread that is able to close socket. In this way we can release thread that is
+                // blocking on i/o.
+                final Runnable runnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            ProgressStatus progressStatus;
+                            while ((progressStatus = progressReader.next()) != null) {
+                                final String buildImageId = getBuildImageId(progressStatus);
+                                if (buildImageId != null) {
+                                    imageIdHolder.set(buildImageId);
+                                }
+                                progressMonitor.updateProgress(progressStatus);
+                            }
+                        } catch (IOException e) {
+                            errorHolder.set(e);
+                        }
+                        synchronized (this) {
+                            notify();
+                        }
+                    }
+                };
+                executor.execute(runnable);
+                // noinspection SynchronizationOnLocalVariableOrMethodParameter
+                synchronized (runnable) {
+                    runnable.wait();
+                }
+                final IOException ioe = errorHolder.get();
+                if (ioe != null) {
+                    throw ioe;
+                }
+                if (imageIdHolder.get() == null) {
+                    throw new IOException("Docker image build failed");
+                }
+                return imageIdHolder.get();
+            }
+        }
+    }
+

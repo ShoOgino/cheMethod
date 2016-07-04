@@ -6,6 +6,22 @@
      *          when a problem occurs with docker api calls
      */
     public String commit(final CommitParams params) throws IOException {
-        return commit(params, dockerDaemonUri);
+        // TODO: add option to pause container
+        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
+                                                            .method("POST")
+                                                            .path("/commit")
+                                                            .query("container", params.getContainer())) {
+            addQueryParamIfNotNull(connection, "repo", params.getRepository());
+            addQueryParamIfNotNull(connection, "tag", params.getTag());
+            addQueryParamIfNotNull(connection, "comment", (params.getComment() == null) ?
+                                                          null : URLEncoder.encode(params.getComment(), "UTF-8"));
+            addQueryParamIfNotNull(connection, "author", (params.getAuthor() == null) ?
+                                                         null : URLEncoder.encode(params.getAuthor(), "UTF-8"));
+            final DockerResponse response = connection.request();
+            if (CREATED.getStatusCode() != response.getStatus()) {
+                throw getDockerException(response);
+            }
+            return parseResponseStreamAndClose(response.getInputStream(), ContainerCommitted.class).getId();
+        }
     }
 
