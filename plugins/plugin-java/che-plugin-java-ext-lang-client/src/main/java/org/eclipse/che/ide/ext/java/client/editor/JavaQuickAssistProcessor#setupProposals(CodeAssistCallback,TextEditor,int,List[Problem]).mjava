@@ -3,19 +3,23 @@
                                 final int offset,
                                 final List<Problem> annotations) {
         final VirtualFile file = textEditor.getEditorInput().getFile();
-        final String projectPath = file.getProject().getProjectConfig().getPath();
-        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
-        Unmarshallable<Proposals> unmarshaller = unmarshallerFactory.newUnmarshaller(Proposals.class);
-        client.computeAssistProposals(projectPath, fqn, offset, annotations, new AsyncRequestCallback<Proposals>(unmarshaller) {
-            @Override
-            protected void onSuccess(Proposals proposals) {
-                showProposals(callback, proposals, textEditor);
-            }
 
-            @Override
-            protected void onFailure(Throwable throwable) {
-                Log.error(JavaCodeAssistProcessor.class, throwable);
-            }
-        });
+        if (file instanceof Resource) {
+            final Optional<Project> project = ((Resource)file).getRelatedProject();
+
+            Unmarshallable<Proposals> unmarshaller = unmarshallerFactory.newUnmarshaller(Proposals.class);
+            client.computeAssistProposals(project.get().getLocation().toString(), resolveFQN(file), offset, annotations,
+                                          new AsyncRequestCallback<Proposals>(unmarshaller) {
+                                              @Override
+                                              protected void onSuccess(Proposals proposals) {
+                                                  showProposals(callback, proposals, textEditor);
+                                              }
+
+                                              @Override
+                                              protected void onFailure(Throwable throwable) {
+                                                  Log.error(JavaCodeAssistProcessor.class, throwable);
+                                              }
+                                          });
+        }
     }
 

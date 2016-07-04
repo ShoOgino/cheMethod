@@ -11,22 +11,30 @@
 
         List<BreakpointDto> allDtoBreakpoints = dtoFactory.createListDtoFromJson(data, BreakpointDto.class);
 
-        for (final BreakpointDto dto : allDtoBreakpoints) {
-            VirtualFileInfo virtualFileInfo = VirtualFileInfo.newBuilder()
-                                                             .setPath(dto.getPath())
-                                                             .setProject(new ProjectConfig(dto.getFileProjectConfig()))
-                                                             .build();
+        Promise<Void> bpPromise = promises.resolve(null);
 
-            VirtualFile file = new VirtualFileImpl(virtualFileInfo);
-            if (dto.getType() == Type.CURRENT) {
-                doSetCurrentBreakpoint(file, dto.getLineNumber());
-            } else {
-                addBreakpoint(new Breakpoint(dto.getType(),
-                                             dto.getLineNumber(),
-                                             dto.getPath(),
-                                             file,
-                                             dto.isActive()));
-            }
+        for (final BreakpointDto dto : allDtoBreakpoints) {
+            bpPromise.thenPromise(new Function<Void, Promise<Void>>() {
+                @Override
+                public Promise<Void> apply(Void ignored) throws FunctionException {
+                    return appContext.getWorkspaceRoot().getFile(dto.getPath()).then(new Function<Optional<File>, Void>() {
+                        @Override
+                        public Void apply(Optional<File> file) throws FunctionException {
+                            if (dto.getType() == Type.CURRENT) {
+                                doSetCurrentBreakpoint(file.get(), dto.getLineNumber());
+                            } else {
+                                addBreakpoint(new Breakpoint(dto.getType(),
+                                                             dto.getLineNumber(),
+                                                             dto.getPath(),
+                                                             file.get(),
+                                                             dto.isActive()));
+                            }
+
+                            return null;
+                        }
+                    });
+                }
+            });
         }
     }
 

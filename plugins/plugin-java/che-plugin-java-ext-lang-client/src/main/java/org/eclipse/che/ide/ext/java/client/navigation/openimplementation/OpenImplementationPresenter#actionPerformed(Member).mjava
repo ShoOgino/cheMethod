@@ -1,19 +1,48 @@
     public void actionPerformed(final Member member) {
         if (member.isBinary()) {
-            javaNodeManager.getClassNode(context.getCurrentProject().getProjectConfig(), member.getLibId(), member.getRootPath())
-                           .then(new Operation<Node>() {
-                               @Override
-                               public void apply(Node node) throws OperationException {
-                                   if (node instanceof VirtualFile) {
-                                       openFile((VirtualFile)node, member);
-                                   }
-                               }
-                           });
+
+            final Resource resource = context.getResource();
+
+            if (resource == null) {
+                return;
+            }
+
+            final Optional<Project> project = resource.getRelatedProject();
+
+            service.getEntry(project.get().getLocation(), member.getLibId(), member.getRootPath())
+                   .then(new Operation<JarEntry>() {
+                       @Override
+                       public void apply(final JarEntry entry) throws OperationException {
+                           service.getContent(project.get().getLocation(), member.getLibId(), Path.valueOf(entry.getPath()))
+                                   .then(new Operation<ClassContent>() {
+                                       @Override
+                                       public void apply(ClassContent content) throws OperationException {
+                                           final String clazz = entry.getName().substring(0, entry.getName().indexOf('.'));
+                                           final VirtualFile file = new SyntheticFile(entry.getName(), clazz, content.getContent());
+                                           editorAgent.openEditor(file, new OpenEditorCallbackImpl() {
+                                               @Override
+                                               public void onEditorOpened(EditorPartPresenter editor) {
+                                                   setCursor(member.getFileRegion());
+                                               }
+                                           });
+                                       }
+                                   });
+                       }
+                   });
         } else {
-            projectExplorer.getNodeByPath(new HasStorablePath.StorablePath(member.getRootPath()))
-                           .then(selectNode())
-                           .then(openNode(member))
-                           .then(setCursor(member.getFileRegion()));
+            context.getWorkspaceRoot().getFile(member.getRootPath()).then(new Operation<Optional<File>>() {
+                @Override
+                public void apply(Optional<File> file) throws OperationException {
+                    if (file.isPresent()) {
+                        editorAgent.openEditor(file.get(), new OpenEditorCallbackImpl() {
+                            @Override
+                            public void onEditorOpened(EditorPartPresenter editor) {
+                                setCursor(member.getFileRegion());
+                            }
+                        });
+                    }
+                }
+            });
         }
         Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
             @Override

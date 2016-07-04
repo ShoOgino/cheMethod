@@ -3,24 +3,23 @@
      * local).
      */
     private void updateRemotes() {
-        service.remoteList(appContext.getDevMachine(), project.getRootProject(), null, true,
-                           new AsyncRequestCallback<List<Remote>>(dtoUnmarshallerFactory.newListUnmarshaller(Remote.class)) {
-                               @Override
-                               protected void onSuccess(List<Remote> result) {
-                                   view.setRepositories(result);
-                                   updateBranches(LIST_REMOTE);
-                                   view.setEnableFetchButton(!result.isEmpty());
-                                   view.showDialog();
-                               }
-
-                               @Override
-                               protected void onFailure(Throwable exception) {
-                                   GitOutputConsole console = gitOutputConsoleFactory.create(FETCH_COMMAND_NAME);
-                                   console.printError(constant.remoteListFailed());
-                                   consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                                   notificationManager.notify(constant.remoteListFailed(), FAIL, FLOAT_MODE, project.getRootProject());
-                                   view.setEnableFetchButton(false);
-                               }
-                           });
+        service.remoteList(appContext.getDevMachine(), project.getLocation(), null, true).then(new Operation<List<Remote>>() {
+            @Override
+            public void apply(List<Remote> remotes) throws OperationException {
+                view.setRepositories(remotes);
+                updateBranches(LIST_REMOTE);
+                view.setEnableFetchButton(!remotes.isEmpty());
+                view.showDialog();
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                GitOutputConsole console = gitOutputConsoleFactory.create(FETCH_COMMAND_NAME);
+                console.printError(constant.remoteListFailed());
+                consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                notificationManager.notify(constant.remoteListFailed(), FAIL, FLOAT_MODE);
+                view.setEnableFetchButton(false);
+            }
+        });
     }
 

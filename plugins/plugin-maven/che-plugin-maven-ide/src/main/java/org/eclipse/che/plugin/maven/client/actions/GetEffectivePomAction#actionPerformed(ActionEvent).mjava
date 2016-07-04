@@ -1,19 +1,19 @@
     @Override
     public void actionPerformed(ActionEvent e) {
-        mavenServerServiceClient.getEffectivePom(appContext.getCurrentProject().getProjectConfig().getPath()).then(new Operation<String>() {
+        final Resource[] resources = appContext.getResources();
+
+        checkState(resources != null && resources.length == 1);
+
+        final Project project = resources[0].getRelatedProject().get();
+
+        checkState(MAVEN_ID.equals(project.getType()));
+
+        mavenServerServiceClient.getEffectivePom(project.getLocation().toString()).then(new Operation<String>() {
             @Override
             public void apply(String content) throws OperationException {
-                HasProjectConfig.ProjectConfig project = new HasProjectConfig.ProjectConfig(appContext.getCurrentProject()
-                                                                                                      .getProjectConfig());
-                VirtualFileInfo fileInfo = VirtualFileInfo.newBuilder()
-                                                          .setContent(content)
-                                                          .setName(NAME)
-                                                          .setDisplayName(NAME)
-                                                          .setProject(project)
-                                                          .setPath(PATH)
-                                                          .build();
-
-                editorAgent.openEditor(new VirtualFileImpl(fileInfo));
+                editorAgent.openEditor(new SyntheticFile("pom.xml",
+                                                         project.getAttributes().get(MavenAttributes.ARTIFACT_ID).get(0) + " [effective pom]",
+                                                         content));
             }
         }).catchError(new Operation<PromiseError>() {
             @Override

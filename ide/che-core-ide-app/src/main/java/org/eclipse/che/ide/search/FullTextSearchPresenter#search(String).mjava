@@ -1,24 +1,23 @@
     @Override
     public void search(final String text) {
-        QueryExpression queryExpression = new QueryExpression();
-        queryExpression.setText(prepareQuery(text));
-        if (!view.getFileMask().isEmpty()) {
-            queryExpression.setName(view.getFileMask());
-        }
-        if (!view.getPathToSearch().isEmpty()) {
-            queryExpression.setPath(view.getPathToSearch());
-        }
+        final Path startPoint = isNullOrEmpty(view.getPathToSearch()) ? defaultStartPoint : Path.valueOf(view.getPathToSearch());
 
-        projectServiceClient.search(appContext.getDevMachine(), queryExpression).then(new Operation<List<ItemReference>>() {
+        appContext.getWorkspaceRoot().getContainer(startPoint).then(new Operation<Optional<Container>>() {
             @Override
-            public void apply(List<ItemReference> result) throws OperationException {
-                view.close();
-                findResultPresenter.handleResponse(result, text);
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                view.showErrorMessage(dtoFactory.createDtoFromJson(arg.getMessage(), ServiceError.class).getMessage());
+            public void apply(Optional<Container> optionalContainer) throws OperationException {
+                if (!optionalContainer.isPresent()) {
+                    view.showErrorMessage("Path '" + startPoint + "' doesn't exists");
+                    return;
+                }
+
+                final Container container = optionalContainer.get();
+                container.search(view.getFileMask(), prepareQuery(text)).then(new Operation<Resource[]>() {
+                    @Override
+                    public void apply(Resource[] result) throws OperationException {
+                        view.close();
+                        findResultPresenter.handleResponse(result, text);
+                    }
+                });
             }
         });
     }

@@ -1,31 +1,29 @@
     @Test
     public void testOnRenameClickedWhenLocalBranchSelected() throws Exception {
         reset(selectedBranch);
+
+        when(service.branchRename(anyObject(), anyObject(), anyString(), anyString())).thenReturn(voidPromise);
+        when(voidPromise.then(any(Operation.class))).thenReturn(voidPromise);
+        when(voidPromise.catchError(any(Operation.class))).thenReturn(voidPromise);
+
         when(selectedBranch.getDisplayName()).thenReturn(BRANCH_NAME);
         when(selectedBranch.isRemote()).thenReturn(false);
         InputDialog inputDialog = mock(InputDialog.class);
-        when(dialogFactory.createInputDialog(anyString(), anyString(), anyString(), anyInt(), anyInt(), anyObject(), anyObject()))
+        when(dialogFactory.createInputDialog(anyObject(), anyObject(), anyString(), anyInt(), anyInt(), anyObject(), anyObject()))
                 .thenReturn(inputDialog);
 
         selectBranch();
         presenter.onRenameClicked();
 
-        verify(dialogFactory).createInputDialog(anyString(), anyString(), anyString(), anyInt(), anyInt(), inputCallbackCaptor.capture(),
-                                                anyObject());
+        verify(dialogFactory).createInputDialog(eq(null), eq(null), eq("branchName"), eq(0), eq("branchName".length()), inputCallbackCaptor.capture(),
+                                                eq(null));
         InputCallback inputCallback = inputCallbackCaptor.getValue();
         inputCallback.accepted(RETURNED_MESSAGE);
 
-
-        verify(service)
-                .branchRename(eq(devMachine), eq(rootProjectConfig), eq(BRANCH_NAME), eq(RETURNED_MESSAGE), asyncRequestCallbackCaptor.capture());
-        AsyncRequestCallback<String> renameBranchCallback = asyncRequestCallbackCaptor.getValue();
-        GwtReflectionUtils.callOnSuccess(renameBranchCallback, PROJECT_PATH);
-
         verify(selectedBranch, times(2)).getDisplayName();
-        verify(service, times(2)).branchList(eq(devMachine), eq(rootProjectConfig), eq(LIST_ALL), anyObject());
         verify(dialogFactory, never()).createConfirmDialog(anyString(), anyString(), anyObject(), anyObject());
         verify(console, never()).printError(anyString());
-        verify(notificationManager, never()).notify(anyString(), eq(rootProjectConfig));
+        verify(notificationManager, never()).notify(anyString());
         verify(constant, never()).branchRenameFailed();
     }
 

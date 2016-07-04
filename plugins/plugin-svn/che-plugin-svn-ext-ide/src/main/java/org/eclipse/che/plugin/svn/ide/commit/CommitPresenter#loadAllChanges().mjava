@@ -1,20 +1,24 @@
     private void loadAllChanges() {
-        Unmarshallable<CLIOutputResponse> unmarshaller = dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class);
-        subversionService.status(getCurrentProjectPath(), Collections.<String>emptyList(), null, false, false, false, true, false, null,
-                                 new AsyncRequestCallback<CLIOutputResponse>(unmarshaller) {
-                                     @Override
-                                     protected void onSuccess(CLIOutputResponse response) {
-                                         List<StatusItem> statusItems = parseChangesList(response);
-                                         view.setChangesList(statusItems);
-                                         view.onShow();
+        final Project project = appContext.getRootProject();
 
-                                         cache.put(Changes.ALL, statusItems);
-                                     }
+        checkState(project != null);
 
-                                     @Override
-                                     protected void onFailure(Throwable exception) {
-                                         Log.error(CommitPresenter.class, exception);
-                                     }
-                                 });
+        service.status(project.getLocation(), new Path[0], null, false, false, false, true, false, null)
+               .then(new Operation<CLIOutputResponse>() {
+                    @Override
+                    public void apply(CLIOutputResponse response) throws OperationException {
+                        List<StatusItem> statusItems = parseChangesList(response);
+                        view.setChangesList(statusItems);
+                        view.onShow();
+
+                        cache.put(Changes.ALL, statusItems);
+                    }
+                })
+                .catchError(new Operation<PromiseError>() {
+                    @Override
+                    public void apply(PromiseError error) throws OperationException {
+                        Log.error(CommitPresenter.class, error.getMessage());
+                    }
+                });
     }
 

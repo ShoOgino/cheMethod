@@ -1,19 +1,27 @@
     private void loadSelectionChanges() {
-        Unmarshallable<CLIOutputResponse> unmarshaller = dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class);
-        subversionService.status(getCurrentProjectPath(), getSelectedPaths(), null, false, false, false, true, false, null,
-                                 new AsyncRequestCallback<CLIOutputResponse>(unmarshaller) {
-                                     @Override
-                                     protected void onSuccess(CLIOutputResponse response) {
-                                         List<StatusItem> statusItems = parseChangesList(response);
-                                         view.setChangesList(statusItems);
+        final Project project = appContext.getRootProject();
 
-                                         cache.put(Changes.SELECTION, statusItems);
-                                     }
+        checkState(project != null);
 
-                                     @Override
-                                     protected void onFailure(Throwable exception) {
-                                         Log.error(CommitPresenter.class, exception);
-                                     }
-                                 });
+        final Resource[] resources = appContext.getResources();
+
+        checkState(!Arrays.isNullOrEmpty(resources));
+
+        service.status(project.getLocation(), toRelative(project, resources), null, false, false, false, true, false, null)
+               .then(new Operation<CLIOutputResponse>() {
+                   @Override
+                   public void apply(CLIOutputResponse response) throws OperationException {
+                       List<StatusItem> statusItems = parseChangesList(response);
+                       view.setChangesList(statusItems);
+
+                       cache.put(Changes.SELECTION, statusItems);
+                   }
+               })
+               .catchError(new Operation<PromiseError>() {
+                   @Override
+                   public void apply(PromiseError error) throws OperationException {
+                       Log.error(CommitPresenter.class, error.getMessage());
+                   }
+               });
     }
 

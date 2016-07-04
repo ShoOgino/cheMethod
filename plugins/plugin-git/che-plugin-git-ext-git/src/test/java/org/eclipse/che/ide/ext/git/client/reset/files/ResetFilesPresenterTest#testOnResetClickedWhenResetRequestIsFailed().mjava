@@ -7,35 +7,21 @@
         when(status.getChanged()).thenReturn(changes);
         when(status.getRemoved()).thenReturn(changes);
 
-        doAnswer(new Answer() {
-            @Override
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                Object[] arguments = invocation.getArguments();
-                AsyncRequestCallback<Status> callback = (AsyncRequestCallback<Status>)arguments[1];
-                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
-                onSuccess.invoke(callback, status);
-                return callback;
-            }
-        }).when(service).status(devMachine, anyObject(), (AsyncRequestCallback<Status>)anyObject());
-        doAnswer(new Answer() {
-            @Override
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                Object[] arguments = invocation.getArguments();
-                AsyncRequestCallback<Void> callback = (AsyncRequestCallback<Void>)arguments[4];
-                Method onFailure = GwtReflectionUtils.getMethod(callback.getClass(), "onFailure");
-                onFailure.invoke(callback, mock(Throwable.class));
-                return callback;
-            }
-        }).when(service).reset(devMachine, anyObject(), anyString(), (ResetRequest.ResetType)anyObject(), (List<String>)anyObject(),
-                               (AsyncRequestCallback<Void>)anyObject());
+        when(service.reset(anyObject(), any(Path.class), anyString(), any(ResetRequest.ResetType.class), anyObject())).thenReturn(voidPromise);
+        when(voidPromise.then(any(Operation.class))).thenReturn(voidPromise);
+        when(voidPromise.catchError(any(Operation.class))).thenReturn(voidPromise);
 
-        presenter.showDialog();
+        presenter.showDialog(project);
+
+        verify(statusPromise).then(statusPromiseCaptor.capture());
+        statusPromiseCaptor.getValue().apply(status);
+
         presenter.onResetClicked();
 
-        verify(service).reset(eq(devMachine), eq(rootProjectConfig), anyString(), (ResetRequest.ResetType)anyObject(), (List<String>)anyObject(),
-                              (AsyncRequestCallback<Void>)anyObject());
-        verify(constant).resetFilesFailed();
+        verify(voidPromise).catchError(promiseErrorCaptor.capture());
+        promiseErrorCaptor.getValue().apply(promiseError);
+
         verify(console).printError(anyString());
-        verify(notificationManager).notify(anyString(), rootProjectConfig);
+        verify(notificationManager).notify(anyString());
     }
 

@@ -13,28 +13,32 @@
 
         VirtualFile file = activeEditor.getEditorInput().getFile();
 
-        String projectPath = file.getProject().getProjectConfig().getPath();
-        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+        if (file instanceof Resource) {
+            final Optional<Project> project = ((Resource)file).getRelatedProject();
+            final int lineStartOffset = getLineStartOffset(activeEditor, offset);
 
-        int lineStartOffset = getLineStartOffset(activeEditor, offset);
+            navigationService.getMethodParametersHints(project.get().getLocation(), JavaUtil.resolveFQN(file), offset, lineStartOffset)
+                             .then(new Operation<List<MethodParameters>>() {
+                                 @Override
+                                 public void apply(List<MethodParameters> parameters) throws OperationException {
+                                     if (parameters.isEmpty()) {
+                                         return;
+                                     }
 
-        Promise<List<MethodParameters>> promise = navigationService.getMethodParametersHints(projectPath, fqn, offset, lineStartOffset);
-        promise.then(new Operation<List<MethodParameters>>() {
-            @Override
-            public void apply(List<MethodParameters> parameters) throws OperationException {
-                if (parameters.isEmpty()) {
-                    return;
-                }
+                                     PositionConverter.PixelCoordinates coordinates =
+                                             activeEditor.getPositionConverter().offsetToPixel(offset);
 
-                PositionConverter.PixelCoordinates coordinates = activeEditor.getPositionConverter().offsetToPixel(offset);
+                                     view.show(parameters, coordinates.getX(), coordinates.getY());
+                                 }
+                             })
+                             .catchError(new Operation<PromiseError>() {
+                                 @Override
+                                 public void apply(PromiseError error) throws OperationException {
+                                     Log.error(getClass(), error.getMessage());
+                                 }
+                             });
+        }
 
-                view.show(parameters, coordinates.getX(), coordinates.getY());
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError error) throws OperationException {
-                Log.error(getClass(), error.getMessage());
-            }
-        });
+
     }
 

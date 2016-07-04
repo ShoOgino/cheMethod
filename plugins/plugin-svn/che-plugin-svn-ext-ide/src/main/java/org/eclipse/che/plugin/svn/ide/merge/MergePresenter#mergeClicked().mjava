@@ -5,19 +5,26 @@
     public void mergeClicked() {
         view.hide();
 
-        String target = getSelectedPaths().get(0);
-        subversionClientService.merge(getActiveProject().getRootProject().getPath(), target, sourceURL,
-                new AsyncRequestCallback<CLIOutputResponse>(dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class)) {
+        final Project project = appContext.getRootProject();
 
-                    @Override
-                    protected void onSuccess(CLIOutputResponse result) {
-                        printResponse(result.getCommand(), result.getOutput(), null, constants.commandMerge());
-                    }
+        checkState(project != null);
 
-                    @Override
-                    protected void onFailure(Throwable exception) {
-                        notificationManager.notify(exception.getMessage(), FAIL, FLOAT_MODE);
-                    }
-                });
+        final Resource[] resources = appContext.getResources();
+
+        checkState(resources != null && resources.length == 1);
+
+        service.merge(project.getLocation(), resources[0].getLocation(), Path.valueOf(sourceURL))
+               .then(new Operation<CLIOutputResponse>() {
+                                   @Override
+                                   public void apply(CLIOutputResponse response) throws OperationException {
+                                       printResponse(response.getCommand(), response.getOutput(), null, constants.commandMerge());
+                                   }
+                               })
+               .catchError(new Operation<PromiseError>() {
+                                   @Override
+                                   public void apply(PromiseError error) throws OperationException {
+                                       notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
+                                   }
+                               });
     }
 

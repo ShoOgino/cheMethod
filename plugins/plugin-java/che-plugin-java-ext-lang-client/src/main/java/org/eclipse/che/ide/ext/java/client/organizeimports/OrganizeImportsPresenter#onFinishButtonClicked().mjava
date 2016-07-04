@@ -5,23 +5,24 @@
 
         ConflictImportDTO result = dtoFactory.createDto(ConflictImportDTO.class).withTypeMatches(new ArrayList<>(selected.values()));
 
-        String projectPath = file.getProject().getProjectConfig().getPath();
-        String fqn = JavaSourceFolderUtil.getFQNForFile(file);
+        if (file instanceof Resource) {
+            final Optional<Project> project = ((Resource)file).getRelatedProject();
 
-        javaCodeAssistClient.applyChosenImports(projectPath, fqn, result)
-                            .then(new Operation<Void>() {
-                                @Override
-                                public void apply(Void arg) throws OperationException {
-                                    applyChanges(file);
-                                    view.hide();
-                                    ((TextEditor)editor).setFocus();
-                                }
-                            })
-                            .catchError(new Operation<PromiseError>() {
-                                @Override
-                                public void apply(PromiseError arg) throws OperationException {
-                                    notificationManager.notify(locale.failedToProcessOrganizeImports(), arg.getMessage(), FAIL, FLOAT_MODE);
-                                }
-                            });
+            javaCodeAssistClient.applyChosenImports(project.get().getLocation().toString(), JavaUtil.resolveFQN(file), result)
+                                .then(new Operation<Void>() {
+                                    @Override
+                                    public void apply(Void arg) throws OperationException {
+                                        applyChanges(file);
+                                        view.hide();
+                                        ((TextEditor)editor).setFocus();
+                                    }
+                                })
+                                .catchError(new Operation<PromiseError>() {
+                                    @Override
+                                    public void apply(PromiseError arg) throws OperationException {
+                                        notificationManager.notify(locale.failedToProcessOrganizeImports(), arg.getMessage(), FAIL, FLOAT_MODE);
+                                    }
+                                });
+        }
     }
 

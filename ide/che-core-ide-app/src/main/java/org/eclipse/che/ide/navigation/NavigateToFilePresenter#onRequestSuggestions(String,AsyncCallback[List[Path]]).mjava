@@ -1,0 +1,29 @@
+    @Override
+    public void onRequestSuggestions(String query, final AsyncCallback<List<Path>> callback) {
+        // add '*' to allow search files by first letters
+        final String url = SEARCH_URL + "/?name=" + URL.encodePathSegment(query + "*");
+        final Message message = new MessageBuilder(GET, url).header(ACCEPT, APPLICATION_JSON).build();
+        final Unmarshallable<List<ItemReference>> unmarshaller = dtoUnmarshallerFactory.newWSListUnmarshaller(ItemReference.class);
+        try {
+            wsMessageBus.send(message, new RequestCallback<List<ItemReference>>(unmarshaller) {
+                @Override
+                protected void onSuccess(List<ItemReference> result) {
+                    List<Path> paths = newArrayList();
+
+                    for (ItemReference reference : result) {
+                        paths.add(Path.valueOf(reference.getPath()));
+                    }
+
+                    callback.onSuccess(paths);
+                }
+
+                @Override
+                protected void onFailure(Throwable exception) {
+                    callback.onFailure(exception);
+                }
+            });
+        } catch (WebSocketException e) {
+            callback.onFailure(e);
+        }
+    }
+

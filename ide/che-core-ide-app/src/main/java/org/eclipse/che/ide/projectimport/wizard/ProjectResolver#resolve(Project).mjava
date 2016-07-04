@@ -1,0 +1,33 @@
+    public Promise<Project> resolve(final Project project) {
+        return project.resolve().thenPromise(new Function<List<SourceEstimation>, Promise<Project>>() {
+            @Override
+            public Promise<Project> apply(List<SourceEstimation> estimations) throws FunctionException {
+                if (estimations == null || estimations.isEmpty()) {
+                    return promiseProvider.resolve(project);
+                }
+
+                final List<String> primeTypes = newArrayList();
+                for (SourceEstimation estimation : estimations) {
+                    if (projectTypeRegistry.getProjectType(estimation.getType()).isPrimaryable()) {
+                        primeTypes.add(estimation.getType());
+                    }
+                }
+
+                final MutableProjectConfig config = new MutableProjectConfig(project);
+
+                if (primeTypes.isEmpty()) {
+                    return promiseProvider.resolve(project);
+                } else if (primeTypes.size() == 1) {
+                    config.setType(primeTypes.get(0));
+                } else {
+                    config.setType(Constants.BLANK_ID);
+                    projectWizard.show(config);
+
+                    return promiseProvider.resolve(project);
+                }
+
+                return project.update().withBody(config).send();
+            }
+        });
+    }
+

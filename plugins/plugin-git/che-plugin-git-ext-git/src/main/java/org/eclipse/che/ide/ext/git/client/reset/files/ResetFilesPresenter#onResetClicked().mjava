@@ -1,36 +1,38 @@
     /** {@inheritDoc} */
     @Override
     public void onResetClicked() {
-        List<String> files = new ArrayList<>();
-        for (IndexFile indexFile : indexedFiles) {
-            if (!indexFile.isIndexed()) {
-                files.add(indexFile.getPath());
+
+        Path[] paths = new Path[0];
+        for (IndexFile file : indexedFiles) {
+            if (!file.isIndexed()) {
+                paths = add(paths, Path.valueOf(file.getPath()));
             }
         }
+
         final GitOutputConsole console = gitOutputConsoleFactory.create(RESET_COMMAND_NAME);
-        if (files.isEmpty()) {
+        if (paths.length == 0) {
             view.close();
             console.print(constant.nothingToReset());
             consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-            notificationManager.notify(constant.nothingToReset(), project.getRootProject());
+            notificationManager.notify(constant.nothingToReset());
             return;
         }
         view.close();
 
-        service.reset(appContext.getDevMachine(), project.getRootProject(), "HEAD", ResetType.MIXED, files, new AsyncRequestCallback<Void>() {
+        service.reset(appContext.getDevMachine(), project.getLocation(), "HEAD", ResetType.MIXED, paths).then(new Operation<Void>() {
             @Override
-            protected void onSuccess(Void result) {
+            public void apply(Void ignored) throws OperationException {
                 console.print(constant.resetFilesSuccessfully());
                 consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                notificationManager.notify(constant.resetFilesSuccessfully(), project.getRootProject());
+                notificationManager.notify(constant.resetFilesSuccessfully());
             }
-
+        }).catchError(new Operation<PromiseError>() {
             @Override
-            protected void onFailure(Throwable exception) {
-                String errorMassage = exception.getMessage() != null ? exception.getMessage() : constant.resetFilesFailed();
+            public void apply(PromiseError error) throws OperationException {
+                String errorMassage = error.getMessage() != null ? error.getMessage() : constant.resetFilesFailed();
                 console.printError(errorMassage);
                 consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                notificationManager.notify(errorMassage, project.getRootProject());
+                notificationManager.notify(errorMassage);
             }
         });
     }

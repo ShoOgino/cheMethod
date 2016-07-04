@@ -1,15 +1,34 @@
     public void showConflictsDialog() {
-        if (conflictsPaths != null && !conflictsPaths.isEmpty()) {
-            for (String file : conflictsPaths) {
-                view.addConflictingFile(file);
+        final Project project = appContext.getRootProject();
+
+        checkState(project != null);
+
+        final Resource[] resources = appContext.getResources();
+
+        checkState(!Arrays.isNullOrEmpty(resources));
+
+        service.showConflicts(project.getLocation(), toRelative(project, resources)).then(new Operation<CLIOutputResponse>() {
+            @Override
+            public void apply(CLIOutputResponse response) throws OperationException {
+                conflictsList = parseConflictsList(response.getOutput());
+
+                if (conflictsList.isEmpty()) {
+                    dialogFactory.createMessageDialog(constants.resolveNoConflictTitle(), constants.resolveNoConflictContent(), null)
+                                 .show();
+
+                    return;
+                }
+
+                for (String file : conflictsList) {
+                    view.addConflictingFile(file);
+                }
+                view.showDialog();
             }
-            view.showDialog();
-        } else {
-            dialogFactory.createMessageDialog(constants.resolveNoConflictTitle(), constants.resolveNoConflictContent(),
-                                              new ConfirmCallback() {
-                                                  @Override
-                                                  public void accepted() {}
-                                              }).show();
-        }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+
+            }
+        });
     }
 

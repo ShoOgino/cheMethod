@@ -1,0 +1,33 @@
+    private Promise<Void> onExternalDeltaMoved(final ResourceDelta delta) {
+        //search resource to remove at first
+        return findResource(delta.getFromPath(), true).thenPromise(new Function<Optional<Resource>, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(final Optional<Resource> toRemove) throws FunctionException {
+                if (!toRemove.isPresent()) {
+                    return promises.resolve(null);
+                }
+
+                store.dispose(delta.getFromPath(), true);
+
+                return findResource(delta.getToPath(), true).then(new Function<Optional<Resource>, Void>() {
+                    @Override
+                    public Void apply(final Optional<Resource> resource) throws FunctionException {
+
+                        if (resource.isPresent() && toRemove.isPresent()) {
+                            Resource intercepted = resource.get();
+
+                            if (!store.getResource(intercepted.getLocation()).isPresent()) {
+                                store.register(intercepted);
+                            }
+
+                            eventBus.fireEvent(new ResourceChangedEvent(
+                                    new ResourceDeltaImpl(intercepted, toRemove.get(), ADDED | MOVED_FROM | MOVED_TO | DERIVED)));
+                        }
+
+                        return null;
+                    }
+                });
+            }
+        });
+    }
+

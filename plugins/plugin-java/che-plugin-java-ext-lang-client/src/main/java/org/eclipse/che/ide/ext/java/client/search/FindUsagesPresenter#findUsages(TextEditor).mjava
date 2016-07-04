@@ -1,36 +1,54 @@
     public void findUsages(TextEditor activeEditor) {
 
-        VirtualFile virtualFile = activeEditor.getEditorInput().getFile();
+        final VirtualFile virtualFile = activeEditor.getEditorInput().getFile();
 
-        String projectPath = virtualFile.getProject().getProjectConfig().getPath();
-        FindUsagesRequest request = dtoFactory.createDto(FindUsagesRequest.class);
-        request.setFQN(JavaSourceFolderUtil.getFQNForFile(virtualFile));
-        request.setProjectPath(projectPath);
-        request.setOffset(activeEditor.getCursorOffset());
+        if (virtualFile instanceof Resource) {
+            final Project project = ((Resource)virtualFile).getRelatedProject().get();
 
-        Promise<FindUsagesResponse> promise = searchService.findUsages(request);
-        promise.then(new Operation<FindUsagesResponse>() {
-            @Override
-            public void apply(FindUsagesResponse arg) throws OperationException {
-                handleResponse(arg);
+            if (project == null) {
+                return;
             }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                Throwable cause = arg.getCause();
-                if (cause instanceof ServerException) {
-                    handleError(((ServerException)cause).getHTTPStatus(), cause.getMessage());
-                    return;
-                }
-                //in case websocket request
-                if (cause instanceof org.eclipse.che.ide.websocket.rest.exceptions.ServerException) {
-                    handleError(((org.eclipse.che.ide.websocket.rest.exceptions.ServerException)cause).getHTTPStatus(), cause.getMessage());
-                    return;
-                }
-                Log.error(getClass(), arg);
-                manager.notify(localizationConstant.failedToProcessFindUsage(), arg.getMessage(), FAIL, FLOAT_MODE);
+
+            final Optional<Resource> srcFolder = ((Resource)virtualFile).getParentWithMarker(SourceFolderMarker.ID);
+
+            if (!srcFolder.isPresent()) {
+                return;
             }
-        });
+
+            final String fqn = JavaUtil.resolveFQN((Container)srcFolder.get(), (Resource)virtualFile);
+
+            String projectPath = project.getLocation().toString();
+            FindUsagesRequest request = dtoFactory.createDto(FindUsagesRequest.class);
+            request.setFQN(fqn);
+            request.setProjectPath(projectPath);
+            request.setOffset(activeEditor.getCursorOffset());
+
+            Promise<FindUsagesResponse> promise = searchService.findUsages(request);
+            promise.then(new Operation<FindUsagesResponse>() {
+                @Override
+                public void apply(FindUsagesResponse arg) throws OperationException {
+                    handleResponse(arg);
+                }
+            }).catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError arg) throws OperationException {
+                    Throwable cause = arg.getCause();
+                    if (cause instanceof ServerException) {
+                        handleError(((ServerException)cause).getHTTPStatus(), cause.getMessage());
+                        return;
+                    }
+                    //in case websocket request
+                    if (cause instanceof org.eclipse.che.ide.websocket.rest.exceptions.ServerException) {
+                        handleError(((org.eclipse.che.ide.websocket.rest.exceptions.ServerException)cause).getHTTPStatus(),
+                                    cause.getMessage());
+                        return;
+                    }
+                    Log.error(getClass(), arg);
+                    manager.notify(localizationConstant.failedToProcessFindUsage(), arg.getMessage(), FAIL, FLOAT_MODE);
+                }
+            });
+        }
+
 
     }
 

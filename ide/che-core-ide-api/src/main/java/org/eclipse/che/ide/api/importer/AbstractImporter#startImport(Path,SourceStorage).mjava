@@ -1,0 +1,27 @@
+    /**
+     * Starts project importing. This method should be called when we want mark project as importing.
+     *
+     * @param sourceStorage
+     *         information about project location and repository type
+     * @return returns instance of Promise
+     */
+    protected Promise<Project> startImport(final Path path, SourceStorage sourceStorage) {
+        appContext.addProjectToImporting(path.toString());
+
+        return importProject(path, sourceStorage).then(new Function<Project, Project>() {
+            @Override
+            public Project apply(Project project) throws FunctionException {
+                appContext.removeProjectFromImporting(project.getLocation().toString());
+
+                return project;
+            }
+        }).catchErrorPromise(new Function<PromiseError, Promise<Project>>() {
+            @Override
+            public Promise<Project> apply(PromiseError error) throws FunctionException {
+                appContext.removeProjectFromImporting(path.toString());
+
+                throw new IllegalStateException(error.getCause());
+            }
+        });
+    }
+

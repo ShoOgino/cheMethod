@@ -5,44 +5,42 @@
             return;
         }
 
-        if (selection == null) {
-            currentProject = null;
-            browserQueryFieldRenderer.setProjectName("");
+        browserQueryFieldRenderer.setProjectName("");
+
+        currentResource = null;
+        currentResources = null;
+
+        if (selection == null || selection.getHeadElement() == null) {
             return;
         }
 
-        final Object headElement = selection.getHeadElement();
-        if (headElement == null) {
-            currentProject = null;
-            browserQueryFieldRenderer.setProjectName("");
-            return;
+        final Object headObject = selection.getHeadElement();
+        final List<?> allObjects = selection.getAllElements();
+
+        if (headObject instanceof HasDataObject) {
+            Object data = ((HasDataObject)headObject).getData();
+
+            if (data instanceof Resource) {
+                currentResource = (Resource)data;
+            }
+        } else if (headObject instanceof Resource) {
+            currentResource = (Resource)headObject;
         }
 
-        currentProject = new CurrentProject();
+        Set<Resource> resources = Sets.newHashSet();
 
-        if (headElement instanceof HasProjectConfig) {
-            final HasProjectConfig hasProjectConfig = (HasProjectConfig)headElement;
-            final ProjectConfigDto module = (hasProjectConfig).getProjectConfig();
-            currentProject.setProjectConfig(module);
-        }
+        for (Object object : allObjects) {
+            if (object instanceof HasDataObject) {
+                Object data = ((HasDataObject)object).getData();
 
-        if (headElement instanceof VirtualFile) {
-            HasProjectConfig project = ((VirtualFile)headElement).getProject();
-            if (project != null && project.getProjectConfig() != null) {
-                currentProject.setProjectConfig(project.getProjectConfig());
-                currentProject.setRootProject(project.getProjectConfig());
-                browserQueryFieldRenderer.setProjectName(project.getProjectConfig().getName());
+                if (data instanceof Resource) {
+                    resources.add((Resource)data);
+                }
+            } else if (object instanceof Resource) {
+                resources.add((Resource)object);
             }
         }
 
-        if (headElement instanceof Node) {
-            ProjectConfigDto rootConfig = getRootConfig((Node)headElement);
-            if (rootConfig == null) {
-                rootConfig = currentProject.getProjectConfig();
-            }
-            currentProject.setRootProject(rootConfig);
-            browserQueryFieldRenderer.setProjectName(rootConfig.getName());
-        }
-        eventBus.fireEvent(new CurrentProjectChangedEvent(currentProject.getProjectConfig()));
+        currentResources = resources.toArray(new Resource[resources.size()]);
     }
 

@@ -1,0 +1,32 @@
+    protected Promise<Resource> copy(final Resource source, final Path destination, final boolean force) {
+        checkArgument(!source.getLocation().isRoot(), "Workspace root is not allowed to be copied");
+
+        return findResource(destination, true).thenPromise(new Function<Optional<Resource>, Promise<Resource>>() {
+            @Override
+            public Promise<Resource> apply(Optional<Resource> resource) throws FunctionException {
+                checkState(!resource.isPresent() || force, "Cannot create '" + destination.toString() + "'. Resource already exists.");
+
+                return ps.copy(source.getLocation(), destination.parent(), destination.lastSegment(), force)
+                         .thenPromise(new Function<Void, Promise<Resource>>() {
+                             @Override
+                             public Promise<Resource> apply(Void ignored) throws FunctionException {
+
+                                 return findResource(destination, false).then(new Function<Optional<Resource>, Resource>() {
+                                     @Override
+                                     public Resource apply(Optional<Resource> copiedResource) throws FunctionException {
+                                         if (copiedResource.isPresent()) {
+                                             eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(copiedResource.get(), source,
+                                                                                                               ADDED | COPIED_FROM |
+                                                                                                               DERIVED)));
+                                             return copiedResource.get();
+                                         }
+
+                                         throw new IllegalStateException("Resource not found");
+                                     }
+                                 });
+                             }
+                         });
+            }
+        });
+    }
+

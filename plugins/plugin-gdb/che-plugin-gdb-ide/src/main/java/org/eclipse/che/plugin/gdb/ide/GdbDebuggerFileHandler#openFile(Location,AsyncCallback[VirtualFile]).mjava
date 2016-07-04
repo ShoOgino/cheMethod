@@ -1,17 +1,24 @@
     @Override
     public void openFile(final Location location, final AsyncCallback<VirtualFile> callback) {
-        CurrentProject currentProject = appContext.getCurrentProject();
-        if (currentProject == null) {
+        final Resource resource = appContext.getResource();
+        if (resource == null) {
+            callback.onFailure(new IllegalStateException("Resource is undefined"));
             return;
         }
-        String filePath = currentProject.getProjectConfig().getPath() + "/" + location.getTarget();
+        final Optional<Project> project = resource.getRelatedProject();
+        if (!project.isPresent()) {
+            callback.onFailure(new IllegalStateException("Project is undefined"));
+            return;
+        }
+
+        final Path filePath = project.get().getLocation().append(location.getTarget());
         VirtualFile activeFile = null;
         final EditorPartPresenter activeEditor = editorAgent.getActiveEditor();
         if (activeEditor != null) {
             activeFile = activeEditor.getEditorInput().getFile();
         }
 
-        if (activeEditor == null || !activeFile.getPath().equals(filePath)) {
+        if (activeEditor == null || !activeFile.getLocation().equals(filePath)) {
             doOpenFile(filePath, location.getLineNumber(), callback);
         } else {
             scrollEditorToExecutionPoint((TextEditor)activeEditor, location.getLineNumber());

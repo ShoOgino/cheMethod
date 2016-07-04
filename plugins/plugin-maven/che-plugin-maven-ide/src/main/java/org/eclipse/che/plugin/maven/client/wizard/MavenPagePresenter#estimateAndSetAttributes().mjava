@@ -1,10 +1,16 @@
     private void estimateAndSetAttributes() {
-        projectServiceClient.estimateProject(appContext.getDevMachine(),
-                context.get(PROJECT_PATH_KEY), MAVEN_ID,
-                new AsyncRequestCallback<SourceEstimation>(dtoUnmarshallerFactory.newUnmarshaller(SourceEstimation.class)) {
+
+        appContext.getWorkspaceRoot().getContainer(dataObject.getPath()).then(new Operation<Optional<Container>>() {
+            @Override
+            public void apply(Optional<Container> container) throws OperationException {
+                if (!container.isPresent()) {
+                    return;
+                }
+
+                container.get().estimate(MAVEN_ID).then(new Operation<SourceEstimation>() {
                     @Override
-                    protected void onSuccess(SourceEstimation result) {
-                        Map<String, List<String>> estimatedAttributes = result.getAttributes();
+                    public void apply(SourceEstimation estimation) throws OperationException {
+                        Map<String, List<String>> estimatedAttributes = estimation.getAttributes();
                         List<String> artifactIdValues = estimatedAttributes.get(ARTIFACT_ID);
                         if (artifactIdValues != null && !artifactIdValues.isEmpty()) {
                             setAttribute(ARTIFACT_ID, artifactIdValues.get(0));
@@ -33,12 +39,8 @@
 
                         updateDelegate.updateControls();
                     }
-
-                    @Override
-                    protected void onFailure(Throwable exception) {
-                        dialogFactory.createMessageDialog("Not valid Maven project", exception.getLocalizedMessage(), null).show();
-                        Log.error(MavenPagePresenter.class, exception);
-                    }
                 });
+            }
+        });
     }
 

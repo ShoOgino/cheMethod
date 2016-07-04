@@ -5,51 +5,23 @@
         final List<Branch> branches = new ArrayList<>();
         branches.add(branch);
 
-        doAnswer(new Answer() {
-            @Override
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                Object[] arguments = invocation.getArguments();
-                AsyncRequestCallback<List<Remote>> callback = (AsyncRequestCallback<List<Remote>>)arguments[3];
-                @SuppressWarnings("NonJREEmulationClassesInClientCode")
-                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
-                onSuccess.invoke(callback, remotes);
-                return callback;
-            }
-        }).when(service)
-          .remoteList(devMachine, anyObject(), anyString(), anyBoolean(), (AsyncRequestCallback<List<Remote>>)anyObject());
-        doAnswer(new Answer() {
-            @Override
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                Object[] arguments = invocation.getArguments();
-                AsyncRequestCallback<List<Branch>> callback = (AsyncRequestCallback<List<Branch>>)arguments[2];
-                @SuppressWarnings("NonJREEmulationClassesInClientCode")
-                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
-                onSuccess.invoke(callback, branches);
-                return callback;
-            }
-        }).doAnswer(new Answer() {
-            @Override
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                Object[] arguments = invocation.getArguments();
-                AsyncRequestCallback<List<Branch>> callback = (AsyncRequestCallback<List<Branch>>)arguments[2];
-                @SuppressWarnings("NonJREEmulationClassesInClientCode")
-                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
-                onSuccess.invoke(callback, branches);
-                return callback;
-            }
-        }).when(service).branchList(eq(devMachine), anyObject(), anyString(), (AsyncRequestCallback<List<Branch>>)anyObject());
+        presenter.showDialog(project);
 
-        presenter.showDialog();
+        verify(remoteListPromise).then(remoteListCaptor.capture());
+        remoteListCaptor.getValue().apply(remotes);
 
-        verify(appContext).getCurrentProject();
-        verify(service).remoteList(eq(devMachine), eq(rootProjectConfig), anyString(), eq(SHOW_ALL_INFORMATION),
-                                   (AsyncRequestCallback<List<Remote>>)anyObject());
+        verify(branchListPromise).then(branchListCaptor.capture());
+        branchListCaptor.getValue().apply(branches);
+
+        verify(branchListPromise, times(2)).then(branchListCaptor.capture());
+        branchListCaptor.getValue().apply(branches);
+
         verify(view).setEnableFetchButton(eq(ENABLE_BUTTON));
-        verify(view).setRepositories((List<Remote>)anyObject());
+        verify(view).setRepositories(anyObject());
         verify(view).setRemoveDeleteRefs(eq(NO_REMOVE_DELETE_REFS));
         verify(view).setFetchAllBranches(eq(FETCH_ALL_BRANCHES));
         verify(view).showDialog();
-        verify(view).setRemoteBranches((List<String>)anyObject());
-        verify(view).setLocalBranches((List<String>)anyObject());
+        verify(view).setRemoteBranches(anyObject());
+        verify(view).setLocalBranches(anyObject());
     }
 

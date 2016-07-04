@@ -1,0 +1,54 @@
+    protected Promise<ResourceDelta[]> synchronize(final ResourceDelta[] deltas) {
+
+        Promise<Void> promise = promises.resolve(null);
+
+        for (final ResourceDelta delta : deltas) {
+            if (delta.getKind() == ADDED) {
+                if (delta.getFlags() == (MOVED_FROM | MOVED_TO)) {
+
+                    promise.thenPromise(new Function<Void, Promise<Void>>() {
+                        @Override
+                        public Promise<Void> apply(Void ignored) throws FunctionException {
+                            return onExternalDeltaMoved(delta);
+                        }
+                    });
+
+                } else {
+
+                    promise.thenPromise(new Function<Void, Promise<Void>>() {
+                        @Override
+                        public Promise<Void> apply(Void ignored) throws FunctionException {
+                            return onExternalDeltaAdded(delta);
+                        }
+                    });
+
+                }
+            } else if (delta.getKind() == REMOVED) {
+
+                promise.thenPromise(new Function<Void, Promise<Void>>() {
+                    @Override
+                    public Promise<Void> apply(Void ignored) throws FunctionException {
+                        return onExternalDeltaRemoved(delta);
+                    }
+                });
+
+            } else if (delta.getKind() == UPDATED) {
+
+                promise.thenPromise(new Function<Void, Promise<Void>>() {
+                    @Override
+                    public Promise<Void> apply(Void ignored) throws FunctionException {
+                        return onExternalDeltaUpdated(delta);
+                    }
+                });
+
+            }
+        }
+
+        return promise.then(new Function<Void, ResourceDelta[]>() {
+            @Override
+            public ResourceDelta[] apply(Void ignored) throws FunctionException {
+                return deltas;
+            }
+        });
+    }
+

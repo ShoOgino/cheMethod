@@ -1,20 +1,42 @@
     /** {@inheritDoc} */
     @Override
     public void complete(@NotNull final CompleteCallback callback) {
-        switch (mode) {
-            case CREATE:
-                createProject(callback);
-                break;
-            case UPDATE:
-                updater.updateProject(new UpdateCallback(callback), dataObject, false);
-                break;
-            case IMPORT:
-                importer.importProject(callback, dataObject);
-                break;
-            case CREATE_MODULE:
-                createModule(callback);
-                break;
-            default:
+        if (mode == CREATE) {
+            appContext.getWorkspaceRoot()
+                      .newProject()
+                      .withBody(dataObject)
+                      .send()
+                      .then(onComplete(callback))
+                      .catchError(onFailure(callback));
+        } else if (mode == UPDATE) {
+            appContext.getWorkspaceRoot().getContainer(Path.valueOf(dataObject.getPath())).then(new Operation<Optional<Container>>() {
+                @Override
+                public void apply(Optional<Container> optContainer) throws OperationException {
+                    checkState(optContainer.isPresent(), "Failed to update non existed path");
+
+                    final Container container = optContainer.get();
+                    if (container.getResourceType() == PROJECT) {
+                        ((Project)container).update()
+                                            .withBody(dataObject)
+                                            .send()
+                                            .then(onComplete(callback))
+                                            .catchError(onFailure(callback));
+                    }
+                }
+            });
+        } else if (mode == IMPORT) {
+            appContext.getWorkspaceRoot()
+                      .importProject()
+                      .withBody(dataObject)
+                      .send()
+                      .thenPromise(new Function<Project, Promise<Project>>() {
+                          @Override
+                          public Promise<Project> apply(Project project) throws FunctionException {
+                              return project.update().withBody(dataObject).send();
+                          }
+                      })
+                      .then(onComplete(callback))
+                      .catchError(onFailure(callback));
         }
     }
 

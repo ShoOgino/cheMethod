@@ -13,26 +13,26 @@
             return;
         }
 
-        final ProjectConfigDto project = appContext.getCurrentProject().getRootProject();
-        service.diff(appContext.getDevMachine(), project, filePatterns, RAW, false, 0, revision.getId(), isCached,
-                     new AsyncRequestCallback<String>(new StringUnmarshaller()) {
-                         @Override
-                         protected void onSuccess(String result) {
-                             view.setDiffContext(result);
-                             String text = isCached ? constant.historyDiffIndexState() : constant.historyDiffTreeState();
-                             displayCommitA(revision);
-                             view.setCompareType(text);
-                         }
-
-                         @Override
-                         protected void onFailure(Throwable exception) {
-                             nothingToDisplay(revision);
-                             String errorMessage = exception.getMessage() != null ? exception.getMessage() : constant.diffFailed();
-                             GitOutputConsole console = gitOutputConsoleFactory.create(DIFF_COMMAND_NAME);
-                             console.printError(errorMessage);
-                             consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
-                             notificationManager.notify(constant.diffFailed(), FAIL, FLOAT_MODE, project);
-                         }
-                     });
+        service.diff(appContext.getDevMachine(), project.getLocation(), filePatterns, RAW, false, 0, revision.getId(), isCached)
+               .then(new Operation<String>() {
+                   @Override
+                   public void apply(String diff) throws OperationException {
+                       view.setDiffContext(diff);
+                       String text = isCached ? constant.historyDiffIndexState() : constant.historyDiffTreeState();
+                       displayCommitA(revision);
+                       view.setCompareType(text);
+                   }
+               })
+               .catchError(new Operation<PromiseError>() {
+                   @Override
+                   public void apply(PromiseError error) throws OperationException {
+                       nothingToDisplay(revision);
+                       String errorMessage = error.getMessage() != null ? error.getMessage() : constant.diffFailed();
+                       GitOutputConsole console = gitOutputConsoleFactory.create(DIFF_COMMAND_NAME);
+                       console.printError(errorMessage);
+                       consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+                       notificationManager.notify(constant.diffFailed(), FAIL, FLOAT_MODE);
+                   }
+               });
     }
 

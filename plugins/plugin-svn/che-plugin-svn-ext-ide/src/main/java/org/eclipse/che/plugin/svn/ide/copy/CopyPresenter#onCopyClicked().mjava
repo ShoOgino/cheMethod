@@ -1,38 +1,33 @@
     /** {@inheritDoc} */
     @Override
     public void onCopyClicked() {
-        final String projectPath = getCurrentProjectPath();
+        final Project project = appContext.getRootProject();
 
-        if (projectPath == null) {
-            return;
-        }
+        Preconditions.checkState(project != null);
 
-        final String src = view.isSourceCheckBoxSelected() ? view.getSourcePath() : relPath(projectPath, getStorableNodePath(sourceNode));
-        final String target = view.isTargetCheckBoxSelected() ? view.getTargetUrl() : relPath(projectPath, targetHolder.normalize());
+        final Path src = view.isSourceCheckBoxSelected() ? Path.valueOf(view.getSourcePath()) : toRelative(project, sourceNode);
+        final Path target = view.isTargetCheckBoxSelected() ? Path.valueOf(view.getTargetUrl()) : toRelative(project, this.target);
         final String comment = view.isTargetCheckBoxSelected() ? view.getComment() : null;
 
-        final StatusNotification notification = new StatusNotification(constants.copyNotificationStarted(src), PROGRESS, FLOAT_MODE);
+        final StatusNotification notification = new StatusNotification(constants.copyNotificationStarted(src.toString()), PROGRESS, FLOAT_MODE);
         notificationManager.notify(notification);
 
         view.hide();
 
-        service.copy(projectPath, src, target, comment,
-                     new AsyncRequestCallback<CLIOutputResponse>(dtoUnmarshallerFactory.newUnmarshaller(CLIOutputResponse.class)) {
-                         @Override
-                         protected void onSuccess(CLIOutputResponse result) {
-                             printResponse(result.getCommand(), result.getOutput(), result.getErrOutput(), constants.commandCopy());
+        service.copy(project.getLocation(), src, target, comment).then(new Operation<CLIOutputResponse>() {
+            @Override
+            public void apply(CLIOutputResponse response) throws OperationException {
+                printResponse(response.getCommand(), response.getOutput(), response.getErrOutput(), constants.commandCopy());
 
-                             notification.setTitle(constants.copyNotificationSuccessful());
-                             notification.setStatus(SUCCESS);
-                         }
-
-                         @Override
-                         protected void onFailure(Throwable exception) {
-                             String errorMessage = exception.getMessage();
-
-                             notification.setTitle(constants.copyNotificationFailed() + ": " + errorMessage);
-                             notification.setStatus(FAIL);
-                         }
-                     });
+                notification.setTitle(constants.copyNotificationSuccessful());
+                notification.setStatus(SUCCESS);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                notification.setTitle(constants.copyNotificationFailed());
+                notification.setStatus(FAIL);
+            }
+        });
     }
 

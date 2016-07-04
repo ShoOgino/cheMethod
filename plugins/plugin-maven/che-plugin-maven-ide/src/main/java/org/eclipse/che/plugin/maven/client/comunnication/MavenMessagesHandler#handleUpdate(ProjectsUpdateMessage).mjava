@@ -1,15 +1,15 @@
     private void handleUpdate(ProjectsUpdateMessage dto) {
         List<String> updatedProjects = dto.getUpdatedProjects();
         Set<String> projectToRefresh = computeUniqueHiLevelProjects(updatedProjects);
-        for (String path : projectToRefresh) {
-            final String projectPath = path;
-            Promise<ProjectConfigDto> promise = projectServiceClient.getProject(context.getDevMachine(), path);
-            promise.then(new Operation<ProjectConfigDto>() {
-                @Override
-                public void apply(ProjectConfigDto arg) throws OperationException {
-                    eventBus.fireEvent(new ProjectUpdatedEvent(projectPath, arg));
-                }
-            });
+        for (final String path : projectToRefresh) {
+            appContext.getWorkspaceRoot().getContainer(path).then(new Operation<Optional<Container>>() {
+                  @Override
+                  public void apply(Optional<Container> container) throws OperationException {
+                      if (container.isPresent()) {
+                          container.get().synchronize();
+                      }
+                  }
+              });
         }
         for (String path : dto.getDeletedProjects()) {
             if (!updatedProjects.contains(path)) {

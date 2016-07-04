@@ -1,0 +1,42 @@
+    /** {@inheritDoc} */
+    @Override
+    public Promise<Void> importProject(final Path path,
+                                       final SourceStorageDto source) {
+        return PromiseHelper.newPromise(new AsyncPromiseHelper.RequestCall<Void>() {
+            @Override
+            public void makeCall(final AsyncCallback<Void> callback) {
+                final String url = PROJECT + IMPORT + path(path.toString());
+
+                final Message message = new MessageBuilder(POST, url).data(dtoFactory.toJson(source))
+                                                                     .header(CONTENTTYPE, APPLICATION_JSON)
+                                                                     .build();
+
+                wsAgentStateController.getMessageBus().then(new Operation<MessageBus>() {
+                    @Override
+                    public void apply(MessageBus messageBus) throws OperationException {
+                        try {
+                            messageBus.send(message, new RequestCallback<Void>() {
+                                @Override
+                                protected void onSuccess(Void result) {
+                                    callback.onSuccess(result);
+                                }
+
+                                @Override
+                                protected void onFailure(Throwable exception) {
+                                    callback.onFailure(exception);
+                                }
+                            });
+                        } catch (WebSocketException e) {
+                            callback.onFailure(e);
+                        }
+                    }
+                }).catchError(new Operation<PromiseError>() {
+                    @Override
+                    public void apply(PromiseError arg) throws OperationException {
+                        callback.onFailure(arg.getCause());
+                    }
+                });
+            }
+        });
+    }
+

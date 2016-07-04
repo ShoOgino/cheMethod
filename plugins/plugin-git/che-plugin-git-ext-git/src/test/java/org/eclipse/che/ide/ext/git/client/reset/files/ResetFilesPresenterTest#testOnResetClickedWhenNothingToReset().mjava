@@ -8,31 +8,23 @@
         when(constant.indexIsEmpty()).thenReturn("Index is Empty");
         when(dialogFactory.createMessageDialog(constant.messagesWarningTitle(), constant.indexIsEmpty(), null)).thenReturn(messageDialog);
         when(indexFile.isIndexed()).thenReturn(true);
+        when(indexFile.withIndexed(anyBoolean())).thenReturn(indexFile);
+        when(indexFile.withPath(anyString())).thenReturn(indexFile);
         List<String> changes = new ArrayList<String>();
         changes.add("Change");
         when(status.getAdded()).thenReturn(changes);
         when(status.getChanged()).thenReturn(changes);
         when(status.getRemoved()).thenReturn(changes);
 
-        doAnswer(new Answer() {
-            @Override
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                Object[] arguments = invocation.getArguments();
-                AsyncRequestCallback<Status> callback = (AsyncRequestCallback<Status>)arguments[1];
-                Method onSuccess = GwtReflectionUtils.getMethod(callback.getClass(), "onSuccess");
-                onSuccess.invoke(callback, status);
-                return callback;
-            }
-        }).when(service).status(devMachine, anyObject(), (AsyncRequestCallback<Status>)anyObject());
+        presenter.showDialog(project);
 
-        presenter.showDialog();
+        verify(statusPromise).then(statusPromiseCaptor.capture());
+        statusPromiseCaptor.getValue().apply(status);
+
         presenter.onResetClicked();
 
         verify(view).close();
-        verify(service, never()).reset(eq(devMachine), eq(projectConfig), anyString(), (ResetRequest.ResetType)anyObject(), (List<String>)anyObject(),
-                                       (AsyncRequestCallback<Void>)anyObject());
         verify(console).print(anyString());
-        verify(notificationManager).notify(anyString(), rootProjectConfig);
         verify(constant, times(2)).nothingToReset();
     }
 

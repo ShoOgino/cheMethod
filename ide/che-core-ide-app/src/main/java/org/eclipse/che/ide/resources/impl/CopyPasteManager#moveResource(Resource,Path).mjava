@@ -1,0 +1,103 @@
+    private Promise<Void> moveResource(final Resource resource, final Path destination) {
+        //simple move without overwriting
+        return resource.move(destination).thenPromise(new Function<Resource, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(Resource ignored) throws FunctionException {
+                return promises.resolve(null);
+            }
+        }).catchErrorPromise(new Function<PromiseError, Promise<Void>>() {
+            @Override
+            public Promise<Void> apply(final PromiseError error) throws FunctionException {
+
+                //resource may already exists
+                if (error.getMessage().contains("exists")) {
+
+                    //create dialog with overwriting option
+                    return createFromAsyncRequest(new RequestCall<Void>() {
+                        @Override
+                        public void makeCall(final AsyncCallback<Void> callback) {
+
+                            //handle overwrite operation
+                            final ConfirmCallback overwrite = new ConfirmCallback() {
+                                @Override
+                                public void accepted() {
+
+                                    //copy with overwriting
+                                    resource.move(destination, true).then(new Operation<Resource>() {
+                                        @Override
+                                        public void apply(Resource ignored) throws OperationException {
+                                            callback.onSuccess(null);
+                                        }
+                                    }).catchError(new Operation<PromiseError>() {
+                                        @Override
+                                        public void apply(PromiseError error) throws OperationException {
+                                            callback.onFailure(error.getCause());
+                                        }
+                                    });
+                                }
+                            };
+
+                            //skip this resource
+                            final ConfirmCallback skip = new ConfirmCallback() {
+                                @Override
+                                public void accepted() {
+                                    callback.onSuccess(null);
+                                }
+                            };
+
+                            //change destination name
+                            final ConfirmCallback rename = new ConfirmCallback() {
+                                @Override
+                                public void accepted() {
+                                    dialogFactory.createInputDialog("Enter new name", "Enter new name",
+                                                                    new InputCallback() {
+                                                                        @Override
+                                                                        public void accepted(String value) {
+                                                                            final Path newPath =
+                                                                                    destination.parent().append(value);
+
+                                                                            moveResource(resource, newPath).then(new Operation<Void>() {
+                                                                                @Override
+                                                                                public void apply(Void result) throws OperationException {
+                                                                                    callback.onSuccess(result);
+                                                                                }
+                                                                            }).catchError(new Operation<PromiseError>() {
+                                                                                @Override
+                                                                                public void apply(PromiseError error)
+                                                                                        throws OperationException {
+                                                                                    callback.onFailure(error.getCause());
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    },
+                                                                    new CancelCallback() {
+                                                                        @Override
+                                                                        public void cancelled() {
+
+                                                                        }
+                                                                    }).show();
+                                }
+                            };
+
+                            dialogFactory.createChoiceDialog("Error",
+                                                             error.getMessage(),
+                                                             "Overwrite",
+                                                             "Skip",
+                                                             "Change Name",
+                                                             overwrite,
+                                                             skip,
+                                                             rename).show();
+                        }
+                    });
+
+                } else {
+                    //notify user about failed copying
+                    notificationManager.notify("Error moving resource", error.getMessage(), FAIL, FLOAT_MODE);
+
+                    return promises.resolve(null);
+                }
+
+            }
+        });
+    }
+

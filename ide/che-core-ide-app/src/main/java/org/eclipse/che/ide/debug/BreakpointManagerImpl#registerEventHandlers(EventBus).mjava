@@ -5,7 +5,7 @@
         eventBus.addHandler(EditorOpenedEvent.TYPE, new EditorOpenedEventHandler() {
             @Override
             public void onEditorOpened(EditorOpenedEvent event) {
-                onOpenEditor(event.getFile().getPath(), event.getEditor());
+                onOpenEditor(event.getFile().getLocation().toString(), event.getEditor());
             }
         });
 
@@ -22,51 +22,27 @@
             }
         });
 
-        eventBus.addHandler(ResourceNodeDeletedEvent.getType(), new ResourceNodeDeletedEvent.ResourceNodeDeletedHandler() {
+        eventBus.addHandler(ResourceChangedEvent.getType(), new ResourceChangedEvent.ResourceChangedHandler() {
             @Override
-            public void onResourceEvent(ResourceNodeDeletedEvent event) {
-                if (breakpoints.isEmpty()) {
-                    return;
-                }
+            public void onResourceChanged(ResourceChangedEvent event) {
+                if (event.getDelta().getKind() == ResourceDelta.REMOVED) {
+                    if (breakpoints.isEmpty()) {
+                        return;
+                    }
 
-                ResourceBasedNode node = event.getNode();
-                if (node instanceof ItemReferenceBasedNode) {
-                    String path = ((ItemReferenceBasedNode)node).getStorablePath();
+                    final Resource resource = event.getDelta().getResource();
 
-                    if (node instanceof FolderReferenceNode) {
-                        path += "/";
-                        deleteBreakpoints(getBreakpointPaths(path));
+                    Path path = resource.getLocation();
 
-                    } else if (node instanceof FileReferenceNode) {
-                        deleteBreakpoints(Collections.singleton(path));
+                    if (resource.isFolder()) {
+                        path.addTrailingSeparator();
+
+                        deleteBreakpoints(getBreakpointPaths(path.toString()));
+                    } else if (resource.isFile()) {
+                        deleteBreakpoints(Collections.singleton(path.toString()));
                     }
                 }
             }
         });
-
-        eventBus.addHandler(ProjectExplorerLoadedEvent.getType(), new ProjectExplorerLoadedEvent.ProjectExplorerLoadedHandler() {
-            @Override
-            public void onProjectsLoaded(ProjectExplorerLoadedEvent event) {
-                if (breakpoints.isEmpty()) {
-                    return;
-                }
-
-                // remove breakpoints which refer to un-existed projects
-                List<Node> projects = event.getNodes();
-                Set<String> pathsToDelete = new HashSet<>(breakpoints.keySet());
-
-                for (String breakpointPath : breakpoints.keySet()) {
-                    for (Node project : projects) {
-                        String projectName = project.getName();
-                        if (breakpointPath.startsWith("/" + projectName + "/")) {
-                            pathsToDelete.remove(breakpointPath);
-                            break;
-                        }
-                    }
-                }
-
-                deleteBreakpoints(pathsToDelete);
-            }
-        });
-    }
+     }
 

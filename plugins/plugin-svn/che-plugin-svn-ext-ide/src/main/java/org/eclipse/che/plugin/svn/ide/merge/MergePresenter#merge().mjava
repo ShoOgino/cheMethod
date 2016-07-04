@@ -2,72 +2,72 @@
      * Prepares to merging and opens Merge dialog.
      */
     public void merge() {
-        targetNode = getSelectedNode();
-        if (targetNode == null) {
-            return;
-        }
-
         view.enableMergeButton(false);
         view.sourceCheckBox().setValue(false);
 
-        /** get info of selected project item */
-        String target = getSelectedPaths().get(0);
-        subversionClientService.info(getActiveProject().getRootProject().getPath(), target, "HEAD", false,
-                                     new AsyncRequestCallback<InfoResponse>(dtoUnmarshallerFactory.newUnmarshaller(InfoResponse.class)) {
-                                         @Override
-                                         protected void onSuccess(InfoResponse result) {
-                                             if (result.getErrorOutput() != null && !result.getErrorOutput().isEmpty()) {
-                                                 printErrors(result.getErrorOutput(), constants.commandInfo());
-                                                 notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
-                                                 return;
-                                             }
+        final Project project = appContext.getRootProject();
 
-                                             mergeTarget = result.getItems().get(0);
-                                             view.targetTextBox().setValue(mergeTarget.getRelativeURL());
+        checkState(project != null);
 
-                                             String repositoryRoot = mergeTarget.getRepositoryRoot();
+        final Resource[] resources = appContext.getResources();
 
-                                             subversionClientService.info(getActiveProject().getRootProject().getPath(), repositoryRoot, "HEAD", true,
-                                new AsyncRequestCallback<InfoResponse>(dtoUnmarshallerFactory.newUnmarshaller(InfoResponse.class)) {
-                                    @Override
-                                    protected void onSuccess(InfoResponse result) {
-                                        if (result.getErrorOutput() != null && !result.getErrorOutput().isEmpty()) {
-                                            printErrors(result.getErrorOutput(), constants.commandInfo());
-                                            notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
-                                            return;
-                                        }
+        checkState(resources != null && resources.length == 1);
 
-                                        sourceURL = result.getItems().get(0).getURL();
-                                        SubversionTreeNode subversionTreeNode = new SubversionTreeNode(result.getItems().get(0));
+        service.info(project.getLocation(), toRelative(project, resources[0]), "HEAD", false).then(new Operation<InfoResponse>() {
+            @Override
+            public void apply(InfoResponse response) throws OperationException {
+                if (response.getErrorOutput() != null && !response.getErrorOutput().isEmpty()) {
+                    printErrors(response.getErrorOutput(), constants.commandInfo());
+                    notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
+                    return;
+                }
 
-                                        List<TreeNode<?>> children = new ArrayList<>();
-                                        if (result.getItems().size() > 1) {
-                                            for (int i = 1; i < result.getItems().size(); i++) {
-                                                SubversionItem item = result.getItems().get(i);
-                                                if (!"file".equals(item.getNodeKind())) {
-                                                    children.add(new SubversionTreeNode(item));
-                                                }
-                                            }
-                                            Collections.sort(children, svnDirectoryComparator);
-                                        }
+                mergeTarget = response.getItems().get(0);
+                view.targetTextBox().setValue(mergeTarget.getRelativeURL());
 
-                                        subversionTreeNode.setChildren(children);
-                                        view.setRootNode(subversionTreeNode);
-                                        view.show();
-                                        validateSourceURL();
-                                    }
+                String repositoryRoot = mergeTarget.getRepositoryRoot();
 
-                                    @Override
-                                    protected void onFailure(Throwable exception) {
-                                        notificationManager.notify(exception.getMessage(), FAIL, FLOAT_MODE);
-                                    }
-                                });
-                    }
+                service.info(project.getLocation(), repositoryRoot, "HEAD", true)
+                       .then(new Operation<InfoResponse>() {
+                                           @Override
+                                           public void apply(InfoResponse response) throws OperationException {
+                                               if (response.getErrorOutput() != null && !response.getErrorOutput().isEmpty()) {
+                                                   printErrors(response.getErrorOutput(), constants.commandInfo());
+                                                   notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
+                                                   return;
+                                               }
 
-                    @Override
-                    protected void onFailure(Throwable exception) {
-                        notificationManager.notify(exception.getMessage(), FAIL, FLOAT_MODE);
-                    }
-                });
+                                               sourceURL = response.getItems().get(0).getURL();
+                                               SubversionItemNode subversionTreeNode = new SubversionItemNode(response.getItems().get(0));
+
+                                               List<Node> children = new ArrayList<>();
+                                               if (response.getItems().size() > 1) {
+                                                   for (int i = 1; i < response.getItems().size(); i++) {
+                                                       SubversionItem item = response.getItems().get(i);
+                                                       if (!"file".equals(item.getNodeKind())) {
+                                                           children.add(new SubversionItemNode(item));
+                                                       }
+                                                   }
+                                               }
+
+                                               subversionTreeNode.setChildren(children);
+                                               view.setRootNode(subversionTreeNode);
+                                               view.show();
+                                               validateSourceURL();
+                                           }
+                                       })
+                       .catchError(new Operation<PromiseError>() {
+                                           @Override
+                                           public void apply(PromiseError error) throws OperationException {
+                                               notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
+                                           }
+                                       });
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
+            }
+        });
     }
 
