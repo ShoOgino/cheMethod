@@ -1,0 +1,28 @@
+    @POST
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @GenerateLink(rel = LINK_REL_USER)
+    @ApiOperation(value = "Create a new user", response = UserDto.class)
+    @ApiResponses({@ApiResponse(code = 201, message = "User successfully created, response contains created entity"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 401, message = "Missed token parameter"),
+                   @ApiResponse(code = 500, message = "Couldn't create user due to internal server error")})
+    public Response create(@ApiParam("New user")
+                           UserDto userDto,
+                           @ApiParam("Authentication token")
+                           @QueryParam("token")
+                           String token,
+                           @ApiParam("User type")
+                           @QueryParam("temporary")
+                           @DefaultValue("false")
+                           Boolean isTemporary) throws BadRequestException,
+                                                       UnauthorizedException,
+                                                       ConflictException,
+                                                       ServerException {
+        final User newUser = token == null ? userDto : tokenValidator.validateToken(token);
+        userValidator.checkUser(newUser);
+        return Response.status(CREATED)
+                       .entity(linksInjector.injectLinks(asDto(userManager.create(newUser, isTemporary)), getServiceContext()))
+                       .build();
+    }
+

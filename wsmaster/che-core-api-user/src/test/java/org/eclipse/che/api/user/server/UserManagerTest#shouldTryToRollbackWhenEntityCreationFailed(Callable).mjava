@@ -1,0 +1,23 @@
+    @Test(dataProvider = "rollback")
+    public void shouldTryToRollbackWhenEntityCreationFailed(Callable preAction) throws Exception {
+        preAction.call();
+
+        // Creating new user
+        try {
+            manager.create(new UserImpl(null, "test@email.com", "testName", null, null), false);
+            fail("Had to throw Exception");
+        } catch (Exception x) {
+            // defined by userDao mock
+        }
+
+        // Capturing identifier
+        final ArgumentCaptor<UserImpl> captor = ArgumentCaptor.forClass(UserImpl.class);
+        verify(userDao).create(captor.capture());
+        final String userId = captor.getValue().getId();
+
+        // Verifying rollback
+        verify(userDao).remove(userId);
+        verify(preferencesDao).remove(userId);
+        verify(profileDao).remove(userId);
+    }
+

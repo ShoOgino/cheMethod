@@ -1,19 +1,21 @@
     @Override
-    public String authenticate(String alias, String password) throws UnauthorizedException, ServerException {
-        lock.readLock().lock();
+    public String authenticate(String aliasOrNameOrEmail, String password) throws UnauthorizedException, ServerException {
+        requireNonNull(aliasOrNameOrEmail);
+        requireNonNull(password);
+        rwLock.readLock().lock();
         try {
-            User myUser = null;
-            for (int i = 0, size = users.size(); i < size && myUser == null; i++) {
-                if (users.get(i).getAliases().contains(alias)) {
-                    myUser = users.get(i);
-                }
+            final Optional<UserImpl> userOpt = users.values()
+                                                    .stream()
+                                                    .filter(user -> user.getName().equals(aliasOrNameOrEmail)
+                                                                    || user.getEmail().equals(aliasOrNameOrEmail)
+                                                                    || user.getAliases().contains(aliasOrNameOrEmail))
+                                                    .findAny();
+            if (!userOpt.isPresent() || !userOpt.get().getPassword().equals(password)) {
+                throw new UnauthorizedException(format("Authentication failed for user '%s'", aliasOrNameOrEmail));
             }
-            if (myUser == null || !password.equals(myUser.getPassword())) {
-                throw new UnauthorizedException(String.format("Authentication failed for user %s", alias));
-            }
-            return myUser.getId();
+            return userOpt.get().getId();
         } finally {
-            lock.readLock().unlock();
+            rwLock.readLock().unlock();
         }
     }
 
