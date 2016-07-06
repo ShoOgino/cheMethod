@@ -1,6 +1,6 @@
     private String buildImage(final DockerConnection dockerConnection,
                               final BuildImageParams params,
-                              final ProgressMonitor progressMonitor) throws IOException, InterruptedException {
+                              final ProgressMonitor progressMonitor) throws IOException {
         final AuthConfigs authConfigs = params.getAuthConfigs();
         final String repository = params.getRepository();
         final String tag = params.getTag();
@@ -25,48 +25,35 @@
             if (OK.getStatusCode() != response.getStatus()) {
                 throw getDockerException(response);
             }
+
             try (InputStream responseStream = response.getInputStream()) {
                 JsonMessageReader<ProgressStatus> progressReader = new JsonMessageReader<>(responseStream, ProgressStatus.class);
 
-                final ValueHolder<IOException> errorHolder = new ValueHolder<>();
-                final ValueHolder<String> imageIdHolder = new ValueHolder<>();
-                // Here do some trick to be able interrupt build process. Basically for now it is not possible interrupt docker daemon while
-                // it's building images but here we need just be able to close connection to the unix socket. Thread is blocking while read
-                // from the socket stream so need one more thread that is able to close socket. In this way we can release thread that is
-                // blocking on i/o.
-                final Runnable runnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            ProgressStatus progressStatus;
-                            while ((progressStatus = progressReader.next()) != null) {
-                                final String buildImageId = getBuildImageId(progressStatus);
-                                if (buildImageId != null) {
-                                    imageIdHolder.set(buildImageId);
-                                }
-                                progressMonitor.updateProgress(progressStatus);
-                            }
-                        } catch (IOException e) {
-                            errorHolder.set(e);
+                // Here do some trick to be able interrupt output streaming process.
+                // Current unix socket implementation of DockerConnection doesn't react to interruption.
+                // So to be able to close unix socket connection and free resources we use main thread.
+                // In case of any exception main thread cancels future and close connection.
+                // If Docker connection implementation supports interrupting it will stop streaming on interruption,
+                // if not it will be stopped by closure of unix socket
+                Future<String> imageIdFuture = executor.submit(() -> {
+                    ProgressStatus progressStatus;
+                    while ((progressStatus = progressReader.next()) != null) {
+                        final String buildImageId = getBuildImageId(progressStatus);
+                        if (buildImageId != null) {
+                            return buildImageId;
                         }
-                        synchronized (this) {
-                            notify();
-                        }
+                        progressMonitor.updateProgress(progressStatus);
                     }
-                };
-                executor.execute(runnable);
-                // noinspection SynchronizationOnLocalVariableOrMethodParameter
-                synchronized (runnable) {
-                    runnable.wait();
-                }
-                final IOException ioe = errorHolder.get();
-                if (ioe != null) {
-                    throw ioe;
-                }
-                if (imageIdHolder.get() == null) {
-                    throw new IOException("Docker image build failed");
-                }
-                return imageIdHolder.get();
+
+                    throw new DockerException("Docker image build failed. Image id not found in build output.", 500);
+                });
+
+                return imageIdFuture.get();
+            } catch (ExecutionException e) {
+                // unwrap exception thrown by task with .getCause()
+                throw new DockerException(e.getCause().getLocalizedMessage(), 500);
+            } catch (InterruptedException e) {
+                throw new DockerException("Docker image build was interrupted", 500);
             }
         }
     }
