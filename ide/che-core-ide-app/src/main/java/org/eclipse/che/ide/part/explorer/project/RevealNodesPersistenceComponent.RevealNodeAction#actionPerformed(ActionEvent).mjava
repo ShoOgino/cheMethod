@@ -1,0 +1,72 @@
+        /** {@inheritDoc} */
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            checkState(e.getParameters() != null);
+
+            final String toReveal = e.getParameters().get(PATH_PARAM_ID);
+            if (isNullOrEmpty(toReveal)) {
+                return;
+            }
+
+            final String[] paths = toReveal.split(PATH_SPLITTER);
+
+            Promise<Node> revealPromise = null;
+
+            final MessageLoader loader = loaderFactory.newLoader("Restoring project structure...");
+            loader.show();
+
+            for (final String path : paths) {
+                if (revealPromise == null) {
+                    revealPromise = revealer.reveal(Path.valueOf(path)).thenPromise(new Function<Node, Promise<Node>>() {
+                        @Override
+                        public Promise<Node> apply(Node node) throws FunctionException {
+                            if (node != null) {
+                                projectExplorer.getTree().setExpanded(node, true, false);
+                            }
+
+                            return revealer.reveal(Path.valueOf(path));
+                        }
+                    });
+                    continue;
+                }
+
+                revealPromise.thenPromise(new Function<Node, Promise<Node>>() {
+                    @Override
+                    public Promise<Node> apply(Node node) throws FunctionException {
+                        if (node != null) {
+                            projectExplorer.getTree().setExpanded(node, true, false);
+                        }
+
+                        return revealer.reveal(Path.valueOf(path));
+                    }
+                }).catchError(new Function<PromiseError, Node>() {
+                    @Override
+                    public Node apply(PromiseError error) throws FunctionException {
+                        Log.info(getClass(), error.getMessage());
+
+                        return null;
+                    }
+                });
+            }
+
+            if (revealPromise != null) {
+                revealPromise.then(new Operation<Node>() {
+                    @Override
+                    public void apply(Node node) throws OperationException {
+                        if (actionCompletedCallback != null) {
+                            actionCompletedCallback.onSuccess(null);
+                            loader.hide();
+                        }
+                    }
+                }).catchError(new Operation<PromiseError>() {
+                    @Override
+                    public void apply(PromiseError error) throws OperationException {
+                        if (actionCompletedCallback != null) {
+                            actionCompletedCallback.onFailure(error.getCause());
+                            loader.hide();
+                        }
+                    }
+                });
+            }
+        }
+
