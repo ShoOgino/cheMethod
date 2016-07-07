@@ -23,46 +23,36 @@
                                                                            SourceNotFoundException,
                                                                            NotFoundException,
                                                                            MachineException {
+        MachineConfig config = machine.getConfig();
+        String sourceType = config.getSource().getType();
 
-        // based on machine source, do the right steps
-        MachineConfig machineConfig = machine.getConfig();
-        MachineSource machineSource = machineConfig.getSource();
-        String type = machineSource.getType();
-
-        // create container machine name
         final String userName = EnvironmentContext.getCurrent().getSubject().getUserName();
-        final String machineContainerName = containerNameGenerator.generateContainerName(machine.getWorkspaceId(),
-                                                                                         machine.getId(),
-                                                                                         userName,
-                                                                                         machine.getConfig().getName());
-        // get recipe
-        // - it's a dockerfile type:
-        //    - location defined : download this location and get script as recipe
-        //    - content defined  : use this content as recipe script
-        // - it's an image:
-        //    - use location of image ([registry:port]/<repository-image>[:tag][@digest])
-        final Recipe recipe;
-        if (DOCKER_FILE_TYPE.equals(type)) {
-            recipe = this.recipeRetriever.getRecipe(machineConfig);
-        } else if (DOCKER_IMAGE_TYPE.equals(type)) {
-            if (isNullOrEmpty(machineSource.getLocation())) {
-                throw new InvalidRecipeException(String.format("The type '%s' needs to be used with a location, not with any other parameter. Found '%s'.", type, machineSource));
+        final String containerName = containerNameGenerator.generateContainerName(machine.getWorkspaceId(),
+                                                                                  machine.getId(),
+                                                                                  userName,
+                                                                                  config.getName());
+        final String imageName = "eclipse-che/" + containerName;
+        final ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
+        ProgressMonitor progressMonitor = currentProgressStatus -> {
+            try {
+                creationLogsOutput.writeLine(progressLineFormatter.format(currentProgressStatus));
+            } catch (IOException e) {
+                LOG.error(e.getLocalizedMessage(), e);
             }
-            return createInstanceFromImage(machine, machineContainerName, creationLogsOutput);
+        };
+
+        if (DOCKER_FILE_TYPE.equals(sourceType)) {
+            buildImage(config, imageName, doForcePullOnBuild, progressMonitor);
+        } else if (DOCKER_IMAGE_TYPE.equals(sourceType)) {
+            pullImage(config, imageName, progressMonitor);
         } else {
             // not supported
-            throw new UnsupportedRecipeException("The type '" + type + "' is not supported");
+            throw new UnsupportedRecipeException("The type '" + sourceType + "' is not supported");
         }
-        final Dockerfile dockerfile = parseRecipe(recipe);
 
-        final String machineImageName = "eclipse-che/" + machineContainerName;
-        final long memoryLimit = (long)machine.getConfig().getLimits().getRam() * 1024 * 1024;
-
-        buildImage(dockerfile, creationLogsOutput, machineImageName, doForcePullOnBuild, memoryLimit, -1);
-
-        return createInstance(machineContainerName,
+        return createInstance(containerName,
                               machine,
-                              machineImageName,
+                              imageName,
                               creationLogsOutput);
     }
 
