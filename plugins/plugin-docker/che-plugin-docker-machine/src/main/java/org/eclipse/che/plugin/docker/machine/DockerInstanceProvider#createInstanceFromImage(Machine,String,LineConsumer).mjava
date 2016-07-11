@@ -5,7 +5,8 @@
                                                                                        SourceNotFoundException {
         final DockerMachineSource dockerMachineSource = new DockerMachineSource(machine.getConfig().getSource());
 
-        if (snapshotUseRegistry) {
+        boolean isSnapshot = SNAPSHOT_LOCATION_PATTERN.matcher(dockerMachineSource.getLocation()).matches();
+        if (!isSnapshot || snapshotUseRegistry) {
             pullImage(dockerMachineSource, creationLogsOutput);
         }
 
@@ -21,8 +22,10 @@
             throw new MachineException("Can't create machine from snapshot.");
         }
         try {
-            // remove unneeded tag
-            docker.removeImage(RemoveImageParams.create(fullNameOfPulledImage).withForce(false));
+            // remove unneeded tag if restoring snapshot from registry
+            if (isSnapshot && snapshotUseRegistry){
+                docker.removeImage(RemoveImageParams.create(fullNameOfPulledImage).withForce(false));
+            }
         } catch (IOException e) {
             LOG.error(e.getLocalizedMessage(), e);
         }
