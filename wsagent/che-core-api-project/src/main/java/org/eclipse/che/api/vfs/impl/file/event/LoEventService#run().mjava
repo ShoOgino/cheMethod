@@ -1,0 +1,24 @@
+    @Override
+    protected void run() {
+        Optional<LoEvent> optional = loEventQueueHolder.poll(MAX_EVENT_INTERVAL_MILLIS);
+
+        if (optional.isPresent()) {
+            final LoEvent loEvent = optional.get();
+            final long eventTime = loEvent.getTime();
+
+            if (eventSegmentStartTime == UNDEFINED || eventTime - eventSegmentStartTime >= MAX_TIME_SEGMENT_SIZE_MILLIS) {
+                LOG.trace("Starting new event segment.");
+                LOG.trace("Old event segment start time: {} ", eventSegmentStartTime);
+                LOG.trace("New event segment start time: {} ", eventTime);
+
+                flushOldTreeAndStartNew();
+                eventSegmentStartTime = eventTime;
+            }
+
+            addEventAndCreatePrecedingNodes(vfsEventTreeRoot, loEvent);
+        } else {
+            flushOldTreeAndStartNew();
+            eventSegmentStartTime = UNDEFINED;
+        }
+    }
+

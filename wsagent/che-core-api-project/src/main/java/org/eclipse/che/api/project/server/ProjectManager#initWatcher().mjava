@@ -1,15 +1,21 @@
     @PostConstruct
     void initWatcher() throws IOException {
-        FileWatcherNotificationListener defaultListener = new FileWatcherNotificationListener(VirtualFileFilter.ACCEPT_ALL) {
-            @Override
-            public void onFileWatcherEvent(VirtualFile virtualFile, FileWatcherEventType eventType) {
-                LOG.debug("FS event detected: " + eventType + " " + virtualFile.getPath().toString() + " " + virtualFile.isFile());
-                eventService.publish(DtoFactory.newDto(VfsWatchEvent.class)
-                                               .withPath(virtualFile.getPath().toString())
-                                               .withFile(virtualFile.isFile())
-                                               .withType(eventType));
-            }
-        };
+        FileWatcherNotificationListener defaultListener =
+                new FileWatcherNotificationListener(file -> !(file.getPath().toString().contains(".codenvy")
+                                                              || file.getPath().toString().contains(".#"))) {
+                    @Override
+                    public void onFileWatcherEvent(VirtualFile virtualFile, FileWatcherEventType eventType) {
+                        LOG.debug("FS event detected: " + eventType + " " + virtualFile.getPath().toString() + " " + virtualFile.isFile());
+                        eventService.publish(LoEvent.newInstance()
+                                                    .withPath(virtualFile.getPath().toString())
+                                                    .withName(virtualFile.getName())
+                                                    .withItemType(virtualFile.isFile()
+                                                                           ? LoEvent.ItemType.FILE
+                                                                           : LoEvent.ItemType.DIR)
+                                                    .withTime(System.currentTimeMillis())
+                                                    .withEventType(eventType));
+                    }
+                };
         fileWatchNotifier.addNotificationListener(defaultListener);
         try {
             fileWatcher.startup();

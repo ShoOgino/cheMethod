@@ -1,0 +1,31 @@
+    @Test
+    public void shouldCreateEventTreeBecauseOfExceedingEventSegmentTimeFrame() throws Exception {
+        final long sleepTime = 150;
+        final long start = currentTimeMillis();
+
+        long totalCounter = 0;
+        long firstSegmentCounter = 0;
+
+        while ((currentTimeMillis() - start) < MAX_TIME_SEGMENT_SIZE_MILLIS + MAX_EVENT_INTERVAL_MILLIS) {
+            if ((firstSegmentCounter == 0) &&  ((currentTimeMillis() - start) > MAX_TIME_SEGMENT_SIZE_MILLIS)) {
+                firstSegmentCounter = totalCounter;
+            }
+            totalCounter++;
+            loEventQueueHolder.put(getLoEvent(PATH + totalCounter, FILE_NAME + totalCounter));
+            sleep(sleepTime);
+        }
+
+        final Optional<EventTreeNode> rootOptionalI = eventTreeQueueHolder.take();
+        final Optional<EventTreeNode> rootOptionalII = eventTreeQueueHolder.take();
+        assertTrue(rootOptionalI.isPresent());
+        assertTrue(rootOptionalII.isPresent());
+
+        final Optional<EventTreeNode> folderI = rootOptionalI.get().getFirstChild();
+        final Optional<EventTreeNode> folderII = rootOptionalII.get().getFirstChild();
+        assertTrue(folderI.isPresent());
+        assertTrue(folderII.isPresent());
+
+        assertEquals(firstSegmentCounter, folderI.get().getChildren().size());
+        assertEquals(totalCounter - firstSegmentCounter, folderII.get().getChildren().size());
+    }
+
