@@ -1,0 +1,47 @@
+    @Test
+    public void commandShouldBeRestoredWheWsAgentIsStarted() throws Exception {
+        WsAgentStateEvent event = mock(WsAgentStateEvent.class);
+        CommandConfigurationFactory commandConfigurationFactory = mock(CommandConfigurationFactory.class);
+        CommandConfiguration commandConfiguration = mock(CommandConfiguration.class);
+
+        MachineDto machineDto = mock(MachineDto.class);
+        MachineConfigDto machineConfigDto = mock(MachineConfigDto.class);
+        when(machineDto.getConfig()).thenReturn(machineConfigDto);
+        when(machineConfigDto.isDev()).thenReturn(true);
+        when(machineDto.getStatus()).thenReturn(MachineStatus.RUNNING);
+        List<MachineDto> machines = new ArrayList<>(2);
+        machines.add(machineDto);
+
+        MachineProcessDto machineProcessDto = mock(MachineProcessDto.class);
+        when(machineProcessDto.getOutputChannel()).thenReturn(OUTPUT_CHANNEL);
+        when(machineProcessDto.getPid()).thenReturn(PID);
+        List<MachineProcessDto> processes = new ArrayList<>(1);
+        processes.add(machineProcessDto);
+
+        CommandDto commandDto = mock(CommandDto.class);
+        when(dtoFactory.createDto(anyObject())).thenReturn(commandDto);
+        when(commandDto.withName(anyString())).thenReturn(commandDto);
+        when(commandDto.withCommandLine(anyString())).thenReturn(commandDto);
+        when(commandDto.withType(anyString())).thenReturn(commandDto);
+        when(commandDto.withAttributes(anyMap())).thenReturn(commandDto);
+        CommandOutputConsole outputConsole = mock(CommandOutputConsole.class);
+
+        CommandType commandType = mock(CommandType.class);
+        when(commandTypeRegistry.getCommandTypeById(anyString())).thenReturn(commandType);
+        when(commandConsoleFactory.create(anyObject(), any(org.eclipse.che.api.core.model.machine.Machine.class)))
+                .thenReturn(outputConsole);
+        when(commandType.getConfigurationFactory()).thenReturn(commandConfigurationFactory);
+        when(commandConfigurationFactory.createFromDto(anyObject())).thenReturn(commandConfiguration);
+
+        presenter.onWsAgentStarted(event);
+
+        verify(machinesPromise, times(2)).then(machinesCaptor.capture());
+        machinesCaptor.getValue().apply(machines);
+
+        verify(processesPromise).then(processesCaptor.capture());
+        processesCaptor.getValue().apply(processes);
+
+        verify(outputConsole).listenToOutput(eq(OUTPUT_CHANNEL));
+        verify(outputConsole).attachToProcess(machineProcessDto);
+    }
+
