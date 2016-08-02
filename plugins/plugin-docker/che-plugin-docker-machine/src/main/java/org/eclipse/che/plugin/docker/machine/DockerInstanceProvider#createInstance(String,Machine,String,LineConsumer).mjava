@@ -3,6 +3,7 @@
                                     final String imageName,
                                     final LineConsumer outputConsumer)
             throws MachineException {
+        Optional<String> containerIdOptional = null;
         try {
             final Map<String, Map<String, String>> portsToExpose;
             final String[] volumes;
@@ -53,7 +54,8 @@
 
             final String containerId = docker.createContainer(CreateContainerParams.create(config)
                                                                                    .withContainerName(containerName))
-                                             .getId();
+                                                                                   .getId();
+            containerIdOptional = Optional.ofNullable(containerId);
 
             docker.startContainer(StartContainerParams.create(containerId));
 
@@ -96,7 +98,11 @@
                                                        node,
                                                        outputConsumer);
         } catch (IOException e) {
+            cleanUpContainer(containerIdOptional);
             throw new MachineException(e.getLocalizedMessage(), e);
+        } catch (MachineException e) {
+            cleanUpContainer(containerIdOptional);
+            throw e;
         }
     }
 
