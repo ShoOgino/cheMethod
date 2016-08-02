@@ -1,0 +1,42 @@
+        @Override
+        protected void onMessageReceived(WorkspaceStatusEvent statusEvent) {
+            final String workspaceId = statusEvent.getWorkspaceId();
+            switch (statusEvent.getEventType()) {
+                case STARTING:
+                    onWorkspaceStarting(workspaceId);
+                    break;
+                case RUNNING:
+                    onWorkspaceStarted(workspaceId);
+                    break;
+                case ERROR:
+                    unSubscribeHandlers();
+
+                    notificationManager.notify(locale.workspaceStartFailed(), FAIL, FLOAT_MODE);
+                    initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), ERROR);
+
+                    final String workspaceName = workspace.getConfig().getName();
+                    final String error = statusEvent.getError();
+                    workspaceServiceClient.getWorkspaces(SKIP_COUNT, MAX_COUNT).then(showErrorDialog(workspaceName, error));
+
+                    eventBus.fireEvent(new WorkspaceStoppedEvent(workspace));
+                    break;
+                case STOPPED:
+                    unSubscribeHandlers();
+
+                    notificationManager.notify(locale.extServerStopped(), StatusNotification.Status.SUCCESS, FLOAT_MODE);
+                    eventBus.fireEvent(new WorkspaceStoppedEvent(workspace));
+                    break;
+                case SNAPSHOT_CREATING:
+                    snapshotLoader.show();
+                    break;
+                case SNAPSHOT_CREATED:
+                    snapshotLoader.hide();
+                    snapshotCreator.successfullyCreated();
+                    break;
+                case SNAPSHOT_CREATION_ERROR:
+                    snapshotLoader.hide();
+                    snapshotCreator.creationError("Snapshot creation error: " + statusEvent.getError());
+                    break;
+            }
+        }
+
