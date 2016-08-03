@@ -1,0 +1,41 @@
+    public void handleWorkspaceEvents(final WorkspaceDto workspace, final Callback<Component, Exception> callback) {
+        this.callback = callback;
+        if (messageBus != null) {
+            messageBus.cancelReconnection();
+        }
+        messageBus = messageBusProvider.createMessageBus(workspace.getId());
+
+        messageBus.addOnOpenHandler(new ConnectionOpenedHandler() {
+            @Override
+            public void onOpen() {
+                loader.show(initialLoadingInfo);
+                initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), IN_PROGRESS);
+
+                messageBus.removeOnOpenHandler(this);
+
+                setCurrentWorkspace(workspace);
+                workspaceEventsNotifier.trackWorkspaceEvents(workspace, callback);
+
+                final WorkspaceStatus workspaceStatus = workspace.getStatus();
+                switch (workspaceStatus) {
+                    case STARTING:
+                        eventBus.fireEvent(new WorkspaceStartingEvent(workspace));
+                        break;
+                    case RUNNING:
+                        Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
+                            @Override
+                            public void execute() {
+                                initialLoadingInfo.setOperationStatus(WORKSPACE_BOOTING.getValue(), SUCCESS);
+                                notificationManager.notify(locale.startedWs(), StatusNotification.Status.SUCCESS, FLOAT_MODE);
+                                eventBus.fireEvent(new WorkspaceStartedEvent(workspace));
+                                machineManagerProvider.get();//start instance of machine manager
+                            }
+                        });
+                        break;
+                    default:
+                        checkWorkspaceForSnapshots(workspace);
+                }
+            }
+        });
+    }
+
