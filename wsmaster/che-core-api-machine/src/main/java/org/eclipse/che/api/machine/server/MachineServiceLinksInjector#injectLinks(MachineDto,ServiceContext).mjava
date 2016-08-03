@@ -69,23 +69,27 @@
 
         injectTerminalLink(machine, serviceContext, links);
 
-        // add links to websocket channels
-        final Link machineChannelLink = createLink("GET",
-                                                   serviceContext.getBaseUriBuilder()
-                                                                 .path("ws")
-                                                                 .path(machine.getWorkspaceId())
-                                                                 .scheme("https".equals(getLogsUri.getScheme()) ? "wss" : "ws")
-                                                                 .build()
-                                                                 .toString(),
-                                                   null);
+        // add workspace channel links
+        final Link workspaceChannelLink = createLink("GET",
+                                                     serviceContext.getBaseUriBuilder()
+                                                                   .path("ws")
+                                                                   .path(machine.getWorkspaceId())
+                                                                   .scheme("https".equals(getLogsUri.getScheme()) ? "wss" : "ws")
+                                                                   .build()
+                                                                   .toString(),
+                                                     null);
         final LinkParameter channelParameter = newDto(LinkParameter.class).withName("channel")
                                                                           .withRequired(true);
 
-        injectMachineChannelsLinks(machine.getConfig(),
-                                   machine.getWorkspaceId(),
-                                   machine.getEnvName(),
-                                   machineChannelLink,
-                                   channelParameter);
+        links.add(cloneDto(workspaceChannelLink).withRel(LINK_REL_ENVIRONMENT_OUTPUT_CHANNEL)
+                                                .withParameters(singletonList(cloneDto(channelParameter)
+                                                                                      .withDefaultValue(format(ENVIRONMENT_OUTPUT_CHANNEL_TEMPLATE,
+                                                                                                               machine.getWorkspaceId())))));
+
+        links.add(cloneDto(workspaceChannelLink).withRel(ENVIRONMENT_STATUS_CHANNEL_TEMPLATE)
+                                                .withParameters(singletonList(cloneDto(channelParameter)
+                                                                                      .withDefaultValue(format(ENVIRONMENT_STATUS_CHANNEL_TEMPLATE,
+                                                                                                               machine.getWorkspaceId())))));
 
         return machine.withLinks(links);
     }

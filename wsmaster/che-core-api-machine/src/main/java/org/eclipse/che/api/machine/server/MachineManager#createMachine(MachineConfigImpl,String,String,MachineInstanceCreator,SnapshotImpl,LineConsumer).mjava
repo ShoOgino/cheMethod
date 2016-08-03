@@ -2,7 +2,8 @@
                                       String workspaceId,
                                       String environmentName,
                                       MachineInstanceCreator instanceCreator,
-                                      SnapshotImpl snapshot)
+                                      SnapshotImpl snapshot,
+                                      LineConsumer outputConsumer)
             throws NotFoundException,
                    SnapshotException,
                    ConflictException,
@@ -55,38 +56,43 @@
                                                     null);
 
         createMachineLogsDir(machineId);
-        final LineConsumer machineLogger = getMachineLogger(machineId, getMachineChannels(machine.getConfig().getName(),
-                                                                                          machine.getWorkspaceId(),
-                                                                                          machine.getEnvName())
-                .getOutput());
+        final LineConsumer machineLogger = getMachineLogger(machineId, outputConsumer);
 
         try {
+            machineRegistry.addMachine(machine);
             try {
-                machineRegistry.addMachine(machine);
                 instanceCreator.createInstance(instanceProvider, machine, machineLogger);
             } catch (MachineException ex) {
                 if (snapshot == null) {
                     throw ex;
                 }
                 if (ex.getCause() instanceof SourceNotFoundException) {
-                    final LineConsumer logger = getMachineLogger(machineId,
-                                                                 getMachineChannels(machine.getConfig().getName(),
-                                                                                    machine.getWorkspaceId(),
-                                                                                    machine.getEnvName()).getOutput());
                     LOG.error("Image of snapshot for machine " + machineConfig.getName() + " not found. " +
                               "Machine will be created from origin source");
                     machine.getConfig().setSource(sourceCopy);
+                    try {
+                        machineRegistry.remove(machineId);
+                    } catch (NotFoundException ignored) {
+                        // machine is already removed, should never happen
+                    }
                     machineRegistry.addMachine(machine);
-                    instanceCreator.createInstance(instanceProvider, machine, logger);
+                    instanceCreator.createInstance(instanceProvider, machine, outputConsumer);
                 }
             }
             return machine;
-        } catch (ConflictException e) {
+        } catch (ApiException apiEx) {
             try {
                 machineLogger.close();
-            } catch (IOException ignored) {
+            } catch (IOException ioEx) {
+                LOG.error(ioEx.getLocalizedMessage(), ioEx);
             }
-            throw new MachineException(e.getLocalizedMessage(), e);
+            try {
+                machineRegistry.remove(machineId);
+            } catch (NotFoundException ignored) {
+                // machine is already removed
+            }
+
+            throw new MachineException(apiEx.getLocalizedMessage(), apiEx);
         }
     }
 
