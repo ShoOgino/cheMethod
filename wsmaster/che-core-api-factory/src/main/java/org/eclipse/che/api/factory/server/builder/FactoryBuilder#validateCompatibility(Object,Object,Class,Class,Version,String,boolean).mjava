@@ -3,7 +3,7 @@
      *
      * @param object
      *         - object to validate factory parameters
-     * @param object
+     * @param parent
      *         - parent object
      * @param methodsProvider
      *         - class that provides methods with {@link org.eclipse.che.api.core.factory.FactoryParameter}
@@ -21,7 +21,8 @@
                                Class methodsProvider,
                                Class allowedMethodsProvider,
                                Version version,
-                               String parentName) throws ConflictException {
+                               String parentName,
+                               boolean isUpdate) throws ConflictException {
         // validate source
         if (SourceStorageDto.class.equals(methodsProvider) && !hasSubprojectInPath(parent)) {
             sourceStorageParametersValidator.validate((SourceStorage)object, version);
@@ -36,9 +37,12 @@
                 continue;
             }
             String fullName = (parentName.isEmpty() ? "" : (parentName + ".")) + CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_CAMEL,
-                                                                                                           method.getName()
-                                                                                                                 .substring(3)
-                                                                                                                 .toLowerCase());
+                                                                                                           method.getName().startsWith("is")
+                                                                                                           ? method.getName()
+                                                                                                                   .substring(2)
+                                                                                                           : method.getName()
+                                                                                                                   .substring(3)
+                                                                                                                   .toLowerCase());
             // check that field is set
             Object parameterValue;
             try {
@@ -68,7 +72,7 @@
                 throw new ConflictException(String.format(FactoryConstants.PARAMETRIZED_INVALID_PARAMETER_MESSAGE, fullName, version));
             } else {
                 // is parameter deprecated
-                if (factoryParameter.deprecatedSince().compareTo(version) <= 0 || factoryParameter.setByServer()) {
+                if (factoryParameter.deprecatedSince().compareTo(version) <= 0 || (!isUpdate && factoryParameter.setByServer())) {
                     throw new ConflictException(
                             String.format(FactoryConstants.PARAMETRIZED_INVALID_PARAMETER_MESSAGE, fullName, version));
                 }
@@ -76,7 +80,7 @@
                 // use recursion if parameter is DTO object
                 if (method.getReturnType().isAnnotationPresent(DTO.class)) {
                     // validate inner objects such Git ot ProjectAttributes
-                    validateCompatibility(parameterValue, object, method.getReturnType(), method.getReturnType(), version, fullName);
+                    validateCompatibility(parameterValue, object, method.getReturnType(), method.getReturnType(), version, fullName, isUpdate);
                 } else if (Map.class.isAssignableFrom(method.getReturnType())) {
                     Type tp = ((ParameterizedType)method.getGenericReturnType()).getActualTypeArguments()[1];
 
@@ -86,7 +90,7 @@
                             Map<Object, Object> map = (Map)parameterValue;
                             for (Map.Entry<Object, Object> entry : map.entrySet()) {
                                 validateCompatibility(entry.getValue(), object, secMapParamClass, secMapParamClass, version,
-                                                      fullName + "." + entry.getKey());
+                                                      fullName + "." + entry.getKey(), isUpdate);
                             }
                         } else {
                             throw new RuntimeException("This type of fields is not supported by factory.");
@@ -100,7 +104,7 @@
                         if (secListParamClass.isAnnotationPresent(DTO.class)) {
                             List<Object> list = (List)parameterValue;
                             for (Object entry : list) {
-                                validateCompatibility(entry, object, secListParamClass, secListParamClass, version, fullName);
+                                validateCompatibility(entry, object, secListParamClass, secListParamClass, version, fullName, isUpdate);
                             }
                         } else {
                             throw new RuntimeException("This type of fields is not supported by factory.");
