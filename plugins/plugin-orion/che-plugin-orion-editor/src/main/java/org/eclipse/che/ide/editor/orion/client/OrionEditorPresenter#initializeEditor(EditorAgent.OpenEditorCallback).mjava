@@ -1,0 +1,40 @@
+    @Override
+    protected void initializeEditor(final EditorAgent.OpenEditorCallback callback) {
+        QuickAssistProcessor processor = configuration.getQuickAssistProcessor();
+        if (quickAssistantFactory != null && processor != null) {
+            quickAssistant = quickAssistantFactory.createQuickAssistant(this);
+            quickAssistant.setQuickAssistProcessor(processor);
+        }
+
+        editorInit = new OrionEditorInit(configuration,
+                                         this.codeAssistantFactory,
+                                         this.quickAssistant,
+                                         this);
+
+        Promise<Void> initializerPromise = editorModule.getInitializerPromise();
+        initializerPromise.catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                displayErrorPanel(constant.editorInitErrorMessage());
+                callback.onInitializationFailed();
+            }
+        }).thenPromise(new Function<Void, Promise<String>>() {
+            @Override
+            public Promise<String> apply(Void arg) throws FunctionException {
+                return documentStorage.getDocument(input.getFile());
+            }
+        }).then(new Operation<String>() {
+            @Override
+            public void apply(String content) throws OperationException {
+                createEditor(content);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                displayErrorPanel(constant.editorFileErrorMessage());
+                callback.onInitializationFailed();
+            }
+        });
+
+    }
+

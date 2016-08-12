@@ -1,0 +1,36 @@
+    private void injectOrion(final AsyncCallback<Void> callback) {
+        loader.setMessage(waitEditorMessage);
+        final String[] scripts = new String[]{
+                "built-codeEdit-11.0/code_edit/built-codeEdit-amd",
+                "orion/CheContentAssistMode"
+        };
+
+        requireJsLoader.require(new Callback<JavaScriptObject[], Throwable>() {
+            @Override
+            public void onSuccess(final JavaScriptObject[] result) {
+                requireOrion(callback);
+            }
+
+            @Override
+            public void onFailure(final Throwable e) {
+                if (e instanceof JavaScriptException) {
+                    final JavaScriptException jsException = (JavaScriptException)e;
+                    final Object nativeException = jsException.getThrown();
+                    if (nativeException instanceof RequireError) {
+                        final RequireError requireError = (RequireError)nativeException;
+                        final String errorType = requireError.getRequireType();
+                        String message = "Orion injection failed: " + errorType;
+                        final JsArrayString modules = requireError.getRequireModules();
+                        if (modules != null) {
+                            message += modules.join(",");
+                        }
+                        Log.debug(OrionEditorExtension.class, message);
+                    }
+                }
+                initializationFailed(callback, "Failed to inject Orion editor", e);
+            }
+        }, scripts, new String[0]);
+
+        injectCssLink(GWT.getModuleBaseForStaticFiles() + "built-codeEdit-11.0/code_edit/built-codeEdit.css");
+    }
+
