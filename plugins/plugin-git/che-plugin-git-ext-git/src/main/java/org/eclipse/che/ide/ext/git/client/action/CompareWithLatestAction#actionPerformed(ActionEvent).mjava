@@ -3,10 +3,20 @@
     public void actionPerformed(ActionEvent e) {
 
         final Project project = appContext.getRootProject();
+        final Resource resource = appContext.getResource();
 
         checkState(project != null, "Null project occurred");
+        checkState(project.getLocation().isPrefixOf(resource.getLocation()), "Given selected item is not descendant of given project");
 
-        service.diff(appContext.getDevMachine(), project.getLocation(), Collections.<String>emptyList(), NAME_STATUS, false, 0, REVISION, false)
+        final String selectedItemPath = resource.getLocation()
+                                                .removeFirstSegments(project.getLocation().segmentCount())
+                                                .removeTrailingSeparator()
+                                                .toString();
+
+        service.diff(appContext.getDevMachine(),
+                     project.getLocation(),
+                     selectedItemPath.isEmpty() ? null : singletonList(selectedItemPath),
+                     NAME_STATUS, false, 0, REVISION, false)
                .then(new Operation<String>() {
                    @Override
                    public void apply(String diff) throws OperationException {
@@ -34,11 +44,11 @@
                        }
                    }
                })
-        .catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                notificationManager.notify(locale.diffFailed(), FAIL, NOT_EMERGE_MODE);
-            }
-        });
+               .catchError(new Operation<PromiseError>() {
+                   @Override
+                   public void apply(PromiseError arg) throws OperationException {
+                       notificationManager.notify(locale.diffFailed(), FAIL, NOT_EMERGE_MODE);
+                   }
+               });
     }
 
