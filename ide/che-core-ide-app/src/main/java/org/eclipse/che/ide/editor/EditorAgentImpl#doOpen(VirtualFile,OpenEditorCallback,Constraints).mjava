@@ -1,0 +1,39 @@
+    private void doOpen(final VirtualFile file, final OpenEditorCallback callback, Constraints constraints) {
+        PartPresenter activePart = editorMultiPartStack.getActivePart();
+        EditorPartStack activePartStack = editorMultiPartStack.getPartStackByPart(activePart);
+        if (constraints == null && activePartStack != null) {
+            PartPresenter partPresenter = activePartStack.getPartByPath(file.getLocation());
+            if (partPresenter != null) {
+                workspaceAgent.setActivePart(partPresenter, EDITING);
+                callback.onEditorActivated((EditorPartPresenter)partPresenter);
+                return;
+            }
+        }
+
+        FileType fileType = fileTypeRegistry.getFileTypeByFile(file);
+        EditorProvider editorProvider = editorRegistry.getEditor(fileType);
+        final EditorPartPresenter editor = editorProvider.getEditor();
+
+        editor.init(new EditorInputImpl(fileType, file), callback);
+        editor.addCloseHandler(this);
+
+        workspaceAgent.openPart(editor, EDITING, constraints);
+
+        openedEditors.add(editor);
+
+        workspaceAgent.setActivePart(editor);
+        editor.addPropertyListener(new PropertyListener() {
+            @Override
+            public void propertyChanged(PartPresenter source, int propId) {
+                if (propId == EditorPartPresenter.PROP_INPUT) {
+                    if (editor instanceof HasReadOnlyProperty) {
+                        ((HasReadOnlyProperty)editor).setReadOnly(file.isReadOnly());
+                    }
+
+                    callback.onEditorOpened(editor);
+                    eventBus.fireEvent(new EditorOpenedEvent(file, editor));
+                }
+            }
+        });
+    }
+
