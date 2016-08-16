@@ -1,0 +1,32 @@
+    /**
+     * Save snapshot of running machine.
+     *
+     * @param namespace
+     *         namespace of workspace
+     * @param workspaceId
+     *         ID of workspace that owns machine
+     * @param machineId
+     *         ID of machine that should be saved
+     * @return snapshot description
+     * @throws NotFoundException
+     *         if machine is not running
+     * @throws ConflictException
+     *         if environment of machine is not running
+     * @throws ServerException
+     *         if another error occurs
+     */
+    public SnapshotImpl saveMachine(String namespace,
+                                    String workspaceId,
+                                    String machineId) throws NotFoundException,
+                                                             ServerException,
+                                                             ConflictException {
+
+        try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
+            WorkspaceState workspaceState = workspaces.get(workspaceId);
+            if (workspaceState == null || workspaceState.status != WorkspaceStatus.RUNNING) {
+                throw new ConflictException(format("Environment of workspace '%s' is not running", workspaceId));
+            }
+        }
+        return environmentEngine.saveSnapshot(namespace, workspaceId, machineId);
+    }
+

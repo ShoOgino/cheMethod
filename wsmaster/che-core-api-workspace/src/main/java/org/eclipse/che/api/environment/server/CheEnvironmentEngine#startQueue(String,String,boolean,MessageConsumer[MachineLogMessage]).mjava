@@ -1,0 +1,110 @@
+    /**
+     * Starts all machine from machine queue of environment.
+     */
+    private void startQueue(String workspaceId,
+                            String envName,
+                            boolean recover,
+                            MessageConsumer<MachineLogMessage> messageConsumer) throws ServerException {
+        // Starting all machines in environment one by one by getting configs
+        // from the corresponding starting queue.
+        // Config will be null only if there are no machines left in the queue
+        MachineConfigImpl config = queuePeekOrFail(workspaceId);
+        while (config != null) {
+            // Environment start is failed when any machine start is failed, so if any error
+            // occurs during machine creation then environment start fail is reported and
+            // start resources such as queue and descriptor must be cleaned up
+            try {
+                String machineId = generateMachineId();
+                final String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
+
+                addMachine(workspaceId,
+                           machineId,
+                           envName,
+                           creator,
+                           config);
+
+                eventService.publish(newDto(MachineStatusEvent.class)
+                                             .withEventType(MachineStatusEvent.EventType.CREATING)
+                                             .withDev(config.isDev())
+                                             .withMachineName(config.getName())
+                                             .withWorkspaceId(workspaceId)
+                                             .withMachineId(machineId));
+
+                Instance machine = startMachineInstance(config,
+                                                        workspaceId,
+                                                        machineId,
+                                                        envName,
+                                                        creator,
+                                                        recover,
+                                                        messageConsumer);
+
+                // Machine destroying is an expensive operation which must be
+                // performed outside of the lock, this section checks if
+                // the environment wasn't stopped while it is starting and sets
+                // polled flag to true if the environment wasn't stopped.
+                // Also polls the proceeded machine configuration from the queue
+                boolean queuePolled = false;
+                try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+                    ensurePreDestroyIsNotExecuted();
+                    EnvironmentHolder environmentHolder = environments.get(workspaceId);
+                    if (environmentHolder != null) {
+                        final Queue<MachineConfigImpl> queue = environmentHolder.startQueue;
+                        if (queue != null) {
+                            queue.poll();
+                            queuePolled = true;
+                        }
+                    }
+                }
+
+                // If machine config is not polled from the queue
+                // then environment was stopped and newly created machine
+                // must be destroyed
+                if (!queuePolled) {
+                    try {
+                        eventService.publish(newDto(MachineStatusEvent.class)
+                                                     .withEventType(MachineStatusEvent.EventType.DESTROYING)
+                                                     .withDev(config.isDev())
+                                                     .withMachineName(config.getName())
+                                                     .withMachineId(machine.getId())
+                                                     .withWorkspaceId(workspaceId));
+
+                        machine.destroy();
+
+                        eventService.publish(newDto(MachineStatusEvent.class)
+                                                     .withEventType(MachineStatusEvent.EventType.DESTROYED)
+                                                     .withDev(config.isDev())
+                                                     .withMachineName(config.getName())
+                                                     .withMachineId(machine.getId())
+                                                     .withWorkspaceId(workspaceId));
+                    } catch (MachineException e) {
+                        LOG.error(e.getLocalizedMessage(), e);
+                    }
+                    throw new ServerException("Workspace '" + workspaceId +
+                                              "' start interrupted. Workspace stopped before all its machines started");
+                }
+
+                replaceMachine(machine);
+
+                eventService.publish(newDto(MachineStatusEvent.class)
+                                             .withEventType(MachineStatusEvent.EventType.RUNNING)
+                                             .withDev(config.isDev())
+                                             .withMachineName(config.getName())
+                                             .withMachineId(machine.getId())
+                                             .withWorkspaceId(workspaceId));
+
+                config = queuePeekOrFail(workspaceId);
+            } catch (RuntimeException | ServerException e) {
+                EnvironmentHolder env;
+                try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+                    env = environments.remove(workspaceId);
+                }
+                try {
+                    stopMachines(env.machines);
+                } catch (Exception remEx) {
+                    LOG.error(remEx.getLocalizedMessage(), remEx);
+                }
+                throw new ServerException(e.getLocalizedMessage(), e);
+            }
+        }
+    }
+

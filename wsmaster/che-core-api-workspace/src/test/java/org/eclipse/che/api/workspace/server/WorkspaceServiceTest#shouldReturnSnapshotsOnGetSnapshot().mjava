@@ -1,0 +1,37 @@
+    @Test
+    public void shouldReturnSnapshotsOnGetSnapshot() throws Exception {
+        // given
+        String workspaceId = "testWsId1";
+        SnapshotImpl.SnapshotBuilder snapshotBuilder = SnapshotImpl.builder()
+                                                                   .setCreationDate(System.currentTimeMillis())
+                                                                   .setDescription("description")
+                                                                   .setDev(true)
+                                                                   .setEnvName("envName")
+                                                                   .setId("snap1")
+                                                                   .setMachineName("machine1")
+                                                                   .setMachineSource(new MachineSourceImpl("type")
+                                                                                             .setContent("content"))
+                                                                   .setNamespace("namespace")
+                                                                   .setType("type")
+                                                                   .setWorkspaceId(workspaceId);
+        SnapshotImpl snapshot1 = snapshotBuilder.build();
+        SnapshotImpl snapshot2 = snapshotBuilder.setDev(false).build();
+
+        List<SnapshotImpl> originSnapshots = Arrays.asList(snapshot1, snapshot2);
+        when(wsManager.getSnapshot(workspaceId)).thenReturn(originSnapshots);
+
+        // when
+        final Response response = given().auth()
+                                         .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                         .when()
+                                         .get(SECURE_PATH + "/workspace/" + workspaceId + "/snapshot");
+
+        // then
+        assertEquals(response.getStatusCode(), 200);
+        List<SnapshotDto> snapshotDtos = unwrapDtoList(response, SnapshotDto.class);
+        List<SnapshotImpl> newSnapshots = snapshotDtos.stream().map(SnapshotImpl::new).collect(Collectors.toList());
+        originSnapshots.forEach(snapshot -> snapshot.setMachineSource(null));
+        assertEquals(newSnapshots, originSnapshots);
+        verify(wsManager).getSnapshot(workspaceId);
+    }
+

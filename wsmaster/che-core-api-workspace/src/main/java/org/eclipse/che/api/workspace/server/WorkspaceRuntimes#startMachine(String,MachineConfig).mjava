@@ -1,0 +1,44 @@
+    /**
+     * Starts machine in running workspace.
+     *
+     * @param workspaceId
+     *         ID of workspace that owns machine
+     * @param machineConfig
+     *         config of machine that should be started
+     * @return running machine
+     * @throws ConflictException
+     *         if environment is not running or conflicting machine already exists in the environment
+     * @throws ConflictException
+     *         if environment was stopped during start of machine
+     * @throws ServerException
+     *         if any other error occurs
+     */
+    public Instance startMachine(String workspaceId,
+                                 MachineConfig machineConfig) throws ServerException,
+                                                                     ConflictException,
+                                                                     NotFoundException {
+
+        try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
+            WorkspaceState workspaceState = workspaces.get(workspaceId);
+            if (workspaceState == null || workspaceState.status != WorkspaceStatus.RUNNING) {
+                throw new ConflictException(format("Environment of workspace '%s' is not running", workspaceId));
+            }
+        }
+
+        Instance instance = environmentEngine.startMachine(workspaceId, machineConfig);
+
+        try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            WorkspaceState workspaceState = workspaces.get(workspaceId);
+            if (workspaceState == null || workspaceState.status != WorkspaceStatus.RUNNING) {
+                try {
+                    environmentEngine.stopMachine(workspaceId, instance.getId());
+                } catch (NotFoundException | ServerException | ConflictException e) {
+                    LOG.error(e.getLocalizedMessage(), e);
+                }
+                throw new ConflictException(format("Environment of workspace '%s' was stopped during start of  machine",
+                                                   workspaceId));
+            }
+        }
+        return instance;
+    }
+

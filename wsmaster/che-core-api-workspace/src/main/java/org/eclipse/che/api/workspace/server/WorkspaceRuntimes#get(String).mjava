@@ -12,18 +12,44 @@
      *         the id of the workspace to get its runtime
      * @return descriptor which describes current state of the workspace runtime
      * @throws NotFoundException
-     *         when workspace with given {@code workspaceId} is not running
+     *         when workspace with given {@code workspaceId} is not found
+     * @throws ServerException
+     *         if environment is in illegal state
      */
-    public RuntimeDescriptor get(String workspaceId) throws NotFoundException {
-        acquireReadLock(workspaceId);
-        try {
-            final RuntimeDescriptor descriptor = descriptors.get(workspaceId);
-            if (descriptor == null) {
-                throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
-            }
-            return new RuntimeDescriptor(descriptor);
-        } finally {
-            releaseReadLock(workspaceId);
+    public RuntimeDescriptor get(String workspaceId) throws NotFoundException,
+                                                            ServerException {
+        WorkspaceState workspaceState;
+        try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
+            workspaceState = workspaces.get(workspaceId);
         }
+        if (workspaceState == null) {
+            throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
+        }
+
+        RuntimeDescriptor runtimeDescriptor = new RuntimeDescriptor(workspaceState.status,
+                                                                    new WorkspaceRuntimeImpl(workspaceState.activeEnv,
+                                                                                             null,
+                                                                                             Collections.emptyList(),
+                                                                                             null));
+        List<Instance> machines = environmentEngine.getMachines(workspaceId);
+        Optional<Instance> devMachineOptional = machines.stream()
+                                                        .filter(machine -> machine.getConfig().isDev())
+                                                        .findAny();
+        if (devMachineOptional.isPresent()) {
+            String projectsRoot = devMachineOptional.get().getStatus() == MachineStatus.RUNNING ?
+                                  devMachineOptional.get().getRuntime().projectsRoot() :
+                                  null;
+            runtimeDescriptor.setRuntime(new WorkspaceRuntimeImpl(workspaceState.activeEnv,
+                                                                  projectsRoot,
+                                                                  machines,
+                                                                  devMachineOptional.get()));
+        } else if (workspaceState.status == WorkspaceStatus.RUNNING) {
+            // invalid state of environment is detected
+            String error = format("Dev machine is not found in active environment of workspace '%s'",
+                                  workspaceId);
+            throw new ServerException(error);
+        }
+
+        return runtimeDescriptor;
     }
 

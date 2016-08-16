@@ -1,0 +1,31 @@
+    /**
+     * Stops running environment of specified workspace.
+     *
+     * @param workspaceId
+     *         ID of workspace that owns environment
+     * @throws EnvironmentNotRunningException
+     *         when environment is not running
+     * @throws ServerException
+     *         if other error occurs
+     */
+    public void stop(String workspaceId) throws EnvironmentNotRunningException,
+                                                ServerException {
+        List<Instance> machinesCopy = null;
+        try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            EnvironmentHolder environmentHolder = environments.get(workspaceId);
+            if (environmentHolder == null || environmentHolder.status != EnvStatus.RUNNING) {
+                throw new EnvironmentNotRunningException("Environment with ID '" + workspaceId + "' is not found");
+            }
+            environments.remove(workspaceId);
+            List<Instance> machines = environmentHolder.machines;
+            if (machines != null && !machines.isEmpty()) {
+                machinesCopy = new ArrayList<>(machines);
+            }
+        }
+
+        // long operation - perform out of lock
+        if (machinesCopy != null) {
+            stopMachines(machinesCopy);
+        }
+    }
+

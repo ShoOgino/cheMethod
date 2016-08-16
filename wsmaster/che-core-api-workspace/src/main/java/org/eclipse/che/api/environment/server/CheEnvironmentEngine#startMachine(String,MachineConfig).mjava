@@ -1,0 +1,92 @@
+    /**
+     * Starts machine in running environment.
+     *
+     * @param workspaceId
+     *         ID of workspace that owns environment in which machine should be started
+     * @param machineConfig
+     *         configuration of machine that should be started
+     * @return running machine
+     * @throws EnvironmentNotRunningException
+     *         if environment is not running
+     * @throws ConflictException
+     *         if machine with the same name already exists in the environment
+     * @throws ServerException
+     *         if any other error occurs
+     */
+    public Instance startMachine(String workspaceId,
+                                 MachineConfig machineConfig) throws ServerException,
+                                                                         EnvironmentNotRunningException,
+                                                                         ConflictException {
+        MachineConfig machineConfigCopy = new MachineConfigImpl(machineConfig);
+        EnvironmentHolder environmentHolder;
+        try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
+            environmentHolder = environments.get(workspaceId);
+            if (environmentHolder == null || environmentHolder.status != EnvStatus.RUNNING) {
+                throw new EnvironmentNotRunningException(format("Environment '%s' is not running", workspaceId));
+            }
+            for (Instance machine : environmentHolder.machines) {
+                if (machine.getConfig().getName().equals(machineConfigCopy.getName())) {
+                    throw new ConflictException(
+                            format("Machine with name '%s' already exists in environment of workspace '%s'",
+                                   machineConfigCopy.getName(), workspaceId));
+                }
+            }
+        }
+        String machineId = generateMachineId();
+        final String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
+
+        Instance instance = null;
+        try {
+            addMachine(workspaceId,
+                       machineId,
+                       environmentHolder.name,
+                       creator,
+                       machineConfigCopy);
+
+            eventService.publish(newDto(MachineStatusEvent.class)
+                                         .withEventType(MachineStatusEvent.EventType.CREATING)
+                                         .withDev(machineConfigCopy.isDev())
+                                         .withMachineName(machineConfigCopy.getName())
+                                         .withMachineId(machineId)
+                                         .withWorkspaceId(workspaceId));
+
+            instance = startMachineInstance(machineConfigCopy,
+                                            workspaceId,
+                                            machineId,
+                                            environmentHolder.name,
+                                            creator,
+                                            false,
+                                            environmentHolder.logger);
+
+            replaceMachine(instance);
+
+            eventService.publish(newDto(MachineStatusEvent.class)
+                                         .withEventType(MachineStatusEvent.EventType.RUNNING)
+                                         .withDev(machineConfigCopy.isDev())
+                                         .withMachineName(machineConfigCopy.getName())
+                                         .withMachineId(instance.getId())
+                                         .withWorkspaceId(workspaceId));
+
+            return instance;
+        } catch (Exception e) {
+            removeMachine(workspaceId, machineId);
+
+            if (instance != null) {
+                try {
+                    instance.destroy();
+                } catch (Exception destroyingExc) {
+                    LOG.error(destroyingExc.getLocalizedMessage(), destroyingExc);
+                }
+            }
+
+            eventService.publish(newDto(MachineStatusEvent.class)
+                                         .withEventType(MachineStatusEvent.EventType.ERROR)
+                                         .withDev(machineConfigCopy.isDev())
+                                         .withMachineName(machineConfigCopy.getName())
+                                         .withMachineId(machineId)
+                                         .withWorkspaceId(workspaceId));
+
+            throw e;
+        }
+    }
+

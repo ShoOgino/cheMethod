@@ -1,17 +1,9 @@
     /**
      * Stops running workspace runtime.
      *
-     * <p>Stops all running machines one by one,
-     * non-dev machines first. During the stop of the workspace
-     * its runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status.
+     * <p>Stops environment in an implementation specific way.
+     * During the stop of the workspace its runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status.
      * Workspace may be stopped only if its status is {@link WorkspaceStatus#RUNNING}.
-     *
-     * <p>If workspace has runtime with dev-machine running
-     * and other machines starting then the runtime can still
-     * be stopped which will also interrupt starting process.
-     *
-     * <p>Note that it doesn't provide any events for machines stop,
-     * Machine API is responsible for it.
      *
      * @param workspaceId
      *         identifier of workspace which should be stopped
@@ -21,7 +13,7 @@
      *         when any error occurs during workspace stopping
      * @throws ConflictException
      *         when running workspace status is different from {@link WorkspaceStatus#RUNNING}
-     * @see MachineManager#destroy(String, boolean)
+     * @see CheEnvironmentEngine#stop(String)
      * @see WorkspaceStatus#STOPPING
      */
     public void stop(String workspaceId) throws NotFoundException, ServerException, ConflictException {
@@ -29,38 +21,37 @@
         // The double check is required as it is still possible to get unlucky timing
         // between locking and stopping workspace.
         ensurePreDestroyIsNotExecuted();
-        acquireWriteLock(workspaceId);
-        final WorkspaceRuntimeImpl runtime;
-        try {
+        try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
             ensurePreDestroyIsNotExecuted();
-            final RuntimeDescriptor descriptor = descriptors.get(workspaceId);
-            if (descriptor == null) {
+            WorkspaceState workspaceState = workspaces.get(workspaceId);
+            if (workspaceState == null) {
                 throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
             }
-            if (descriptor.getRuntimeStatus() != WorkspaceStatus.RUNNING) {
+            if (workspaceState.status != WorkspaceStatus.RUNNING) {
                 throw new ConflictException(
                         format("Couldn't stop '%s' workspace because its status is '%s'. Workspace can be stopped only if it is 'RUNNING'",
                                workspaceId,
-                               descriptor.getRuntimeStatus()));
+                               workspaceState.status));
             }
 
-            // According to the WorkspaceStatus specification workspace runtime
-            // must visible with STOPPING status until dev-machine is not stopped
-            descriptor.setRuntimeStatus(WorkspaceStatus.STOPPING);
-
-            // At this point of time starting queue must be removed
-            // to prevent start of another machines which are not started yet.
-            // In this case workspace start will be interrupted and
-            // interruption will be reported, machine which is currently starting(if such exists)
-            // will be destroyed by workspace starting thread.
-            startQueues.remove(workspaceId);
-
-            // Create deep  copy of the currently running workspace to prevent
-            // out of the lock instance modifications and stale data effects
-            runtime = new WorkspaceRuntimeImpl(descriptor.getRuntime());
-        } finally {
-            releaseWriteLock(workspaceId);
+            workspaceState.status = WorkspaceStatus.STOPPING;
         }
-        destroyRuntime(workspaceId, runtime);
+
+        publishWorkspaceEvent(EventType.STOPPING, workspaceId, null);
+        String error = null;
+        try {
+            environmentEngine.stop(workspaceId);
+        } catch (ServerException | RuntimeException e) {
+            error = e.getLocalizedMessage();
+        } finally {
+            try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+                workspaces.remove(workspaceId);
+            }
+        }
+        if (error == null) {
+            publishWorkspaceEvent(EventType.STOPPED, workspaceId, null);
+        } else {
+            publishWorkspaceEvent(EventType.ERROR, workspaceId, error);
+        }
     }
 

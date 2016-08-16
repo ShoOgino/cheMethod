@@ -3,13 +3,28 @@
         workspaceManager = spy(new WorkspaceManager(workspaceDao,
                                                     runtimes,
                                                     eventService,
-                                                    machineManager,
                                                     false,
-                                                    true));
+                                                    true,
+                                                    snapshotDao));
         final WorkspaceImpl workspace = workspaceManager.createWorkspace(createConfig(), "user123", "account");
-        when(machineManager.getSnapshots(any(), any())).thenReturn(singletonList(mock(SnapshotImpl.class)));
         when(workspaceDao.get(workspace.getId())).thenReturn(workspace);
         when(runtimes.get(any())).thenThrow(new NotFoundException(""));
+        SnapshotImpl.SnapshotBuilder snapshotBuilder = SnapshotImpl.builder()
+                                                                   .generateId()
+                                                                   .setEnvName("env")
+                                                                   .setDev(true)
+                                                                   .setMachineName("machine1")
+                                                                   .setNamespace(workspace.getNamespace())
+                                                                   .setWorkspaceId(workspace.getId())
+                                                                   .setType("docker")
+                                                                   .setMachineSource(new MachineSourceImpl("image"));
+        SnapshotImpl snapshot1 = snapshotBuilder.build();
+        SnapshotImpl snapshot2 = snapshotBuilder.generateId()
+                                                .setDev(false)
+                                                .setMachineName("machine2")
+                                                .build();
+        when(snapshotDao.findSnapshots(workspace.getNamespace(), workspace.getId()))
+                .thenReturn(asList(snapshot1, snapshot2));
 
         workspaceManager.startWorkspace(workspace.getId(), workspace.getConfig().getDefaultEnv(), "account", null);
 

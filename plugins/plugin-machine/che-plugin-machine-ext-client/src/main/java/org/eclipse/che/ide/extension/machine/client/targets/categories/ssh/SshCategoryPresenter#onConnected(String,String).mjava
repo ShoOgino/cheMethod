@@ -1,0 +1,31 @@
+    /**
+     * Ensures machine is started.
+     */
+    private void onConnected(final String workspaceId, final String machineId) {
+        // There is a little bug in machine service on the server side.
+        // The machine info is updated with a little delay after running a machine.
+        // Using timer must fix the problem.
+        new Timer() {
+            @Override
+            public void run() {
+                machineService.getMachine(workspaceId, machineId).then(new Operation<MachineDto>() {
+                    @Override
+                    public void apply(MachineDto machineDto) throws OperationException {
+                        if (machineDto.getStatus() == RUNNING) {
+                            connectNotification.setTitle(machineLocale.targetsViewConnectSuccess(machineDto.getConfig().getName()));
+                            connectNotification.setStatus(StatusNotification.Status.SUCCESS);
+                            updateTargets(machineDto.getConfig().getName());
+                        } else {
+                            onConnectingFailed(null);
+                        }
+                    }
+                }).catchError(new Operation<PromiseError>() {
+                    @Override
+                    public void apply(PromiseError arg) throws OperationException {
+                        onConnectingFailed(null);
+                    }
+                });
+            }
+        }.schedule(500);
+    }
+

@@ -1,0 +1,35 @@
+    @Test
+    public void shouldRemoveMachinesSnapshotsEvenSomeRemovalFails() throws Exception {
+        // given
+        String testWsId = "testWsId";
+        String testNamespace = "testNamespace";
+        WorkspaceImpl workspaceMock = mock(WorkspaceImpl.class);
+        when(workspaceDao.get(testWsId)).thenReturn(workspaceMock);
+        when(workspaceMock.getNamespace()).thenReturn(testNamespace);
+        SnapshotImpl.SnapshotBuilder snapshotBuilder = SnapshotImpl.builder()
+                                                                   .generateId()
+                                                                   .setEnvName("env")
+                                                                   .setDev(true)
+                                                                   .setMachineName("machine1")
+                                                                   .setNamespace(testNamespace)
+                                                                   .setWorkspaceId(testWsId)
+                                                                   .setType("docker")
+                                                                   .setMachineSource(new MachineSourceImpl("image"));
+        SnapshotImpl snapshot1 = snapshotBuilder.build();
+        SnapshotImpl snapshot2 = snapshotBuilder.generateId()
+                                                .setDev(false)
+                                                .setMachineName("machine2")
+                                                .build();
+        when(snapshotDao.findSnapshots(testNamespace, testWsId)).thenReturn(asList(snapshot1, snapshot2));
+        doThrow(new SnapshotException("test")).when(snapshotDao).removeSnapshot(snapshot1.getId());
+
+        // when
+        workspaceManager.removeSnapshots(testWsId);
+
+        // then
+        verify(runtimes).removeSnapshot(snapshot1);
+        verify(runtimes).removeSnapshot(snapshot2);
+        verify(snapshotDao).removeSnapshot(snapshot1.getId());
+        verify(snapshotDao).removeSnapshot(snapshot2.getId());
+    }
+

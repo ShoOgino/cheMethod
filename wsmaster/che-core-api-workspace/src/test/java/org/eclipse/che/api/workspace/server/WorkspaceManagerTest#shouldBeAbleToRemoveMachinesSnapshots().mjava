@@ -4,13 +4,33 @@
         String testWsId = "testWsId";
         String testNamespace = "testNamespace";
         WorkspaceImpl workspaceMock = mock(WorkspaceImpl.class);
-        doReturn(workspaceMock).when(workspaceManager).getWorkspace(testWsId);
+        when(workspaceDao.get(testWsId)).thenReturn(workspaceMock);
         when(workspaceMock.getNamespace()).thenReturn(testNamespace);
+        SnapshotImpl.SnapshotBuilder snapshotBuilder = SnapshotImpl.builder()
+                                                                   .generateId()
+                                                                   .setEnvName("env")
+                                                                   .setDev(true)
+                                                                   .setMachineName("machine1")
+                                                                   .setNamespace(testNamespace)
+                                                                   .setWorkspaceId(testWsId)
+                                                                   .setType("docker")
+                                                                   .setMachineSource(new MachineSourceImpl("image"));
+        SnapshotImpl snapshot1 = snapshotBuilder.build();
+        SnapshotImpl snapshot2 = snapshotBuilder.generateId()
+                                                .setDev(false)
+                                                .setMachineName("machine2")
+                                                .build();
+        when(snapshotDao.findSnapshots(testNamespace, testWsId)).thenReturn(asList(snapshot1, snapshot2));
 
         // when
         workspaceManager.removeSnapshots(testWsId);
 
         // then
-        verify(machineManager).removeSnapshots(testNamespace, testWsId);
+        InOrder runtimesInOrder = inOrder(runtimes);
+        runtimesInOrder.verify(runtimes).removeSnapshot(snapshot1);
+        runtimesInOrder.verify(runtimes).removeSnapshot(snapshot2);
+        InOrder snapshotDaoInOrder = inOrder(snapshotDao);
+        snapshotDaoInOrder.verify(snapshotDao).removeSnapshot(snapshot1.getId());
+        snapshotDaoInOrder.verify(snapshotDao).removeSnapshot(snapshot2.getId());
     }
 
