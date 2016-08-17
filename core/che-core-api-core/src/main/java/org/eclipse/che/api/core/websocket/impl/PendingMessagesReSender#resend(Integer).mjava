@@ -1,0 +1,30 @@
+    public void resend(Integer endpointId) {
+        final List<WebSocketTransmission> messages = messagesMap.remove(endpointId);
+
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+
+        final Optional<Session> sessionOptional = registry.get(endpointId);
+
+        if (!sessionOptional.isPresent()) {
+            return;
+        }
+
+        final Session session = sessionOptional.get();
+
+        final List<WebSocketTransmission> backing = new ArrayList<>(messages);
+        messages.clear();
+
+        for (WebSocketTransmission message : backing) {
+
+            if (session.isOpen()) {
+                session.getAsyncRemote().sendText(message.toString());
+            } else {
+                messages.add(message);
+            }
+        }
+
+        messagesMap.put(endpointId, messages);
+    }
+
