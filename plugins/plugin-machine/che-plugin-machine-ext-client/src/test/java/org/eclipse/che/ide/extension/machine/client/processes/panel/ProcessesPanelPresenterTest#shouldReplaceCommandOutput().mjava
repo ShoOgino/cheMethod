@@ -1,0 +1,36 @@
+    @Test
+    public void shouldReplaceCommandOutput() throws Exception {
+        MachineDto machineDto = mock(MachineDto.class);
+        when(machineDto.getId()).thenReturn(MACHINE_ID);
+        MachineConfigDto machineConfigDto = mock(MachineConfigDto.class);
+        when(machineDto.getConfig()).thenReturn(machineConfigDto);
+
+        List<ProcessTreeNode> children = new ArrayList<>();
+        ProcessTreeNode commandNode = new ProcessTreeNode(COMMAND_NODE, null, PROCESS_NAME, null, children);
+        children.add(commandNode);
+        ProcessTreeNode machineNode = new ProcessTreeNode(MACHINE_NODE, null, machineDto, null, children);
+        children.add(machineNode);
+        when(machineNode.getId()).thenReturn(MACHINE_ID);
+
+        String commandId = commandNode.getId();
+        presenter.rootNode = new ProcessTreeNode(ROOT_NODE, null, null, null, children);
+        presenter.consoles.put(commandId, outputConsole);
+
+        when(outputConsole.isFinished()).thenReturn(true);
+        when(outputConsole.getTitle()).thenReturn(PROCESS_NAME);
+
+        presenter.addCommandOutput(MACHINE_ID, outputConsole);
+
+        verify(view, never()).addProcessNode(anyObject());
+        verify(view, never()).setProcessesData(anyObject());
+
+        verify(outputConsole).go(acceptsOneWidgetCaptor.capture());
+        IsWidget widget = mock(IsWidget.class);
+        acceptsOneWidgetCaptor.getValue().setWidget(widget);
+
+        verify(view).hideProcessOutput(eq(commandId));
+        verify(view).addWidget(eq(commandId), anyString(), anyObject(), eq(widget), anyBoolean());
+        verify(view).selectNode(anyObject());
+        verify(view).getNodeById(eq(commandId));
+    }
+
