@@ -2,24 +2,45 @@
     public void shouldBeAbleToStartEnvironment() throws Exception {
         // given
         EnvironmentImpl env = createEnv();
+        String envName = "env-1";
         String workspaceId = "wsId";
         List<Instance> expectedMachines = new ArrayList<>();
-        when(instanceProvider.createInstance(any(Machine.class),
-                                             any(LineConsumer.class)))
+        when(composeProvider.startService(anyString(),
+                                          eq(workspaceId),
+                                          eq(envName),
+                                          anyString(),
+                                          anyString(),
+                                          anyBoolean(),
+                                          anyString(),
+                                          any(ComposeServiceImpl.class),
+                                          any(LineConsumer.class)))
                 .thenAnswer(invocationOnMock -> {
                     Object[] arguments = invocationOnMock.getArguments();
-                    Machine machine = (Machine)arguments[0];
-                    Instance instance = spy(new NoOpMachineInstance(machine));
+                    String machineId = (String)arguments[3];
+                    String machineName = (String)arguments[4];
+                    boolean isDev = (boolean)arguments[5];
+                    ComposeServiceImpl service = (ComposeServiceImpl)arguments[7];
+                    Machine machine = createMachine(machineId,
+                                                    workspaceId,
+                                                    envName,
+                                                    service,
+                                                    machineName,
+                                                    isDev);
+                    NoOpMachineInstance instance = spy(new NoOpMachineInstance(machine));
                     expectedMachines.add(instance);
                     return instance;
                 });
 
         // when
-        List<Instance> machines = engine.start(workspaceId, env, false, messageConsumer);
+        List<Instance> machines = engine.start(workspaceId,
+                                               envName,
+                                               env,
+                                               false,
+                                               messageConsumer);
 
         // then
         assertEquals(machines, expectedMachines);
-        verify(instanceProvider, times(env.getMachineConfigs().size()))
-                .createInstance(any(Machine.class), any(LineConsumer.class));
+//        verify(instanceProvider, times(env.getMachineConfigs().size()))
+//                .createInstance(any(Machine.class), any(LineConsumer.class));
     }
 

@@ -1,0 +1,95 @@
+    @Override
+    public Instance startService(String namespace,
+                                 String workspaceId,
+                                 String envName,
+                                 String machineId,
+                                 String machineName,
+                                 boolean isDev,
+                                 String networkName,
+                                 ComposeServiceImpl service,
+                                 LineConsumer machineLogger)
+            throws ServerException {
+
+        // copy to not affect/be affected by changes in origin
+        service = new ComposeServiceImpl(service);
+
+        ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
+        ProgressMonitor progressMonitor = currentProgressStatus -> {
+            try {
+                machineLogger.writeLine(progressLineFormatter.format(currentProgressStatus));
+            } catch (IOException e) {
+                LOG.error(e.getLocalizedMessage(), e);
+            }
+        };
+
+        String container = null;
+        try {
+            String image = prepareImage(namespace,
+                                        workspaceId,
+                                        machineId,
+                                        machineName,
+                                        service,
+                                        progressMonitor);
+
+            container = createContainer(namespace,
+                                        workspaceId,
+                                        machineId,
+                                        machineName,
+                                        isDev,
+                                        image,
+                                        networkName,
+                                        service);
+
+            docker.startContainer(StartContainerParams.create(container));
+
+            readContainerLogsInSeparateThread(container,
+                                              workspaceId,
+                                              machineId,
+                                              machineLogger);
+
+            DockerNode node = dockerMachineFactory.createNode(workspaceId, container);
+            if (isDev) {
+                node.bindWorkspace();
+                LOG.info("Machine with id '{}' backed by container '{}' has been deployed on node '{}'",
+                         machineId, container, node.getHost());
+            }
+
+            dockerInstanceStopDetector.startDetection(container,
+                                                      machineId,
+                                                      workspaceId);
+
+            MachineImpl machine = new MachineImpl(MachineConfigImpl.builder()
+                                                                   .setDev(isDev)
+                                                                   .setName(machineName)
+                                                                   .setType("docker")
+                                                                   // casting considered as safe because more than int of megabytes is a lot!
+                                                                   .setLimits(new LimitsImpl((int)Size
+                                                                           .parseSizeToMegabytes(
+                                                                                   service.getMemLimit() + "b")))
+                                                                   .setSource(new MachineSourceImpl(service.getBuild() != null ?
+                                                                                                    "context" :
+                                                                                                    "image")
+                                                                                      .setLocation(service.getBuild() != null ?
+                                                                                                   service.getBuild().getContext() :
+                                                                                                   service.getImage()))
+                                                                   .build(),
+                                                  machineId,
+                                                  workspaceId,
+                                                  envName,
+                                                  namespace,
+                                                  MachineStatus.RUNNING,
+                                                  null);
+
+            return dockerMachineFactory.createInstance(machine,
+                                                       container,
+                                                       image,
+                                                       node,
+                                                       machineLogger);
+        } catch (SourceNotFoundException e) {
+            throw e;
+        } catch (RuntimeException | ServerException | NotFoundException | IOException e) {
+            cleanUpContainer(container);
+            throw new ServerException(e.getLocalizedMessage());
+        }
+    }
+

@@ -1,5 +1,6 @@
     @Override
-    public void validateConfig(WorkspaceConfig config) throws BadRequestException {
+    public void validateConfig(WorkspaceConfig config) throws BadRequestException,
+                                                              ServerException {
         // configuration object itself
         checkNotNull(config.getName(), "Workspace name required");
         checkArgument(WS_NAME.matcher(config.getName()).matches(),
@@ -11,14 +12,12 @@
         //environments
         checkArgument(!isNullOrEmpty(config.getDefaultEnv()), "Workspace default environment name required");
         checkNotNull(config.getEnvironments(), "Workspace should contain at least one environment");
-        checkArgument(config.getEnvironments()
-                            .stream()
-                            .anyMatch(env -> config.getDefaultEnv().equals(env.getName())),
+        checkArgument(config.getEnvironments().containsKey(config.getDefaultEnv()),
                       "Workspace default environment configuration required");
 
-        for (Environment environment : config.getEnvironments()) {
+        for (Map.Entry<String, ? extends Environment> envEntry : config.getEnvironments().entrySet()) {
             try {
-                environmentValidator.validate(environment);
+                environmentValidator.validate(envEntry.getKey(), envEntry.getValue());
             } catch (IllegalArgumentException e) {
                 throw new BadRequestException(e.getLocalizedMessage());
             }

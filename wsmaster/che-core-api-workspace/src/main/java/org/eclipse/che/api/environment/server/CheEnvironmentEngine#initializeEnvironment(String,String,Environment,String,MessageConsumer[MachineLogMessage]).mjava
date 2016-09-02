@@ -1,0 +1,28 @@
+    private void initializeEnvironment(String workspaceId,
+                                       String envName,
+                                       Environment env,
+                                       String networkId,
+                                       MessageConsumer<MachineLogMessage> messageConsumer)
+            throws ServerException,
+                   ConflictException {
+
+        ComposeEnvironmentImpl composeEnvironment = composeFileParser.parse(env);
+
+        normalizeEnvironment(composeEnvironment);
+
+        List<String> servicesOrder = startStrategy.order(composeEnvironment);
+
+        EnvironmentHolder environmentHolder = new EnvironmentHolder(servicesOrder,
+                                                                    composeEnvironment,
+                                                                    messageConsumer,
+                                                                    EnvStatus.STARTING,
+                                                                    envName,
+                                                                    networkId);
+
+        try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            if (environments.putIfAbsent(workspaceId, environmentHolder) != null) {
+                throw new ConflictException(format("Environment of workspace '%s' already exists", workspaceId));
+            }
+        }
+    }
+

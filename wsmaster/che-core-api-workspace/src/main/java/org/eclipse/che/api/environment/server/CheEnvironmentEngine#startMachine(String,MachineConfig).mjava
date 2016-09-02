@@ -8,6 +8,8 @@
      * @return running machine
      * @throws EnvironmentNotRunningException
      *         if environment is not running
+     * @throws NotFoundException
+     *         if provider of machine implementation is not found
      * @throws ConflictException
      *         if machine with the same name already exists in the environment
      * @throws ServerException
@@ -15,8 +17,8 @@
      */
     public Instance startMachine(String workspaceId,
                                  MachineConfig machineConfig) throws ServerException,
-                                                                         EnvironmentNotRunningException,
-                                                                         ConflictException {
+                                                                     NotFoundException,
+                                                                     ConflictException {
         MachineConfig machineConfigCopy = new MachineConfigImpl(machineConfig);
         EnvironmentHolder environmentHolder;
         try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
@@ -34,59 +36,49 @@
         }
         String machineId = generateMachineId();
         final String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
+        final String namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
 
-        Instance instance = null;
-        try {
-            addMachine(workspaceId,
-                       machineId,
-                       environmentHolder.name,
-                       creator,
-                       machineConfigCopy);
+        MachineImpl machine = MachineImpl.builder()
+                                         .setConfig(machineConfig)
+                                         .setId(machineId)
+                                         .setWorkspaceId(workspaceId)
+                                         .setStatus(MachineStatus.CREATING)
+                                         .setEnvName(environmentHolder.name)
+                                         .setOwner(creator)
+                                         .build();
 
-            eventService.publish(newDto(MachineStatusEvent.class)
-                                         .withEventType(MachineStatusEvent.EventType.CREATING)
-                                         .withDev(machineConfigCopy.isDev())
-                                         .withMachineName(machineConfigCopy.getName())
-                                         .withMachineId(machineId)
-                                         .withWorkspaceId(workspaceId));
+        MachineStarter machineStarter;
+        if ("docker".equals(machineConfig.getType())) {
+            // needed to reuse startInstance method and
+            // create machine instances by different implementation-specific providers
+            ComposeServiceImpl composeService = machineConfigToComposeService(machineConfig);
+            machineStarter = (machineLogger, machineSource) -> {
+                ComposeServiceImpl serviceWithCorrectSource = getServiceWithCorrectSource(composeService, machineSource);
+                return composeProvider.startService(namespace,
+                                                    workspaceId,
+                                                    environmentHolder.name,
+                                                    machineId,
+                                                    machineConfig.getName(),
+                                                    machineConfig.isDev(),
+                                                    environmentHolder.networkId,
+                                                    serviceWithCorrectSource,
+                                                    machineLogger);
+            };
+        } else {
+            try {
+                InstanceProvider provider = machineInstanceProviders.getProvider(machineConfig.getType());
 
-            instance = startMachineInstance(machineConfigCopy,
-                                            workspaceId,
-                                            machineId,
-                                            environmentHolder.name,
-                                            creator,
-                                            false,
-                                            environmentHolder.logger);
-
-            replaceMachine(instance);
-
-            eventService.publish(newDto(MachineStatusEvent.class)
-                                         .withEventType(MachineStatusEvent.EventType.RUNNING)
-                                         .withDev(machineConfigCopy.isDev())
-                                         .withMachineName(machineConfigCopy.getName())
-                                         .withMachineId(instance.getId())
-                                         .withWorkspaceId(workspaceId));
-
-            return instance;
-        } catch (Exception e) {
-            removeMachine(workspaceId, machineId);
-
-            if (instance != null) {
-                try {
-                    instance.destroy();
-                } catch (Exception destroyingExc) {
-                    LOG.error(destroyingExc.getLocalizedMessage(), destroyingExc);
-                }
+                machineStarter = (machineLogger, machineSource) -> {
+                    Machine machineWithCorrectSource = getMachineWithCorrectSource(machine, machineSource);
+                    return provider.createInstance(machineWithCorrectSource, machineLogger);
+                };
+            } catch (NotFoundException e) {
+                throw new NotFoundException(format("Provider of machine type '%s' not found", machineConfig.getType()));
             }
-
-            eventService.publish(newDto(MachineStatusEvent.class)
-                                         .withEventType(MachineStatusEvent.EventType.ERROR)
-                                         .withDev(machineConfigCopy.isDev())
-                                         .withMachineName(machineConfigCopy.getName())
-                                         .withMachineId(machineId)
-                                         .withWorkspaceId(workspaceId));
-
-            throw e;
         }
+        return startInstance(false,
+                             environmentHolder.logger,
+                             machine,
+                             machineStarter);
     }
 

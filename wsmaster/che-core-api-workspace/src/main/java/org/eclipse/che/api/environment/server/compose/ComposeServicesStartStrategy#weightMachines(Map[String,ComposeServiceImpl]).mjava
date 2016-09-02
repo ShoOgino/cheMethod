@@ -1,0 +1,79 @@
+    /**
+     * Returns mapping of names of machines to its weights in dependency graph.
+     *
+     * @throws IllegalArgumentException
+     *         if weights of machines can not be calculated
+     */
+    private Map<String, Integer> weightMachines(Map<String, ComposeServiceImpl> services)
+            throws IllegalArgumentException {
+
+        HashMap<String, Integer> weights = new HashMap<>();
+        Set<String> machinesLeft = new HashSet<>(services.keySet());
+
+        // create machines dependency graph
+        Map<String, List<String>> dependencies = new HashMap<>(services.size());
+        for (Map.Entry<String, ComposeServiceImpl> serviceEntry : services.entrySet()) {
+            ComposeServiceImpl service = serviceEntry.getValue();
+
+            ArrayList<String> machineDependencies = new ArrayList<>(service.getDependsOn().size() +
+                                                                    service.getLinks().size());
+
+            machineDependencies.addAll(service.getDependsOn());
+
+            // links also counts as dependencies
+            for (String link : service.getLinks()) {
+                machineDependencies.add(getServiceFromMachineLink(link));
+            }
+            dependencies.put(serviceEntry.getKey(), machineDependencies);
+        }
+
+        // Find weight of each machine in graph.
+        // Weight of machine is calculated as sum of all weights of machines it depends on.
+        // Nodes with no dependencies gets weight 0
+
+        // If this flag is not set during cycle of machine evaluation loop
+        // then no more weight of machine can be evaluated
+        boolean weightEvaluatedInCycleRun = true;
+        while (weights.size() != dependencies.size() && weightEvaluatedInCycleRun) {
+            weightEvaluatedInCycleRun = false;
+            for (String service : dependencies.keySet()) {
+                // process not yet processed machines only
+                if (machinesLeft.contains(service)) {
+                    if (dependencies.get(service).size() == 0) {
+                        // no links - smallest weight 0
+                        weights.put(service, 0);
+                        machinesLeft.remove(service);
+                        weightEvaluatedInCycleRun = true;
+                    } else {
+                        // machine has dependencies - check if it has not weighted dependencies
+                        Optional<String> nonWeightedLink = dependencies.get(service)
+                                                                       .stream()
+                                                                       .filter(machinesLeft::contains)
+                                                                       .findAny();
+                        if (!nonWeightedLink.isPresent()) {
+                            // all connections are weighted - lets evaluate current machine
+                            Optional<String> maxWeight = dependencies.get(service)
+                                                                     .stream()
+                                                                     .max((o1, o2) -> weights.get(o1).compareTo(weights.get(o2)));
+                            // optional can't be empty because size of the list is checked above
+                            //noinspection OptionalGetWithoutIsPresent
+                            weights.put(service, weights.get(maxWeight.get()) + 1);
+                            machinesLeft.remove(service);
+                            weightEvaluatedInCycleRun = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Not evaluated weights of machines left.
+        // Probably because of circular dependency.
+        if (weights.size() != services.size()) {
+            throw new IllegalArgumentException("Launch order of machines " +
+                                               Joiner.on(',').join(machinesLeft) +
+                                               " can't be evaluated");
+        }
+
+        return weights;
+    }
+

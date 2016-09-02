@@ -1,0 +1,58 @@
+    private String createContainer(String namespace,
+                                   String workspaceId,
+                                   String machineId,
+                                   String machineName,
+                                   boolean isDev,
+                                   String image,
+                                   String networkName,
+                                   ComposeServiceImpl service) throws IOException {
+
+        long machineMemorySwap = memorySwapMultiplier == -1 ?
+                                 -1 :
+                                 (long)(service.getMemLimit() * memorySwapMultiplier);
+
+        String containerName = generateContainerName(namespace, workspaceId, machineId, machineName);
+
+        addSystemWideContainerSettings(workspaceId,
+                                       isDev,
+                                       service);
+
+        EndpointConfig endpointConfig = new EndpointConfig().withAliases(machineName);
+        NetworkingConfig networkingConfig = new NetworkingConfig().withEndpointsConfig(singletonMap(networkName,
+                                                                                                    endpointConfig));
+
+        HostConfig hostConfig = new HostConfig();
+        hostConfig.withBinds(toArrayIfNotNull(service.getVolumes()))
+                  .withExtraHosts(allMachinesExtraHosts)
+                  .withPublishAllPorts(true)
+                  .withMemorySwap(machineMemorySwap)
+                  .withMemory(service.getMemLimit())
+                  .withPrivileged(privilegeMode)
+                  .withNetworkMode(networkName)
+                  .withLinks(toArrayIfNotNull(service.getLinks()))
+                  .withPortBindings(service.getPorts()
+                                           .stream()
+                                           .collect(Collectors.toMap(Function.identity(),
+                                                                     value -> new PortBinding[0])))
+                  .withVolumesFrom(toArrayIfNotNull(service.getVolumesFrom()));
+
+        ContainerConfig config = new ContainerConfig();
+        config.withImage(image)
+              .withExposedPorts(service.getExpose().stream().collect(Collectors.toMap(Function.identity(),
+                                                                                      value -> Collections.emptyMap())))
+              .withHostConfig(hostConfig)
+              .withCmd(toArrayIfNotNull(service.getCommand()))
+              .withEntrypoint(toArrayIfNotNull(service.getEntrypoint()))
+              .withLabels(service.getLabels())
+              .withNetworkingConfig(networkingConfig)
+              .withEnv(service.getEnvironment()
+                              .entrySet()
+                              .stream()
+                              .map(entry -> entry.getKey() + "=" + entry.getValue())
+                              .toArray(String[]::new));
+
+        return docker.createContainer(CreateContainerParams.create(config)
+                                                           .withContainerName(containerName))
+                     .getId();
+    }
+
