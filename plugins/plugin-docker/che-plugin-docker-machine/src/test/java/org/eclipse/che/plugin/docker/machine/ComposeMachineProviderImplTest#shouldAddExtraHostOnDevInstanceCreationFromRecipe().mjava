@@ -1,0 +1,45 @@
+    @Test
+    public void shouldAddExtraHostOnDevInstanceCreationFromRecipe() throws Exception {
+        //given
+        final String expectedHostPathOfProjects = "/tmp/projects";
+        Set<String> devVolumes = new HashSet<>(asList("/etc:/tmp/etc:ro", "/some/thing:/home/some/thing"));
+        Set<String> commonVolumes =
+                new HashSet<>(asList("/some/thing/else:/home/some/thing/else", "/other/path:/home/other/path"));
+
+        provider = new ComposeMachineProviderImpl(dockerConnector,
+                                                  dockerConnectorConfiguration,
+                                                  credentialsReader,
+                                                  dockerMachineFactory,
+                                                  dockerInstanceStopDetector,
+                                                  containerNameGenerator,
+                                                  Collections.emptySet(),
+                                                  Collections.emptySet(),
+                                                  devVolumes,
+                                                  commonVolumes,
+                                                  "dev.box.com:192.168.0.1",
+                                                  workspaceFolderPathProvider,
+                                                  PROJECT_FOLDER_PATH,
+                                                  false,
+                                                  false,
+                                                  Collections.emptySet(),
+                                                  Collections.emptySet(),
+                                                  SNAPSHOT_USE_REGISTRY,
+                                                  MEMORY_SWAP_MULTIPLIER);
+
+        when(dockerNode.getProjectsFolder()).thenReturn(expectedHostPathOfProjects);
+
+        final boolean isDev = true;
+
+        //when
+        createInstanceFromRecipe(isDev);
+
+        //then
+        ArgumentCaptor<CreateContainerParams> argumentCaptor = ArgumentCaptor.forClass(CreateContainerParams.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture());
+        verify(dockerConnector).startContainer(any(StartContainerParams.class));
+
+        final String[] extraHosts = argumentCaptor.getValue().getContainerConfig().getHostConfig().getExtraHosts();
+        assertEquals(extraHosts.length, 2);
+        assertEquals(extraHosts[0], "dev.box.com:192.168.0.1");
+    }
+

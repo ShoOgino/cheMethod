@@ -1,0 +1,52 @@
+    /**
+     * Parses {@link Environment} into {@link ComposeEnvironmentImpl}.
+     *
+     * @param environment
+     *         environment to parse
+     * @return environment representation as compose environment
+     * @throws IllegalArgumentException
+     *         if provided environment is illegal
+     * @throws ServerException
+     *         if fetching of environment recipe content fails
+     */
+    public ComposeEnvironmentImpl parse(Environment environment) throws IllegalArgumentException,
+                                                                        ServerException {
+
+        checkNotNull(environment, "Environment should not be null");
+        checkNotNull(environment.getRecipe(), "Environment recipe should not be null");
+        checkNotNull(environment.getRecipe().getType(), "Environment recipe type should not be null");
+        checkArgument(environment.getRecipe().getContent() != null || environment.getRecipe().getLocation() != null,
+                      "Recipe of environment must contain location or content");
+
+        ComposeEnvironmentImpl composeEnvironment;
+        String envType = environment.getRecipe().getType();
+        switch (envType) {
+            case "compose":
+                composeEnvironment = parseCompose(environment.getRecipe());
+                break;
+            case "dockerimage":
+            case "dockerfile":
+                composeEnvironment = parseDocker(environment);
+                break;
+            default:
+                throw new IllegalArgumentException("Environment type " + envType + " is not supported");
+        }
+
+        composeEnvironment.getServices().forEach((name, service) -> {
+            ExtendedMachine extendedMachine = environment.getMachines().get(name);
+            if (extendedMachine != null &&
+                extendedMachine.getAttributes() != null &&
+                extendedMachine.getAttributes().containsKey("memoryLimitBytes")) {
+
+                try {
+                    service.setMemLimit(Long.parseLong(extendedMachine.getAttributes().get("memoryLimitBytes")));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException(
+                            format("Value of attribute 'memoryLimitBytes' of machine '%s' is illegal", name));
+                }
+            }
+        });
+
+        return composeEnvironment;
+    }
+

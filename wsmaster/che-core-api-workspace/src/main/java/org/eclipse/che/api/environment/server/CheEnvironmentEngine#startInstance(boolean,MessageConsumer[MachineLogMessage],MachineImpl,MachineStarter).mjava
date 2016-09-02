@@ -1,0 +1,89 @@
+    private Instance startInstance(boolean recover,
+                                   MessageConsumer<MachineLogMessage> environmentLogger,
+                                   MachineImpl machine,
+                                   MachineStarter machineStarter)
+            throws ServerException {
+
+        LineConsumer machineLogger = null;
+        Instance instance = null;
+        try {
+            addMachine(machine);
+
+            eventService.publish(newDto(MachineStatusEvent.class)
+                                         .withEventType(MachineStatusEvent.EventType.CREATING)
+                                         .withDev(machine.getConfig().isDev())
+                                         .withMachineName(machine.getConfig().getName())
+                                         .withMachineId(machine.getId())
+                                         .withWorkspaceId(machine.getWorkspaceId()));
+
+            machineLogger = getMachineLogger(environmentLogger,
+                                             machine.getId(),
+                                             machine.getConfig().getName());
+
+            MachineImpl originMachine = new MachineImpl(machine);
+            try {
+                MachineSource machineSource = null;
+                if (recover) {
+                    SnapshotImpl snapshot = snapshotDao.getSnapshot(machine.getWorkspaceId(),
+                                                                    machine.getEnvName(),
+                                                                    machine.getConfig().getName());
+
+                    machineSource = snapshot.getMachineSource();
+                }
+
+                instance = machineStarter.startMachine(machineLogger, machineSource);
+            } catch (SourceNotFoundException e) {
+                if (recover) {
+                    LOG.error("Image of snapshot for machine " + machine.getConfig().getName() +
+                              " not found. " + "Machine will be created from origin source");
+                    machine = originMachine;
+                    instance = machineStarter.startMachine(machineLogger, null);
+                } else {
+                    throw e;
+                }
+            }
+            replaceMachine(instance);
+
+            eventService.publish(newDto(MachineStatusEvent.class)
+                                         .withEventType(MachineStatusEvent.EventType.RUNNING)
+                                         .withDev(machine.getConfig().isDev())
+                                         .withMachineName(machine.getConfig().getName())
+                                         .withMachineId(instance.getId())
+                                         .withWorkspaceId(machine.getWorkspaceId()));
+
+            return instance;
+        } catch (ApiException | RuntimeException e) {
+            removeMachine(machine.getWorkspaceId(), machine.getId());
+
+            if (instance != null) {
+                try {
+                    instance.destroy();
+                } catch (Exception destroyingExc) {
+                    LOG.error(destroyingExc.getLocalizedMessage(), destroyingExc);
+                }
+            }
+
+            if (machineLogger != null) {
+                try {
+                    machineLogger.writeLine("[ERROR] " + e.getLocalizedMessage());
+                } catch (IOException ioEx) {
+                    LOG.error(ioEx.getLocalizedMessage(), ioEx);
+                }
+                try {
+                    machineLogger.close();
+                } catch (IOException ioEx) {
+                    LOG.error(ioEx.getLocalizedMessage(), ioEx);
+                }
+            }
+
+            eventService.publish(newDto(MachineStatusEvent.class)
+                                         .withEventType(MachineStatusEvent.EventType.ERROR)
+                                         .withDev(machine.getConfig().isDev())
+                                         .withMachineName(machine.getConfig().getName())
+                                         .withMachineId(machine.getId())
+                                         .withWorkspaceId(machine.getWorkspaceId()));
+
+            throw new ServerException(e.getLocalizedMessage(), e);
+        }
+    }
+

@@ -1,0 +1,43 @@
+    @Test
+    public void shouldAddServersConfsPortsFromMachineConfigToExposedPortsOnNonDevInstanceCreationFromRecipe()
+            throws Exception {
+        // given
+        provider = new ComposeMachineProviderImpl(dockerConnector,
+                                                  dockerConnectorConfiguration,
+                                                  credentialsReader,
+                                                  dockerMachineFactory,
+                                                  dockerInstanceStopDetector,
+                                                  containerNameGenerator,
+                                                  Collections.emptySet(),
+                                                  Collections.emptySet(),
+                                                  Collections.emptySet(),
+                                                  Collections.emptySet(),
+                                                  null,
+                                                  workspaceFolderPathProvider,
+                                                  PROJECT_FOLDER_PATH,
+                                                  false,
+                                                  false,
+                                                  Collections.emptySet(),
+                                                  Collections.emptySet(),
+                                                  SNAPSHOT_USE_REGISTRY,
+                                                  MEMORY_SWAP_MULTIPLIER);
+
+        final boolean isDev = false;
+        ComposeServiceImpl machine = createService();
+        machine.setExpose(asList("9090", "8080"));
+        List<String> expectedExposedPorts = asList("9090", "8080");
+
+        // when
+        createInstanceFromRecipe(machine, isDev);
+
+        // then
+        ArgumentCaptor<CreateContainerParams> argumentCaptor = ArgumentCaptor.forClass(CreateContainerParams.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture());
+
+        assertTrue(new ArrayList<>(argumentCaptor.getValue()
+                                                 .getContainerConfig()
+                                                 .getExposedPorts()
+                                                 .keySet())
+                           .containsAll(expectedExposedPorts));
+    }
+
