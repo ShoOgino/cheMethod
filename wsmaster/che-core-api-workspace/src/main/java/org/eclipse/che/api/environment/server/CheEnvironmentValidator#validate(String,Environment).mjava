@@ -3,12 +3,11 @@
         checkArgument(!isNullOrEmpty(envName),
                       "Environment name should not be neither null nor empty");
         checkNotNull(env.getRecipe(), "Environment recipe should not be null");
-        checkArgument("compose".equals(env.getRecipe().getType()),
-                      "Type '%s' of environment '%s' is not supported. Supported types: compose",
+        checkArgument(environmentParser.getEnvironmentTypes().contains(env.getRecipe().getType()),
+                      "Type '%s' of environment '%s' is not supported. Supported types: %s",
                       env.getRecipe().getType(),
-                      envName);
-        checkArgument(!isNullOrEmpty(env.getRecipe().getContentType()),
-                      "Environment recipe content type should not be neither null nor empty");
+                      envName,
+                      Joiner.on(',').join(environmentParser.getEnvironmentTypes()));
         checkArgument(env.getRecipe().getContent() != null || env.getRecipe().getLocation() != null,
                       "Recipe of environment '%s' must contain location or content", envName);
         checkArgument(env.getRecipe().getContent() == null || env.getRecipe().getLocation() == null,
@@ -17,7 +16,7 @@
 
         ComposeEnvironmentImpl composeEnvironment;
         try {
-            composeEnvironment = composeFileParser.parse(env);
+            composeEnvironment = environmentParser.parse(env);
         } catch (ServerException e) {
             throw new ServerException(format("Parsing of recipe of environment '%s' failed. Error: %s",
                                              envName, e.getLocalizedMessage()));
@@ -27,7 +26,7 @@
         }
 
         checkArgument(composeEnvironment.getServices() != null && !composeEnvironment.getServices().isEmpty(),
-                      "Environment '%s' should contain at least 1 compose service",
+                      "Environment '%s' should contain at least 1 machine",
                       envName);
 
         checkArgument(env.getMachines() != null && !env.getMachines().isEmpty(),
@@ -73,7 +72,7 @@
             startStrategy.order(composeEnvironment);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                    format("Compose services order of environment '%s' is not resolvable. Error: %s",
+                    format("Start order of machine in environment '%s' is not resolvable. Error: %s",
                            envName, e.getLocalizedMessage()));
         }
     }
