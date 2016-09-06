@@ -1,12 +1,12 @@
         protected <K, V> void bindProperties(String prefix, Iterable<Map.Entry<K, V>> properties, boolean skipUnresolved) {
             StringBuilder buf = null;
             for (Map.Entry<K, V> e : properties) {
-                String pValue = (String)e.getValue();
-                if ("NULL".equals(pValue)) {
-                    bind(String.class).annotatedWith(Names.named(prefix == null ? (String)e.getKey() : (prefix + e.getKey())))
-                                      .toProvider(Providers.<String>of(null));
+                String name = (String)e.getKey();
+                String value = (String)e.getValue();
+                if (NULL.equals(value)) {
+                    bindProperty(prefix, name, null);
                 } else {
-                    final Matcher matcher = PATTERN.matcher(pValue);
+                    final Matcher matcher = PROPERTIES_PLACE_HOLDER_PATTERN.matcher(value);
                     if (matcher.find()) {
                         int start = 0;
                         if (buf == null) {
@@ -15,30 +15,26 @@
                             buf.setLength(0);
                         }
                         do {
-                            final int i = matcher.start();
-                            final int j = matcher.end();
-                            buf.append(pValue.substring(start, i));
-                            final String name = pValue.substring(i + 2, j - 1);
-                            String actual = System.getProperty(name);
-                            if (actual == null) {
-                                actual = System.getenv(name);
-                            }
-                            if (actual != null) {
-                                buf.append(actual);
+                            buf.append(value.substring(start, matcher.start()));
+                            final String placeholder = value.substring(matcher.start(), matcher.end());
+                            final String placeholderName = removePlaceholderFormatting(placeholder);
+                            String resolvedPlaceholder = resolvePlaceholder(placeholderName);
+                            if (resolvedPlaceholder != null) {
+                                buf.append(resolvedPlaceholder);
                             } else if (skipUnresolved) {
-                                buf.append(pValue.substring(i, j));
-                                LOG.warn("Environment variable " + name + " cannot be resolved, leaving as is.");
+                                buf.append(placeholder);
+                                LOG.warn("Placeholder {} cannot be resolved neither from environment variable nor from system property, leaving as is.", placeholderName);
                             } else {
                                 throw new ConfigurationException(
-                                        "Property " + name + " is not found as system property or environment variable.");
+                                        String.format("Property %s is not found as system property or environment variable.", placeholderName));
                             }
 
                             start = matcher.end();
                         } while (matcher.find());
-                        buf.append(pValue.substring(start));
-                        pValue = buf.toString();
+                        buf.append(value.substring(start));
+                        value = buf.toString();
                     }
-                    bindConstant().annotatedWith(Names.named(prefix == null ? (String)e.getKey() : (prefix + e.getKey()))).to(pValue);
+                    bindProperty(prefix, name, value);
                 }
             }
         }
