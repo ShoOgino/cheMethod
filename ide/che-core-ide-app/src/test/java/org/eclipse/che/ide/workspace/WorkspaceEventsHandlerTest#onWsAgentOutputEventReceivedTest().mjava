@@ -1,9 +1,12 @@
-//    @Test disabled because of GWT timer usage
-    public void shouldSubscribesOnWsAgentOutputWhenWorkspaceIsStarting() throws Exception {
+    @Test
+    public void onWsAgentOutputEventReceivedTest() throws Exception {
         WorkspaceRuntimeDto runtime = mock(WorkspaceRuntimeDto.class);
         WorkspaceConfigDto workspaceConfig = mock(WorkspaceConfigDto.class);
-        when(workspaceStatusEvent.getEventType()).thenReturn(STARTING);
         when(workspace.getRuntime()).thenReturn(runtime);
+        MachineDto devMachine = mock(MachineDto.class);
+        when(devMachine.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+        when(devMachine.getId()).thenReturn(MACHINE_NAME);
+        when(runtime.getDevMachine()).thenReturn(devMachine);
         when(runtime.getActiveEnv()).thenReturn(ACTIVE_ENV);
         when(workspace.getConfig()).thenReturn(workspaceConfig);
         Map<String, EnvironmentDto> environments = new HashMap<>(3);
@@ -13,12 +16,12 @@
         MachineConfigDto devMachineConfig = mock(MachineConfigDto.class);
         when(devMachineConfig.getName()).thenReturn(MACHINE_NAME);
 
-        workspaceEventsNotifier.trackWorkspaceEvents(workspace, callback);
-        workspaceEventsNotifier.workspaceStatusSubscriptionHandler.onMessageReceived(workspaceStatusEvent);
+        when(machineServiceClient.getProcesses(WORKSPACE_ID, MACHINE_NAME)).thenReturn(processPromise);
 
-        verify(workspacePromise).then(workspaceCaptor.capture());
-        workspaceCaptor.getValue().apply(workspace);
+        workspaceEventsHandler.trackWorkspaceEvents(workspace, callback);
+        workspaceEventsHandler.wsAgentLogSubscriptionHandler.onMessageReceived("");
+        verify(processPromise).then(processCaptor.capture());
 
-        verify(messageBus, times(2)).subscribe(eq(WS_AGENT_LOG_CHANNEL), (MessageHandler)anyObject());
+        verify(eventBus).fireEvent(Matchers.<EnvironmentOutputEvent> anyObject());
     }
 
