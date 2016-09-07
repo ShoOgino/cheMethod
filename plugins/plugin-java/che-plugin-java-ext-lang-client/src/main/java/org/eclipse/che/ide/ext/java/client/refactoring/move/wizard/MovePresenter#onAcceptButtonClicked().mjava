@@ -7,6 +7,8 @@
             @Override
             public void apply(ChangeCreationResult arg) throws OperationException {
                 if (arg.isCanShowPreviewPage()) {
+                    eventBus.fireEvent(newFileTrackingSuspendEvent());
+
                     refactorService.applyRefactoring(session).then(new Operation<RefactoringResult>() {
                         @Override
                         public void apply(RefactoringResult arg) throws OperationException {
@@ -23,6 +25,14 @@
                             } else {
                                 view.showErrorMessage(arg);
                             }
+
+                            for (ChangeInfo change : arg.getChanges()) {
+                                final String path = change.getPath();
+                                final String oldPath = change.getOldPath();
+
+                                eventBus.fireEvent(newFileTrackingMoveEvent(path, oldPath));
+                            }
+                            eventBus.fireEvent(newFileTrackingResumeEvent());
                         }
                     });
                 } else {

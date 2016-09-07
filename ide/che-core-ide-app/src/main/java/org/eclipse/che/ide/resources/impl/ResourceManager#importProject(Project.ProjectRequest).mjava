@@ -14,20 +14,27 @@
                                                                     .withLocation(sourceStorage.getLocation())
                                                                     .withParameters(sourceStorage.getParameters());
 
-                return ps.importProject(path, sourceStorageDto).then(new Function<Void, Project>() {
+                return ps.importProject(path, sourceStorageDto).thenPromise(new Function<Void, Promise<Project>>() {
                     @Override
-                    public Project apply(Void ignored) throws FunctionException {
+                    public Promise<Project> apply(Void ignored) throws FunctionException {
 
-                        Resource project = resourceFactory.newProjectImpl(importRequest.getBody(), ResourceManager.this);
+                        return ps.getProject(path).then(new Function<ProjectConfigDto, Project>() {
+                            @Override
+                            public Project apply(ProjectConfigDto config) throws FunctionException {
+                                cachedConfigs = add(cachedConfigs, config);
 
-                        checkState(project != null, "Failed to locate imported project's configuration");
+                                Resource project = resourceFactory.newProjectImpl(config, ResourceManager.this);
 
-                        store.register(project);
+                                checkState(project != null, "Failed to locate imported project's configuration");
 
-                        eventBus.fireEvent(new ResourceChangedEvent(
-                                new ResourceDeltaImpl(project, (resource.isPresent() ? UPDATED : ADDED) | DERIVED)));
+                                store.register(project);
 
-                        return (Project)project;
+                                eventBus.fireEvent(new ResourceChangedEvent(
+                                        new ResourceDeltaImpl(project, (resource.isPresent() ? UPDATED : ADDED) | DERIVED)));
+
+                                return (Project)project;
+                            }
+                        });
                     }
                 });
             }

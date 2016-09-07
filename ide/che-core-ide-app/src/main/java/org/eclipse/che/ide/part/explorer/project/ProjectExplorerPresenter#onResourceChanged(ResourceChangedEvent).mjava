@@ -1,19 +1,59 @@
     @Override
     public void onResourceChanged(ResourceChangedEvent event) {
+        final Tree tree = view.getTree();
         final ResourceDelta delta = event.getDelta();
+        final Resource resource = delta.getResource();
 
-        switch (delta.getKind()) {
-            case SYNCHRONIZED:
-                onResourceSynchronized(delta.getResource());
-                break;
-            case ADDED:
-                onResourceAdded(delta);
-                break;
-            case REMOVED:
-                onResourceRemoved(delta);
-                break;
-            case UPDATED:
-                onResourceUpdated(delta);
+        if (delta.getKind() == UPDATED) {
+            for (Node node : tree.getNodeStorage().getAll()) {
+                if (node instanceof ResourceNode && ((ResourceNode)node).getData().getLocation().equals(delta.getResource().getLocation())) {
+                    final String oldId = tree.getNodeStorage().getKeyProvider().getKey(node);
+                    ((ResourceNode)node).setData(delta.getResource());
+                    tree.getNodeStorage().reIndexNode(oldId, node);
+                    tree.refresh(node);
+
+                    if (tree.isExpanded(node)) {
+                        reloadNode(node);
+                    }
+
+                    return;
+                }
+            }
+        }
+
+        final NodeSettings nodeSettings = settingsProvider.getSettings();
+
+        // process root projects, they have only one segment in path
+        if (resource.getLocation().segmentCount() == 1) {
+            if (delta.getKind() == ADDED) {
+                tree.getNodeStorage().add(nodeFactory.newContainerNode((Container)resource, nodeSettings));
+            } else if (delta.getKind() == REMOVED) {
+                Node node = getNode(resource.getLocation());
+
+                if (node != null) {
+                    tree.getNodeStorage().remove(node);
+                }
+            }
+        } else {
+            final Optional<Container> parent = resource.getParent();
+
+            if (parent.isPresent()) {
+                final Container container = parent.get();
+                final Node parentNode = firstNonNull(getNode(container.getLocation()), getParentNode(container.getLocation()));
+
+                if (parentNode != null && tree.isExpanded(parentNode)) {
+                    reloadNode(parentNode);
+                }
+            }
+
+            // process movement
+            if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
+                final Node parentNode = getParentNode(delta.getFromPath());
+
+                if (parentNode != null && tree.isExpanded(parentNode)) {
+                    reloadNode(parentNode);
+                }
+            }
         }
     }
 

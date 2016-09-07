@@ -1,0 +1,47 @@
+    @Inject
+    public FileOpenCloseEventListener(final Provider<EditorAgent> editorAgentProvider,
+                                      final DeletedFilesController deletedFilesController,
+                                      final EventBus eventBus) {
+
+        Log.debug(getClass(), "Adding file event listener");
+        eventBus.addHandler(FileEvent.TYPE, new FileEvent.FileEventHandler() {
+            @Override
+            public void onFileOperation(FileEvent event) {
+                final Path path = event.getFile().getLocation();
+
+                switch (event.getOperationType()) {
+                    case OPEN: {
+                        processFileOpen(path);
+
+                        break;
+                    }
+                    case CLOSE: {
+                        final EditorPartPresenter closingEditor = event.getEditorTab().getRelativeEditorPart();
+                        final List<EditorPartPresenter> openedEditors = editorAgentProvider.get().getOpenedEditors();
+
+                        processFileClose(closingEditor, openedEditors, path);
+
+                        break;
+                    }
+                }
+            }
+
+            private void processFileOpen(Path path) {
+                eventBus.fireEvent(newFileTrackingStartEvent(path.toString()));
+            }
+
+            private void processFileClose(EditorPartPresenter closingEditor, List<EditorPartPresenter> openedEditors, Path path) {
+                for (final EditorPartPresenter editor : openedEditors) {
+                    final Path editorFilePath = editor.getEditorInput().getFile().getLocation();
+                    if (Objects.equals(path, editorFilePath) && closingEditor != editor) {
+                        return;
+                    }
+                }
+
+                deletedFilesController.remove(closingEditor.getEditorInput().getFile().getLocation().toString());
+                eventBus.fireEvent(newFileTrackingStopEvent(path.toString()));
+
+            }
+        });
+    }
+

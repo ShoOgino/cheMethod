@@ -1,0 +1,27 @@
+    @Override
+    public Optional<HiEvent<GitCheckoutEventDto>> detect(EventTreeNode eventTreeNode) {
+        if (!eventTreeNode.isRoot() || eventTreeNode.getChildren().isEmpty()) {
+            return empty();
+        }
+
+        final Optional<EventTreeNode> headFile = eventTreeNode.getFirstChild()
+                                                              .flatMap(o -> o.getChild(GIT_DIR))
+                                                              .flatMap(o -> o.getChild(HEAD_FILE));
+        if (headFile.isPresent()) {
+            final EventTreeNode file = headFile.get();
+
+            if (file.modificationOccurred() && MODIFIED == file.getLastEventType()) {
+                final String fileContent = getFileContent(file);
+                final Type type = getType(fileContent);
+                final String name = getName(fileContent, type);
+
+                transmitter.transmit(newDto(JsonRpcRequest.class)
+                                             .withMethod("event:git-checkout")
+                                             .withJsonrpc("2.0")
+                                             .withParams(newDto(GitCheckoutEventDto.class).withName(name).withType(type).toString()));
+
+            }
+        }
+        return Optional.empty();
+    }
+

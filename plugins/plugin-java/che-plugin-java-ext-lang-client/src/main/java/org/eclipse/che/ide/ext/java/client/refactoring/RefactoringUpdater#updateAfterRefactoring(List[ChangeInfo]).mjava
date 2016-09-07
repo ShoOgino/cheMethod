@@ -24,12 +24,16 @@
                 case MOVE:
                 case RENAME_COMPILATION_UNIT:
                     delta = new ExternalResourceDelta(newPath, oldPath, ADDED | MOVED_FROM | MOVED_TO);
+                    registerRemovedFile(change);
                     break;
                 case RENAME_PACKAGE:
                     delta = new ExternalResourceDelta(newPath, oldPath, ADDED | MOVED_FROM | MOVED_TO);
                     break;
                 case UPDATE:
-                    pathChanged.add(change.getPath());
+                    if (!isFileRemoved(change.getPath(), changes)) {
+                        pathChanged.add(change.getPath());
+                        registerRemovedFile(change);
+                    }
                 default:
                     continue;
             }
@@ -54,7 +58,7 @@
                 @Override
                 public void apply(final ResourceDelta[] appliedDeltas) throws OperationException {
                     for (ResourceDelta delta : appliedDeltas) {
-                            eventBus.fireEvent(new RevealResourceEvent(delta.getToPath()));
+                        eventBus.fireEvent(new RevealResourceEvent(delta.getToPath()));
                     }
                     for (EditorPartPresenter editorPartPresenter : editorAgent.getOpenedEditors()) {
                         final String path = editorPartPresenter.getEditorInput().getFile().getLocation().toString();
@@ -63,6 +67,7 @@
                                     new FileContentUpdateEvent(editorPartPresenter.getEditorInput().getFile().getLocation().toString()));
                         }
                     }
+                    setActiveEditor();
                 }
             });
         } else {
@@ -73,6 +78,7 @@
                         eventBus.fireEvent(
                                 new FileContentUpdateEvent(editorPartPresenter.getEditorInput().getFile().getLocation().toString()));
                     }
+                    setActiveEditor();
                 }
             });
         }

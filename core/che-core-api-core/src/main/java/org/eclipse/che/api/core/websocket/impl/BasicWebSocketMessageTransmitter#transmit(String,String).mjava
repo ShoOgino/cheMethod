@@ -1,5 +1,5 @@
     @Override
-    public void transmit(String protocol, String message) {
+    public synchronized void transmit(String protocol, String message) {
         final WebSocketTransmission transmission = newDto(WebSocketTransmission.class).withProtocol(protocol).withMessage(message);
         validator.validate(transmission);
 
@@ -8,7 +8,13 @@
         registry.getSessions()
                 .stream()
                 .filter(Session::isOpen)
-                .map(Session::getAsyncRemote)
-                .forEach(it -> it.sendText(transmission.toString()));
+                .map(Session::getBasicRemote)
+                .forEach(it -> {
+                    try {
+                        it.sendText(transmission.toString());
+                    } catch (IOException e) {
+                        LOG.error("Error while trying to send a message to a basic websocket remote endpoint", e);
+                    }
+                });
     }
 
