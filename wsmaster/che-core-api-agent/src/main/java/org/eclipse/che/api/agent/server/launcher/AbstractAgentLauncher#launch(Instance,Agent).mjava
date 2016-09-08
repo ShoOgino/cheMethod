@@ -1,0 +1,28 @@
+    @Override
+    public void launch(Instance machine, Agent agent) throws ServerException {
+        try {
+            final InstanceProcess process = start(machine, agent);
+            LOG.debug("Waiting for agent {} is launched. Workspace ID:{}", agent.getName(), machine.getWorkspaceId());
+
+            final long pingStartTimestamp = System.currentTimeMillis();
+            while (System.currentTimeMillis() - pingStartTimestamp < agentMaxStartTimeMs) {
+                if (agentLaunchingChecker.isLaunched(agent, process, machine)) {
+                    return;
+                } else {
+                    Thread.sleep(agentPingDelayMs);
+                }
+            }
+
+            process.kill();
+        } catch (MachineException e) {
+            throw new ServerException(e.getServiceError());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ServerException(format("Launching agent %s is interrupted", agent.getName()));
+        }
+
+        final String errMsg = format("Fail launching agent %s. Workspace ID:%s", agent.getName(), machine.getWorkspaceId());
+        LOG.error(errMsg);
+        throw new ServerException(errMsg);
+    }
+

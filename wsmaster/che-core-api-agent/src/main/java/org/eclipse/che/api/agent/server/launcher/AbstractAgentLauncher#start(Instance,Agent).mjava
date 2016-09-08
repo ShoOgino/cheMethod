@@ -1,0 +1,29 @@
+    protected InstanceProcess start(final Instance machine, final Agent agent) throws ServerException {
+        final Command command = new CommandImpl(agent.getName(), agent.getScript(), "agent");
+        final InstanceProcess process = machine.createProcess(command, null);
+        final LineConsumer lineConsumer = new AbstractLineConsumer() {
+            @Override
+            public void writeLine(String line) throws IOException {
+                machine.getLogger().writeLine(line);
+            }
+        };
+
+        executor.execute(ThreadLocalPropagateContext.wrap(() -> {
+            try {
+                process.start(lineConsumer);
+            } catch (ConflictException | MachineException e) {
+                try {
+                    machine.getLogger().writeLine(format("[ERROR] %s", e.getMessage()));
+                } catch (IOException ignored) {
+                }
+            } finally {
+                try {
+                    lineConsumer.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }));
+
+        return process;
+    }
+
