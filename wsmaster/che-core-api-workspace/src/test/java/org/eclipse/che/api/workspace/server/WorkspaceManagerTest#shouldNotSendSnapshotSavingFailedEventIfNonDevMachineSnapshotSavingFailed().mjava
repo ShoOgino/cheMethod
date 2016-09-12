@@ -1,5 +1,5 @@
     @Test
-    public void shouldBeAbleToCreateSnapshot() throws Exception {
+    public void shouldNotSendSnapshotSavingFailedEventIfNonDevMachineSnapshotSavingFailed() throws Exception {
         // given
         final WorkspaceImpl workspace = workspaceManager.createWorkspace(createConfig(), "user123", "account");
         when(workspaceDao.get(workspace.getId())).thenReturn(workspace);
@@ -10,13 +10,19 @@
                                      eq(workspace.getConfig().getDefaultEnv()),
                                      anyString()))
                 .thenReturn(oldSnapshot);
+        for (MachineImpl machine : descriptor.getRuntime().getMachines()) {
+            if (!machine.getConfig().isDev()) {
+                when(runtimes.saveMachine(workspace.getNamespace(), workspace.getId(), machine.getId()))
+                        .thenThrow(new ServerException("test error"));
+            }
+        }
 
         // when
         workspaceManager.createSnapshot(workspace.getId());
 
         // then
-        verify(workspaceManager, timeout(1_000)).createSnapshotSync(any(WorkspaceRuntimeImpl.class),
-                                                    eq(workspace.getNamespace()),
-                                                    eq(workspace.getId()));
+        verify(eventService, timeout(1_000)).publish(eq(newDto(WorkspaceStatusEvent.class)
+                                                                .withEventType(SNAPSHOT_CREATED)
+                                                                .withWorkspaceId(workspace.getId())));
     }
 

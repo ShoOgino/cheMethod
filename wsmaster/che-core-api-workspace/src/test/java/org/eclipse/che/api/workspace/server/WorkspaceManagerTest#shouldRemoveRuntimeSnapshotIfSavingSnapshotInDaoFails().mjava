@@ -1,5 +1,5 @@
     @Test
-    public void shouldBeAbleToCreateSnapshot() throws Exception {
+    public void shouldRemoveRuntimeSnapshotIfSavingSnapshotInDaoFails() throws Exception {
         // given
         final WorkspaceImpl workspace = workspaceManager.createWorkspace(createConfig(), "user123", "account");
         when(workspaceDao.get(workspace.getId())).thenReturn(workspace);
@@ -10,13 +10,12 @@
                                      eq(workspace.getConfig().getDefaultEnv()),
                                      anyString()))
                 .thenReturn(oldSnapshot);
+        doThrow(new SnapshotException("test error")).when(snapshotDao).saveSnapshot(any(SnapshotImpl.class));
 
         // when
         workspaceManager.createSnapshot(workspace.getId());
 
         // then
-        verify(workspaceManager, timeout(1_000)).createSnapshotSync(any(WorkspaceRuntimeImpl.class),
-                                                    eq(workspace.getNamespace()),
-                                                    eq(workspace.getId()));
+        verify(runtimes, timeout(1_000).times(2)).removeSnapshot(any(SnapshotImpl.class));
     }
 
