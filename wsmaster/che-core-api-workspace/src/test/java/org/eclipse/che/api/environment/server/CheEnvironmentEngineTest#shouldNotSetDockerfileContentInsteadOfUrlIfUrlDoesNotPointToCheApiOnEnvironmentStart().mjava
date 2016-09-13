@@ -1,0 +1,28 @@
+    @Test
+    public void shouldNotSetDockerfileContentInsteadOfUrlIfUrlDoesNotPointToCheApiOnEnvironmentStart() throws Exception {
+        // given
+        EnvironmentImpl env = createEnv();
+        String machineName = "machineWithDockerfileNotFromApi";
+        String contextUrl = "http://another-server.com/recipe/12345";
+        String additionalServiceComposeFilePart = "\n  " + machineName + ":\n    build:\n      context: " + contextUrl;
+        env.getRecipe().setContent(env.getRecipe().getContent() + additionalServiceComposeFilePart);
+
+        // when
+        startEnv(env);
+
+        // then
+        ArgumentCaptor<ComposeServiceImpl> captor = ArgumentCaptor.forClass(ComposeServiceImpl.class);
+        verify(composeProvider).startService(anyString(),
+                                             anyString(),
+                                             anyString(),
+                                             anyString(),
+                                             eq(machineName),
+                                             eq(false),
+                                             anyString(),
+                                             captor.capture(),
+                                             any(LineConsumer.class));
+        ComposeServiceImpl actualService = captor.getValue();
+        assertNull(actualService.getBuild().getDockerfile());
+        assertEquals(actualService.getBuild().getContext(), contextUrl);
+    }
+

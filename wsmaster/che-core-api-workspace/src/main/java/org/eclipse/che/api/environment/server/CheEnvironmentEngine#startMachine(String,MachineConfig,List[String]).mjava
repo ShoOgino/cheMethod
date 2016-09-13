@@ -16,9 +16,11 @@
      *         if any other error occurs
      */
     public Instance startMachine(String workspaceId,
-                                 MachineConfig machineConfig) throws ServerException,
-                                                                     NotFoundException,
-                                                                     ConflictException {
+                                 MachineConfig machineConfig,
+                                 List<String> agents) throws ServerException,
+                                                             NotFoundException,
+                                                             ConflictException {
+
         MachineConfig machineConfigCopy = new MachineConfigImpl(machineConfig);
         EnvironmentHolder environmentHolder;
         try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
@@ -52,8 +54,16 @@
             // needed to reuse startInstance method and
             // create machine instances by different implementation-specific providers
             ComposeServiceImpl composeService = machineConfigToComposeService(machineConfig);
+            normalize(composeService);
+
             machineStarter = (machineLogger, machineSource) -> {
                 ComposeServiceImpl serviceWithCorrectSource = getServiceWithCorrectSource(composeService, machineSource);
+
+                normalize(serviceWithCorrectSource);
+                ExtendedMachineImpl extendedMachine = new ExtendedMachineImpl();
+                extendedMachine.setAgents(agents);
+                applyAgents(extendedMachine, serviceWithCorrectSource);
+
                 return composeProvider.startService(namespace,
                                                     workspaceId,
                                                     environmentHolder.name,

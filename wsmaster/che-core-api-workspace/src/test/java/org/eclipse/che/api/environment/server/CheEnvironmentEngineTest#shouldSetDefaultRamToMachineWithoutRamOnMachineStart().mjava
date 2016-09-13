@@ -1,0 +1,44 @@
+    @Test
+    public void shouldSetDefaultRamToMachineWithoutRamOnMachineStart() throws Exception {
+        // given
+        List<Instance> instances = startEnv();
+        String workspaceId = instances.get(0).getWorkspaceId();
+
+        when(engine.generateMachineId()).thenReturn("newMachineId");
+        Instance newMachine = mock(Instance.class);
+        when(newMachine.getId()).thenReturn("newMachineId");
+        when(newMachine.getWorkspaceId()).thenReturn(workspaceId);
+        when(composeProvider.startService(anyString(),
+                                          anyString(),
+                                          anyString(),
+                                          anyString(),
+                                          anyString(),
+                                          anyBoolean(),
+                                          anyString(),
+                                          any(ComposeServiceImpl.class),
+                                          any(LineConsumer.class)))
+                .thenReturn(newMachine);
+
+        MachineConfigImpl config = createConfig(false);
+        String machineName = "extraMachine";
+        config.setName(machineName);
+        config.setLimits(null);
+
+        // when
+        engine.startMachine(workspaceId, config, emptyList());
+
+        // then
+        ArgumentCaptor<ComposeServiceImpl> captor = ArgumentCaptor.forClass(ComposeServiceImpl.class);
+        verify(composeProvider).startService(anyString(),
+                                             anyString(),
+                                             anyString(),
+                                             anyString(),
+                                             eq(machineName),
+                                             eq(false),
+                                             anyString(),
+                                             captor.capture(),
+                                             any(LineConsumer.class));
+        ComposeServiceImpl actualService = captor.getValue();
+        assertEquals((long)actualService.getMemLimit(), DEFAULT_MACHINE_MEM_LIMIT_MB * 1024L * 1024L);
+    }
+
