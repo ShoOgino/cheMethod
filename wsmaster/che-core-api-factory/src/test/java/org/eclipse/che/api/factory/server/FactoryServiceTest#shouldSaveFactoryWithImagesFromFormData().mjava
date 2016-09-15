@@ -1,0 +1,31 @@
+    @Test
+    public void shouldSaveFactoryWithImagesFromFormData() throws Exception {
+        final Factory factory = createFactory();
+        final FactoryDto factoryDto = asDto(factory, user);
+        when(factoryManager.saveFactory(any(FactoryDto.class), anySetOf(FactoryImage.class))).thenReturn(factory);
+        when(factoryManager.getById(FACTORY_ID)).thenReturn(factory);
+        doReturn(factoryDto).when(factoryBuilderSpy).build(any(InputStream.class));
+
+        final Response response = given().auth()
+                                         .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                         .multiPart("factory", JsonHelper.toJson(factoryDto), APPLICATION_JSON)
+                                         .multiPart("image", getImagePath().toFile(), FACTORY_IMAGE_MIME_TYPE)
+                                         .expect()
+                                         .statusCode(200)
+                                         .when()
+                                         .post(SERVICE_PATH);
+
+
+        final FactoryDto result = getFromResponse(response, FactoryDto.class);
+        final boolean found = result.getLinks()
+                                    .stream()
+                                    .anyMatch(link -> link.getRel().equals("image")
+                                                      && link.getProduces().equals(FACTORY_IMAGE_MIME_TYPE)
+                                                      && !link.getHref().isEmpty());
+        factoryDto.withLinks(result.getLinks())
+                  .getCreator()
+                  .withCreated(result.getCreator().getCreated());
+        assertEquals(result, factoryDto);
+        assertTrue(found);
+    }
+

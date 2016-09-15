@@ -1,47 +1,33 @@
-    /**
-     * Get image information by its id from specified factory.
-     *
-     * @param id
-     *         id of factory
-     * @param imageId
-     *         image id
-     * @return image information if ids are correct. If imageId is not set, random image of the factory will be returned,
-     * if factory has no images, exception will be thrown
-     * @throws NotFoundException
-     *         when the factory with specified id doesn't not found
-     * @throws NotFoundException
-     *         when image id is not specified and there is no default image for the specified factory
-     * @throws NotFoundException
-     *         when image with specified id doesn't exist
-     */
     @GET
     @Path("/{id}/image")
     @Produces("image/*")
-    @ApiOperation(value = "Get factory image information",
-                  notes = "If the factory does not have image with specified id then first found image will be returned")
-    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
-                   @ApiResponse(code = 404, message = "Factory or image id not found")})
-    public Response getImage(@ApiParam(value = "Factory id")
+    @ApiOperation(value = "Get factory image",
+                  notes = "If image identifier is not specified then first found image will be returned")
+    @ApiResponses({@ApiResponse(code = 200, message = "Response contains requested factory image"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 404, message = "Factory or factory image not found"),
+                   @ApiResponse(code = 500, message = "Internal server error")})
+    public Response getImage(@ApiParam(value = "Factory identifier")
                              @PathParam("id")
-                             String id,
-                             @ApiParam(value = "Image id", required = true)
+                             String factoryId,
+                             @ApiParam(value = "Image identifier")
                              @QueryParam("imgId")
-                             String imageId) throws NotFoundException {
-        final Set<FactoryImage> factoryImages = factoryStore.getFactoryImages(id, null);
+                             String imageId) throws NotFoundException,
+                                                    BadRequestException,
+                                                    ServerException {
+        final Set<FactoryImage> images;
         if (isNullOrEmpty(imageId)) {
-            if (factoryImages.isEmpty()) {
-                LOG.warn("Default image for factory {} is not found.", id);
-                throw new NotFoundException("Default image for factory " + id + " is not found.");
+            if ((images = factoryManager.getFactoryImages(factoryId)).isEmpty()) {
+                LOG.warn("Default image for factory {} is not found.", factoryId);
+                throw new NotFoundException("Default image for factory " + factoryId + " is not found.");
             }
-            final FactoryImage image = factoryImages.iterator().next();
-            return Response.ok(image.getImageData(), image.getMediaType()).build();
-        }
-        for (FactoryImage image : factoryImages) {
-            if (imageId.equals(image.getName())) {
-                return Response.ok(image.getImageData(), image.getMediaType()).build();
+        } else {
+            if ((images = factoryManager.getFactoryImages(factoryId, imageId)).isEmpty()) {
+                LOG.warn("Image with id {} is not found.", imageId);
+                throw new NotFoundException("Image with id " + imageId + " is not found.");
             }
         }
-        LOG.warn("Image with id {} is not found.", imageId);
-        throw new NotFoundException("Image with id " + imageId + " is not found.");
+        final FactoryImage image = images.iterator().next();
+        return Response.ok(image.getImageData(), image.getMediaType()).build();
     }
 

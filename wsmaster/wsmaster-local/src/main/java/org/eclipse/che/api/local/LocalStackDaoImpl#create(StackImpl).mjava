@@ -1,14 +1,14 @@
     @Override
-    public void create(StackImpl stack) throws ConflictException, ServerException {
+    public synchronized void create(StackImpl stack) throws ConflictException, ServerException {
         requireNonNull(stack, "Stack required");
-        lock.writeLock().lock();
-        try {
-            if (stacks.containsKey(stack.getId())) {
-                throw new ConflictException(format("Stack with id %s is already exist", stack.getId()));
-            }
-            stacks.put(stack.getId(), stack);
-        } finally {
-            lock.writeLock().unlock();
+        if (stacks.containsKey(stack.getId())) {
+            throw new ConflictException(format("Stack with id %s is already exist", stack.getId()));
         }
+        if (stacks.values()
+                  .stream()
+                  .anyMatch(s -> s.getName().equals(stack.getName()))) {
+            throw new ConflictException(format("Stack with name '%s' already exists", stack.getName()));
+        }
+        stacks.put(stack.getId(), new StackImpl(stack));
     }
 

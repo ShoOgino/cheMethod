@@ -1,0 +1,34 @@
+    @PUT
+    @Path("/{id}")
+    @Consumes(APPLICATION_JSON)
+    @Produces(APPLICATION_JSON)
+    @ApiOperation(value = "Update factory information by configuration and specified identifier",
+                  notes = "Update factory based on the factory id which is passed in a path parameter. " +
+                          "For perform this operation user needs respective rights")
+    @ApiResponses({@ApiResponse(code = 200, message = "Factory successfully updated"),
+                   @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+                   @ApiResponse(code = 403, message = "User does not have rights to update factory"),
+                   @ApiResponse(code = 404, message = "Factory to update not found"),
+                   @ApiResponse(code = 409, message = "Conflict error occurred during factory update" +
+                                                      "(e.g. Factory with such name and creator already exists)"),
+                   @ApiResponse(code = 500, message = "Internal server error")})
+    public FactoryDto updateFactory(@ApiParam(value = "Factory identifier")
+                                    @PathParam("id")
+                                    String factoryId,
+                                    FactoryDto update) throws BadRequestException,
+                                                              NotFoundException,
+                                                              ServerException,
+                                                              ForbiddenException,
+                                                              ConflictException {
+        requiredNotNull(update, "Factory configuration");
+        update.setId(factoryId);
+        final Factory existing = factoryManager.getById(factoryId);
+        // check if the current user has enough access to edit the factory
+        editValidator.validate(existing);
+        factoryBuilder.checkValid(update, true);
+        // validate the new content
+        createValidator.validateOnCreate(update);
+        return injectLinks(asDto(factoryManager.updateFactory(update)),
+                           factoryManager.getFactoryImages(factoryId));
+    }
+

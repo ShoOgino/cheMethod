@@ -25,9 +25,9 @@
                            @QueryParam("start-after-create")
                            @DefaultValue("false")
                            Boolean startAfterCreate,
-                           @ApiParam("The account id related to this operation")
-                           @QueryParam("account")
-                           String accountId) throws ConflictException,
+                           @ApiParam("Namespace where workspace should be created")
+                           @QueryParam("namespace")
+                           String namespace) throws ConflictException,
                                                     ServerException,
                                                     BadRequestException,
                                                     ForbiddenException,
@@ -36,12 +36,14 @@
         final Map<String, String> attributes = parseAttrs(attrsList);
         validator.validateAttributes(attributes);
         validator.validateConfig(config);
+        if (namespace == null) {
+            namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
+        }
         final WorkspaceImpl workspace = workspaceManager.createWorkspace(config,
-                                                                         EnvironmentContext.getCurrent().getSubject().getUserName(),
-                                                                         attributes,
-                                                                         accountId);
+                                                                         namespace,
+                                                                         attributes);
         if (startAfterCreate) {
-            workspaceManager.startWorkspace(workspace.getId(), null, accountId, false);
+            workspaceManager.startWorkspace(workspace.getId(), null, false);
         }
         return Response.status(201)
                        .entity(linksInjector.injectLinks(asDto(workspace), getServiceContext()))
