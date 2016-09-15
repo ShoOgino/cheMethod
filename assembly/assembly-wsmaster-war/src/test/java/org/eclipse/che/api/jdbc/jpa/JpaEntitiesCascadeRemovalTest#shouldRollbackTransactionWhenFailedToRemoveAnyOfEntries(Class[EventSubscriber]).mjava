@@ -1,0 +1,24 @@
+    @Test(dataProvider = "beforeRemoveRollbackActions")
+    public void shouldRollbackTransactionWhenFailedToRemoveAnyOfEntries(Class<EventSubscriber> eventSubscriber) throws Exception {
+        createTestData();
+        eventService.unsubscribe(injector.getInstance(eventSubscriber));
+
+        // Remove the user, all entries must be rolled back after fail
+        try {
+            userDao.remove(user.getId());
+            fail("UserDao#remove had to throw exception");
+        } catch (Exception ignored) {
+        }
+
+        // Check all the data rolled back
+        assertNotNull(userDao.getById(user.getId()));
+        assertNotNull(profileDao.getById(user.getId()));
+        assertFalse(preferenceDao.getPreferences(user.getId()).isEmpty());
+        assertFalse(sshDao.get(user.getId()).isEmpty());
+        assertFalse(workspaceDao.getByNamespace(user.getName()).isEmpty());
+        assertFalse(factoryDao.getByAttribute(0, 0, singletonList(Pair.of("creator.userId", user.getId()))).isEmpty());
+        assertFalse(snapshotDao.findSnapshots(workspace1.getId()).isEmpty());
+        assertFalse(snapshotDao.findSnapshots(workspace2.getId()).isEmpty());
+        wipeTestData();
+    }
+

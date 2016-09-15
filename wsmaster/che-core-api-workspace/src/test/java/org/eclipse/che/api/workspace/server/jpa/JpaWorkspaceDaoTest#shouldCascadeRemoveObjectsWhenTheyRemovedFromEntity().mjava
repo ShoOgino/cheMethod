@@ -1,0 +1,34 @@
+    @Test
+    public void shouldCascadeRemoveObjectsWhenTheyRemovedFromEntity() {
+        final AccountImpl account = new AccountImpl("accountId", "namespace", "test");
+        final WorkspaceImpl workspace = createWorkspace("id", account, "name");
+
+        // Persist the workspace
+        manager.getTransaction().begin();
+        manager.persist(account);
+        manager.getTransaction().commit();
+        manager.clear();
+
+        // Persist the workspace
+        manager.getTransaction().begin();
+        manager.persist(workspace);
+        manager.getTransaction().commit();
+        manager.clear();
+
+        // Cleanup one to many dependencies
+        manager.getTransaction().begin();
+        final WorkspaceConfigImpl config = workspace.getConfig();
+        config.getProjects().clear();
+        config.getCommands().clear();
+        config.getEnvironments().clear();
+        manager.merge(workspace);
+        manager.getTransaction().commit();
+        manager.clear();
+
+        // If all the One To Many dependencies are removed then all the embedded objects
+        // which depend on those object are also removed, which guaranteed by foreign key constraints
+        assertEquals(asLong("SELECT COUNT(p) FROM ProjectConfig p"), 0L, "Project configs");
+        assertEquals(asLong("SELECT COUNT(c) FROM Command c"), 0L, "Commands");
+        assertEquals(asLong("SELECT COUNT(e) FROM Environment e"), 0L, "Environments");
+    }
+

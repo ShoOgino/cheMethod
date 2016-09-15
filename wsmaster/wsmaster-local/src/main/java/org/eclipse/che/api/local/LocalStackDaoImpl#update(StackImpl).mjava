@@ -1,17 +1,17 @@
     @Override
-    public StackImpl update(StackImpl update) throws NotFoundException, ServerException {
+    public synchronized StackImpl update(StackImpl update) throws NotFoundException, ServerException, ConflictException {
         requireNonNull(update, "Stack required");
         requireNonNull(update.getId(), "Stack id required");
-        lock.writeLock().lock();
-        try {
-            String updateId = update.getId();
-            if (!stacks.containsKey(updateId)) {
-                throw new NotFoundException(format("Stack with id %s was not found", updateId));
-            }
-            stacks.replace(updateId, update);
-            return new StackImpl(update);
-        } finally {
-            lock.writeLock().unlock();
+        String updateId = update.getId();
+        if (!stacks.containsKey(updateId)) {
+            throw new NotFoundException(format("Stack with id %s was not found", updateId));
         }
+        if (stacks.values()
+                  .stream()
+                  .anyMatch(stack -> stack.getName().equals(update.getName()) && !stack.getId().equals(updateId))) {
+            throw new ConflictException(format("Stack with name '%s' already exists", updateId));
+        }
+        stacks.replace(updateId, new StackImpl(update));
+        return new StackImpl(update);
     }
 
