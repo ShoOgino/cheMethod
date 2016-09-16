@@ -1,0 +1,34 @@
+    @Override
+    public void install(TextEditor editor) {
+        this.editor = editor;
+        if (capabilities.getDocumentOnTypeFormattingProvider() != null &&
+            capabilities.getDocumentOnTypeFormattingProvider().getFirstTriggerCharacter() != null) {
+            editor.getDocument().getDocumentHandle().getDocEventBus().addHandler(DocumentChangeEvent.TYPE, new DocumentChangeHandler() {
+                @Override
+                public void onDocumentChange(DocumentChangeEvent event) {
+                    if (capabilities.getDocumentOnTypeFormattingProvider().getFirstTriggerCharacter().equals(event.getText())) {
+                        Document document = event.getDocument().getDocument();
+
+                        DocumentOnTypeFormattingParamsDTO params = dtoFactory.createDto(DocumentOnTypeFormattingParamsDTO.class);
+                        TextDocumentIdentifierDTO identifier = dtoFactory.createDto(TextDocumentIdentifierDTO.class);
+                        identifier.setUri(document.getFile().getLocation().toString());
+                        params.setTextDocument(identifier);
+                        params.setOptions(getFormattingOptions());
+                        params.setCh(event.getText());
+
+                        TextPosition position = document.getPositionFromIndex(event.getOffset());
+
+                        PositionDTO start = dtoFactory.createDto(PositionDTO.class);
+                        start.setLine(position.getLine());
+                        start.setCharacter(position.getCharacter());
+                        params.setPosition(start);
+
+                        Promise<List<TextEditDTO>> promise = client.onTypeFormatting(params);
+                        handleFormatting(promise, document);
+
+                    }
+                }
+            });
+        }
+    }
+

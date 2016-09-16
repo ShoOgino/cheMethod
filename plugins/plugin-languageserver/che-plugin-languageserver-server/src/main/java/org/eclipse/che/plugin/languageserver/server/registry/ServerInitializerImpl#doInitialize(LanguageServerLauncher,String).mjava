@@ -1,0 +1,28 @@
+    protected LanguageServer doInitialize(LanguageServerLauncher launcher, String projectPath) throws LanguageServerException {
+        String languageId = launcher.getLanguageDescription().getLanguageId();
+        InitializeParamsImpl initializeParams = prepareInitializeParams(projectPath);
+
+        LanguageServer server;
+        try {
+            server = launcher.launch(projectPath);
+        } catch (LanguageServerException e) {
+            throw new LanguageServerException(
+                    "Can't initialize Language Server " + languageId + " on " + projectPath + ". " + e.getMessage(), e);
+        }
+        registerCallbacks(server);
+
+        CompletableFuture<InitializeResult> completableFuture = server.initialize(initializeParams);
+        try {
+            InitializeResult initializeResult = completableFuture.get();
+            serversToInitResult.put(server, new LanguageServerDescription(initializeResult, launcher.getLanguageDescription()));
+        } catch (InterruptedException | ExecutionException e) {
+            server.shutdown();
+            server.exit();
+
+            throw new LanguageServerException("Error fetching server capabilities " + languageId + ". " + e.getMessage(), e);
+        }
+
+        LOG.info("Initialized Language Server {} on project {}", languageId, projectPath);
+        return server;
+    }
+

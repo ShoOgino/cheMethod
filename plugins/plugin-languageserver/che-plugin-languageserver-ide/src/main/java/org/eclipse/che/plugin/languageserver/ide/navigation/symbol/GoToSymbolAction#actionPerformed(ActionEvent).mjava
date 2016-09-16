@@ -1,0 +1,25 @@
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        DocumentSymbolParamsDTO paramsDTO = dtoFactory.createDto(DocumentSymbolParamsDTO.class);
+        TextDocumentIdentifierDTO identifierDTO = dtoFactory.createDto(TextDocumentIdentifierDTO.class);
+        identifierDTO.setUri(editorAgent.getActiveEditor().getEditorInput().getFile().getPath());
+        paramsDTO.setTextDocument(identifierDTO);
+        activeEditor = (TextEditor)editorAgent.getActiveEditor();
+        cursorPosition = activeEditor.getDocument().getCursorPosition();
+        client.documentSymbol(paramsDTO).then(new Operation<List<SymbolInformationDTO>>() {
+
+            @Override
+            public void apply(List<SymbolInformationDTO> arg) throws OperationException {
+
+                cachedItems = arg;
+                presenter.run(GoToSymbolAction.this);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                notificationManager.notify("Can't fetch document symbols.", arg.getMessage(), StatusNotification.Status.FAIL,
+                                           StatusNotification.DisplayMode.FLOAT_MODE);
+            }
+        });
+    }
+

@@ -1,0 +1,36 @@
+    @Override
+    public void computeCompletionProposals(TextEditor editor, int offset, final CodeAssistCallback callback) {
+        TextDocumentPositionParamsDTO documentPosition = dtoFactory.createDto(TextDocumentPositionParamsDTO.class);
+        documentPosition.setUri(editor.getEditorInput().getFile().getPath());
+        PositionDTO position = dtoFactory.createDto(PositionDTO.class);
+        TextPosition textPos = editor.getDocument().getPositionFromIndex(offset);
+        position.setCharacter(textPos.getCharacter());
+        position.setLine(textPos.getLine());
+        documentPosition.setPosition(position);
+        final TextDocumentIdentifierDTO documentId = dtoFactory.createDto(TextDocumentIdentifierDTO.class);
+        documentId.setUri(editor.getEditorInput().getFile().getPath());
+        documentPosition.setTextDocument(documentId);
+        this.lastErrorMessage = null;
+        documentServiceClient.completion(documentPosition).then(new Operation<List<CompletionItemDTO>>() {
+
+            @Override
+            public void apply(List<CompletionItemDTO> items) throws OperationException {
+                List<CompletionProposal> proposals = newArrayList();
+                for (CompletionItemDTO item : items) {
+                    proposals.add(new CompletionItemBasedCompletionProposal(item,
+                                                                            documentServiceClient,
+                                                                            documentId,
+                                                                            resources,
+                                                                            imageProvider.getIcon(item.getKind()),
+                                                                            serverCapabilities));
+                }
+                callback.proposalComputed(proposals);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                lastErrorMessage = error.getMessage();
+            }
+        });
+    }
+

@@ -1,0 +1,37 @@
+    @Override
+    public void syncTextDocument(DocumentChangeEvent event, int version) {
+        Document document = event.getDocument().getDocument();
+        TextPosition startPosition = document.getPositionFromIndex(event.getOffset());
+        TextPosition endPosition;
+        if (event.getRemoveCharCount() != 0) {
+            endPosition = new TextPosition(startPosition.getLine(), startPosition.getCharacter() + event.getRemoveCharCount());
+        } else {
+            endPosition = new TextPosition(startPosition.getLine(), startPosition.getCharacter() + event.getLength());
+        }
+
+        DidChangeTextDocumentParamsDTO changeDTO = dtoFactory.createDto(DidChangeTextDocumentParamsDTO.class);
+        String uri = document.getFile().getLocation().toString();
+        changeDTO.setUri(uri);
+        VersionedTextDocumentIdentifierDTO versionedDocId = dtoFactory.createDto(VersionedTextDocumentIdentifierDTO.class);
+        versionedDocId.setUri(uri);
+        versionedDocId.setVersion(version);
+        changeDTO.setTextDocument(versionedDocId);
+
+        RangeDTO range = dtoFactory.createDto(RangeDTO.class);
+        PositionDTO start = dtoFactory.createDto(PositionDTO.class);
+        start.setLine(startPosition.getLine());
+        start.setCharacter(startPosition.getCharacter());
+        PositionDTO end = dtoFactory.createDto(PositionDTO.class);
+        end.setLine(endPosition.getLine());
+        end.setCharacter(endPosition.getCharacter());
+        range.setStart(start);
+        range.setEnd(end);
+
+        TextDocumentContentChangeEventDTO actualChange = dtoFactory.createDto(TextDocumentContentChangeEventDTO.class);
+        actualChange.setRange(range);
+        actualChange.setText(event.getText());
+
+        changeDTO.setContentChanges(Collections.singletonList(actualChange));
+        textDocumentService.didChange(changeDTO);
+    }
+

@@ -1,0 +1,56 @@
+    @Override
+    public JsPromise<OrionHoverOverlay> computeHover(OrionHoverContextOverlay context) {
+        EditorPartPresenter activeEditor = editorAgent.getActiveEditor();
+        if (activeEditor == null || !(activeEditor instanceof TextEditor)) {
+            return null;
+        }
+
+        TextEditor editor = ((TextEditor)activeEditor);
+        if (!(editor.getConfiguration() instanceof LanguageServerEditorConfiguration)) {
+            return null;
+        }
+
+        LanguageServerEditorConfiguration configuration = (LanguageServerEditorConfiguration)editor.getConfiguration();
+        if (configuration.getServerCapabilities().isHoverProvider() == null || !configuration.getServerCapabilities().isHoverProvider()) {
+            return null;
+        }
+
+        Document document = editor.getDocument();
+
+        TextDocumentPositionParamsDTO paramsDTO = dtoFactory.createDto(TextDocumentPositionParamsDTO.class);
+        TextDocumentIdentifierDTO identifierDTO = dtoFactory.createDto(TextDocumentIdentifierDTO.class);
+        identifierDTO.setUri(editor.getEditorInput().getFile().getLocation().toString());
+
+        PositionDTO positionDTO = dtoFactory.createDto(PositionDTO.class);
+        TextPosition position = document.getPositionFromIndex(context.getOffset());
+        positionDTO.setCharacter(position.getCharacter());
+        positionDTO.setLine(position.getLine());
+
+        paramsDTO.setUri(editor.getEditorInput().getFile().getLocation().toString());
+        paramsDTO.setTextDocument(identifierDTO);
+        paramsDTO.setPosition(positionDTO);
+
+        Promise<HoverDTO> promise = client.hover(paramsDTO);
+        Promise<OrionHoverOverlay> then = promise.then(new Function<HoverDTO, OrionHoverOverlay>() {
+            @Override
+            public OrionHoverOverlay apply(HoverDTO arg) throws FunctionException {
+                OrionHoverOverlay hover = OrionHoverOverlay.create();
+                hover.setType("markdown");
+                StringBuilder b = new StringBuilder();
+                for (MarkedStringDTO dto : arg.getContents()) {
+                    b.append(dto.getValue());
+                }
+                String content = b.toString();
+                //do not show hover with only white spaces
+                if (StringUtils.isNullOrWhitespace(content)) {
+                    return null;
+                }
+                hover.setContent(content);
+
+                return hover;
+            }
+        });
+        return (JsPromise<OrionHoverOverlay>)then;
+
+    }
+

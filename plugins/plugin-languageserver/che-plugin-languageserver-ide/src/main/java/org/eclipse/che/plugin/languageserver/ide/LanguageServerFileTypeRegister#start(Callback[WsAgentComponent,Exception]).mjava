@@ -1,0 +1,49 @@
+    @Override
+    public void start(final Callback<WsAgentComponent, Exception> callback) {
+        Promise<List<LanguageDescriptionDTO>> registeredLanguages = serverLanguageRegistry.getSupportedLanguages();
+        registeredLanguages.then(new Operation<List<LanguageDescriptionDTO>>() {
+            @Override
+            public void apply(List<LanguageDescriptionDTO> langs) throws OperationException {
+                if (!langs.isEmpty()) {
+                    JsArrayString contentTypes = JsArrayString.createArray().cast();
+                    for (LanguageDescriptionDTO lang : langs) {
+                        String primaryExtension = lang.getFileExtensions().get(0);
+                        for (String ext : lang.getFileExtensions()) {
+                            final FileType fileType = new FileType(resources.file(), ext);
+                            fileTypeRegistry.registerFileType(fileType);
+                            editorRegistry.registerDefaultEditor(fileType, editorProvider);
+                        }
+                        List<String> mimeTypes = lang.getMimeTypes();
+                        if (mimeTypes.isEmpty()) {
+                            mimeTypes = newArrayList("text/x-" + lang.getLanguageId());
+                        }
+                        for (String contentTypeId : mimeTypes) {
+                            contentTypes.push(contentTypeId);
+                            OrionContentTypeOverlay contentType = OrionContentTypeOverlay.create();
+                            contentType.setId(contentTypeId);
+                            contentType.setName(lang.getLanguageId());
+                            contentType.setExtension(primaryExtension);
+                            contentType.setExtends("text/plain");
+
+                            // highlighting
+                            OrionHighlightingConfigurationOverlay config = OrionHighlightingConfigurationOverlay
+                                    .create();
+                            config.setId(lang.getLanguageId() + ".highlighting");
+                            config.setContentTypes(contentTypeId);
+                            config.setPatterns(lang.getHighlightingConfiguration());
+
+                            contentTypeRegistrant.registerFileType(contentType, config);
+                        }
+                    }
+                    orionHoverRegistrant.registerHover(contentTypes, hoverProvider);
+                }
+                callback.onSuccess(LanguageServerFileTypeRegister.this);
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                callback.onFailure(new Exception(arg.getMessage(), arg.getCause()));
+            }
+        });
+    }
+

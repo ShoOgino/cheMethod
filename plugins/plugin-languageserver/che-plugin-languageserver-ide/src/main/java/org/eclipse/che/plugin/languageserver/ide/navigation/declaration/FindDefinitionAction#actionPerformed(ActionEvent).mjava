@@ -1,0 +1,40 @@
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        EditorPartPresenter activeEditor = editorAgent.getActiveEditor();
+
+        //TODO replace this
+        if (!(activeEditor instanceof TextEditor)) {
+            return;
+        }
+        TextEditor textEditor = ((TextEditor)activeEditor);
+        String path = activeEditor.getEditorInput().getFile().getPath();
+        TextDocumentPositionParamsDTO paramsDTO = dtoFactory.createDto(TextDocumentPositionParamsDTO.class);
+
+        PositionDTO positionDTO = dtoFactory.createDto(PositionDTO.class);
+        positionDTO.setLine(textEditor.getCursorPosition().getLine());
+        positionDTO.setCharacter(textEditor.getCursorPosition().getCharacter());
+
+        TextDocumentIdentifierDTO identifierDTO = dtoFactory.createDto(TextDocumentIdentifierDTO.class);
+        identifierDTO.setUri(path);
+
+        paramsDTO.setUri(path);
+        paramsDTO.setPosition(positionDTO);
+        paramsDTO.setTextDocument(identifierDTO);
+        final Promise<List<LocationDTO>> promise = client.definition(paramsDTO);
+        promise.then(new Operation<List<LocationDTO>>() {
+            @Override
+            public void apply(List<LocationDTO> arg) throws OperationException {
+                if (arg.size() == 1) {
+                    presenter.onLocationSelected(arg.get(0));
+                } else {
+                    presenter.openLocation(promise);
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                presenter.showError(arg);
+            }
+        });
+    }
+

@@ -1,0 +1,53 @@
+    @Override
+    protected Process startLanguageServerProcess(String projectPath) {
+        Stream<Path> paths;
+        try {
+            paths = Files.find(Paths.get("/projects"),
+                               0,
+                               (path, basicFileAttributes) -> path.endsWith("-languageserver.jar"),
+                               FileVisitOption.FOLLOW_LINKS);
+        } catch (IOException e) {
+            String errMsg = "Can't find jar";
+            LOG.error(errMsg);
+
+            throw new IllegalStateException(e);
+        }
+
+        Path filePath;
+        Iterator<Path> iterator = paths.iterator();
+        if (!iterator.hasNext()) {
+            filePath = iterator.next();
+        } else {
+            String errMsg = "Can't find jar";
+            LOG.error(errMsg);
+
+            throw new IllegalStateException(errMsg);
+        }
+
+        ProcessBuilder processBuilder = new ProcessBuilder(JAVA_EXEC, "-jar", filePath.toString(),
+                                                           "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1044",
+                                                           "debug");
+        processBuilder.redirectInput(ProcessBuilder.Redirect.PIPE);
+        processBuilder.redirectOutput(ProcessBuilder.Redirect.PIPE);
+
+        Process process;
+        try {
+            process = processBuilder.start();
+        } catch (IOException e) {
+            String errMsg = "Can't start JSON language server";
+            LOG.error(errMsg, e);
+
+            throw new IllegalStateException(errMsg, e);
+        }
+
+        Thread thread = new Thread(new StreamReader(process));
+        thread.setDaemon(true);
+        thread.start();
+
+        if (!process.isAlive()) {
+            LOG.error("Couldn't start process : " + processBuilder.command());
+        }
+
+        return process;
+    }
+
