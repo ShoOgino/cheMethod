@@ -1,0 +1,35 @@
+    private void initializeEnvironment(String namespace,
+                                       String workspaceId,
+                                       String envName,
+                                       Environment env,
+                                       String networkId,
+                                       MessageConsumer<MachineLogMessage> messageConsumer)
+            throws ServerException,
+                   ConflictException {
+
+        CheServicesEnvironmentImpl environment = environmentParser.parse(env);
+
+        applyAgents(env, environment);
+
+        normalize(namespace,
+                  workspaceId,
+                  environment);
+
+        List<String> servicesOrder = startStrategy.order(environment);
+
+        normilizeVolumesFrom(environment);
+
+        EnvironmentHolder environmentHolder = new EnvironmentHolder(servicesOrder,
+                                                                    environment,
+                                                                    messageConsumer,
+                                                                    EnvStatus.STARTING,
+                                                                    envName,
+                                                                    networkId);
+
+        try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            if (environments.putIfAbsent(workspaceId, environmentHolder) != null) {
+                throw new ConflictException(format("Environment of workspace '%s' already exists", workspaceId));
+            }
+        }
+    }
+

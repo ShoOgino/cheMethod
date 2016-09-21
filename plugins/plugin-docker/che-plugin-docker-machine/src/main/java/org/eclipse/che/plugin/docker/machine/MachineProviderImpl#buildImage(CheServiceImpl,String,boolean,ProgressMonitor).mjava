@@ -1,0 +1,40 @@
+    protected void buildImage(CheServiceImpl service,
+                              String machineImageName,
+                              boolean doForcePullOnBuild,
+                              ProgressMonitor progressMonitor)
+            throws MachineException {
+
+        File workDir = null;
+        try {
+            BuildImageParams buildImageParams;
+            if (service.getBuild() != null &&
+                service.getBuild().getDockerfileContent() != null) {
+
+                workDir = Files.createTempDirectory(null).toFile();
+                final File dockerfileFile = new File(workDir, "Dockerfile");
+                try (FileWriter output = new FileWriter(dockerfileFile)) {
+                    output.append(service.getBuild().getDockerfileContent());
+                }
+
+                buildImageParams = BuildImageParams.create(dockerfileFile);
+            } else {
+                buildImageParams = BuildImageParams.create(service.getBuild().getContext())
+                                                   .withDockerfile(service.getBuild().getDockerfilePath());
+            }
+            buildImageParams.withForceRemoveIntermediateContainers(true)
+                            .withRepository(machineImageName)
+                            .withAuthConfigs(dockerCredentials.getCredentials())
+                            .withDoForcePull(doForcePullOnBuild)
+                            .withMemoryLimit(service.getMemLimit())
+                            .withMemorySwapLimit(-1);
+
+            docker.buildImage(buildImageParams, progressMonitor);
+        } catch (IOException e) {
+            throw new MachineException(e.getLocalizedMessage(), e);
+        } finally {
+            if (workDir != null) {
+                FileCleaner.addFile(workDir);
+            }
+        }
+    }
+

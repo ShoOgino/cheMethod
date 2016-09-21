@@ -36,13 +36,11 @@
                 }
             }
         }
-        String machineId = generateMachineId();
         final String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
         final String namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
 
         MachineImpl machine = MachineImpl.builder()
                                          .setConfig(machineConfig)
-                                         .setId(machineId)
                                          .setWorkspaceId(workspaceId)
                                          .setStatus(MachineStatus.CREATING)
                                          .setEnvName(environmentHolder.name)
@@ -53,21 +51,28 @@
         if ("docker".equals(machineConfig.getType())) {
             // needed to reuse startInstance method and
             // create machine instances by different implementation-specific providers
-            ComposeServiceImpl composeService = machineConfigToComposeService(machineConfig);
-            normalize(composeService);
+            CheServiceImpl service = machineConfigToService(machineConfig);
+            normalize(namespace,
+                      workspaceId,
+                      machineConfig.getName(),
+                      service);
+            machine.setId(service.getId());
 
             machineStarter = (machineLogger, machineSource) -> {
-                ComposeServiceImpl serviceWithCorrectSource = getServiceWithCorrectSource(composeService, machineSource);
+                CheServiceImpl serviceWithCorrectSource = getServiceWithCorrectSource(service, machineSource);
 
-                normalize(serviceWithCorrectSource);
+                normalize(namespace,
+                          workspaceId,
+                          machineConfig.getName(),
+                          serviceWithCorrectSource);
+
                 ExtendedMachineImpl extendedMachine = new ExtendedMachineImpl();
                 extendedMachine.setAgents(agents);
                 applyAgents(extendedMachine, serviceWithCorrectSource);
 
-                return composeProvider.startService(namespace,
+                return machineProvider.startService(namespace,
                                                     workspaceId,
                                                     environmentHolder.name,
-                                                    machineId,
                                                     machineConfig.getName(),
                                                     machineConfig.isDev(),
                                                     environmentHolder.networkId,
@@ -77,6 +82,7 @@
         } else {
             try {
                 InstanceProvider provider = machineInstanceProviders.getProvider(machineConfig.getType());
+                machine.setId(generateMachineId());
 
                 machineStarter = (machineLogger, machineSource) -> {
                     Machine machineWithCorrectSource = getMachineWithCorrectSource(machine, machineSource);

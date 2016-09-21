@@ -1,0 +1,34 @@
+    @Inject
+    public CheEnvironmentEngine(SnapshotDao snapshotDao,
+                                MachineInstanceProviders machineInstanceProviders,
+                                @Named("machine.logs.location") String machineLogsDir,
+                                @Named("machine.default_mem_size_mb") int defaultMachineMemorySizeMB,
+                                EventService eventService,
+                                EnvironmentParser environmentParser,
+                                DefaultServicesStartStrategy startStrategy,
+                                MachineInstanceProvider machineProvider,
+                                AgentConfigApplier agentConfigApplier,
+                                @Named("api.endpoint") String apiEndpoint,
+                                RecipeDownloader recipeDownloader,
+                                ContainerNameGenerator containerNameGenerator) {
+        this.snapshotDao = snapshotDao;
+        this.eventService = eventService;
+        this.environmentParser = environmentParser;
+        this.startStrategy = startStrategy;
+        this.machineProvider = machineProvider;
+        this.agentConfigApplier = agentConfigApplier;
+        this.recipeDownloader = recipeDownloader;
+        this.environments = new ConcurrentHashMap<>();
+        this.machineInstanceProviders = machineInstanceProviders;
+        this.machineLogsDir = new File(machineLogsDir);
+        this.defaultMachineMemorySizeBytes = Size.parseSize(defaultMachineMemorySizeMB + "MB");
+        // 16 - experimental value for stripes count, it comes from default hash map size
+        this.stripedLocks = new StripedLocks(16);
+        this.recipeApiPattern = Pattern.compile("^https?" +
+                                                apiEndpoint.substring(apiEndpoint.indexOf(":")) +
+                                                "/recipe/.*$");
+        this.containerNameGenerator = containerNameGenerator;
+
+        eventService.subscribe(new MachineCleaner());
+    }
+

@@ -1,3 +1,4 @@
+    // TODO fix error messages: fields mentioning, usage of service term
     public void validate(String envName, Environment env) throws IllegalArgumentException,
                                                                  ServerException {
         checkArgument(!isNullOrEmpty(envName),
@@ -14,9 +15,9 @@
                       "Recipe of environment '%s' contains mutually exclusive fields location and content",
                       envName);
 
-        ComposeEnvironmentImpl composeEnvironment;
+        CheServicesEnvironmentImpl cheServicesEnvironment;
         try {
-            composeEnvironment = environmentParser.parse(env);
+            cheServicesEnvironment = environmentParser.parse(env);
         } catch (ServerException e) {
             throw new ServerException(format("Parsing of recipe of environment '%s' failed. Error: %s",
                                              envName, e.getLocalizedMessage()));
@@ -25,7 +26,7 @@
                                                       envName, e.getLocalizedMessage()));
         }
 
-        checkArgument(composeEnvironment.getServices() != null && !composeEnvironment.getServices().isEmpty(),
+        checkArgument(cheServicesEnvironment.getServices() != null && !cheServicesEnvironment.getServices().isEmpty(),
                       "Environment '%s' should contain at least 1 machine",
                       envName);
 
@@ -36,8 +37,8 @@
         List<String> missingServices = env.getMachines()
                                           .keySet()
                                           .stream()
-                                          .filter(machineName -> !composeEnvironment.getServices()
-                                                                                    .containsKey(machineName))
+                                          .filter(machineName -> !cheServicesEnvironment.getServices()
+                                                                                        .containsKey(machineName))
                                           .collect(toList());
         checkArgument(missingServices.isEmpty(),
                       "Environment '%s' contains machines that are missing in environment recipe: %s",
@@ -57,10 +58,10 @@
                       envName, devMachines.size(), Joiner.on(", ").join(devMachines));
 
         // needed to validate different kinds of dependencies in services to other services
-        Set<String> servicesNames = composeEnvironment.getServices().keySet();
+        Set<String> servicesNames = cheServicesEnvironment.getServices().keySet();
 
-        composeEnvironment.getServices()
-                          .forEach((serviceName, service) -> validateMachine(serviceName,
+        cheServicesEnvironment.getServices()
+                              .forEach((serviceName, service) -> validateMachine(serviceName,
                                                                              env.getMachines().get(serviceName),
                                                                              service,
                                                                              envName,
@@ -68,7 +69,7 @@
 
         // check that order can be resolved
         try {
-            startStrategy.order(composeEnvironment);
+            startStrategy.order(cheServicesEnvironment);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
                     format("Start order of machine in environment '%s' is not resolvable. Error: %s",

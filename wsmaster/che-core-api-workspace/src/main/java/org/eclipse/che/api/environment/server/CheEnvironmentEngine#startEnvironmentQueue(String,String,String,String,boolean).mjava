@@ -22,7 +22,7 @@
         }
 
         try {
-            composeProvider.createNetwork(networkId);
+            machineProvider.createNetwork(networkId);
 
             String machineName = queuePeekOrFail(workspaceId);
             while (machineName != null) {
@@ -30,54 +30,55 @@
                 // Environment start is failed when any machine start is failed, so if any error
                 // occurs during machine creation then environment start fail is reported and
                 // start resources such as queue and descriptor must be cleaned up
-                String machineId = generateMachineId();
                 String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
 
-                ComposeServiceImpl composeService;
+                CheServiceImpl service;
                 try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
                     EnvironmentHolder environmentHolder = environments.get(workspaceId);
                     if (environmentHolder == null) {
                         throw new ServerException("Environment start is interrupted.");
                     }
-                    composeService = environmentHolder.composeEnvironment.getServices().get(machineName);
+                    service = environmentHolder.environment.getServices().get(machineName);
                 }
                 // should not happen
-                if (composeService == null) {
-                    LOG.error("Compose service with name {} is missing in compose environment", machineName);
-                    throw new ServerException("Environment of workspace with ID '%s' failed due to internal error");
+                if (service == null) {
+                    LOG.error("Start of machine with name {} in workspace {} failed. Machine not found in start queue",
+                              machineName, workspaceId);
+                    throw new ServerException(
+                            format("Environment of workspace with ID '%s' failed due to internal error", workspaceId));
                 }
-
-                MachineImpl machine =
-                        MachineImpl.builder()
-                                   .setConfig(MachineConfigImpl.builder()
-                                                               .setDev(isDev)
-                                                               .setLimits(new MachineLimitsImpl(
-                                                                       bytesToMB(composeService.getMemLimit())))
-                                                               .setType("docker")
-                                                               .setName(machineName)
-                                                               .build())
-                                   .setId(machineId)
-                                   .setWorkspaceId(workspaceId)
-                                   .setStatus(MachineStatus.CREATING)
-                                   .setEnvName(envName)
-                                   .setOwner(creator)
-                                   .build();
 
                 final String finalMachineName = machineName;
                 // needed to reuse startInstance method and
                 // create machine instances by different implementation-specific providers
                 MachineStarter machineStarter = (machineLogger, machineSource) -> {
-                    ComposeServiceImpl serviceWithCorrectSource = getServiceWithCorrectSource(composeService, machineSource);
-                    return composeProvider.startService(namespace,
+                    CheServiceImpl serviceWithCorrectSource = getServiceWithCorrectSource(service, machineSource);
+                    return machineProvider.startService(namespace,
                                                         workspaceId,
                                                         envName,
-                                                        machineId,
                                                         finalMachineName,
                                                         isDev,
                                                         networkId,
                                                         serviceWithCorrectSource,
                                                         machineLogger);
                 };
+
+                MachineImpl machine =
+                        MachineImpl.builder()
+                                   .setConfig(MachineConfigImpl.builder()
+                                                               .setDev(isDev)
+                                                               .setLimits(new MachineLimitsImpl(
+                                                                       bytesToMB(service.getMemLimit())))
+                                                               .setType("docker")
+                                                               .setName(machineName)
+                                                               .build())
+                                   .setId(service.getId())
+                                   .setWorkspaceId(workspaceId)
+                                   .setStatus(MachineStatus.CREATING)
+                                   .setEnvName(envName)
+                                   .setOwner(creator)
+                                   .build();
+
                 Instance instance = startInstance(recover,
                                                   envLogger,
                                                   machine,

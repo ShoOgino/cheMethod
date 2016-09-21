@@ -1,0 +1,33 @@
+    @Test
+    public void shouldBindCommonAndDevVolumesToContainerOnDevInstanceCreationFromRecipe() throws Exception {
+        final String expectedHostPathOfProjects = "/tmp/projects";
+        Set<String> devVolumes = new HashSet<>(asList("/etc:/tmp/etc:ro", "/some/thing:/home/some/thing"));
+        Set<String> commonVolumes =
+                new HashSet<>(asList("/some/thing/else:/home/some/thing/else", "/other/path:/home/other/path"));
+
+        final ArrayList<String> expectedVolumes = new ArrayList<>();
+        expectedVolumes.addAll(devVolumes);
+        expectedVolumes.addAll(commonVolumes);
+        expectedVolumes.add(expectedHostPathOfProjects + ":/projects:Z");
+
+        provider = new MachineProviderBuilder().setDevMachineVolumes(devVolumes)
+                                               .setAllMachineVolumes(commonVolumes)
+                                               .build();
+
+        when(workspaceFolderPathProvider.getPath(anyString())).thenReturn(expectedHostPathOfProjects);
+        final boolean isDev = true;
+
+        CheServiceImpl service = createService();
+        service.setVolumes(null);
+        createInstanceFromRecipe(isDev, service);
+
+
+        ArgumentCaptor<CreateContainerParams> argumentCaptor = ArgumentCaptor.forClass(CreateContainerParams.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture());
+        verify(dockerConnector).startContainer(any(StartContainerParams.class));
+
+        final String[] actualBinds = argumentCaptor.getValue().getContainerConfig().getHostConfig().getBinds();
+        assertEquals(actualBinds.length, expectedVolumes.size());
+        assertEquals(new HashSet<>(asList(actualBinds)), new HashSet<>(expectedVolumes));
+    }
+
