@@ -11,10 +11,11 @@
      * @throws UnauthorizedException
      */
     @VisibleForTesting
-    Object executeRemoteCommand(String remoteUrl, TransportCommand command)
+    Object executeRemoteCommand(String remoteUrl, TransportCommand command, GitRequest request)
             throws GitException, GitAPIException, UnauthorizedException {
         File keyDirectory = null;
         UserCredential credentials = null;
+
         try {
             if (GitUrlUtils.isSSH(remoteUrl)) {
                 keyDirectory =  Files.createTempDir();
@@ -44,14 +45,19 @@
                     String password = remoteUrl.substring(remoteUrl.lastIndexOf(":") + 1, remoteUrl.indexOf("@"));
                     command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, password));
                 } else {
-                    credentials = credentialsLoader.getUserCredential(remoteUrl);
-                    if (credentials != null) {
-                        command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(credentials.getUserName(),
-                                                                                               credentials.getPassword()));
+                    String gitUser = request.getAttributes().get("username");
+                    String gitPassword = request.getAttributes().get("password");
+                    if (gitUser != null && gitPassword != null) {
+                        command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(gitUser, gitPassword));
+                    } else {
+                        credentials = credentialsLoader.getUserCredential(remoteUrl);
+                        if (credentials != null) {
+                            command.setCredentialsProvider(
+                                    new UsernamePasswordCredentialsProvider(credentials.getUserName(), credentials.getPassword()));
+                        }
                     }
                 }
             }
-
             ProxyAuthenticator.initAuthenticator(remoteUrl);
             return command.call();
         } catch (GitException | TransportException exception) {
@@ -78,7 +84,6 @@
                     throw new GitException("Can't remove SSH key directory", exception);
                 }
             }
-
             ProxyAuthenticator.resetAuthenticator();
         }
     }
