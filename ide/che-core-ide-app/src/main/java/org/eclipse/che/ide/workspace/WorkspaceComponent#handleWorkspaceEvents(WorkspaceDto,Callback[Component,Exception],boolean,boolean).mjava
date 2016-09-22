@@ -1,4 +1,17 @@
-    public void handleWorkspaceEvents(final WorkspaceDto workspace, final Callback<Component, Exception> callback) {
+    /**
+     * Listens message bus and handles workspace events.
+     *
+     * @param workspace
+     *          workspace to listen
+     * @param callback
+     *          callback
+     * @param checkForShapshots
+     *          whether is needed checking workspace for snapshots
+     * @param restoreFromSnapshot
+     *          restore or not the workspace from snapshot
+     */
+    public void handleWorkspaceEvents(final WorkspaceDto workspace, final Callback<Component, Exception> callback,
+                                      final boolean checkForShapshots, final boolean restoreFromSnapshot) {
         this.callback = callback;
         if (messageBus != null) {
             messageBus.cancelReconnection();
@@ -8,7 +21,7 @@
         messageBus.addOnOpenHandler(new ConnectionOpenedHandler() {
             @Override
             public void onOpen() {
-                loader.setProgress(LoaderPresenter.Phase.STARTING_WORKSPACE_RUNTIME, LoaderPresenter.Status.LOADING);
+                loader.show(LoaderPresenter.Phase.STARTING_WORKSPACE_RUNTIME);
 
                 messageBus.removeOnOpenHandler(this);
 
@@ -24,7 +37,7 @@
                         Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
                             @Override
                             public void execute() {
-                                loader.setProgress(LoaderPresenter.Phase.STARTING_WORKSPACE_RUNTIME, LoaderPresenter.Status.SUCCESS);
+                                loader.setSuccess(LoaderPresenter.Phase.STARTING_WORKSPACE_RUNTIME);
 
                                 notificationManager.notify(locale.startedWs(), StatusNotification.Status.SUCCESS, FLOAT_MODE);
                                 eventBus.fireEvent(new WorkspaceStartedEvent(workspace));
@@ -33,7 +46,12 @@
                         });
                         break;
                     default:
-                        checkWorkspaceForSnapshots(workspace);
+                        if (checkForShapshots) {
+                            checkWorkspaceForSnapshots(workspace);
+                        } else {
+                            loader.show(LoaderPresenter.Phase.STARTING_WORKSPACE_RUNTIME);
+                            workspaceServiceClient.startById(workspace.getId(), workspace.getConfig().getDefaultEnv(), restoreFromSnapshot);
+                        }
                 }
             }
         });
