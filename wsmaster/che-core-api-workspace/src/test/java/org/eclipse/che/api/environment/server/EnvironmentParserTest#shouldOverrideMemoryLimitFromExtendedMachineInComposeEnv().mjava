@@ -1,0 +1,28 @@
+    @Test
+    public void shouldOverrideMemoryLimitFromExtendedMachineInComposeEnv() throws Exception {
+        HashMap<String, ExtendedMachineImpl> machines = new HashMap<>();
+        machines.put("machine1", new ExtendedMachineImpl(emptyList(),
+                                                         emptyMap(),
+                                                         singletonMap("memoryLimitBytes", "101010")));
+        machines.put("machine2", new ExtendedMachineImpl(emptyList(),
+                                                         emptyMap(),
+                                                         emptyMap()));
+        EnvironmentImpl environment = new EnvironmentImpl(new EnvironmentRecipeImpl("compose",
+                                                                                    "application/x-yaml",
+                                                                                    "content",
+                                                                                    null),
+                                                          machines);
+        CheServicesEnvironmentImpl expected = new CheServicesEnvironmentImpl();
+        expected.getServices().put("machine1", createCheService(false).withMemLimit(101010L));
+        expected.getServices().put("machine2", createCheService(true));
+        ComposeEnvironmentImpl composeEnvironment = toCompose(expected);
+        when(composeFileParser.parse(eq(environment.getRecipe().getContent()),
+                                     eq("application/x-yaml"))).thenReturn(composeEnvironment);
+
+        // when
+        CheServicesEnvironmentImpl cheServicesEnvironment = parser.parse(environment);
+
+        // then
+        assertEquals(cheServicesEnvironment, expected);
+    }
+

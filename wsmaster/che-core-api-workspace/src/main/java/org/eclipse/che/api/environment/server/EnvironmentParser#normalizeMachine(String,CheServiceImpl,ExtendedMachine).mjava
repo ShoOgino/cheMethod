@@ -1,0 +1,42 @@
+    private void normalizeMachine(String name, CheServiceImpl service, ExtendedMachine extendedMachine) {
+        if (extendedMachine.getAttributes().containsKey("memoryLimitBytes")) {
+
+            try {
+                service.setMemLimit(Long.parseLong(extendedMachine.getAttributes().get("memoryLimitBytes")));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                        format("Value of attribute 'memoryLimitBytes' of machine '%s' is illegal", name));
+            }
+        }
+        service.setExpose(service.getExpose()
+                                 .stream()
+                                 .map(expose -> expose.contains("/") ?
+                                                expose :
+                                                expose + "/tcp")
+                                 .collect(toList()));
+        extendedMachine.getServers().forEach((serverRef, serverConf) -> {
+            String normalizedPort = serverConf.getPort().contains("/") ?
+                                    serverConf.getPort() :
+                                    serverConf.getPort() + "/tcp";
+
+            service.getExpose().add(normalizedPort);
+
+            String portLabelPrefix = SERVER_CONF_LABEL_PREFIX + normalizedPort;
+
+            service.getLabels().put(portLabelPrefix +
+                                    SERVER_CONF_LABEL_REF_SUFFIX,
+                                    serverRef);
+            if (serverConf.getProperties() != null && serverConf.getProperties().get("path") != null) {
+
+                service.getLabels().put(portLabelPrefix +
+                                        SERVER_CONF_LABEL_PATH_SUFFIX,
+                                        serverConf.getProperties().get("path"));
+            }
+            if (serverConf.getProtocol() != null) {
+                service.getLabels().put(portLabelPrefix +
+                                        SERVER_CONF_LABEL_PROTOCOL_SUFFIX,
+                                        serverConf.getProtocol());
+            }
+        });
+    }
+

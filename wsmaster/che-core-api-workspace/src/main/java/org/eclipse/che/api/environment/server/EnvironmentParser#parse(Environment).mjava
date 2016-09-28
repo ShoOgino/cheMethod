@@ -18,35 +18,30 @@
         checkArgument(environment.getRecipe().getContent() != null || environment.getRecipe().getLocation() != null,
                       "Recipe of environment must contain location or content");
 
-        CheServicesEnvironmentImpl composeEnvironment;
+        CheServicesEnvironmentImpl cheServicesEnvironment;
         String envType = environment.getRecipe().getType();
         switch (envType) {
             case "compose":
-                composeEnvironment = parseCompose(environment.getRecipe());
+                cheServicesEnvironment = parseCompose(environment.getRecipe());
                 break;
             case "dockerimage":
             case "dockerfile":
-                composeEnvironment = parseDocker(environment);
+                cheServicesEnvironment = parseDocker(environment);
                 break;
             default:
-                throw new IllegalArgumentException("Environment type " + envType + " is not supported");
+                throw new IllegalArgumentException(format("Environment type '%s' is not supported. " +
+                                                          "Supported environment types: %s",
+                                                          envType,
+                                                          Joiner.on(", ").join(types)));
         }
 
-        composeEnvironment.getServices().forEach((name, service) -> {
+        cheServicesEnvironment.getServices().forEach((name, service) -> {
             ExtendedMachine extendedMachine = environment.getMachines().get(name);
-            if (extendedMachine != null &&
-                extendedMachine.getAttributes() != null &&
-                extendedMachine.getAttributes().containsKey("memoryLimitBytes")) {
-
-                try {
-                    service.setMemLimit(Long.parseLong(extendedMachine.getAttributes().get("memoryLimitBytes")));
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException(
-                            format("Value of attribute 'memoryLimitBytes' of machine '%s' is illegal", name));
-                }
+            if (extendedMachine != null) {
+                normalizeMachine(name, service, extendedMachine);
             }
         });
 
-        return composeEnvironment;
+        return cheServicesEnvironment;
     }
 
