@@ -1,0 +1,40 @@
+    /**
+     * Stops process.
+     */
+    void stop() {
+        try {
+            send("quit");
+        } catch (NodeJsDebuggerException e) {
+            LOG.warn(e.getMessage());
+        }
+
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    LOG.warn("Unable to terminate main pool");
+                }
+            }
+        } catch (InterruptedException e) {
+            LOG.warn(e.getMessage());
+        }
+
+
+        process.destroy();
+        try {
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                LOG.error("Unable to terminate NodeJs");
+            }
+        } catch (InterruptedException e) {
+            LOG.warn(e.getMessage());
+        }
+
+        try {
+            processWriter.close();
+        } catch (IOException e) {
+            LOG.warn("Failed to close NodeJs process output stream", e);
+        }
+        observers.clear();
+    }
+

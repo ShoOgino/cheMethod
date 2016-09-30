@@ -1,0 +1,36 @@
+    /**
+     * Execute {@code breakpoints} command.
+     * @see NodeJsBackTraceParser
+     */
+    public List<Breakpoint> getBreakpoints() throws NodeJsDebuggerException {
+        NodeJsDebugCommand<Breakpoints> breakpointsCommand = createCommand("breakpoints", NodeJsBreakpointsParser.INSTANCE);
+        List<Breakpoint> breakpoints = doExecute(breakpointsCommand).getAll();
+
+        NodeJsDebugCommand<Scripts> scriptsCommand = createCommand("scripts", NodeJsScriptsParser.INSTANCE);
+        Map<Integer, String> scripts = doExecute(scriptsCommand).getAll();
+
+        for (int i = 0; i < breakpoints.size(); i++) {
+            Breakpoint breakpoint = breakpoints.get(i);
+            Location location = breakpoint.getLocation();
+
+            String newTarget;
+            String[] target = location.getTarget().split(":");
+            if (target.length != 2) {
+                LOG.error(format("Illegal breakpoint location format %s", target));
+                continue;
+            }
+
+            if (target[0].equals("scriptId")) {
+                newTarget = scripts.get((int)Double.parseDouble(target[1]));
+            } else {
+                newTarget = target[1];
+            }
+
+            Location newLocation = new LocationImpl(newTarget, location.getLineNumber());
+            Breakpoint newBreakpoint = new BreakpointImpl(newLocation, breakpoint.isEnabled(), breakpoint.getCondition());
+            breakpoints.set(i, newBreakpoint);
+        }
+
+        return breakpoints;
+    }
+

@@ -1,0 +1,23 @@
+    private NodeJsDebugProcess(String outputSeparator, String... options) throws NodeJsDebuggerException {
+        this.observers = new CopyOnWriteArrayList<>();
+        this.outputSeparator = outputSeparator;
+
+        List<String> commands = new ArrayList<>(1 + options.length);
+        commands.add(NODEJS_COMMAND);
+        commands.addAll(Arrays.asList(options));
+
+        ProcessBuilder processBuilder = new ProcessBuilder(commands);
+        try {
+            process = processBuilder.start();
+        } catch (IOException e) {
+            throw new NodeJsDebuggerException("NodeJs process failed.", e);
+        }
+
+        processWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+
+        executor = Executors.newScheduledThreadPool(1, new ThreadFactoryBuilder().setNameFormat("nodejs-debugger-%d")
+                                                                                 .setDaemon(true)
+                                                                                 .build());
+        executor.scheduleWithFixedDelay(new OutputReader(), 0, 100, TimeUnit.MILLISECONDS);
+    }
+
