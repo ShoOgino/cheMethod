@@ -1,0 +1,28 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        when(completableFuture.get()).thenReturn(initializeResult);
+        when(initializeResult.getCapabilities()).thenReturn(serverCapabilities);
+
+        when(languageServerLauncher.getLanguageDescription()).thenReturn(languageDescription);
+        when(languageServerLauncher.isAbleToLaunch()).thenReturn(true);
+        when(languageDescription.getLanguageId()).thenReturn("id");
+        when(languageDescription.getFileExtensions()).thenReturn(Collections.singletonList("txt"));
+        when(languageDescription.getMimeTypes()).thenReturn(Collections.singletonList("plain/text"));
+
+        when(languageServer.getTextDocumentService()).thenReturn(mock(TextDocumentService.class));
+        when(languageServer.getWindowService()).thenReturn(mock(WindowService.class));
+        when(languageServer.initialize(any(InitializeParams.class))).thenReturn(completableFuture);
+
+        registry = spy(new LanguageServerRegistryImpl(Collections.singleton(languageServerLauncher),
+                                                      null,
+                                                      initializer));
+
+        when(initializer.initialize(any(LanguageServerLauncher.class), anyString())).thenAnswer(invocation -> {
+            Object[] arguments = invocation.getArguments();
+            registry.onServerInitialized(languageServer, serverCapabilities, languageDescription, (String)arguments[1]);
+            return languageServer;
+        });
+
+        doReturn(PROJECT_PATH).when(registry).extractProjectPath(FILE_PATH);
+    }
+
