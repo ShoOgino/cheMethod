@@ -13,7 +13,12 @@
 
         checkState(resources != null && resources.length == 1);
 
-        service.info(project.getLocation(), toRelative(project, resources[0]), "HEAD", false).then(new Operation<InfoResponse>() {
+        performOperationWithCredentialsRequestIfNeeded(new RemoteSubversionOperation<InfoResponse>() {
+            @Override
+            public Promise<InfoResponse> perform(Credentials credentials) {
+                return service.info(project.getLocation(), toRelative(project, resources[0]), "HEAD", false, credentials);
+            }
+        }, null).then(new Operation<InfoResponse>() {
             @Override
             public void apply(InfoResponse response) throws OperationException {
                 if (response.getErrorOutput() != null && !response.getErrorOutput().isEmpty()) {
@@ -29,39 +34,39 @@
 
                 service.info(project.getLocation(), repositoryRoot, "HEAD", true)
                        .then(new Operation<InfoResponse>() {
-                                           @Override
-                                           public void apply(InfoResponse response) throws OperationException {
-                                               if (response.getErrorOutput() != null && !response.getErrorOutput().isEmpty()) {
-                                                   printErrors(response.getErrorOutput(), constants.commandInfo());
-                                                   notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
-                                                   return;
-                                               }
+                           @Override
+                           public void apply(InfoResponse response) throws OperationException {
+                               if (!response.getErrorOutput().isEmpty()) {
+                                   printErrors(response.getErrorOutput(), constants.commandInfo());
+                                   notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
+                                   return;
+                               }
 
-                                               sourceURL = response.getItems().get(0).getURL();
-                                               SubversionItemNode subversionTreeNode = new SubversionItemNode(response.getItems().get(0));
+                               sourceURL = response.getItems().get(0).getURL();
+                               SubversionItemNode subversionTreeNode = new SubversionItemNode(response.getItems().get(0));
 
-                                               List<Node> children = new ArrayList<>();
-                                               if (response.getItems().size() > 1) {
-                                                   for (int i = 1; i < response.getItems().size(); i++) {
-                                                       SubversionItem item = response.getItems().get(i);
-                                                       if (!"file".equals(item.getNodeKind())) {
-                                                           children.add(new SubversionItemNode(item));
-                                                       }
-                                                   }
-                                               }
+                               List<Node> children = new ArrayList<>();
+                               if (response.getItems().size() > 1) {
+                                   for (int i = 1; i < response.getItems().size(); i++) {
+                                       SubversionItem item = response.getItems().get(i);
+                                       if (!"file".equals(item.getNodeKind())) {
+                                           children.add(new SubversionItemNode(item));
+                                       }
+                                   }
+                               }
 
-                                               subversionTreeNode.setChildren(children);
-                                               view.setRootNode(subversionTreeNode);
-                                               view.show();
-                                               validateSourceURL();
-                                           }
-                                       })
+                               subversionTreeNode.setChildren(children);
+                               view.setRootNode(subversionTreeNode);
+                               view.show();
+                               validateSourceURL();
+                           }
+                       })
                        .catchError(new Operation<PromiseError>() {
-                                           @Override
-                                           public void apply(PromiseError error) throws OperationException {
-                                               notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
-                                           }
-                                       });
+                           @Override
+                           public void apply(PromiseError error) throws OperationException {
+                               notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
+                           }
+                       });
             }
         }).catchError(new Operation<PromiseError>() {
             @Override

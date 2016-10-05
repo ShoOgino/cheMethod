@@ -9,12 +9,22 @@
         final Path target = view.isTargetCheckBoxSelected() ? Path.valueOf(view.getTargetUrl()) : toRelative(project, this.target);
         final String comment = view.isTargetCheckBoxSelected() ? view.getComment() : null;
 
-        final StatusNotification notification = new StatusNotification(constants.copyNotificationStarted(src.toString()), PROGRESS, FLOAT_MODE);
+        final StatusNotification notification = new StatusNotification(constants.copyNotificationStarted(src.toString()),
+                                                                       PROGRESS,
+                                                                       FLOAT_MODE);
         notificationManager.notify(notification);
 
         view.hide();
 
-        service.copy(project.getLocation(), src, target, comment).then(new Operation<CLIOutputResponse>() {
+        performOperationWithCredentialsRequestIfNeeded(new RemoteSubversionOperation<CLIOutputResponse>() {
+            @Override
+            public Promise<CLIOutputResponse> perform(Credentials credentials) {
+                notification.setStatus(PROGRESS);
+                notification.setTitle(constants.copyNotificationStarted(src.toString()));
+
+                return service.copy(project.getLocation(), src, target, comment, credentials);
+            }
+        }, notification).then(new Operation<CLIOutputResponse>() {
             @Override
             public void apply(CLIOutputResponse response) throws OperationException {
                 printResponse(response.getCommand(), response.getOutput(), response.getErrOutput(), constants.commandCopy());

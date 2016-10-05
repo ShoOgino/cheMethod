@@ -6,14 +6,21 @@
         checkState(project != null);
 
         final Path source = getSource();
-        final Path target = getTarget();
         final String comment = view.isURLSelected() ? view.getComment() : null;
 
         final StatusNotification notification =
                 new StatusNotification(locale.moveNotificationStarted(source.toString()), PROGRESS, FLOAT_MODE);
         notificationManager.notify(notification);
 
-        service.move(project.getLocation(), source, target, comment).then(new Operation<CLIOutputResponse>() {
+        performOperationWithCredentialsRequestIfNeeded(new RemoteSubversionOperation<CLIOutputResponse>() {
+            @Override
+            public Promise<CLIOutputResponse> perform(Credentials credentials) {
+                notification.setStatus(PROGRESS);
+                notification.setTitle(locale.moveNotificationStarted(source.toString()));
+
+                return service.move(project.getLocation(), source, getTarget(), comment, credentials);
+            }
+        }, notification).then(new Operation<CLIOutputResponse>() {
             @Override
             public void apply(CLIOutputResponse response) throws OperationException {
                 notification.setTitle(locale.moveNotificationSuccessful());

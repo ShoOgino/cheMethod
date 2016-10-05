@@ -6,40 +6,11 @@
                                   + "It is not a folder.");
         }
 
-        final String location = sourceStorage.getLocation();
-        final Map<String, String> parameters = sourceStorage.getParameters();
-
-        String[] credentials = null;
-
-        if (parameters != null) {
-            String paramUsername = parameters.get(ImportParameterKeys.PARAMETER_USERNAME);
-            String paramPassword = parameters.get(ImportParameterKeys.PARAMETER_PASSWORD);
-
-            if (!isNullOrEmpty(paramUsername) && !isNullOrEmpty(paramPassword)) {
-                credentials = new String[] {paramUsername, paramPassword};
-                try {
-                    this.credentialsProvider.storeCredential(location, new CredentialsProvider.Credentials(paramUsername, paramPassword));
-                } catch (final CredentialsException e) {
-                    LoggerFactory.getLogger(SubversionProjectImporter.class.getName())
-                                 .warn("Could not store credentials - try to continue anyway." + e.getMessage());
-                }
-            }
-        }
-
         this.subversionApi.setOutputLineConsumerFactory(lineConsumerFactory);
-
-        // Perform checkout
-        if (credentials != null) {
-            this.subversionApi.checkout(DtoFactory.getInstance()
-                                                  .createDto(CheckoutRequest.class)
-                                                  .withProjectPath(baseFolder.getVirtualFile().toIoFile().getAbsolutePath())
-                                                  .withUrl(location),
-                                        credentials);
-        } else {
-            this.subversionApi.checkout(DtoFactory.getInstance()
-                                                  .createDto(CheckoutRequest.class)
-                                                  .withProjectPath(baseFolder.getVirtualFile().toIoFile().getAbsolutePath())
-                                                  .withUrl(location));
-        }
+        subversionApi.checkout(newDto(CheckoutRequest.class)
+                                       .withProjectPath(baseFolder.getVirtualFile().toIoFile().getAbsolutePath())
+                                       .withUrl(sourceStorage.getLocation())
+                                       .withUsername(sourceStorage.getParameters().remove("username"))
+                                       .withPassword(sourceStorage.getParameters().remove("password")));
     }
 
