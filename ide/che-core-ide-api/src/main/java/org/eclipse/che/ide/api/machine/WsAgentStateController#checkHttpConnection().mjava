@@ -2,45 +2,34 @@
      * Goto checking HTTP connection via getting all registered REST Services
      */
     private void checkHttpConnection() {
-        String url = devMachine.getWsAgentBaseUrl() + '/'; //here we add trailing slash because
-                                                          // {@link org.eclipse.che.api.core.rest.ApiInfoService} mapped in this way
-        asyncRequestFactory.createGetRequest(url)
-                           .send(new StringUnmarshaller())
-                           .then(new Operation<String>() {
-                               @Override
-                               public void apply(String result) throws OperationException {
-                                   JSONObject object = null;
-                                   try {
-                                       object = JSONParser.parseStrict(result).isObject();
-                                   } catch (Exception exception) {
-                                       Log.warn(getClass(), "Parse root resources failed.");
-                                   }
+        //here we add trailing slash because {@link org.eclipse.che.api.core.rest.ApiInfoService} mapped in this way
+        String url = devMachine.getWsAgentBaseUrl() + '/';
+        asyncRequestFactory.createGetRequest(url).send(new StringUnmarshaller()).then(new Operation<String>() {
+            @Override
+            public void apply(String result) throws OperationException {
+                try {
+                    JSONObject object = JSONParser.parseStrict(result).isObject();
+                    if (object.containsKey("rootResources")) {
+                        JSONArray rootResources = object.get("rootResources").isArray();
+                        for (int i = 0; i < rootResources.size(); i++) {
+                            JSONObject rootResource = rootResources.get(i).isObject();
+                            String regex = rootResource.get("regex").isString().stringValue();
+                            String fqn = rootResource.get("fqn").isString().stringValue();
+                            String path = rootResource.get("path").isString().stringValue();
+                            availableServices.add(new RestServiceInfo(fqn, regex, path));
+                        }
+                    }
+                } catch (Exception exception) {
+                    Log.warn(getClass(), "Parse root resources failed.");
+                }
 
-                                   if (object != null && object.containsKey("rootResources")) {
-                                       JSONArray rootResources = object.get("rootResources").isArray();
-                                       for (int i = 0; i < rootResources.size(); i++) {
-                                           JSONObject rootResource = rootResources.get(i).isObject();
-                                           String regex = rootResource.get("regex").isString().stringValue();
-                                           String fqn = rootResource.get("fqn").isString().stringValue();
-                                           String path = rootResource.get("path").isString().stringValue();
-                                           availableServices.add(new RestServiceInfo(fqn, regex, path));
-                                       }
-                                   }
-
-                                   checkWsConnection();
-                               }
-                           })
-                           .catchError(new Operation<PromiseError>() {
-                               @Override
-                               public void apply(PromiseError arg) throws OperationException {
-                                   Log.error(getClass(), arg.getMessage());
-                                   new Timer() {
-                                       @Override
-                                       public void run() {
-                                           checkHttpConnection();
-                                       }
-                                   }.schedule(1000);
-                               }
-                           });
+                checkWsConnection();
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError arg) throws OperationException {
+                checkWsAgentHealth();
+            }
+        });
     }
 
