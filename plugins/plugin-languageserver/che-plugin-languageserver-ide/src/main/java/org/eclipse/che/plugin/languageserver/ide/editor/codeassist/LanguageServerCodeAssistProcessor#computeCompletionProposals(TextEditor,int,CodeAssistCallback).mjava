@@ -2,6 +2,8 @@
     public void computeCompletionProposals(TextEditor editor, int offset, final CodeAssistCallback callback) {
         TextDocumentPositionParamsDTO documentPosition = dtoBuildHelper.createTDPP(editor.getDocument(), offset);
         final TextDocumentIdentifierDTO documentId = documentPosition.getTextDocument();
+        String currentLine = editor.getDocument().getLineContent(documentPosition.getPosition().getLine());
+        final String currentIdentifier = getCurrentIdentifier(currentLine, documentPosition.getPosition().getCharacter());
         this.lastErrorMessage = null;
         documentServiceClient.completion(documentPosition).then(new Operation<List<CompletionItemDTO>>() {
 
@@ -9,12 +11,16 @@
             public void apply(List<CompletionItemDTO> items) throws OperationException {
                 List<CompletionProposal> proposals = newArrayList();
                 for (CompletionItemDTO item : items) {
-                    proposals.add(new CompletionItemBasedCompletionProposal(item,
-                                                                            documentServiceClient,
-                                                                            documentId,
-                                                                            resources,
-                                                                            imageProvider.getIcon(item.getKind()),
-                                                                            serverCapabilities));
+                    List<Match> highlights = filter(currentIdentifier, item);
+                    if (highlights != null ) {
+                        proposals.add(new CompletionItemBasedCompletionProposal(item,
+                                                                                documentServiceClient,
+                                                                                documentId,
+                                                                                resources,
+                                                                                imageProvider.getIcon(item.getKind()),
+                                                                                serverCapabilities,
+                                                                                highlights));
+                    }
                 }
                 callback.proposalComputed(proposals);
             }
