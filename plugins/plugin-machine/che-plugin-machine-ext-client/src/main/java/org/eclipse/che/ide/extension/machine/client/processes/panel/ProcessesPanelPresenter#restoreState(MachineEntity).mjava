@@ -6,25 +6,19 @@
                     /**
                      * Do not show the process if the command line has prefix #hidden
                      */
-                    if (!Strings.isNullOrEmpty(machineProcessDto.getCommandLine()) && machineProcessDto.getCommandLine().startsWith("#hidden")) {
+                    if (!Strings.isNullOrEmpty(machineProcessDto.getCommandLine()) &&
+                        machineProcessDto.getCommandLine().startsWith("#hidden")) {
                         continue;
                     }
 
-                    final CommandDto commandDto = dtoFactory.createDto(CommandDto.class)
-                                                            .withName(machineProcessDto.getName())
-                                                            .withAttributes(machineProcessDto.getAttributes())
-                                                            .withCommandLine(machineProcessDto.getCommandLine())
-                                                            .withType(machineProcessDto.getType());
-
-                    final CommandType type = commandTypeRegistry.getCommandTypeById(commandDto.getType());
-                    if (type != null) {
-                        final CommandConfiguration configuration = type.getConfigurationFactory().createFromDto(commandDto);
-                        final CommandOutputConsole console = commandConsoleFactory.create(configuration, machine);
+                    // hide the processes which are launched by command of unknown type
+                    if (isProcessLaunchedByCommandOfKnownType(machineProcessDto)) {
+                        final CommandOutputConsole console = commandConsoleFactory.create(new CommandImpl(machineProcessDto), machine);
                         console.listenToOutput(machineProcessDto.getOutputChannel());
                         console.attachToProcess(machineProcessDto);
+
                         addCommandOutput(machine.getId(), console);
                     }
-
                 }
             }
         }).catchError(new Operation<PromiseError>() {

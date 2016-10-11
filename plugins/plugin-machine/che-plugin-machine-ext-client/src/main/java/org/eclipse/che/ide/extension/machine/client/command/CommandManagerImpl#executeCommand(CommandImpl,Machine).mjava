@@ -1,0 +1,28 @@
+    @Override
+    public void executeCommand(final CommandImpl command, final Machine machine) {
+        final String outputChannel = "process:output:" + UUID.uuid();
+
+        final CommandOutputConsole console = commandConsoleFactory.create(command, machine);
+        console.listenToOutput(outputChannel);
+        processesPanelPresenter.addCommandOutput(machine.getId(), console);
+
+        macroProcessor.expandMacros(command.getCommandLine()).then(new Operation<String>() {
+            @Override
+            public void apply(String arg) throws OperationException {
+                final CommandImpl toExecute = new CommandImpl(command);
+                toExecute.setCommandLine(arg);
+
+                Promise<MachineProcessDto> processPromise = machineServiceClient.executeCommand(machine.getWorkspaceId(),
+                                                                                                machine.getId(),
+                                                                                                toExecute,
+                                                                                                outputChannel);
+                processPromise.then(new Operation<MachineProcessDto>() {
+                    @Override
+                    public void apply(MachineProcessDto process) throws OperationException {
+                        console.attachToProcess(process);
+                    }
+                });
+            }
+        });
+    }
+

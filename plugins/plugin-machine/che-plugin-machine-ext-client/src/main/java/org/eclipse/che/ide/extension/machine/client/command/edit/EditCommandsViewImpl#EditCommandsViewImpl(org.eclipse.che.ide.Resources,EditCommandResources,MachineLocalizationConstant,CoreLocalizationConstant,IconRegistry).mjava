@@ -1,6 +1,6 @@
     @Inject
     protected EditCommandsViewImpl(org.eclipse.che.ide.Resources resources,
-                                   EditCommandResources commandResources,
+                                   final EditCommandResources commandResources,
                                    MachineLocalizationConstant machineLocale,
                                    CoreLocalizationConstant coreLocale,
                                    IconRegistry iconRegistry) {
@@ -9,7 +9,29 @@
         this.coreLocale = coreLocale;
         this.iconRegistry = iconRegistry;
 
-        selectConfiguration = null;
+        commandRenderer = new CategoryRenderer<CommandImpl>() {
+            @Override
+            public void renderElement(Element element, CommandImpl data) {
+                UIObject.ensureDebugId(element, "commandsManager-type-" + data.getType());
+
+                element.addClassName(commandResources.getCss().categorySubElementHeader());
+                element.setInnerText(data.getName().trim().isEmpty() ? "<none>" : data.getName());
+                element.appendChild(createCommandButtons());
+            }
+
+            @Override
+            public SpanElement renderCategory(Category<CommandImpl> category) {
+                return createCategoryHeaderForCommandType(category.getTitle());
+            }
+        };
+
+        commandEventDelegate = new Category.CategoryEventDelegate<CommandImpl>() {
+            @Override
+            public void onListItemClicked(Element listItemBase, CommandImpl itemData) {
+                onCommandSelected(itemData);
+            }
+        };
+
         categories = new HashMap<>();
 
         commandResources.getCss().ensureInjected();
@@ -24,8 +46,8 @@
         filterInputField.getElement().setAttribute("placeholder", machineLocale.editCommandsViewPlaceholder());
         filterInputField.getElement().addClassName(commandResources.getCss().filterPlaceholder());
 
-        list = new CategoriesList(resources);
-        list.addDomHandler(new KeyDownHandler() {
+        categoriesList = new CategoriesList(resources);
+        categoriesList.addDomHandler(new KeyDownHandler() {
             @Override
             public void onKeyDown(KeyDownEvent event) {
                 switch (event.getNativeKeyCode()) {
@@ -34,19 +56,14 @@
                         resetFilter();
                         break;
                     case KeyboardEvent.KeyCode.DELETE:
-                        delegate.onRemoveClicked(selectConfiguration);
+                        delegate.onRemoveClicked();
                         break;
                 }
             }
         }, KeyDownEvent.getType());
-        categoriesPanel.add(list);
-
-        savePanel.setVisible(false);
-        previewUrlPanel.setVisible(false);
-        contentPanel.clear();
+        categoriesPanel.add(categoriesList);
 
         createButtons();
-        resetFilter();
 
         getWidget().getElement().getStyle().setPadding(0, Style.Unit.PX);
     }
