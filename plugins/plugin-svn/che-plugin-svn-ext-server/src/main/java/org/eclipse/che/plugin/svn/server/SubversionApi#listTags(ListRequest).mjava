@@ -1,0 +1,41 @@
+    /**
+     * Returns list of the tags of the project.
+     *
+     * @param request
+     *         the request
+     *
+     * @see #list(ListRequest)
+     * @see #info(InfoRequest)
+     */
+    public ListResponse listTags(final ListRequest request) throws ApiException {
+        InfoResponse info = info(newDto(InfoRequest.class).withProjectPath(request.getProjectPath())
+                                                          .withTarget(".")
+                                                          .withPassword(request.getPassword())
+                                                          .withUsername(request.getUsername()));
+
+        final List<String> args = defaultArgs();
+        args.add("list");
+
+        String repositoryRoot = getRepositoryRoot(info.getOutput());
+        String projectRelativeUrl = getRelativeUrl(info.getOutput());
+        String projectUri = recognizeProjectUri(repositoryRoot, projectRelativeUrl);
+
+        String branchesPath = projectUri == null ? "^/tags"
+                                                 : (projectUri + "/tags");
+
+        final CommandLineResult result = runCommand(null,
+                                                    args,
+                                                    new File(request.getProjectPath()),
+                                                    singletonList(branchesPath),
+                                                    request.getUsername(),
+                                                    request.getPassword());
+
+        return newDto(ListResponse.class).withCommand(result.getCommandLine().toString())
+                                         .withOutput(result.getStdout()
+                                                           .stream()
+                                                           .filter(s -> s.endsWith("/"))
+                                                           .map(s -> s.substring(0, s.length() - 1))
+                                                           .collect(Collectors.toList()))
+                                         .withErrorOutput(result.getStderr());
+    }
+
