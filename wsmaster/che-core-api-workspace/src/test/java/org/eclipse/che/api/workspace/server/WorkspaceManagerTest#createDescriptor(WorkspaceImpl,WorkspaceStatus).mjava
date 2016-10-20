@@ -1,16 +1,38 @@
-    private RuntimeDescriptor createDescriptor(WorkspaceImpl workspace, WorkspaceStatus status) {
+    private RuntimeDescriptor createDescriptor(WorkspaceImpl workspace, WorkspaceStatus status)
+            throws ServerException, NotFoundException, ConflictException {
         EnvironmentImpl environment = workspace.getConfig().getEnvironments().get(workspace.getConfig().getDefaultEnv());
         assertNotNull(environment);
 
         final WorkspaceRuntimeImpl runtime = new WorkspaceRuntimeImpl(workspace.getConfig().getDefaultEnv());
-        MachineImpl machine = spy(createMachine(workspace.getId(), workspace.getConfig().getDefaultEnv(), true));
-        runtime.getMachines().add(machine);
-        MachineImpl machine2 = spy(createMachine(workspace.getId(), workspace.getConfig().getDefaultEnv(), false));
-        runtime.getMachines().add(machine2);
+        final MachineImpl machine1 = spy(createMachine(workspace.getId(), workspace.getConfig().getDefaultEnv(), true));
+        final MachineImpl machine2 = spy(createMachine(workspace.getId(), workspace.getConfig().getDefaultEnv(), false));
+        final Map<String, MachineImpl> machines = new HashMap<>();
+        machines.put(machine1.getId(), machine1);
+        machines.put(machine2.getId(), machine2);
+        runtime.getMachines().addAll(machines.values());
+        runtime.setDevMachine(machine1);
+
+        when(runtimes.saveMachine(any(), any(), anyObject())).thenAnswer(inv -> {
+            final String machineId = (String)inv.getArguments()[2];
+            final MachineImpl machine = machines.get(machineId);
+            if (machine == null) {
+                return null;
+            }
+            return SnapshotImpl.builder()
+                               .setWorkspaceId(machine.getWorkspaceId())
+                               .useCurrentCreationDate()
+                               .generateId()
+                               .setDescription("test")
+                               .setDev(machine.getConfig().isDev())
+                               .setEnvName(machine.getEnvName())
+                               .setMachineName(machine.getConfig().getName())
+                               .build();
+        });
 
         final RuntimeDescriptor descriptor = mock(RuntimeDescriptor.class);
         when(descriptor.getRuntimeStatus()).thenReturn(status);
         when(descriptor.getRuntime()).thenReturn(runtime);
+        workspace.setRuntime(runtime);
         return descriptor;
     }
 

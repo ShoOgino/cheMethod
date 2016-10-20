@@ -1,0 +1,26 @@
+    @Test
+    public void removesNewlyCreatedSnapshotsWhenFailedToSaveTheirsMetadata() throws Exception {
+        final WorkspaceImpl workspace = createRunningWorkspace();
+        when(snapshotDao.replaceSnapshots(eq(workspace.getId()),
+                                          eq(workspace.getRuntime().getActiveEnv()),
+                                          anyObject())).thenThrow(new SnapshotException("test"));
+
+        workspaceManager.stopWorkspace(workspace.getId());
+
+        verify(runtimes, timeout(2000)).beginSnapshotting(workspace.getId());
+        verify(runtimes, timeout(2000)).finishSnapshotting(workspace.getId());
+        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                               .withEventType(SNAPSHOT_CREATING)
+                                               .withWorkspaceId(workspace.getId()));
+        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                               .withEventType(SNAPSHOT_CREATION_ERROR)
+                                               .withWorkspaceId(workspace.getId())
+                                               .withError("test"));
+        verify(snapshotDao).replaceSnapshots(eq(workspace.getId()),
+                                             eq(workspace.getRuntime().getActiveEnv()),
+                                             snapshotsCaptor.capture());
+        final Iterator<SnapshotImpl> snapshotsIt = snapshotsCaptor.getValue().iterator();
+        verify(runtimes).removeSnapshot(snapshotsIt.next());
+        verify(runtimes).removeSnapshot(snapshotsIt.next());
+    }
+

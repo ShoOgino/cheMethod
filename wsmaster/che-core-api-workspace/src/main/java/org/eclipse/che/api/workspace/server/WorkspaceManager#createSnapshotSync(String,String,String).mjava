@@ -1,0 +1,68 @@
+    /**
+     * Synchronously creates snapshot of the workspace.
+     *
+     * @return true if snapshot of dev-machine was successfully created
+     * otherwise returns false.
+     */
+    @VisibleForTesting
+    boolean createSnapshotSync(String namespace, String workspaceId, String envName) {
+        try {
+            runtimes.beginSnapshotting(workspaceId);
+        } catch (NotFoundException | ConflictException x) {
+            LOG.warn("Couldn't start snapshot creation of workspace '{}' due to error: '{}'",
+                     workspaceId,
+                     x.getMessage());
+            return false;
+        }
+
+        publishEvent(SNAPSHOT_CREATING, workspaceId);
+
+        final List<MachineImpl> machines;
+        try {
+            machines = runtimes.get(workspaceId).getRuntime().getMachines();
+        } catch (Exception x) {
+            throw new IllegalStateException(x.getLocalizedMessage(), x);
+        }
+
+        LOG.info("Creating snapshot of workspace '{}', machines to snapshot: '{}'", workspaceId, machines.size());
+        final List<SnapshotImpl> newSnapshots = new ArrayList<>(machines.size());
+        Collections.sort(machines, comparing(m -> !m.getConfig().isDev(), Boolean::compare));
+        for (MachineImpl machine : machines) {
+            try {
+                newSnapshots.add(runtimes.saveMachine(namespace, workspaceId, machine.getId()));
+            } catch (Exception x) {
+                if (machine.getConfig().isDev()) {
+                    runtimes.finishSnapshotting(workspaceId);
+                    publishEvent(SNAPSHOT_CREATION_ERROR, workspaceId, x.getMessage());
+                    return false;
+                }
+                LOG.warn(format("Couldn't create snapshot of machine '%s:%s:%s' in workspace '%s'",
+                                namespace,
+                                machine.getEnvName(),
+                                machine.getConfig().getName(),
+                                workspaceId));
+            }
+        }
+
+        try {
+            LOG.info("Saving new snapshots metadata, workspace id '{}'", workspaceId);
+            final List<SnapshotImpl> removed = snapshotDao.replaceSnapshots(workspaceId, envName, newSnapshots);
+            if (!removed.isEmpty()) {
+                LOG.info("Removing old snapshots, workspace id '{}', snapshots to remove '{}'", workspaceId, removed.size());
+                removeSnapshotsBinaries(removed);
+            }
+        } catch (SnapshotException x) {
+            LOG.error(format("Couldn't remove existing snapshots metadata for workspace '%s'", workspaceId), x);
+            LOG.info("Removing newly created snapshots, workspace id '{}', snapshots to remove '{}'", workspaceId, newSnapshots.size());
+            removeSnapshotsBinaries(newSnapshots);
+            runtimes.finishSnapshotting(workspaceId);
+            publishEvent(SNAPSHOT_CREATION_ERROR, workspaceId, x.getMessage());
+            return false;
+        }
+
+        runtimes.finishSnapshotting(workspaceId);
+        publishEvent(SNAPSHOT_CREATED, workspaceId);
+
+        return true;
+    }
+

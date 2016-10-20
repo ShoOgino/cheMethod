@@ -3,15 +3,20 @@
      * attribute set to true) and then stops the workspace(even if snapshot creation failed).
      */
     @VisibleForTesting
-    void performAsyncStop(WorkspaceImpl workspace) throws ConflictException {
+    void performAsyncStop(WorkspaceImpl workspace, @Nullable Boolean createSnapshot) throws ConflictException {
         checkWorkspaceIsRunning(workspace, "stop");
-        final String autoSnapshotAttr = workspace.getAttributes().get(AUTO_CREATE_SNAPSHOT);
-        boolean createSnapshot;
+
+        final boolean snapshotBeforeStop;
         if (workspace.isTemporary()) {
-            createSnapshot = false;
+            snapshotBeforeStop = false;
+        } else if (createSnapshot != null) {
+            snapshotBeforeStop = createSnapshot;
+        } else if (workspace.getAttributes().containsKey(AUTO_CREATE_SNAPSHOT)) {
+            snapshotBeforeStop = parseBoolean(workspace.getAttributes().get(AUTO_CREATE_SNAPSHOT));
         } else {
-            createSnapshot = autoSnapshotAttr == null ? defaultAutoSnapshot : parseBoolean(autoSnapshotAttr);
+            snapshotBeforeStop = defaultAutoSnapshot;
         }
+
         executor.execute(ThreadLocalPropagateContext.wrap(() -> {
             final String stoppedBy = sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY));
             LOG.info("Workspace '{}:{}' with id '{}' is being stopped by user '{}'",
@@ -19,7 +24,9 @@
                      workspace.getConfig().getName(),
                      workspace.getId(),
                      firstNonNull(stoppedBy, "undefined"));
-            if (createSnapshot && !createSnapshotSync(workspace.getRuntime(), workspace.getNamespace(), workspace.getId())) {
+            if (snapshotBeforeStop && !createSnapshotSync(workspace.getNamespace(),
+                                                          workspace.getId(),
+                                                          workspace.getRuntime().getActiveEnv())) {
                 LOG.warn("Could not create a snapshot of the workspace '{}:{}' with workspace id '{}'. The workspace will be stopped",
                          workspace.getNamespace(),
                          workspace.getConfig().getName(),

@@ -1,0 +1,18 @@
+    @Test
+    public void failsToCreateSnapshotWhenDevMachineSnapshottingFailed() throws Exception {
+        final WorkspaceImpl workspace = createRunningWorkspace();
+        when(runtimes.saveMachine(any(), any(), any())).thenThrow( new ServerException("test"));
+
+        workspaceManager.stopWorkspace(workspace.getId());
+
+        verify(runtimes, timeout(2000)).beginSnapshotting(workspace.getId());
+        verify(runtimes, timeout(2000)).finishSnapshotting(workspace.getId());
+        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                               .withEventType(SNAPSHOT_CREATING)
+                                               .withWorkspaceId(workspace.getId()));
+        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                               .withEventType(SNAPSHOT_CREATION_ERROR)
+                                               .withWorkspaceId(workspace.getId())
+                                               .withError("test"));
+    }
+
