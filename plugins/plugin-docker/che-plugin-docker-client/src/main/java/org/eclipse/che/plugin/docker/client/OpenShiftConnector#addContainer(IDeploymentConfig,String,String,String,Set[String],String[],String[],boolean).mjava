@@ -1,0 +1,28 @@
+    private void addContainer(IDeploymentConfig dc, String workspaceID, String imageName, String containerName, Set<String> exposedPorts, String[] envVariables, String[] volumes, boolean runContainerAsRoot) {
+        Set<IPort> containerPorts = getContainerPortsFrom(exposedPorts);
+        Map<String, String> containerEnv = getContainerEnvFrom(envVariables);
+        dc.addContainer(containerName,
+                new DockerImageURI(imageName),
+                containerPorts,
+                containerEnv,
+                Collections.emptyList());
+        dc.getContainer(containerName).setImagePullPolicy(IMAGE_PULL_POLICY_IFNOTPRESENT);
+
+        ModelNode dcFirstContainer = ((DeploymentConfig)dc).getNode().get("spec").get("template").get("spec").get("containers").get(0);
+
+        String UID = runContainerAsRoot ? UID_ROOT : UID_USER;
+
+        dcFirstContainer.get("securityContext").get("privileged").set(true);
+        dcFirstContainer.get("securityContext").get("runAsUser").set(UID);
+
+        addLivenessProbe(dcFirstContainer, exposedPorts);
+
+        // Add volumes
+        for (String volume : volumes) {
+            String hostPath = volume.split(":",3)[0];
+            String mountPath = volume.split(":",3)[1];
+            String volumName = getVolumeName(volume);
+            addVolume((DeploymentConfig)dc, "ws-" + workspaceID + "-" + volumName, hostPath, mountPath);
+        }
+    }
+
