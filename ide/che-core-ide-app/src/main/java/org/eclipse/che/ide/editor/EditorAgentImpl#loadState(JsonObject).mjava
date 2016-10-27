@@ -1,0 +1,29 @@
+    @Override
+    @SuppressWarnings("unchecked")
+    public void loadState(@NotNull final JsonObject state) {
+        if (state.hasKey("FILES")) {
+            JsonObject files = state.getObject("FILES");
+            EditorPartStack partStack = editorMultiPartStack.createRootPartStack();
+            final Map<EditorPartPresenter, EditorPartStack> activeEditors = new HashMap<>();
+            List<Promise<Void>> restore = restore(files, partStack, activeEditors);
+            Promise<ArrayOf<?>> promise = promiseProvider.all2(restore.toArray(new Promise[restore.size()]));
+            promise.then(new Operation() {
+                @Override
+                public void apply(Object arg) throws OperationException {
+                    String activeFile = "";
+                    if (state.hasKey("ACTIVE_EDITOR")) {
+                        activeFile = state.getString("ACTIVE_EDITOR");
+                    }
+                    EditorPartPresenter activeEditorPart = null;
+                    for (Map.Entry<EditorPartPresenter, EditorPartStack> entry : activeEditors.entrySet()) {
+                        entry.getValue().setActivePart(entry.getKey());
+                        if (activeFile.equals(entry.getKey().getEditorInput().getFile().getLocation().toString())) {
+                            activeEditorPart = entry.getKey();
+                        }
+                    }
+                    workspaceAgent.setActivePart(activeEditorPart);
+                }
+            });
+        }
+    }
+
