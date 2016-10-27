@@ -1,0 +1,42 @@
+    @Test(dataProvider = "GitConnectionFactory", dataProviderClass = GitConnectionFactoryProvider.class)
+    public void testLogSince(GitConnectionFactory connectionFactory) throws GitException, IOException, InterruptedException {
+        //given
+        GitConnection connection = connectToInitializedGitRepository(connectionFactory, repository);
+        addFile(connection, "1.txt", "someChanges");
+        connection.add(newDto(AddRequest.class));
+        String firstCommitId = connection.commit(newDto(CommitRequest.class).withMessage("add 1.txt file")).getId();
+
+        addFile(connection, "2.txt", "secondChanges");
+        connection.add(newDto(AddRequest.class));
+        String secondCommitId = connection.commit(newDto(CommitRequest.class).withMessage("add 2.txt file")).getId();
+
+        addFile(connection, "3.txt", "thirdChanges");
+        connection.add(newDto(AddRequest.class));
+        String thirdCommitId = connection.commit(newDto(CommitRequest.class).withMessage("add 3.txt file")).getId();
+
+        addFile(connection, "4.txt", "fourthChanges");
+        connection.add(newDto(AddRequest.class));
+        String fourthCommitId = connection.commit(newDto(CommitRequest.class).withMessage("add 4.txt file")).getId();
+
+        //when
+        List<Revision> allCommits =
+            connection.log(newDto(LogRequest.class)).getCommits();
+        List<Revision> secondAndThirdAndFourthCommits =
+            connection.log(newDto(LogRequest.class).withRevisionRangeSince(firstCommitId).withRevisionRangeUntil(fourthCommitId)).getCommits();
+        List<Revision> thirdAndFourthCommits =
+            connection.log(newDto(LogRequest.class).withRevisionRangeSince(secondCommitId).withRevisionRangeUntil(fourthCommitId)).getCommits();
+
+        //then
+        assertEquals(4, allCommits.size());
+        assertEquals(3, secondAndThirdAndFourthCommits.size());
+        assertEquals(2, thirdAndFourthCommits.size());
+
+
+        assertEquals(secondAndThirdAndFourthCommits.get(0).getMessage(), "add 4.txt file");
+        assertEquals(secondAndThirdAndFourthCommits.get(1).getMessage(), "add 3.txt file");
+        assertEquals(secondAndThirdAndFourthCommits.get(2).getMessage(), "add 2.txt file");
+
+        assertEquals(thirdAndFourthCommits.get(0).getMessage(), "add 4.txt file");
+        assertEquals(thirdAndFourthCommits.get(1).getMessage(), "add 3.txt file");
+    }
+

@@ -1,0 +1,43 @@
+    private List<DiffCommitFile> getCommitDiffFiles(RevCommit revCommit, String pattern) throws IOException {
+        List<DiffEntry> diffs;
+        TreeFilter filter = null;
+        if (!isNullOrEmpty(pattern)) {
+            filter = AndTreeFilter.create(PathFilterGroup.createFromStrings(Collections.singleton(pattern)), TreeFilter.ANY_DIFF);
+        }
+        List<DiffCommitFile> commitFilesList = new ArrayList<>();
+        try (TreeWalk tw = new TreeWalk(repository)){
+            tw.setRecursive(true);
+            // get the current commit parent in order to compare it with the current commit
+            // and to get the list of DiffEntry.
+            if (revCommit.getParentCount() > 0) {
+                RevCommit parent = parseCommit(revCommit.getParent(0));
+                tw.reset(parent.getTree(), revCommit.getTree());
+                if (filter != null) {
+                    tw.setFilter(filter);
+                } else {
+                    tw.setFilter(TreeFilter.ANY_DIFF);
+                }
+                diffs = DiffEntry.scan(tw);
+            } else {
+                // If the current commit has no parents (which means it is the initial commit),
+                // then create an empty tree and compare it to the current commit to get the
+                // list of DiffEntry.
+                try (RevWalk rw = new RevWalk(repository);
+                     DiffFormatter diffFormat = new DiffFormatter(NullOutputStream.INSTANCE)) {
+                    diffFormat.setRepository(repository);
+                    if (filter != null) {
+                        diffFormat.setPathFilter(filter);
+                    }
+                    diffs = diffFormat.scan(new EmptyTreeIterator(), new CanonicalTreeParser(null, rw.getObjectReader(), revCommit.getTree()));
+                }
+            }
+        }
+        if (diffs != null) {
+            commitFilesList.addAll(diffs.stream().map(diff -> newDto(DiffCommitFile.class).withOldPath(diff.getOldPath())
+                                                                                          .withNewPath(diff.getNewPath())
+                                                                                          .withChangeType(diff.getChangeType().name()))
+                                                 .collect(Collectors.toList()));
+        }
+        return commitFilesList;
+    }
+
