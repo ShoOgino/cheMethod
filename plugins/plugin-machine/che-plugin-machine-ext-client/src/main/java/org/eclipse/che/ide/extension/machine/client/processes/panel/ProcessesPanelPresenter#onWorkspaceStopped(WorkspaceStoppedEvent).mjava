@@ -1,21 +1,36 @@
     @Override
     public void onWorkspaceStopped(WorkspaceStoppedEvent event) {
-        for (ProcessTreeNode processTreeNode : rootNode.getChildren()) {
-            if (processTreeNode.getType() == MACHINE_NODE) {
-                onCloseTerminal(processTreeNode);
-                processTreeNode.setRunning(false);
-                if (processTreeNode.getChildren() != null) {
-                    processTreeNode.getChildren().clear();
+        try {
+            for (ProcessTreeNode node : rootNode.getChildren()) {
+                if (MACHINE_NODE == node.getType()) {
+                    node.setRunning(false);
+
+                    ArrayList<ProcessTreeNode> children = new ArrayList<>();
+                    children.addAll(node.getChildren());
+
+                    for (ProcessTreeNode child : children) {
+                        if (COMMAND_NODE == child.getType()) {
+                            closeCommandOutput(child, new SubPanel.RemoveCallback() {
+                                @Override
+                                public void remove() {
+                                }
+                            });
+                        } else if (TERMINAL_NODE == child.getType()) {
+                            closeTerminal(child);
+                        }
+
+                        view.hideProcessOutput(child.getId());
+                        view.removeProcessNode(child);
+
+                    }
                 }
             }
+
+        } catch (Exception e) {
+            Log.error(getClass(), e);
         }
 
-        rootNode.getChildren().clear();
-        rootNodes.clear();
-        machineNodes.clear();
-
-        view.clear();
-        view.selectNode(null);
         view.setProcessesData(rootNode);
+        selectDevMachine();
     }
 

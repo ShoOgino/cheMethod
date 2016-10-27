@@ -1,10 +1,13 @@
     private void connectToTerminalWebSocket(@NotNull String wsUrl) {
+        countRetry--;
+
         socket = WebSocket.create(wsUrl);
+
         socket.setOnOpenHandler(new ConnectionOpenedHandler() {
             @Override
             public void onOpen() {
                 terminal = TerminalJso.create(TerminalOptionsJso.createDefault());
-                isTerminalConnected = true;
+                connected = true;
 
                 view.openTerminal(terminal);
 
@@ -35,11 +38,14 @@
         socket.setOnErrorHandler(new ConnectionErrorHandler() {
             @Override
             public void onError() {
-                isTerminalConnected = false;
+                connected = false;
 
-                notificationManager.notify(locale.connectionFailedWithTerminal(), locale.terminalErrorConnection(), FAIL, FLOAT_MODE);
-
-                tryToReconnect();
+                if (countRetry == 0) {
+                    view.showErrorMessage(locale.terminalErrorStart());
+                    notificationManager.notify(locale.connectionFailedWithTerminal(), locale.terminalErrorConnection(), FAIL, FLOAT_MODE);
+                } else {
+                    reconnect();
+                }
             }
         });
     }
