@@ -1,0 +1,45 @@
+    @Override
+    public Map<String, String> deserialize(JsonParser jsonParser, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+        Object environment = jsonParser.readValueAs(Object.class);
+
+        /* Parse dictionary in view of:
+           "environment:
+             key1: value1
+             key2: value2"
+        */
+        if (environment instanceof Map) {
+            return (Map<String, String>) environment;
+        }
+
+        /* Parse array in view of:
+           "environment:
+             - key1=value1
+             - key2=value2"
+        */
+        try {
+            if (environment instanceof List) {
+                return parseArrayEnvironment((List<String>) environment);
+            }
+        } catch (IllegalArgumentException ie) {
+            throw ctxt.mappingException(ie.getMessage());
+
+        } catch (Exception e) {
+            throw ctxt.mappingException(format(UNSUPPORTED_VALUE_MESSAGE, environment));
+        }
+
+        // work around empty environment
+        if (environment instanceof String) {
+            if (((String) environment).isEmpty()) {
+                return new HashMap<>();
+            }
+
+            throw ctxt.mappingException(format(UNSUPPORTED_VALUE_MESSAGE, environment));
+        }
+
+        /* Work around unsupported type of environment content, for example, 'Boolean' in case of content:
+           "environment:
+             true"
+        */
+        throw ctxt.mappingException(format("Unsupported type '%s'.", environment.getClass()));
+    }
+
