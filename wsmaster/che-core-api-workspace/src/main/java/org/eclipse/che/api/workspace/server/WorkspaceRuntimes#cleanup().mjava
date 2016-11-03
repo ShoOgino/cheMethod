@@ -7,16 +7,11 @@
     void cleanup() {
         isPreDestroyInvoked = true;
 
-        final ExecutorService stopEnvExecutor =
-                Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors(),
-                                             new ThreadFactoryBuilder().setNameFormat("StopEnvironment-%d")
-                                                                       .setDaemon(false)
-                                                                       .build());
         try (StripedLocks.WriteAllLock lock = stripedLocks.acquireWriteAllLock()) {
             for (Map.Entry<String, WorkspaceState> workspace : workspaces.entrySet()) {
                 if (workspace.getValue().status.equals(RUNNING) ||
                     workspace.getValue().status.equals(WorkspaceStatus.STARTING)) {
-                    stopEnvExecutor.execute(() -> {
+                    executor.execute(() -> {
                         try {
                             environmentEngine.stop(workspace.getKey());
                         } catch (ServerException | NotFoundException e) {
@@ -28,17 +23,17 @@
 
             workspaces.clear();
 
-            stopEnvExecutor.shutdown();
+            executor.shutdown();
         }
         try {
-            if (!stopEnvExecutor.awaitTermination(50, TimeUnit.SECONDS)) {
-                stopEnvExecutor.shutdownNow();
-                if (!stopEnvExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+            if (!executor.awaitTermination(50, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
                     LOG.warn("Unable terminate destroy machines pool");
                 }
             }
         } catch (InterruptedException e) {
-            stopEnvExecutor.shutdownNow();
+            executor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }

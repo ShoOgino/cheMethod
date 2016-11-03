@@ -1,0 +1,41 @@
+    /** Starts the machine instances. */
+    private void doStart(EnvironmentImpl environment,
+                         String workspaceId,
+                         String envName,
+                         boolean recover) throws ServerException {
+        publishWorkspaceEvent(EventType.STARTING, workspaceId, null);
+        try {
+            List<Instance> machines = environmentEngine.start(workspaceId,
+                                                              envName,
+                                                              environment,
+                                                              recover,
+                                                              getEnvironmentLogger(workspaceId));
+            launchAgents(environment, machines);
+
+            try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+                WorkspaceState workspaceState = workspaces.get(workspaceId);
+                workspaceState.status = WorkspaceStatus.RUNNING;
+            }
+            // Event publication should be performed outside of the lock
+            // as it may take some time to notify subscribers
+            publishWorkspaceEvent(EventType.RUNNING, workspaceId, null);
+        } catch (ApiException | RuntimeException e) {
+            try {
+                environmentEngine.stop(workspaceId);
+            } catch (EnvironmentNotRunningException ignore) {
+            } catch (Exception ex) {
+                LOG.error(ex.getLocalizedMessage(), ex);
+            }
+            String environmentStartError = "Start of environment " + envName +
+                                           " failed. Error: " + e.getLocalizedMessage();
+            try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+                workspaces.remove(workspaceId);
+            }
+            publishWorkspaceEvent(EventType.ERROR,
+                                  workspaceId,
+                                  environmentStartError);
+
+            throw new ServerException(environmentStartError, e);
+        }
+    }
+
