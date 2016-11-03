@@ -1,0 +1,19 @@
+    @Override
+    public List<RemoteReference> lsRemote(String remoteUrl) throws UnauthorizedException, GitException {
+        LsRemoteCommand lsRemoteCommand = getGit().lsRemote().setRemote(remoteUrl);
+        Collection<Ref> refs;
+        try {
+            refs = lsRemoteCommand.call();
+        } catch (GitAPIException exception) {
+            if (exception.getMessage().contains(ERROR_AUTHENTICATION_REQUIRED)) {
+                throw new UnauthorizedException(format(ERROR_AUTHENTICATION_FAILED, remoteUrl));
+            } else {
+                throw new GitException(exception.getMessage(), exception);
+            }
+        }
+
+        return refs.stream()
+                   .map(ref -> newDto(RemoteReference.class).withCommitId(ref.getObjectId().name()).withReferenceName(ref.getName()))
+                   .collect(Collectors.toList());
+    }
+

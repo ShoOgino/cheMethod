@@ -42,7 +42,7 @@
                 }
                 //convertToTopLevelProject feature is working only if we don't need any git information
                 //and when we are working in git sparse checkout mode.
-                if (!keepVcs && !Strings.isNullOrEmpty(keepDir) && parameters.containsKey("convertToTopLevelProject")) {
+                if (!keepVcs && !isNullOrEmpty(keepDir) && parameters.containsKey("convertToTopLevelProject")) {
                     convertToTopLevelProject = Boolean.parseBoolean(parameters.get("convertToTopLevelProject"));
                 }
                 branchMerge = parameters.get("branchMerge");
@@ -55,7 +55,6 @@
             }
             // Get path to local file. Git works with local filesystem only.
             final String localPath = baseFolder.getVirtualFile().toIoFile().getAbsolutePath();
-            final DtoFactory dtoFactory = DtoFactory.getInstance();
             final String location = storage.getLocation();
             final String projectName = baseFolder.getName();
 
@@ -73,39 +72,42 @@
             }
 
             if (keepDir != null) {
-                git.cloneWithSparseCheckout(keepDir, location, branch == null ? "master" : branch);
+                git.cloneWithSparseCheckout(keepDir, location);
+                if (branch != null) {
+                    git.checkout(CheckoutParams.create(branch));
+                }
             } else {
                 if (baseFolder.getChildren().size() == 0) {
-                    cloneRepository(git, "origin", location, dtoFactory, recursiveEnabled);
+                    cloneRepository(git, "origin", location, recursiveEnabled);
                     if (commitId != null) {
-                        checkoutCommit(git, commitId, dtoFactory);
+                        checkoutCommit(git, commitId);
                     } else if (fetch != null) {
                         git.getConfig().add("remote.origin.fetch", fetch);
-                        fetch(git, "origin", dtoFactory);
+                        fetch(git, "origin");
                         if (branch != null) {
-                            checkoutBranch(git, projectName, branch, startPoint, dtoFactory);
+                            checkoutBranch(git, projectName, branch, startPoint);
                         }
                     } else if (branch != null) {
-                        checkoutBranch(git, projectName, branch, startPoint, dtoFactory);
+                        checkoutBranch(git, projectName, branch, startPoint);
                     }
                 } else {
-                    initRepository(git, dtoFactory);
-                    addRemote(git, "origin", location, dtoFactory);
+                    git.init(false);
+                    addRemote(git, "origin", location);
                     if (commitId != null) {
-                        fetchBranch(git, "origin", branch == null ? "*" : branch, dtoFactory);
-                        checkoutCommit(git, commitId, dtoFactory);
+                        fetchBranch(git, "origin", branch == null ? "*" : branch);
+                        checkoutCommit(git, commitId);
                     } else if (fetch != null) {
                         git.getConfig().add("remote.origin.fetch", fetch);
-                        fetch(git, "origin", dtoFactory);
+                        fetch(git, "origin");
                         if (branch != null) {
-                            checkoutBranch(git, projectName, branch, startPoint, dtoFactory);
+                            checkoutBranch(git, projectName, branch, startPoint);
                         }
                     } else {
-                        fetchBranch(git, "origin", branch == null ? "*" : branch, dtoFactory);
+                        fetchBranch(git, "origin", branch == null ? "*" : branch);
 
-                        List<Branch> branchList = git.branchList(dtoFactory.createDto(BranchListRequest.class).withListMode("r"));
+                        List<Branch> branchList = git.branchList(LIST_REMOTE);
                         if (!branchList.isEmpty()) {
-                            checkoutBranch(git, projectName, branch == null ? "master" : branch, startPoint, dtoFactory);
+                            checkoutBranch(git, projectName, branch == null ? "master" : branch, startPoint);
                         }
                     }
                 }

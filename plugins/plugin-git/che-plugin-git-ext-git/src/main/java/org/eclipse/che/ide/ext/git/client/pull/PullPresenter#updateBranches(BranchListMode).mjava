@@ -1,0 +1,33 @@
+    /**
+     * Update the list of branches.
+     *
+     * @param remoteMode
+     *         is a remote mode
+     */
+    private void updateBranches(@NotNull final BranchListMode remoteMode) {
+
+        service.branchList(appContext.getDevMachine(), project.getLocation(), remoteMode).then(new Operation<List<Branch>>() {
+            @Override
+            public void apply(List<Branch> branches) throws OperationException {
+                if (LIST_REMOTE.equals(remoteMode)) {
+                    view.setRemoteBranches(branchSearcher.getRemoteBranchesToDisplay(view.getRepositoryName(), branches));
+                    updateBranches(LIST_LOCAL);
+                } else {
+                    view.setLocalBranches(branchSearcher.getLocalBranchesToDisplay(branches));
+                    for (Branch branch : branches) {
+                        if (branch.isActive()) {
+                            view.selectRemoteBranch(branch.getDisplayName());
+                            break;
+                        }
+                    }
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                handleError(error.getCause(), BRANCH_LIST_COMMAND_NAME);
+                view.setEnablePullButton(false);
+            }
+        });
+    }
+

@@ -3,26 +3,23 @@
             throws GitException, URISyntaxException, IOException, UnauthorizedException {
         //given
         GitConnection connection = connectToGitRepositoryWithContent(connectionFactory, repository);
-        connection.branchCreate(newDto(BranchCreateRequest.class).withName("b1"));
-        connection.branchCreate(newDto(BranchCreateRequest.class).withName("b2"));
-        connection.branchCreate(newDto(BranchCreateRequest.class).withName("b3"));
+        connection.branchCreate("b1", null);
+        connection.branchCreate("b2", null);
+        connection.branchCreate("b3", null);
 
         GitConnection connection2 = connectionFactory.getConnection(remoteRepo.getAbsolutePath());
-        connection2.init(newDto(InitRequest.class).withBare(false));
+        connection2.init(false);
         //when
         //add remote tracked only to b1 and b3 branches.
-        RemoteAddRequest remoteAddRequest = newDto(RemoteAddRequest.class)
-                .withName("origin")
-                .withUrl(connection.getWorkingDir().getAbsolutePath());
-        remoteAddRequest.setBranches(Arrays.asList("b1", "b3"));
-        connection2.remoteAdd(remoteAddRequest);
+        RemoteAddParams params = RemoteAddParams.create("origin", connection.getWorkingDir().getAbsolutePath())
+                                                .withBranches(ImmutableList.of("b1", "b3"));
+        connection2.remoteAdd(params);
         //then
         //make pull
-        connection2.pull(newDto(PullRequest.class).withRemote("origin"));
+        connection2.pull(PullParams.create("origin"));
 
         assertTrue(Sets.symmetricDifference(
-                Sets.newHashSet(connection2.branchList(newDto(BranchListRequest.class)
-                                                               .withListMode(BranchListRequest.LIST_REMOTE))),
+                Sets.newHashSet(connection2.branchList(LIST_REMOTE)),
                 Sets.newHashSet(newDto(Branch.class).withName("refs/remotes/origin/b1")
                                                     .withDisplayName("origin/b1")
                                                     .withActive(false)

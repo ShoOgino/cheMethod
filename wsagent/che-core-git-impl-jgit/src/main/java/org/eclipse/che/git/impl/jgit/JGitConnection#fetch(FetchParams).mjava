@@ -1,0 +1,65 @@
+    @Override
+    public void fetch(FetchParams params) throws GitException, UnauthorizedException {
+        String remoteName = params.getRemote();
+        String remoteUri;
+        try {
+            List<RefSpec> fetchRefSpecs;
+            List<String> refSpec = params.getRefSpec();
+            if (!refSpec.isEmpty()) {
+                fetchRefSpecs = new ArrayList<>(refSpec.size());
+                for (String refSpecItem : refSpec) {
+                    RefSpec fetchRefSpec = (refSpecItem.indexOf(':') < 0) //
+                                           ? new RefSpec(Constants.R_HEADS + refSpecItem + ":") //
+                                           : new RefSpec(refSpecItem);
+                    fetchRefSpecs.add(fetchRefSpec);
+                }
+            } else {
+                fetchRefSpecs = Collections.emptyList();
+            }
+
+            FetchCommand fetchCommand = getGit().fetch();
+
+            // If this an unknown remote with no refspecs given, put HEAD
+            // (otherwise JGit fails)
+            if (remoteName != null && refSpec.isEmpty()) {
+                boolean found = false;
+                List<Remote> configRemotes = remoteList(null, false);
+                for (Remote configRemote : configRemotes) {
+                    if (remoteName.equals(configRemote.getName())) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    fetchRefSpecs = Collections.singletonList(new RefSpec(Constants.HEAD + ":" + Constants.FETCH_HEAD));
+                }
+            }
+
+            if (remoteName == null) {
+                remoteName = Constants.DEFAULT_REMOTE_NAME;
+            }
+            fetchCommand.setRemote(remoteName);
+            remoteUri = getRepository().getConfig().getString(ConfigConstants.CONFIG_REMOTE_SECTION, remoteName,
+                                                              ConfigConstants.CONFIG_KEY_URL);
+            fetchCommand.setRefSpecs(fetchRefSpecs);
+
+            int timeout = params.getTimeout();
+            if (timeout > 0) {
+                fetchCommand.setTimeout(timeout);
+            }
+            fetchCommand.setRemoveDeletedRefs(params.isRemoveDeletedRefs());
+
+            executeRemoteCommand(remoteUri, fetchCommand, params.getUsername(), params.getPassword());
+        } catch (GitException | GitAPIException exception) {
+            String errorMessage;
+            if (exception.getMessage().contains("Invalid remote: ")) {
+                errorMessage = ERROR_NO_REMOTE_REPOSITORY;
+            } else if ("Nothing to fetch.".equals(exception.getMessage())) {
+                return;
+            } else {
+                errorMessage = generateExceptionMessage(exception);
+            }
+            throw new GitException(errorMessage, exception);
+        }
+    }
+
