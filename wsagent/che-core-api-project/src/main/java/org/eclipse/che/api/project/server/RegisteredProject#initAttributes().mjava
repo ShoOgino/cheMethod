@@ -1,14 +1,8 @@
     /**
      * Initialize project attributes.
-     *
-     * @throws ValueStorageException
-     * @throws ProjectTypeConstraintException
-     * @throws ServerException
-     * @throws NotFoundException
+     * Note: the problem with {@link Problem#code} = 13 will be added when a value for some attribute is not initialized
      */
-    private void initAttributes() throws ValueStorageException, ProjectTypeConstraintException, ServerException, NotFoundException {
-
-        Set<Attribute> invalidAttributes = new HashSet<>();
+    private void initAttributes() {
 
         // we take only defined attributes, others ignored
         for (Map.Entry<String, Attribute> entry : types.getAttributeDefs().entrySet()) {
@@ -30,12 +24,17 @@
 
                     if (folder != null) {
 
-                        if (!valueProvider.isSettable() || value.isEmpty()) {
-                            // get provided value
-                            value = new AttributeValue(valueProvider.getValues(name));
-                        } else {
-                            // set provided (not empty) value
-                            valueProvider.setValues(name, value.getList());
+                        try {
+                            if (!valueProvider.isSettable() || value.isEmpty()) {
+                                // get provided value
+                                value = new AttributeValue(valueProvider.getValues(name));
+                            } else {
+                                // set provided (not empty) value
+                                valueProvider.setValues(name, value.getList());
+                            }
+                        } catch (ValueStorageException e) {
+                            this.problems.add(new Problem(13, format("Value for attribute %s is not initialized, caused by: %s",
+                                                                     variable.getId(), e.getLocalizedMessage())));
                         }
 
                     } else {
@@ -45,7 +44,6 @@
 
                 if (value.isEmpty() && variable.isRequired()) {
                     this.problems.add(new Problem(13, "Value for required attribute is not initialized " + variable.getId()));
-                    invalidAttributes.add(variable);
                     //throw new ProjectTypeConstraintException("Value for required attribute is not initialized " + variable.getId());
                 }
 
@@ -54,8 +52,5 @@
                 }
             }
         }
-
-        types.reset(invalidAttributes);
-
     }
 

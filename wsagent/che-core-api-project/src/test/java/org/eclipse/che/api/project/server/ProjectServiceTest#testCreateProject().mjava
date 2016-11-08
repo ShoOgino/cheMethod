@@ -1,23 +1,8 @@
     @Test
     public void testCreateProject() throws Exception {
-
-
-
-        phRegistry.register(new CreateProjectHandler() {
-            @Override
-            public void onCreateProject(Path projectPath, Map<String, AttributeValue> attributes, Map<String, String> options)
-                    throws ForbiddenException, ConflictException, ServerException {
-                FolderEntry projectFolder = new FolderEntry(vfsProvider.getVirtualFileSystem().getRoot().createFolder("new_project"));
-                projectFolder.createFolder("a");
-                projectFolder.createFolder("b");
-                projectFolder.createFile("test.txt", "test".getBytes(Charset.defaultCharset()));
-            }
-
-            @Override
-            public String getProjectType() {
-                return "testCreateProject";
-            }
-        });
+        final String projectName = "new_project";
+        final String projectType = "testCreateProject";
+        phRegistry.register(createProjectHandlerFor(projectName, projectType));
 
         Map<String, List<String>> headers = new HashMap<>();
         headers.put("Content-Type", singletonList(APPLICATION_JSON));
@@ -36,9 +21,9 @@
 
         final ProjectConfigDto newProjectConfig = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
                                                             .withPath("/new_project")
-                                                            .withName("new_project")
+                                                            .withName(projectName)
                                                             .withDescription("new project")
-                                                            .withType("testCreateProject")
+                                                            .withType(projectType)
                                                             .withAttributes(attributeValues)
                                                             .withSource(DtoFactory.getInstance().createDto(SourceStorageDto.class));
         projects.add(newProjectConfig);
@@ -53,11 +38,11 @@
         assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
         ProjectConfigDto result = (ProjectConfigDto)response.getEntity();
         assertNotNull(result);
-        assertEquals(result.getName(), "new_project");
+        assertEquals(result.getName(), projectName);
         assertEquals(result.getPath(), "/new_project");
         assertEquals(result.getDescription(), newProjectConfig.getDescription());
         assertEquals(result.getType(), newProjectConfig.getType());
-        assertEquals(result.getType(), "testCreateProject");
+        assertEquals(result.getType(), projectType);
         Map<String, List<String>> attributes = result.getAttributes();
         assertNotNull(attributes);
         assertEquals(attributes.size(), 1);
@@ -78,7 +63,5 @@
         assertNotNull(project.getBaseFolder().getChild("a"));
         assertNotNull(project.getBaseFolder().getChild("b"));
         assertNotNull(project.getBaseFolder().getChild("test.txt"));
-
-
     }
 

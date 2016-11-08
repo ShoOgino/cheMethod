@@ -1,29 +1,31 @@
     ProjectTypes(String projectPath,
-                        String type,
-                        List<String> mixinTypes,
-                        ProjectTypeRegistry projectTypeRegistry,
-                        List<Problem>      problems) throws ProjectTypeConstraintException, NotFoundException {
+                 String type,
+                 List<String> mixinTypes,
+                 ProjectTypeRegistry projectTypeRegistry,
+                 List<Problem> problems) {
         mixins = new HashMap<>();
         all = new HashMap<>();
         attributeDefs = new HashMap<>();
+        this.problems = problems != null ? problems : newArrayList();
 
         this.projectTypeRegistry = projectTypeRegistry;
         this.projectPath = projectPath;
 
         ProjectTypeDef tmpPrimary;
         if (type == null) {
-            problems.add(new Problem(12, "No primary type defined for " + projectPath + " Base Project Type assigned."));
+            this.problems.add(new Problem(12, "No primary type defined for " + projectPath + " Base Project Type assigned."));
             tmpPrimary = ProjectTypeRegistry.BASE_TYPE;
         } else {
             try {
                 tmpPrimary = projectTypeRegistry.getProjectType(type);
             } catch (NotFoundException e) {
-                problems.add(new Problem(12, "Primary type " + type + " defined for " + projectPath + " is not registered. Base Project Type assigned."));
+                this.problems.add(new Problem(12, "Primary type " + type + " defined for " + projectPath +
+                                             " is not registered. Base Project Type assigned."));
                 tmpPrimary = ProjectTypeRegistry.BASE_TYPE;
             }
 
             if (!tmpPrimary.isPrimaryable()) {
-                problems.add(new Problem(12, "Project type " + tmpPrimary.getId() + " is not allowable to be primary type. Base Project Type assigned."));
+                this.problems.add(new Problem(12, "Project type " + tmpPrimary.getId() + " is not allowable to be primary type. Base Project Type assigned."));
                 tmpPrimary = ProjectTypeRegistry.BASE_TYPE;
             }
         }
@@ -50,12 +52,12 @@
             try {
                 mixin = projectTypeRegistry.getProjectType(mixinFromConfig);
             } catch (NotFoundException e) {
-                problems.add(new Problem(12, "Project type " + mixinFromConfig + " is not registered. Skipped."));
+                this.problems.add(new Problem(12, "Project type " + mixinFromConfig + " is not registered. Skipped."));
                 continue;
             }
 
             if (!mixin.isMixable()) {
-                problems.add(new Problem(12, "Project type " + mixin + " is not allowable to be mixin. It not mixable. Skipped."));
+                this.problems.add(new Problem(12, "Project type " + mixin + " is not allowable to be mixin. It not mixable. Skipped."));
                 continue;
             }
 
@@ -65,14 +67,15 @@
 
             // detect duplicated attributes
             for (Attribute attr : mixin.getAttributes()) {
-                if (attributeDefs.containsKey(attr.getName())) {
-
-                    problems.add(new Problem(13, "Attribute name conflict. Duplicated attributes detected " + projectPath +
-                                                 " Attribute " + attr.getName() + " declared in " + mixin.getId() + " already declared in " +
-                                                 attributeDefs.get(attr.getName()).getProjectType()+" Skipped."));
+                final String attrName = attr.getName();
+                if (attributeDefs.containsKey(attrName)) {
+                    this.problems.add(new Problem(13,
+                                                  format("Attribute name conflict. Duplicated attributes detected for %s. " +
+                                                         "Attribute %s declared in %s already declared in %s. Skipped.",
+                                                         projectPath, attrName, mixin.getId(), attributeDefs.get(attrName).getProjectType())));
                     continue;
                 }
-                attributeDefs.put(attr.getName(), attr);
+                attributeDefs.put(attrName, attr);
             }
 
             // Silently remove repeated items from mixins if any

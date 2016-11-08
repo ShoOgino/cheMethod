@@ -1,4 +1,4 @@
-    public ProjectTypeResolution resolveSources(FolderEntry projectFolder) throws ValueStorageException {
+    public ProjectTypeResolution resolveSources(FolderEntry projectFolder) {
         Map<String, Value> matchAttrs = new HashMap<>();
         for (Map.Entry<String, Attribute> entry : attributes.entrySet()) {
             Attribute attr = entry.getValue();
@@ -7,11 +7,22 @@
                 Variable var = (Variable)attr;
                 ValueProviderFactory factory = var.getValueProviderFactory();
                 if (factory != null) {
-                    Value value = new AttributeValue(factory.newInstance(projectFolder).getValues(name));
-                    if (value.isEmpty()) {
+
+                    Value value;
+                    String errorMessage = "";
+                    try {
+                        value = new AttributeValue(factory.newInstance(projectFolder).getValues(name));
+                    } catch (ValueStorageException e) {
+                        value = null;
+                        errorMessage = e.getLocalizedMessage();
+                    }
+
+                    if (value == null || value.isEmpty()) {
                         if (var.isRequired()) {
                             // this PT is not match
-                            return new DefaultResolution(id, new HashMap<>(), false);
+                            errorMessage = errorMessage.isEmpty() ? format("Value for required attribute %s is not initialized", name)
+                                                                  : errorMessage;
+                            return new DefaultResolution(id, errorMessage);
                         }
                     } else {
                         // add one more matched attribute

@@ -23,52 +23,7 @@
                                                                                                              NotFoundException {
         projectTreeChangesDetector.suspend();
         try {
-            final ProjectImporter importer = importers.getImporter(sourceStorage.getType());
-            if (importer == null) {
-                throw new NotFoundException(String.format("Unable import sources project from '%s'. Sources type '%s' is not supported.",
-                                                          sourceStorage.getLocation(), sourceStorage.getType()));
-            }
-
-            // Preparing websocket output publisher to broadcast output of import process to the ide clients while importing
-            final LineConsumerFactory outputOutputConsumerFactory =
-                    () -> new ProjectImportOutputWSLineConsumer(path, workspaceProjectsHolder.getWorkspaceId(), 300);
-
-            String normalizePath = (path.startsWith("/")) ? path : "/".concat(path);
-            FolderEntry folder = asFolder(normalizePath);
-            if (folder != null && !rewrite) {
-                throw new ConflictException(String.format("Project %s already exists ", path));
-            }
-
-            if (folder == null) {
-                folder = getProjectsRoot().createFolder(normalizePath);
-            }
-
-            try {
-                importer.importSources(folder, sourceStorage, outputOutputConsumerFactory);
-            } catch (final Exception e) {
-                folder.remove();
-                throw e;
-            }
-
-            final String name = folder.getPath().getName();
-            for (ProjectConfig project : workspaceProjectsHolder.getProjects()) {
-                if (normalizePath.equals(project.getPath())) {
-                    // TODO Needed for factory project importing with keepDir. It needs to find more appropriate solution
-                    List<String> innerProjects = projectRegistry.getProjects(normalizePath);
-                    for (String innerProject : innerProjects) {
-                        RegisteredProject registeredProject = projectRegistry.getProject(innerProject);
-                        projectRegistry.putProject(registeredProject, asFolder(registeredProject.getPath()), true, false);
-                    }
-                    RegisteredProject rp = projectRegistry.putProject(project, folder, true, false);
-                    workspaceProjectsHolder.sync(projectRegistry);
-                    return rp;
-                }
-            }
-
-            RegisteredProject rp = projectRegistry
-                    .putProject(new NewProjectConfig(normalizePath, name, BaseProjectType.ID, sourceStorage), folder, true, false);
-            workspaceProjectsHolder.sync(projectRegistry);
-            return rp;
+            return doImportProject(path, sourceStorage, rewrite);
         } finally {
             projectTreeChangesDetector.resume();
         }
