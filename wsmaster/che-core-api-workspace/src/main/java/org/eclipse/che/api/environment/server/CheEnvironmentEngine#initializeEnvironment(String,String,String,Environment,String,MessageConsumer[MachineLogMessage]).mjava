@@ -1,26 +1,29 @@
     private void initializeEnvironment(String namespace,
                                        String workspaceId,
                                        String envName,
-                                       Environment env,
+                                       Environment envConfig,
                                        String networkId,
                                        MessageConsumer<MachineLogMessage> messageConsumer)
             throws ServerException,
-                   ConflictException {
+                   ConflictException,
+                   EnvironmentException {
 
-        CheServicesEnvironmentImpl environment = environmentParser.parse(env);
+        CheServicesEnvironmentImpl internalEnv = environmentParser.parse(envConfig);
 
-        applyAgents(env, environment);
+        internalEnv.setWorkspaceId(workspaceId);
+
+        infrastructureProvisioner.provision(envConfig, internalEnv);
 
         normalize(namespace,
                   workspaceId,
-                  environment);
+                  internalEnv);
 
-        List<String> servicesOrder = startStrategy.order(environment);
+        List<String> servicesOrder = startStrategy.order(internalEnv);
 
-        normalizeNames(environment);
+        normalizeNames(internalEnv);
 
         EnvironmentHolder environmentHolder = new EnvironmentHolder(servicesOrder,
-                                                                    environment,
+                                                                    internalEnv,
                                                                     messageConsumer,
                                                                     EnvStatus.STARTING,
                                                                     envName,

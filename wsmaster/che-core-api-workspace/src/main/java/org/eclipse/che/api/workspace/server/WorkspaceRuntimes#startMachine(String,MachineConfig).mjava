@@ -16,14 +16,20 @@
     public Instance startMachine(String workspaceId,
                                  MachineConfig machineConfig) throws ServerException,
                                                                      ConflictException,
-                                                                     NotFoundException {
+                                                                     NotFoundException,
+                                                                     EnvironmentException {
 
         try (StripedLocks.ReadLock lock = stripedLocks.acquireReadLock(workspaceId)) {
             getRunningState(workspaceId);
         }
 
+        // Copy constructor makes deep copy of objects graph
+        // which means that original values won't affect the values in used further in this class
+        MachineConfigImpl machineConfigCopy = new MachineConfigImpl(machineConfig);
+
         List<String> agents = Collections.singletonList("org.eclipse.che.terminal");
-        Instance instance = environmentEngine.startMachine(workspaceId, machineConfig, agents);
+
+        Instance instance = environmentEngine.startMachine(workspaceId, machineConfigCopy, agents);
         launchAgents(instance, agents);
 
         try (StripedLocks.WriteLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
