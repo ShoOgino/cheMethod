@@ -13,27 +13,24 @@
                                                                             ServerException {
 
         checkNotNull(environment, "Environment should not be null");
-        checkNotNull(environment.getRecipe(), "Environment recipe should not be null");
-        checkNotNull(environment.getRecipe().getType(), "Environment recipe type should not be null");
-        checkArgument(environment.getRecipe().getContent() != null || environment.getRecipe().getLocation() != null,
+        EnvironmentRecipe recipe = environment.getRecipe();
+        checkNotNull(recipe, "Environment recipe should not be null");
+        checkNotNull(recipe.getType(), "Environment recipe type should not be null");
+        checkArgument(recipe.getContent() != null || recipe.getLocation() != null,
                       "Recipe of environment must contain location or content");
 
-        CheServicesEnvironmentImpl cheServicesEnvironment;
-        String envType = environment.getRecipe().getType();
-        switch (envType) {
-            case "compose":
-                cheServicesEnvironment = parseCompose(environment.getRecipe());
-                break;
-            case "dockerimage":
-            case "dockerfile":
-                cheServicesEnvironment = parseDocker(environment);
-                break;
-            default:
-                throw new IllegalArgumentException(format("Environment type '%s' is not supported. " +
-                                                          "Supported environment types: %s",
-                                                          envType,
-                                                          Joiner.on(", ").join(types)));
+        String envType = recipe.getType();
+        Set<String> envTypes = getEnvironmentTypes();
+
+        if (!envTypes.contains(envType)) {
+            throw new IllegalArgumentException(format("Environment type '%s' is not supported. " +
+                                                      "Supported environment types: %s",
+                                                      envType,
+                                                      Joiner.on(", ").join(envTypes)));
         }
+
+        TypeSpecificEnvironmentParser parser = environmentParsers.get(envType);
+        CheServicesEnvironmentImpl cheServicesEnvironment = parser.parse(environment);
 
         cheServicesEnvironment.getServices().forEach((name, service) -> {
             ExtendedMachine extendedMachine = environment.getMachines().get(name);
