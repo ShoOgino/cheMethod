@@ -21,6 +21,7 @@
 
             final String fqn = JavaUtil.resolveFQN((Container)srcFolder.get(), (Resource)file);
 
+            eventBus.fireEvent(newFileTrackingSuspendEvent());
             javaCodeAssistClient.organizeImports(project.get().getLocation().toString(), fqn)
                                 .then(new Operation<List<ConflictImportDTO>>() {
                                     @Override
@@ -30,12 +31,16 @@
                                         } else {
                                             applyChanges(file);
                                         }
+                                        eventBus.fireEvent(newFileTrackingResumeEvent());
                                     }
                                 })
                                 .catchError(new Operation<PromiseError>() {
                                     @Override
                                     public void apply(PromiseError arg) throws OperationException {
-                                        notificationManager.notify(locale.failedToProcessOrganizeImports(), arg.getMessage(), FAIL, FLOAT_MODE);
+                                        String title = locale.failedToProcessOrganizeImports();
+                                        String message = arg.getMessage();
+                                        notificationManager.notify(title, message, FAIL, FLOAT_MODE);
+                                        eventBus.fireEvent(newFileTrackingResumeEvent());
                                     }
                                 });
         }
