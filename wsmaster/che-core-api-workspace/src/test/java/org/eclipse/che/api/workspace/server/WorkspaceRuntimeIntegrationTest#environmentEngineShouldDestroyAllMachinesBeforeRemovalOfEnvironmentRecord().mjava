@@ -1,0 +1,67 @@
+    // Check for https://github.com/codenvy/codenvy/issues/593
+    @Test(expectedExceptions = NotFoundException.class,
+          expectedExceptionsMessageRegExp = "Workspace with id '" + WORKSPACE_ID + "' is not running.")
+    public void environmentEngineShouldDestroyAllMachinesBeforeRemovalOfEnvironmentRecord() throws Exception {
+        // given
+        EnvironmentDto environment = newDto(EnvironmentDto.class);
+        environment.withMachines(singletonMap("service1", newDto(ExtendedMachineDto.class)
+                .withAgents(singletonList("org.eclipse.che.ws-agent"))));
+        WorkspaceConfigDto config = newDto(WorkspaceConfigDto.class)
+                .withDefaultEnv(ENV_NAME)
+                .withName("ws1")
+                .withEnvironments(singletonMap(ENV_NAME, environment));
+        WorkspaceDto workspace = newDto(WorkspaceDto.class).withId(WORKSPACE_ID)
+                                                           .withNamespace("namespace")
+                                                           .withConfig(config);
+        Instance instance = mock(Instance.class);
+        MachineConfigImpl machineConfig = new MachineConfigImpl();
+        machineConfig.setDev(true);
+        machineConfig.setName("service1");
+        when(instance.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+        when(instance.getId()).thenReturn("machineId");
+        when(instance.getConfig()).thenReturn(machineConfig);
+
+        CheServicesEnvironmentImpl internalEnv = new CheServicesEnvironmentImpl();
+        internalEnv.getServices().put("service1", new CheServiceImpl().withId("machineId"));
+
+        when(environmentParser.parse(any(Environment.class))).thenReturn(internalEnv);
+        when(instanceProvider.startService(anyString(),
+                                           anyString(),
+                                           anyString(),
+                                           anyString(),
+                                           anyBoolean(),
+                                           anyString(),
+                                           any(CheServiceImpl.class),
+                                           any(LineConsumer.class)))
+                .thenReturn(instance);
+
+        runtimes.start(workspace, ENV_NAME, false);
+
+        WaitingAnswer<Void> waitingAnswer = new WaitingAnswer<>();
+        doAnswer(waitingAnswer).when(instance).destroy();
+
+        // when
+        executor.execute(() -> {
+            try {
+                runtimes.stop(WORKSPACE_ID);
+            } catch (ApiException e) {
+                LOG.error(e.getLocalizedMessage(), e);
+            }
+        });
+
+        waitingAnswer.waitAnswerCall(1, TimeUnit.SECONDS);
+
+        // then
+        // no exception - environment and workspace are still running
+        runtimes.get(WORKSPACE_ID);
+        // let instance removal proceed
+        waitingAnswer.completeAnswer();
+        // verify destroying was called
+        verify(instance, timeout(1000)).destroy();
+        verify(instanceProvider, timeout(1000)).destroyNetwork(anyString());
+        // wait to ensure that removal of runtime is finished
+        Thread.sleep(500);
+        // runtime is removed - now getting of it should throw an exception
+        runtimes.get(WORKSPACE_ID);
+    }
+
