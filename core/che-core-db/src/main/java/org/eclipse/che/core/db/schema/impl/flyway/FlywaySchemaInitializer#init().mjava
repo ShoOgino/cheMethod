@@ -1,0 +1,24 @@
+    @Override
+    public void init() throws SchemaInitializationException {
+        try (final Connection conn = dataSource.getConnection()) {
+            final Flyway flyway = new Flyway();
+            flyway.setDataSource(dataSource);
+            flyway.setLocations(locations);
+            flyway.setClassLoader(Thread.currentThread().getContextClassLoader());
+            final DbSupport dbSupport = DbSupportFactory.createDbSupport(conn, true);
+            final String productName = conn.getMetaData().getDatabaseProductName().toLowerCase();
+            flyway.setResolvers(new CustomSqlMigrationResolver(productName, dbSupport, placeholderReplacer));
+            flyway.setSkipDefaultResolvers(true);
+            flyway.setBaselineOnMigrate(baselineOnMigrate);
+            if (baselineOnMigrate) {
+                flyway.setBaselineVersionAsString(baselineVersion);
+            }
+            flyway.setSqlMigrationSeparator(versionSeparator);
+            flyway.setSqlMigrationSuffix(scriptsSuffix);
+            flyway.setSqlMigrationPrefix(scriptsPrefix);
+            flyway.migrate();
+        } catch (SQLException | RuntimeException x) {
+            throw new SchemaInitializationException(x.getLocalizedMessage(), x);
+        }
+    }
+

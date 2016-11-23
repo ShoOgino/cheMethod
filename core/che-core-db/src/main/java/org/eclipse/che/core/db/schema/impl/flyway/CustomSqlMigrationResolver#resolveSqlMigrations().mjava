@@ -1,0 +1,53 @@
+    private List<ResolvedMigration> resolveSqlMigrations() throws IOException, SQLException {
+        LOG.info("Searching for sql scripts in locations {}", Arrays.toString(flywayConfiguration.getLocations()));
+        final Map<Location, List<Resource>> allResources = finder.findResources(flywayConfiguration);
+        LOG.debug("Found scripts: {}", allResources);
+
+        final Map<String, Map<String, SqlScript>> scriptsInDir = new HashMap<>();
+        for (Location location : allResources.keySet()) {
+            final List<Resource> resources = allResources.get(location);
+            for (Resource resource : resources) {
+                final SqlScript newScript = scriptsCreator.createScript(location, resource);
+                if (!scriptsInDir.containsKey(newScript.dir)) {
+                    scriptsInDir.put(newScript.dir, new HashMap<>(4));
+                }
+                final Map<String, SqlScript> existingScripts = scriptsInDir.get(newScript.dir);
+                final SqlScript existingScript = existingScripts.get(newScript.name);
+                if (existingScript == null) {
+                    existingScripts.put(newScript.name, newScript);
+                } else if (Objects.equals(existingScript.vendor, newScript.vendor)) {
+                    throw new FlywayException(format("More than one script with name '%s' is registered for " +
+                                                     "database vendor '%s', script '%s' conflicts with '%s'",
+                                                     newScript.name,
+                                                     existingScript.vendor,
+                                                     newScript,
+                                                     existingScript));
+                } else if (vendorName.equals(newScript.vendor)) {
+                    existingScripts.put(newScript.name, newScript);
+                }
+            }
+        }
+
+        final Map<MigrationVersion, ResolvedMigration> migrations = new HashMap<>();
+        for (SqlScript script : scriptsInDir.values()
+                                            .stream()
+                                            .flatMap(scripts -> scripts.values().stream())
+                                            .collect(toList())) {
+            final ResolvedMigrationImpl migration = new ResolvedMigrationImpl();
+            migration.setVersion(versionResolver.resolve(script, flywayConfiguration));
+            migration.setScript(script.resource.getLocation());
+            migration.setPhysicalLocation(script.resource.getLocationOnDisk());
+            migration.setType(MigrationType.SQL);
+            migration.setDescription(script.name);
+            migration.setChecksum(ByteSource.wrap(script.resource.loadAsBytes()).hash(Hashing.crc32()).asInt());
+            migration.setExecutor(new SqlMigrationExecutor(dbSupport,
+                                                           script.resource,
+                                                           placeholderReplacer,
+                                                           flywayConfiguration.getEncoding()));
+            if (migrations.put(migration.getVersion(), migration) != null) {
+                throw new FlywayException("Two migrations with the same version detected");
+            }
+        }
+        return new ArrayList<>(migrations.values());
+    }
+

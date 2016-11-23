@@ -1,0 +1,22 @@
+    @Test
+    public void executesOnlyThoseMigrationsWhichGoAfterBaseline() throws Exception {
+        execQuery("CREATE TABLE test (id INT, text TEXT, PRIMARY KEY (id));");
+        createScript("1.0/1__init.sql", "CREATE TABLE test (id INT, text TEXT, PRIMARY KEY (id));");
+        createScript("2.0/1__add_data.sql", "INSERT INTO test VALUES(1, 'test1');" +
+                                            "INSERT INTO test VALUES(2, 'test2');" +
+                                            "INSERT INTO test VALUES(3, 'test3');");
+        final FlywaySchemaInitializer initializer = FlywayInitializerBuilder.from(dataSource)
+                                                                            .setBaselineOnMigrate(true)
+                                                                            .setBaselineVersion("1.0.1")
+                                                                            .build();
+
+        initializer.init();
+
+        assertEquals(queryEntities(), Sets.newHashSet(new TestEntity(1, "test1"),
+                                                      new TestEntity(2, "test2"),
+                                                      new TestEntity(3, "test3")));
+
+        // second init must do nothing, so there are no conflicts
+        initializer.init();
+    }
+
