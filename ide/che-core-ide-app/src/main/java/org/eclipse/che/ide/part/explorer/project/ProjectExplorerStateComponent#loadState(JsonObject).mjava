@@ -1,0 +1,70 @@
+    @Override
+    public void loadState(@NotNull JsonObject state) {
+
+        if (state.hasKey(SHOW_HIDDEN_FILES)) {
+            projectExplorer.showHiddenFiles(state.getBoolean(SHOW_HIDDEN_FILES));
+        }
+
+        JsonArray paths;
+
+        if (state.hasKey(PATH_PARAM_ID)) {
+            paths = state.getArray(PATH_PARAM_ID);
+        } else {
+            paths = Json.createArray();
+        }
+
+        Promise<Node> revealPromise = null;
+
+        final MessageLoader loader = loaderFactory.newLoader("Restoring project structure...");
+        loader.show();
+
+        for (int i = 0; i < paths.length(); i++) {
+            final String path = paths.getString(i);
+            if (revealPromise == null) {
+                revealPromise = revealer.reveal(Path.valueOf(path), false).thenPromise(new Function<Node, Promise<Node>>() {
+                    @Override
+                    public Promise<Node> apply(Node node) throws FunctionException {
+                        if (node != null) {
+                            projectExplorer.getTree().setExpanded(node, true, false);
+                        }
+
+                        return revealer.reveal(Path.valueOf(path), false);
+                    }
+                });
+                continue;
+            }
+
+            revealPromise.thenPromise(new Function<Node, Promise<Node>>() {
+                @Override
+                public Promise<Node> apply(Node node) throws FunctionException {
+                    if (node != null) {
+                        projectExplorer.getTree().setExpanded(node, true, false);
+                    }
+
+                    return revealer.reveal(Path.valueOf(path), false);
+                }
+            }).catchError(new Function<PromiseError, Node>() {
+                @Override
+                public Node apply(PromiseError error) throws FunctionException {
+                    Log.info(getClass(), error.getMessage());
+
+                    return null;
+                }
+            });
+        }
+
+        if (revealPromise != null) {
+            revealPromise.then(new Operation<Node>() {
+                @Override
+                public void apply(Node node) throws OperationException {
+                    loader.hide();
+                }
+            }).catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError error) throws OperationException {
+                    loader.hide();
+                }
+            });
+        }
+    }
+
