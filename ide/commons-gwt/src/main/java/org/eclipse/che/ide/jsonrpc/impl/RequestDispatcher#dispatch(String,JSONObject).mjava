@@ -1,0 +1,45 @@
+    /**
+     * Dispatches json rpc request received from endpoint identified by a high
+     * level identifier and represented as a json object.
+     *
+     * @param endpointId
+     *         high level endpoint identifier
+     * @param incomingJson
+     *         json object
+     */
+    public void dispatch(String endpointId, JSONObject incomingJson) {
+        Log.debug(getClass(), "Dispatching a request from endpoint: " + endpointId + ", jso: " + incomingJson);
+
+        final String method = incomingJson.get("method").isString().stringValue();
+        Log.debug(getClass(), "Extracted request method: " + method);
+
+        final RequestHandler handler = getRequestHandler(endpointId, method);
+
+        final String id = incomingJson.get("id").toString();
+        Log.debug(getClass(), "Extracted request id: " + id);
+
+        final Class resultClass = handler.getResultClass();
+        Log.debug(getClass(), "Extracted request result class: " + resultClass);
+
+
+        JSONObject result;
+        if (incomingJson.containsKey("params")) {
+            final JSONObject params = incomingJson.get("params").isObject();
+            Log.debug(getClass(), "Request is parametrized, processing parameters: " + params);
+
+            final Class paramsClass = handler.getParamsClass();
+            Log.debug(getClass(), "Extracted request params class: " + paramsClass);
+
+            result = dispatch(endpointId, handler, params, paramsClass);
+        } else {
+
+            Log.debug(getClass(), "Request is not parametrized");
+            result = dispatch(endpointId, handler);
+        }
+
+        final JSONObject response = prepareResponse(id, result);
+        Log.debug(getClass(), "Prepared a response: " + response);
+
+        transmitter.transmit(endpointId, response.toString());
+    }
+

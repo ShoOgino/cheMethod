@@ -1,0 +1,40 @@
+    /**
+     * Dispatches json rpc response received from endpoint identified by a high
+     * level identifier and represented as a json object.
+     *
+     * @param endpointId
+     *         high level endpoint identifier
+     * @param incomingJson
+     *         json object
+     */
+    public void dispatch(String endpointId, JsonObject incomingJson) {
+        LOG.debug("Dispatching incoming response from: " + endpointId + ", json: " + incomingJson);
+
+        final String id = incomingJson.get("id").getAsString();
+        LOG.debug("Extracted response id: " + id);
+
+        final String key = endpointId + '@' + id;
+        LOG.debug("Combined response key: " + key);
+
+        final Class resultClass = resultClasses.get(key);
+        LOG.debug("Extracted result class: " + resultClass);
+
+        final CompletableFuture completableFuture = futures.get(key);
+
+        if (incomingJson.has("result")) {
+            LOG.debug("Response contains result field, processing result");
+
+            final JsonObject result = incomingJson.get("result").getAsJsonObject();
+            final Object dto = DtoFactory.getInstance().createDtoFromJson(result.toString(), resultClass);
+
+            completableFuture.complete(dto);
+        } else {
+            LOG.debug("Response contains error field, processing error");
+
+            final String error = "Error processing is not yet supported";
+            LOG.error(error);
+            throw new UnsupportedOperationException(error);
+        }
+
+    }
+

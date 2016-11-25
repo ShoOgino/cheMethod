@@ -1,20 +1,19 @@
     @Override
-    public synchronized void transmit(String protocol, String message) {
-        final WebSocketTransmission transmission = newDto(WebSocketTransmission.class).withProtocol(protocol).withMessage(message);
-        validator.validate(transmission);
+    public synchronized void transmit(String endpointId, String message) {
+        final Optional<Session> sessionOptional = registry.get(endpointId);
 
-        LOG.debug("Broadcasting a web socket transmission: ", transmission.toString());
+        if (!sessionOptional.isPresent() || !sessionOptional.get().isOpen()) {
+            LOG.debug("Session is not registered or closed, adding message to pending");
 
-        registry.getSessions()
-                .stream()
-                .filter(Session::isOpen)
-                .map(Session::getBasicRemote)
-                .forEach(it -> {
-                    try {
-                        it.sendText(transmission.toString());
-                    } catch (IOException e) {
-                        LOG.error("Error while trying to send a message to a basic websocket remote endpoint", e);
-                    }
-                });
+            reSender.add(endpointId, message);
+        } else {
+            LOG.debug("Session registered and open, sending message");
+
+            try {
+                sessionOptional.get().getBasicRemote().sendText(message);
+            } catch (IOException e) {
+                LOG.error("Error while trying to send a message to a basic websocket remote endpoint", e);
+            }
+        }
     }
 

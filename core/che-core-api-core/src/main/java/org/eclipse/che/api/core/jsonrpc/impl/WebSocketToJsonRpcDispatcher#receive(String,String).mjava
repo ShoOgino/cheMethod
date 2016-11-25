@@ -1,0 +1,40 @@
+    @Override
+    public void receive(String endpointId, String message) {
+        LOG.debug("Receiving a message from: " + endpointId + ", message" + message);
+        final JsonParser jsonParser = new JsonParser();
+        final JsonElement jsonElement = jsonParser.parse(message);
+
+        if (!jsonElement.isJsonObject()) {
+            final String error = "Json is an array, not supported yet";
+            LOG.error(error);
+            throw new UnsupportedOperationException(error);
+        }
+
+        final JsonObject incomingJson = jsonElement.getAsJsonObject();
+        final boolean hasMethod = incomingJson.has("method");
+        final boolean hasParams = incomingJson.has("params");
+        final boolean hasId = incomingJson.has("id");
+        final boolean hasResult = incomingJson.has("result");
+        final boolean hasError = incomingJson.has("error");
+
+        if (hasMethod && hasId && !hasResult && !hasError) {
+            LOG.debug("It's a request, processing by request dispatcher.");
+            requestDispatcher.dispatch(endpointId, incomingJson);
+            return;
+        }
+
+        if (hasMethod && !hasId && !hasResult && !hasError) {
+            LOG.debug("It's a notification, processing by notification dispatcher.");
+            notificationDispatcher.dispatch(endpointId, incomingJson);
+            return;
+        }
+
+        if (!hasMethod && !hasParams && hasId && (hasError != hasResult)) {
+            LOG.debug("It's a response, processing by response dispatcher.");
+            responseDispatcher.dispatch(endpointId, incomingJson);
+            return;
+        }
+
+        throw new IllegalStateException("Improper json rpc message.");
+    }
+

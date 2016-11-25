@@ -1,0 +1,35 @@
+    @Override
+    public void receive(String endpointId, String message) {
+        Log.debug(getClass(), "Dispatching message: " + message + " form endpoint: " + endpointId);
+
+        final JSONObject incomingJson = JSONParser.parseStrict(message).isObject();
+
+        final boolean hasMethod = incomingJson.containsKey("method");
+        final boolean hasParams = incomingJson.containsKey("params");
+        final boolean hasId = incomingJson.containsKey("id");
+        final boolean hasResult = incomingJson.containsKey("result");
+        final boolean hasError = incomingJson.containsKey("error");
+
+        if (hasMethod && hasId && !hasResult && !hasError) {
+            Log.debug(getClass(), "It is a request, calling request dispatcher.");
+            requestDispatcher.dispatch(endpointId, incomingJson);
+            return;
+        }
+
+        if (hasMethod && !hasId &&  !hasResult && !hasError) {
+            Log.debug(getClass(), "It is a notification, calling notification dispatcher.");
+            notificationDispatcher.dispatch(endpointId, incomingJson);
+            return;
+        }
+
+        if (!hasMethod && !hasParams && hasId && (hasError != hasResult)) {
+            Log.debug(getClass(), "It is a response, calling response dispatcher.");
+            responseDispatcher.dispatch(endpointId, incomingJson);
+            return;
+        }
+
+        final String error = "Malformed Json RPC message, could not define message type or parse it properly.";
+        Log.error(getClass(), error);
+        throw new IllegalStateException(error);
+    }
+
