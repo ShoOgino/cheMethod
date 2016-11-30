@@ -5,6 +5,8 @@
      *         proposals to display
      */
     public void show(final List<CompletionProposal> proposals) {
+        this.proposals = proposals;
+
         OrionTextViewOverlay textView = textEditor.getTextView();
         OrionPixelPositionOverlay caretLocation = textView.getLocationAtOffset(textView.getCaretOffset());
         caretLocation.setY(caretLocation.getY() + textView.getLineHeight());
@@ -14,30 +16,17 @@
         listElement.setInnerHTML("");
 
         /* Display an empty popup when it is nothing to show. */
-        if (proposals == null || proposals.isEmpty()) {
+        if (getTotalItems() == 0) {
             final Element emptyElement = Elements.createLiElement(popupResources.popupStyle().item());
             emptyElement.setTextContent("No proposals");
             listElement.appendChild(emptyElement);
             return;
         }
 
-        if (proposals.size() == 1) {
-            CompletionProposal.CompletionCallback callback = new CompletionProposal.CompletionCallback() {
-                @Override
-                public void onCompletion(Completion completion) {
-                    applyCompletion(completion);
-                }
-            };
-
-            CompletionProposal proposal = proposals.get(0);
-            proposal.getCompletion(callback);
-
+        /* Automatically apply the completion proposal if it only one. */
+        if (getTotalItems() == 1) {
+            applyProposal(proposals.get(0));
             return;
-        }
-
-        /* Add new popup items. */
-        for (CompletionProposal proposal : proposals) {
-            addProposalPopupItem(proposal);
         }
 
         /* Reset popup dimensions and show. */
@@ -45,15 +34,19 @@
         popupElement.getStyle().setTop(caretLocation.getY(), PX);
         popupElement.getStyle().setWidth("400px");
         popupElement.getStyle().setHeight("200px");
-        popupElement.getStyle().setOpacity(0);
+        popupElement.getStyle().setOpacity(1);
         Elements.getDocument().getBody().appendChild(this.popupElement);
 
-        Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
-            @Override
-            public void execute() {
-                popupElement.getStyle().setOpacity(1);
-            }
-        });
+        /* Add the top extra row. */
+        setExtraRowHeight(appendExtraRow(), 0);
+
+        /* Add the popup items. */
+        for (int i = 0; i < Math.min(DOM_ITEMS_SIZE, getTotalItems()); i++) {
+            listElement.appendChild(createProposalPopupItem(i));
+        }
+
+        /* Add the bottom extra row. */
+        setExtraRowHeight(appendExtraRow(), Math.max(0, getTotalItems() - DOM_ITEMS_SIZE));
 
         /* Correct popup position (wants to be refactored) */
         final Window window = Elements.getWindow();
@@ -100,6 +93,7 @@
 
         /* Indicates the codeassist is visible. */
         visible = true;
+        focused = false;
 
         if (docPopup.isAttached()) {
             docPopup.getElement().getStyle().setOpacity(0);
@@ -113,6 +107,6 @@
         }
 
         /* Select first row. */
-        selectElement(listElement.getFirstElementChild());
+        selectFirst();
     }
 

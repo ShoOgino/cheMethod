@@ -1,0 +1,28 @@
+    @Override
+    public void computeCompletionProposals(TextEditor editor, final int offset, final boolean triggered, final CodeAssistCallback callback) {
+        this.lastErrorMessage = null;
+
+        TextDocumentPositionParamsDTO documentPosition = dtoBuildHelper.createTDPP(editor.getDocument(), offset);
+        final TextDocumentIdentifierDTO documentId = documentPosition.getTextDocument();
+        String currentLine = editor.getDocument().getLineContent(documentPosition.getPosition().getLine());
+        final String currentWord = getCurrentWord(currentLine, documentPosition.getPosition().getCharacter());
+
+        if (!triggered && latestCompletionResult.isGoodFor(documentId, offset, currentWord)) {
+            // no need to send new completion request
+            computeProposals(currentWord, offset - latestCompletionResult.getOffset(), callback);
+        } else {
+            documentServiceClient.completion(documentPosition).then(new Operation<CompletionListDTO>() {
+                @Override
+                public void apply(CompletionListDTO list) throws OperationException {
+                    latestCompletionResult.update(documentId, offset, currentWord, list);
+                    computeProposals(currentWord, 0, callback);
+                }
+            }).catchError(new Operation<PromiseError>() {
+                @Override
+                public void apply(PromiseError error) throws OperationException {
+                    lastErrorMessage = error.getMessage();
+                }
+            });
+        }
+    }
+
