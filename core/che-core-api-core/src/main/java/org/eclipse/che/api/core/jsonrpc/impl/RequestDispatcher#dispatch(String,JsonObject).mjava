@@ -17,27 +17,31 @@
         LOG.debug("Extracted request method: " + method);
 
         final RequestHandler handler = handlers.get(method);
+        if(handler == null) {
+            LOG.error("Handler not found: " + method);
+            // TODO make a centralized standard errors structure
+            transmitter.transmit(endpointId, error(-32601, "Method not found: " + method));
+            return;
+        }
 
         final Class resultClass = handler.getResultClass();
         LOG.debug("Extracted request result class: " + resultClass);
 
 
-        JsonObject result;
+        JsonElement result;
         if (incomingJson.has("params")) {
             final JsonObject params = incomingJson.get("params").getAsJsonObject();
             LOG.debug("Request is parametrized, processing parameters: " + params);
 
             final Class paramsClass = handler.getParamsClass();
             LOG.debug("Extracted request params class: " + paramsClass);
-
-            result = dispatch(endpointId, handler, params, paramsClass, resultClass);
+            result = response(endpointId, handler, params, paramsClass, resultClass);
         } else {
-            LOG.debug("Request is parametrized.");
-
-            result = dispatch(endpointId, handler, resultClass);
+            LOG.debug("Request is not parametrized.");
+            result = response(endpointId, handler, null, null, resultClass);
         }
 
-        final JsonObject response = prepareResponse(id, result);
+        final JsonElement response = prepareResponse(id, result);
         LOG.debug("Generated response: " + response);
 
         transmitter.transmit(endpointId, response.toString());
