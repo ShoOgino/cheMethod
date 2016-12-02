@@ -4,24 +4,6 @@
         final Tree tree = view.getTree();
         final ResourceDelta delta = event.getDelta();
         final Resource resource = delta.getResource();
-
-        if (delta.getKind() == UPDATED) {
-            for (Node node : tree.getNodeStorage().getAll()) {
-                if (node instanceof ResourceNode && ((ResourceNode)node).getData().getLocation().equals(delta.getResource().getLocation())) {
-                    final String oldId = tree.getNodeStorage().getKeyProvider().getKey(node);
-                    ((ResourceNode)node).setData(delta.getResource());
-                    tree.getNodeStorage().reIndexNode(oldId, node);
-                    tree.refresh(node);
-
-                    if (tree.isExpanded(node)) {
-                        reloadNode(node);
-                    }
-
-                    return;
-                }
-            }
-        }
-
         final NodeSettings nodeSettings = settingsProvider.getSettings();
 
         // process root projects, they have only one segment in path
@@ -34,27 +16,32 @@
                 if (node != null) {
                     tree.getNodeStorage().remove(node);
                 }
+            } else if (delta.getKind() == UPDATED) {
+                for (Node node : tree.getNodeStorage().getAll()) {
+                    if (node instanceof ResourceNode &&
+                        ((ResourceNode)node).getData().getLocation().equals(delta.getResource().getLocation())) {
+                        final String oldId = tree.getNodeStorage().getKeyProvider().getKey(node);
+                        ((ResourceNode)node).setData(delta.getResource());
+                        tree.getNodeStorage().reIndexNode(oldId, node);
+                        tree.refresh(node);
+                        updateTask.submit(delta.getResource().getLocation());
+                    }
+                }
             }
         } else {
-            final Optional<Container> parent = resource.getParent();
-            final Optional<Project> relatedProject = resource.getRelatedProject();
 
-            if (parent.isPresent() && relatedProject.isPresent()) {
-                final Container container = parent.get();
-                final Node parentNode = firstNonNull(getNode(container.getLocation()), getParentNode(container.getLocation()));
+            if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
+                final Node node = getNode(delta.getFromPath());
 
-                if (parentNode != null && tree.isExpanded(parentNode)) {
-                    reloadNode(parentNode);
+                if (node != null && tree.isExpanded(node)) {
+                    expandQueue.add(delta.getToPath());
                 }
             }
 
-            // process movement
-            if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
-                final Node parentNode = getParentNode(delta.getFromPath());
+            updateTask.submit(resource.getLocation());
 
-                if (parentNode != null && tree.isExpanded(parentNode)) {
-                    reloadNode(parentNode);
-                }
+            if (delta.getFromPath() != null) {
+                updateTask.submit(delta.getFromPath());
             }
         }
     }
