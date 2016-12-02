@@ -1,12 +1,25 @@
     @Override
-    public void subscribe(final String projectName, final StatusNotification existingNotification) {
-        this.projectName = projectName;
-        this.wsChannel = "importProject:output:" + workspaceId + ":" + projectName;
+    public void subscribe(final String name, final StatusNotification existingNotification) {
+        this.projectName = name;
+        this.wsChannel = "importProject:output";
         this.notification = existingNotification;
-        this.subscriptionHandler = new SubscriptionHandler<String>(new LineUnmarshaller()) {
+        this.subscriptionHandler = new SubscriptionHandler<String>(new StringUnmarshallerWS()) {
             @Override
             protected void onMessageReceived(String result) {
-                notification.setContent(result);
+                JsonObject jsonObject = Json.parse(result);
+
+                if (jsonObject == null) {
+                    return;
+                }
+
+                if (jsonObject.hasKey("project")) {
+                    projectName = jsonObject.getString("project");
+                    notification.setTitle(locale.importingProject(projectName));
+                }
+
+                if (jsonObject.hasKey("line")) {
+                    notification.setContent(jsonObject.getString("line"));
+                }
             }
 
             @Override
