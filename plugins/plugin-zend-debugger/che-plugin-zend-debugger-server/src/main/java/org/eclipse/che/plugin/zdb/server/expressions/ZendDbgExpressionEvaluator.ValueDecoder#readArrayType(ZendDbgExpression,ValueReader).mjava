@@ -1,0 +1,27 @@
+        private void readArrayType(ZendDbgExpression expression, ValueReader reader) {
+            int arrayLength = reader.readInt();
+            String arrayDescriptor = "array [" + arrayLength + "]";
+            if (reader.isEnd()) {
+                expression.setExpressionResult(new ZendDbgExpressionResult(arrayDescriptor, PHP_ARRAY, arrayLength));
+                return;
+            }
+            List<IDbgExpression> childExpressions = new ArrayList<>();
+            for (int i = 0; i < arrayLength; i++) {
+                char type = reader.readType();
+                String name;
+                if (type == 'i') {
+                    name = Integer.toString(reader.readInt());
+                } else if (type == 's') {
+                    name = reader.readString();
+                } else {
+                    // Fall back when type is invalid
+                    return;
+                }
+                ZendDbgExpression childExpression = expression.createChild(name, KIND_ARRAY_MEMBER);
+                childExpressions.add(childExpression);
+                read(childExpression, reader);
+            }
+            expression.setExpressionResult(
+                    new ZendDbgExpressionResult(arrayDescriptor, PHP_OBJECT, arrayLength, childExpressions));
+        }
+

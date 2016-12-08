@@ -1,0 +1,25 @@
+    private GetLocalFileContentResponse handleGetLocalFileContent(GetLocalFileContentRequest request) {
+        String remoteFilePath = request.getFileName();
+        VirtualFileEntry localFileEntry = ZendDbgFileUtils.findVirtualFileEntry(remoteFilePath);
+        if (localFileEntry == null) {
+            LOG.error("Could not found corresponding local file for: " + remoteFilePath);
+            return new GetLocalFileContentResponse(request.getID(), GetLocalFileContentResponse.STATUS_FAILURE, null);
+        }
+        try {
+            byte[] localFileContent = localFileEntry.getVirtualFile().getContentAsBytes();
+            // Check if remote content is equal to corresponding local one
+            if (ZendDbgConnectionUtils.isRemoteContentEqual(request.getSize(), request.getCheckSum(),
+                    localFileContent)) {
+                // Remote and local contents are identical
+                return new GetLocalFileContentResponse(request.getID(),
+                        GetLocalFileContentResponse.STATUS_FILES_IDENTICAL, null);
+            }
+            // Remote and local contents are different, send local content to the engine
+            return new GetLocalFileContentResponse(request.getID(), GetLocalFileContentResponse.STATUS_SUCCESS,
+                    localFileContent);
+        } catch (Exception e) {
+            LOG.error(e.getMessage(), e);
+        }
+        return new GetLocalFileContentResponse(request.getID(), GetLocalFileContentResponse.STATUS_FAILURE, null);
+    }
+
