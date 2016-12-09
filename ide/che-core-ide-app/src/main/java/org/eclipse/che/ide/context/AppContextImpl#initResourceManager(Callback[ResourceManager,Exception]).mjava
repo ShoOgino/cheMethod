@@ -1,0 +1,33 @@
+    @Override
+    public void initResourceManager(final Callback<ResourceManager, Exception> callback) {
+        if (devMachine == null) {
+            //should never happened, but anyway
+            callback.onFailure(new NullPointerException("Dev machine is not initialized"));
+        }
+
+        browserQueryFieldRenderer.setProjectName("");
+
+        if (projects != null) {
+            for (Project project : projects) {
+                eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(project, REMOVED)));
+            }
+            projects = null;
+        }
+
+        resourceManager = resourceManagerFactory.newResourceManager(devMachine);
+        resourceManager.getWorkspaceProjects().then(new Operation<Project[]>() {
+            @Override
+            public void apply(Project[] projects) throws OperationException {
+                AppContextImpl.this.projects = projects;
+                java.util.Arrays.sort(AppContextImpl.this.projects, ResourcePathComparator.getInstance());
+                callback.onSuccess(resourceManager);
+                eventBus.fireEvent(new WorkspaceReadyEvent(projects));
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                callback.onFailure((Exception)error.getCause());
+            }
+        });
+    }
+
