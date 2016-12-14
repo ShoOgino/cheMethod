@@ -1,0 +1,52 @@
+    /**
+     * @param docker
+     * @param container
+     * @return
+     * @throws IOException
+     */
+    @Override
+    public ContainerInfo inspectContainer(String container) throws IOException {
+        // Proxy to DockerConnector
+        ContainerInfo info = super.inspectContainer(container);
+        if (info == null) {
+            return null;
+        }
+
+        Pod pod = getChePodByContainerId(info.getId());
+        if (pod == null ) {
+            LOG.warn("No Pod found by container ID " + info.getId());
+            return null;
+        }
+
+        String deploymentName = pod.getMetadata().getLabels().get(OPENSHIFT_DEPLOYMENT_LABEL);
+        if (deploymentName == null ) {
+            LOG.warn("No label " + OPENSHIFT_DEPLOYMENT_LABEL + " found for Pod " + pod.getMetadata().getName());
+            return null;
+        }
+
+        Service svc = getCheServiceBySelector(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
+        if (svc == null) {
+            LOG.warn("No Service found by selector " + OPENSHIFT_DEPLOYMENT_LABEL + "=" + deploymentName);
+            return null;
+        }
+
+        Map<String, String> annotations = kubernetesLabelConverter.namesToLabels(svc.getMetadata().getAnnotations());
+        Map<String, String> containerLabels = info.getConfig().getLabels();
+
+        Map<String, String> labels = Stream.concat(annotations.entrySet().stream(), containerLabels.entrySet().stream())
+                                           .filter(e -> e.getKey().startsWith(kubernetesLabelConverter.getCheServerLabelPrefix()))
+                                           .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
+
+        info.getConfig().setLabels(labels);
+
+        LOG.info("Container labels:");
+        info.getConfig().getLabels().entrySet()
+                        .stream().forEach(e -> LOG.info("- " + e.getKey() + "=" + e.getValue()));
+
+        // Ignore portMapping for now: info.getNetworkSettings().setPortMapping();
+        // replacePortMapping(info)
+        replaceNetworkSettings(info);
+
+        return info;
+    }
+

@@ -1,0 +1,33 @@
+    private String waitAndRetrieveContainerID(String deploymentName) {
+        for (int i = 0; i < OPENSHIFT_WAIT_POD_TIMEOUT; i++) {
+            try {
+                Thread.sleep(OPENSHIFT_WAIT_POD_DELAY);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+
+            PodList pods = openShiftClient.pods()
+                                .inNamespace(this.cheOpenShiftProjectName)
+                                .list();
+
+            for (Pod p : pods.getItems()) {
+                String status = p.getStatus().getPhase();
+                String dc = p.getMetadata().getLabels().get(OPENSHIFT_DEPLOYMENT_LABEL);
+                if (OPENSHIFT_POD_STATUS_RUNNING.equals(status) && deploymentName.equals(dc)) {
+                    String containerID = p.getStatus().getContainerStatuses().get(0).getContainerID();
+                    String normalizedID = normalizeContainerID(containerID);
+                    openShiftClient.pods()
+                            .inNamespace(this.cheOpenShiftProjectName)
+                            .withName(p.getMetadata().getName())
+                            .edit()
+                            .editMetadata()
+                                .addToLabels(CHE_CONTAINER_IDENTIFIER_LABEL_KEY, getLabelFromContainerID(normalizedID))
+                            .endMetadata()
+                            .done();
+                    return normalizedID;
+                }
+            }
+        }
+        return null;
+    }
+

@@ -1,0 +1,67 @@
+    private String createOpenShiftDeployment(String workspaceID,
+                                             String imageName,
+                                             String sanitizedContainerName,
+                                             Set<String> exposedPorts,
+                                             String[] envVariables,
+                                             String[] volumes,
+                                             boolean runContainerAsRoot) {
+
+        String dName = CHE_OPENSHIFT_RESOURCES_PREFIX + workspaceID;
+        LOG.info(String.format("Creating OpenShift deployment %s", dName));
+
+        Map<String, String> selector = new HashMap<>();
+        selector.put(OPENSHIFT_DEPLOYMENT_LABEL, CHE_OPENSHIFT_RESOURCES_PREFIX + workspaceID);
+
+        LOG.info(String.format("Adding container %s to OpenShift deployment %s", sanitizedContainerName, dName));
+        Long UID = runContainerAsRoot ? UID_ROOT : UID_USER;
+        Container container = new ContainerBuilder()
+                                    .withName(sanitizedContainerName)
+                                    .withImage(imageName)
+                                    .withEnv(getContainerEnvFrom(envVariables))
+                                    .withPorts(getContainerPortsFrom(exposedPorts))
+                                    .withImagePullPolicy(IMAGE_PULL_POLICY_IFNOTPRESENT)
+                                    .withNewSecurityContext()
+                                        .withRunAsUser(UID)
+                                        .withPrivileged(true)
+                                    .endSecurityContext()
+                                    .withLivenessProbe(getLivenessProbeFrom(exposedPorts))
+                                    .withVolumeMounts(getVolumeMountsFrom(volumes,workspaceID))
+                                    .build();
+
+
+        PodSpec podSpec = new PodSpecBuilder()
+                                 .withContainers(container)
+                                 .withVolumes(getVolumesFrom(volumes, workspaceID))
+                                 .withServiceAccountName(this.cheOpenShiftServiceAccount)
+                                 .build();
+
+
+        Deployment deployment = new DeploymentBuilder()
+                .withNewMetadata()
+                    .withName(dName)
+                    .withNamespace(this.cheOpenShiftProjectName)
+                .endMetadata()
+                .withNewSpec()
+                    .withReplicas(1)
+                    //.withTrigger(DeploymentTriggerType.CONFIG_CHANGE) ?
+                    .withNewSelector()
+                        .withMatchLabels(selector)
+                    .endSelector()
+                    .withNewTemplate()
+                        .withNewMetadata()
+                            .withLabels(selector)
+                        .endMetadata()
+                        .withSpec(podSpec)
+                    .endTemplate()
+                .endSpec()
+                .build();
+
+        deployment = openShiftClient.extensions()
+                                    .deployments()
+                                    .inNamespace(this.cheOpenShiftProjectName)
+                                    .create(deployment);
+
+        LOG.info(String.format("OpenShift deployment %s created", dName));
+        return deployment.getMetadata().getName();
+    }
+
