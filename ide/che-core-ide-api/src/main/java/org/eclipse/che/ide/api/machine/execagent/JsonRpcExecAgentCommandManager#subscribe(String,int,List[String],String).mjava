@@ -1,0 +1,23 @@
+    @Override
+    public ExecAgentPromise<ProcessSubscribeResponseDto> subscribe(final String endpointId, int pid, List<String> eventTypes,
+                                                                   String after) {
+        Log.debug(getClass(), "Subscribing to a process. PID: " + pid + ", event types: " + eventTypes + ", after timestamp: " + after);
+
+        ProcessSubscribeRequestDto dto = dtoFactory.createDto(ProcessSubscribeRequestDto.class)
+                                                   .withPid(pid)
+                                                   .withEventTypes(join(eventTypes, ","))
+                                                   .withAfter(after);
+
+        final ExecAgentPromise<ProcessSubscribeResponseDto> execAgentPromise = new ExecAgentPromise<>();
+
+        transmitter.transmitOneToOne(endpointId, PROCESS_SUBSCRIBE, dto, ProcessSubscribeResponseDto.class).then(
+                new Operation<ProcessSubscribeResponseDto>() {
+                    @Override
+                    public void apply(ProcessSubscribeResponseDto arg) throws OperationException {
+                        subscribe(endpointId, execAgentPromise, arg);
+                    }
+                });
+
+        return execAgentPromise;
+    }
+

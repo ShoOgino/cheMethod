@@ -1,0 +1,26 @@
+    @Override
+    public ExecAgentPromise<ProcessStartResponseDto> startProcess(final String endpointId, Command command) {
+        String name = command.getName();
+        String commandLine = command.getCommandLine();
+        String type = command.getType();
+
+        Log.debug(getClass(), "Starting a process. Name: " + name + ", command line: " + commandLine + ", type: " + type);
+
+        ProcessStartRequestDto dto = dtoFactory.createDto(ProcessStartRequestDto.class)
+                                               .withCommandLine(commandLine)
+                                               .withName(name)
+                                               .withType(type);
+
+        final ExecAgentPromise<ProcessStartResponseDto> execAgentPromise = new ExecAgentPromise<>();
+
+        transmitter.transmitOneToOne(endpointId, PROCESS_START, dto, ProcessStartResponseDto.class)
+                   .then(new Operation<ProcessStartResponseDto>() {
+                       @Override
+                       public void apply(ProcessStartResponseDto arg) throws OperationException {
+                           subscribe(endpointId, execAgentPromise, arg);
+                       }
+                   });
+
+        return execAgentPromise;
+    }
+
