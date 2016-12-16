@@ -1,5 +1,5 @@
-    private List<ConflictImportDTO> createOrganizeImportOperation(ICompilationUnit compilationUnit,
-                                                                 List<String> chosen) throws CoreException {
+    private OrganizeImportResult createOrganizeImportOperation(ICompilationUnit compilationUnit,
+                                                               List<String> chosen) throws CoreException {
         CodeGenerationSettings settings = JavaPreferencesSettings.getCodeGenerationSettings(compilationUnit.getJavaProject());
 
         OrganizeImportsOperation operation = new OrganizeImportsOperation(compilationUnit,
@@ -12,15 +12,24 @@
 
         NullProgressMonitor monitor = new NullProgressMonitor();
         TextEdit edit = operation.createTextEdit(monitor);
-
+        OrganizeImportResult result = DtoFactory.newDto(OrganizeImportResult.class);
         TypeNameMatch[][] choices = operation.getChoices();
         //Apply organize import declarations if operation doesn't have conflicts (choices.length == 0)
         //or all conflicts were resolved (!chosen.isEmpty())
         if ((chosen != null && !chosen.isEmpty()) || choices == null || choices.length == 0) {
-            operation.applyChanges(edit, monitor);
-            return Collections.emptyList();
+            IBuffer buffer = compilationUnit.getBuffer();
+            IDocument document = new Document(buffer.getContents());
+            DocumentChangeListener documentChangeListener = new DocumentChangeListener(document);
+            try {
+                edit.apply(document);
+            } catch (BadLocationException e) {
+                LOG.debug("Applying Organize import text edits goes wrong:", e);
+            }
+            result.setChanges(documentChangeListener.getChanges());
+            return result;
         }
 
-        return createListOfDTOMatches(choices);
+        result.setConflicts(createListOfDTOMatches(choices));
+        return result;
     }
 
