@@ -1,0 +1,23 @@
+    @Test
+    public void removesOldSnapshotsWhenNewSnapshotsMetadataSuccessfullySaved() throws Exception {
+        WorkspaceImpl workspace = createWorkspace();
+        runtimes.start(workspace, workspace.getConfig().getDefaultEnv(), false);
+        SnapshotImpl oldSnapshot = mock(SnapshotImpl.class);
+        doReturn((singletonList(oldSnapshot))).when(snapshotDao)
+                                              .replaceSnapshots(any(), any(), any());
+
+        runtimes.snapshot(workspace.getId());
+
+        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                               .withStatus(WorkspaceStatus.SNAPSHOTTING)
+                                               .withEventType(EventType.SNAPSHOT_CREATING)
+                                               .withPrevStatus(WorkspaceStatus.RUNNING)
+                                               .withWorkspaceId(workspace.getId()));
+        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                               .withStatus(WorkspaceStatus.RUNNING)
+                                               .withEventType(EventType.SNAPSHOT_CREATED)
+                                               .withPrevStatus(WorkspaceStatus.SNAPSHOTTING)
+                                               .withWorkspaceId(workspace.getId()));
+        verify(envEngine).removeSnapshot(oldSnapshot);
+    }
+

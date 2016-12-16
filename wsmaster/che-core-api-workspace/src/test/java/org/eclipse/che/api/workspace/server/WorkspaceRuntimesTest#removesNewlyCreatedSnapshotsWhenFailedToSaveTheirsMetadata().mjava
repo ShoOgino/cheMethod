@@ -1,0 +1,31 @@
+    @Test(expectedExceptions = ServerException.class, expectedExceptionsMessageRegExp = "test")
+    public void removesNewlyCreatedSnapshotsWhenFailedToSaveTheirsMetadata() throws Exception {
+        WorkspaceImpl workspace = createWorkspace();
+        runtimes.start(workspace, workspace.getConfig().getDefaultEnv(), false);
+        doThrow(new SnapshotException("test")).when(snapshotDao)
+                                              .replaceSnapshots(any(), any(), any());
+        SnapshotImpl snapshot = mock(SnapshotImpl.class);
+        when(envEngine.saveSnapshot(any(), any())).thenReturn(snapshot);
+
+        try {
+            runtimes.snapshot(workspace.getId());
+        } catch (Exception x) {
+            verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                   .withStatus(WorkspaceStatus.SNAPSHOTTING)
+                                                   .withEventType(EventType.SNAPSHOT_CREATING)
+                                                   .withPrevStatus(WorkspaceStatus.RUNNING)
+                                                   .withWorkspaceId(workspace.getId()));
+            verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                   .withStatus(WorkspaceStatus.RUNNING)
+                                                   .withEventType(EventType.SNAPSHOT_CREATION_ERROR)
+                                                   .withWorkspaceId(workspace.getId())
+                                                   .withPrevStatus(WorkspaceStatus.SNAPSHOTTING)
+                                                   .withError("test"));
+            verify(snapshotDao).replaceSnapshots(any(),
+                                                 any(),
+                                                 snapshotsCaptor.capture());
+            verify(envEngine, times(snapshotsCaptor.getValue().size())).removeSnapshot(snapshot);
+            throw x;
+        }
+    }
+

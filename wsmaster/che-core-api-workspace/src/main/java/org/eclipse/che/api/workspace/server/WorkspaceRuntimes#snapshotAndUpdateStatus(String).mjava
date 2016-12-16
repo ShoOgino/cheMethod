@@ -1,0 +1,67 @@
+    /** Creates a snapshot and changes status SNAPSHOTTING -> RUNNING . */
+    private void snapshotAndUpdateStatus(String workspaceId) throws NotFoundException,
+                                                                    ConflictException,
+                                                                    ServerException {
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withWorkspaceId(workspaceId)
+                                        .withStatus(WorkspaceStatus.SNAPSHOTTING)
+                                        .withEventType(EventType.SNAPSHOT_CREATING)
+                                        .withPrevStatus(WorkspaceStatus.RUNNING));
+
+        WorkspaceRuntimeImpl runtime = get(workspaceId).getRuntime();
+        List<MachineImpl> machines = runtime.getMachines();
+        machines.sort(comparing(m -> !m.getConfig().isDev(), Boolean::compare));
+
+        LOG.info("Creating snapshot of workspace '{}', machines to snapshot: '{}'", workspaceId, machines.size());
+        List<SnapshotImpl> newSnapshots = new ArrayList<>(machines.size());
+        for (MachineImpl machine : machines) {
+            try {
+                newSnapshots.add(envEngine.saveSnapshot(workspaceId, machine.getId()));
+            } catch (ServerException | NotFoundException x) {
+                if (machine.getConfig().isDev()) {
+                    compareAndSetStatus(workspaceId, WorkspaceStatus.SNAPSHOTTING, WorkspaceStatus.RUNNING);
+                    eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                    .withWorkspaceId(workspaceId)
+                                                    .withStatus(WorkspaceStatus.RUNNING)
+                                                    .withEventType(EventType.SNAPSHOT_CREATION_ERROR)
+                                                    .withPrevStatus(WorkspaceStatus.SNAPSHOTTING)
+                                                    .withError(x.getMessage()));
+                    throw x;
+                }
+                LOG.warn(format("Couldn't create snapshot of machine '%s:%s' in workspace '%s'",
+                                machine.getEnvName(),
+                                machine.getConfig().getName(),
+                                workspaceId));
+            }
+        }
+
+        LOG.info("Saving new snapshots metadata, workspace id '{}'", workspaceId);
+        try {
+            List<SnapshotImpl> removed = snapshotDao.replaceSnapshots(workspaceId,
+                                                                      runtime.getActiveEnv(),
+                                                                      newSnapshots);
+            if (!removed.isEmpty()) {
+                LOG.info("Removing old snapshots binaries, workspace id '{}', snapshots to remove '{}'", workspaceId, removed.size());
+                removeBinaries(removed);
+            }
+        } catch (SnapshotException x) {
+            LOG.error(format("Couldn't remove existing snapshots metadata for workspace '%s'", workspaceId), x);
+            LOG.info("Removing newly created snapshots, workspace id '{}', snapshots to remove '{}'", workspaceId, newSnapshots.size());
+            removeBinaries(newSnapshots);
+            compareAndSetStatus(workspaceId, WorkspaceStatus.SNAPSHOTTING, WorkspaceStatus.RUNNING);
+            eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                            .withWorkspaceId(workspaceId)
+                                            .withStatus(WorkspaceStatus.RUNNING)
+                                            .withEventType(EventType.SNAPSHOT_CREATION_ERROR)
+                                            .withPrevStatus(WorkspaceStatus.SNAPSHOTTING)
+                                            .withError(x.getMessage()));
+            throw x;
+        }
+        compareAndSetStatus(workspaceId, WorkspaceStatus.SNAPSHOTTING, WorkspaceStatus.RUNNING);
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withStatus(WorkspaceStatus.RUNNING)
+                                        .withWorkspaceId(workspaceId)
+                                        .withEventType(EventType.SNAPSHOT_CREATED)
+                                        .withPrevStatus(WorkspaceStatus.SNAPSHOTTING));
+    }
+

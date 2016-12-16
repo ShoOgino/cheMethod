@@ -1,24 +1,10 @@
-    @Test
+    @Test(expectedExceptions = ConflictException.class,
+          expectedExceptionsMessageRegExp = "Workspace with id '.*' is not 'RUNNING', it's status is 'SNAPSHOTTING'")
     public void throwsConflictExceptionWhenBeginningSnapshottingForNotRunningWorkspace() throws Exception {
         final WorkspaceImpl workspace = createWorkspace();
-
-        doAnswer(inv -> {
-            // checking exception here
-            try {
-                runtimes.beginSnapshotting(workspace.getId());
-                fail("Expected to get an exception");
-            } catch (ConflictException x) {
-                assertEquals(x.getMessage(), format("Workspace with id '%s' is not in '%s', it's status is '%s'",
-                                                    workspace.getId(),
-                                                    WorkspaceStatus.RUNNING,
-                                                    WorkspaceStatus.STARTING));
-            }
-            return null;
-        }).when(eventService)
-          .publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                             .withEventType(EventType.STARTING)
-                             .withWorkspaceId(workspace.getId()));
-
         runtimes.start(workspace, workspace.getConfig().getDefaultEnv(), false);
+
+        runtimes.snapshotAsync(workspace.getId());
+        runtimes.snapshotAsync(workspace.getId());
     }
 

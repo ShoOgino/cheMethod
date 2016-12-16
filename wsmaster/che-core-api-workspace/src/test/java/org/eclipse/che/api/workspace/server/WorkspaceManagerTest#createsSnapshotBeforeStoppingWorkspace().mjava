@@ -1,19 +1,11 @@
     @Test
     public void createsSnapshotBeforeStoppingWorkspace() throws Exception {
-        final WorkspaceImpl workspace = createRunningWorkspace();
+        WorkspaceImpl workspace = createAndMockWorkspace();
+        createAndMockDescriptor(workspace, RUNNING);
 
-        workspaceManager.stopWorkspace(workspace.getId());
+        workspaceManager.stopWorkspace(workspace.getId(), true);
 
-        verify(runtimes, timeout(2000)).beginSnapshotting(workspace.getId());
-        verify(runtimes, timeout(2000)).finishSnapshotting(workspace.getId());
-        final Iterator<MachineImpl> machineIt = workspace.getRuntime().getMachines().iterator();
-        verify(runtimes).saveMachine(workspace.getNamespace(), workspace.getId(), machineIt.next().getId());
-        verify(runtimes).saveMachine(workspace.getNamespace(), workspace.getId(), machineIt.next().getId());
-        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                               .withEventType(SNAPSHOT_CREATING)
-                                               .withWorkspaceId(workspace.getId()));
-        verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                               .withEventType(SNAPSHOT_CREATED)
-                                               .withWorkspaceId(workspace.getId()));
+        captureAsyncTaskAndExecuteSynchronously();
+        verify(runtimes).snapshot(workspace.getId());
     }
 

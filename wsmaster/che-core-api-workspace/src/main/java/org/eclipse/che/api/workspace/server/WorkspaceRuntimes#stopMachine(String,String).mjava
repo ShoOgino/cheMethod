@@ -7,6 +7,7 @@
      *         ID of machine that should be stopped
      * @throws NotFoundException
      *         if machine is not found in the environment
+     *         or workspace doesn't have a runtime
      * @throws ConflictException
      *         if environment is not running
      * @throws ConflictException
@@ -17,12 +18,9 @@
     public void stopMachine(String workspaceId, String machineId) throws NotFoundException,
                                                                          ServerException,
                                                                          ConflictException {
-        try (CloseableLock lock = stripedLocks.acquireReadLock(workspaceId)) {
-            WorkspaceState workspaceState = workspaces.get(workspaceId);
-            if (workspaceState == null || workspaceState.status != RUNNING) {
-                throw new ConflictException(format("Environment of workspace '%s' is not running", workspaceId));
-            }
+        try (CloseableLock lock = locks.acquireReadLock(workspaceId)) {
+            getRunningState(workspaceId);
         }
-        environmentEngine.stopMachine(workspaceId, machineId);
+        envEngine.stopMachine(workspaceId, machineId);
     }
 

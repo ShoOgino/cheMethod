@@ -19,7 +19,7 @@
                                                                      NotFoundException,
                                                                      EnvironmentException {
 
-        try (CloseableLock lock = stripedLocks.acquireReadLock(workspaceId)) {
+        try (CloseableLock lock = locks.acquireReadLock(workspaceId)) {
             getRunningState(workspaceId);
         }
 
@@ -29,14 +29,15 @@
 
         List<String> agents = Collections.singletonList("org.eclipse.che.terminal");
 
-        Instance instance = environmentEngine.startMachine(workspaceId, machineConfigCopy, agents);
+        Instance instance = envEngine.startMachine(workspaceId, machineConfigCopy, agents);
         launchAgents(instance, agents);
 
-        try (CloseableLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+        try (CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
+            ensurePreDestroyIsNotExecuted();
             WorkspaceState workspaceState = workspaces.get(workspaceId);
             if (workspaceState == null || workspaceState.status != RUNNING) {
                 try {
-                    environmentEngine.stopMachine(workspaceId, instance.getId());
+                    envEngine.stopMachine(workspaceId, instance.getId());
                 } catch (NotFoundException | ServerException | ConflictException e) {
                     LOG.error(e.getLocalizedMessage(), e);
                 }

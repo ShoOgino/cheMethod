@@ -3,37 +3,48 @@
                          String workspaceId,
                          String envName,
                          boolean recover) throws ServerException {
-        publishWorkspaceEvent(EventType.STARTING, workspaceId, null);
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withWorkspaceId(workspaceId)
+                                        .withStatus(WorkspaceStatus.STARTING)
+                                        .withEventType(EventType.STARTING)
+                                        .withPrevStatus(WorkspaceStatus.STOPPED));
+
         try {
-            List<Instance> machines = environmentEngine.start(workspaceId,
-                                                              envName,
-                                                              environment,
-                                                              recover,
-                                                              getEnvironmentLogger(workspaceId));
+            List<Instance> machines = envEngine.start(workspaceId,
+                                                      envName,
+                                                      environment,
+                                                      recover,
+                                                      getEnvironmentLogger(workspaceId));
             launchAgents(environment, machines);
 
-            try (CloseableLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            try (CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
+                ensurePreDestroyIsNotExecuted();
                 WorkspaceState workspaceState = workspaces.get(workspaceId);
                 workspaceState.status = WorkspaceStatus.RUNNING;
             }
-            // Event publication should be performed outside of the lock
-            // as it may take some time to notify subscribers
-            publishWorkspaceEvent(EventType.RUNNING, workspaceId, null);
+
+            eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                            .withWorkspaceId(workspaceId)
+                                            .withStatus(WorkspaceStatus.RUNNING)
+                                            .withEventType(EventType.RUNNING)
+                                            .withPrevStatus(WorkspaceStatus.STARTING));
         } catch (ApiException | EnvironmentException | RuntimeException e) {
             try {
-                environmentEngine.stop(workspaceId);
+                envEngine.stop(workspaceId);
             } catch (EnvironmentNotRunningException ignore) {
             } catch (Exception ex) {
                 LOG.error(ex.getLocalizedMessage(), ex);
             }
             String environmentStartError = "Start of environment " + envName +
                                            " failed. Error: " + e.getLocalizedMessage();
-            try (CloseableLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            try (CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
                 workspaces.remove(workspaceId);
             }
-            publishWorkspaceEvent(EventType.ERROR,
-                                  workspaceId,
-                                  environmentStartError);
+            eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                            .withWorkspaceId(workspaceId)
+                                            .withEventType(EventType.ERROR)
+                                            .withPrevStatus(WorkspaceStatus.STARTING)
+                                            .withError(environmentStartError));
 
             throw new ServerException(environmentStartError, e);
         }

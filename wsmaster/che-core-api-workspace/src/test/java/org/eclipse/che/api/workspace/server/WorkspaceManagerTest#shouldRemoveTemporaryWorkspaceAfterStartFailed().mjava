@@ -1,13 +1,13 @@
     @Test
     public void shouldRemoveTemporaryWorkspaceAfterStartFailed() throws Exception {
-        final WorkspaceImpl workspace = workspaceManager.createWorkspace(createConfig(), NAMESPACE);
+        WorkspaceImpl workspace = createAndMockWorkspace();
         workspace.setTemporary(true);
-        when(workspaceDao.get(workspace.getId())).thenReturn(workspace);
-        when(runtimes.get(any())).thenThrow(new NotFoundException(""));
-        when(runtimes.start(any(), anyString(), anyBoolean())).thenThrow(new ConflictException(""));
+        createAndMockDescriptor(workspace, RUNNING);
+        doThrow(new ServerException("")).when(runtimes).stop(workspace.getId());
 
-        workspaceManager.startWorkspace(workspace.getId(), null, null);
+        workspaceManager.stopWorkspace(workspace.getId());
 
-        verify(workspaceDao, timeout(2000)).remove(workspace.getId());
+        captureAsyncTaskAndExecuteSynchronously();
+        verify(workspaceDao).remove(workspace.getId());
     }
 

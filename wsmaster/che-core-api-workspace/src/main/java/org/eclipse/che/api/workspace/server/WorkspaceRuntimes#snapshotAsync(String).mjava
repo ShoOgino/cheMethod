@@ -1,0 +1,22 @@
+    /**
+     * Asynchronously creates a snapshot of a given workspace,
+     * but synchronously toggles workspace status to {@link WorkspaceStatus#SNAPSHOTTING}
+     * or throws an error if it is impossible to do so.
+     *
+     * @see #snapshot(String)
+     */
+    public Future<Void> snapshotAsync(String workspaceId) throws NotFoundException, ConflictException {
+        try (@SuppressWarnings("unused") CloseableLock l = locks.acquireWriteLock(workspaceId)) {
+            getRunningState(workspaceId).status = SNAPSHOTTING;
+        }
+        return sharedPool.submit(() -> {
+            try {
+                snapshotAndUpdateStatus(workspaceId);
+            } catch (Exception x) {
+                LOG.error(format("Couldn't create a snapshot of workspace '%s'", workspaceId), x);
+                throw x;
+            }
+            return null;
+        });
+    }
+

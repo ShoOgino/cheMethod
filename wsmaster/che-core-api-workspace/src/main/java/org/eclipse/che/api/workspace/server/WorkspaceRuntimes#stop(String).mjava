@@ -21,37 +21,49 @@
         // The double check is required as it is still possible to get unlucky timing
         // between locking and stopping workspace.
         ensurePreDestroyIsNotExecuted();
-        try (CloseableLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+        try (CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
             ensurePreDestroyIsNotExecuted();
             WorkspaceState workspaceState = workspaces.get(workspaceId);
             if (workspaceState == null) {
                 throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
             }
             if (workspaceState.status != WorkspaceStatus.RUNNING) {
-                throw new ConflictException(
-                        format("Couldn't stop '%s' workspace because its status is '%s'. Workspace can be stopped only if it is 'RUNNING'",
-                               workspaceId,
-                               workspaceState.status));
+                throw new ConflictException(format("Couldn't stop '%s' workspace because its status is '%s'. " +
+                                                   "Workspace can be stopped only if it is 'RUNNING'",
+                                                   workspaceId,
+                                                   workspaceState.status));
             }
 
             workspaceState.status = WorkspaceStatus.STOPPING;
         }
 
-        publishWorkspaceEvent(EventType.STOPPING, workspaceId, null);
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withWorkspaceId(workspaceId)
+                                        .withPrevStatus(WorkspaceStatus.RUNNING)
+                                        .withStatus(WorkspaceStatus.STOPPING)
+                                        .withEventType(EventType.STOPPING));
         String error = null;
         try {
-            environmentEngine.stop(workspaceId);
+            envEngine.stop(workspaceId);
         } catch (ServerException | RuntimeException e) {
             error = e.getLocalizedMessage();
         } finally {
-            try (CloseableLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
+            try (CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
                 workspaces.remove(workspaceId);
             }
         }
+
+        final WorkspaceStatusEvent event = DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                     .withWorkspaceId(workspaceId)
+                                                     .withPrevStatus(WorkspaceStatus.STOPPING);
         if (error == null) {
-            publishWorkspaceEvent(EventType.STOPPED, workspaceId, null);
+            event.setStatus(WorkspaceStatus.STOPPED);
+            event.setEventType(EventType.STOPPED);
         } else {
-            publishWorkspaceEvent(EventType.ERROR, workspaceId, error);
+            event.setStatus(WorkspaceStatus.STOPPED);
+            event.setEventType(EventType.ERROR);
+            event.setError(error);
         }
+        eventsService.publish(event);
     }
 

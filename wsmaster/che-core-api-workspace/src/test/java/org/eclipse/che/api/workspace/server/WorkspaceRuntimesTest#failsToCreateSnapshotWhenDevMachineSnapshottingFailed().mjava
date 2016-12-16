@@ -1,0 +1,24 @@
+    @Test(expectedExceptions = ServerException.class, expectedExceptionsMessageRegExp = "can't save")
+    public void failsToCreateSnapshotWhenDevMachineSnapshottingFailed() throws Exception {
+        final WorkspaceImpl workspace = createWorkspace();
+        runtimes.start(workspace, workspace.getConfig().getDefaultEnv(), false);
+        when(envEngine.saveSnapshot(any(), any())).thenThrow(new ServerException("can't save"));
+
+        try {
+            runtimes.snapshot(workspace.getId());
+        } catch (Exception x) {
+            verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                   .withWorkspaceId(workspace.getId())
+                                                   .withStatus(WorkspaceStatus.SNAPSHOTTING)
+                                                   .withPrevStatus(WorkspaceStatus.RUNNING)
+                                                   .withEventType(EventType.SNAPSHOT_CREATING));
+            verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                   .withWorkspaceId(workspace.getId())
+                                                   .withError("can't save")
+                                                   .withStatus(WorkspaceStatus.RUNNING)
+                                                   .withPrevStatus(WorkspaceStatus.SNAPSHOTTING)
+                                                   .withEventType(EventType.SNAPSHOT_CREATION_ERROR));
+            throw x;
+        }
+    }
+

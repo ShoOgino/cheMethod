@@ -7,29 +7,46 @@
     void cleanup() {
         isPreDestroyInvoked = true;
 
-        try (CloseableLock lock = stripedLocks.acquireWriteAllLock()) {
-            for (Map.Entry<String, WorkspaceState> workspace : workspaces.entrySet()) {
-                if (workspace.getValue().status.equals(RUNNING) ||
-                    workspace.getValue().status.equals(WorkspaceStatus.STARTING)) {
-                    executor.execute(() -> {
-                        try {
-                            environmentEngine.stop(workspace.getKey());
-                        } catch (ServerException | NotFoundException e) {
-                            LOG.error(e.getLocalizedMessage(), e);
-                        }
-                    });
-                }
-            }
+        // wait existing tasks to complete
+        sharedPool.terminateAndWait();
 
+        List<String> idsToStop;
+        try (@SuppressWarnings("unused") CloseableLock l = locks.acquireWriteAllLock()) {
+            idsToStop = workspaces.entrySet()
+                                  .stream()
+                                  .filter(e -> e.getValue().status != STOPPING)
+                                  .map(Map.Entry::getKey)
+                                  .collect(Collectors.toList());
             workspaces.clear();
-
-            executor.shutdown();
         }
+
+        // nothing to stop
+        if (idsToStop.isEmpty()) {
+            return;
+        }
+
+        LOG.info("Shutdown running workspaces, workspaces to shutdown '{}'", idsToStop.size());
+        ExecutorService executor =
+                Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors(),
+                                             new ThreadFactoryBuilder().setNameFormat("StopEnvironmentsPool-%d")
+                                                                       .setDaemon(false)
+                                                                       .build());
+        for (String id : idsToStop) {
+            executor.execute(() -> {
+                try {
+                    envEngine.stop(id);
+                } catch (Exception x) {
+                    LOG.error(x.getMessage(), x);
+                }
+            });
+        }
+
+        executor.shutdown();
         try {
-            if (!executor.awaitTermination(50, TimeUnit.SECONDS)) {
+            if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
-                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    LOG.warn("Unable terminate destroy machines pool");
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    LOG.error("Unable terminate machines pool");
                 }
             }
         } catch (InterruptedException e) {
