@@ -3,7 +3,6 @@
                                    MachineLocalizationConstant localizationConstant,
                                    MachineResources resources,
                                    EventBus eventBus,
-                                   MachineServiceClient machineServiceClient,
                                    WorkspaceAgent workspaceAgent,
                                    AppContext appContext,
                                    NotificationManager notificationManager,
@@ -14,11 +13,11 @@
                                    ConsoleTreeContextMenuFactory consoleTreeContextMenuFactory,
                                    CommandTypeRegistry commandTypeRegistry,
                                    SshServiceClient sshServiceClient,
-                                   ExecAgentCommandManager execAgentCommandManager) {
+                                   ExecAgentCommandManager execAgentCommandManager,
+                                   DtoFactory dtoFactory) {
         this.view = view;
         this.localizationConstant = localizationConstant;
         this.resources = resources;
-        this.machineServiceClient = machineServiceClient;
         this.workspaceAgent = workspaceAgent;
         this.sshServiceClient = sshServiceClient;
         this.appContext = appContext;
@@ -31,6 +30,7 @@
         this.eventBus = eventBus;
         this.commandTypeRegistry = commandTypeRegistry;
         this.execAgentCommandManager = execAgentCommandManager;
+        this.dtoFactory = dtoFactory;
 
         machineNodes = new HashMap<>();
         machines = new HashMap<>();
@@ -50,8 +50,6 @@
         eventBus.addHandler(DownloadWorkspaceOutputEvent.TYPE, this);
         eventBus.addHandler(PartStackStateChangedEvent.TYPE, this);
 
-        updateMachineList();
-
         final PartStack partStack = checkNotNull(workspaceAgent.getPartStack(PartStackType.INFORMATION),
                                                  "Information part stack should not be a null");
         partStack.addPart(this);
@@ -59,5 +57,12 @@
         if (appContext.getFactory() == null) {
             partStack.setActivePart(this);
         }
+
+        Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
+            @Override
+            public void execute() {
+                updateMachineList();
+            }
+        });
     }
 
