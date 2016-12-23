@@ -1,0 +1,26 @@
+    /**
+     * Deletes all abandoned CHE networks.
+     * Abandoned networks appear when workspaces were stopped unexpectedly,
+     * for example, force stop che, restart docker, turn off PC, etc.
+     * A network is considered abandoned when it doesn't contain a container.
+     * To do this job more efficiently, it should be invoked after cleaning of abandoned containers.
+     */
+    @VisibleForTesting
+    void cleanNetworks() {
+        try {
+            for (Network network : dockerConnector.getNetworks(GET_NETWORKS_PARAMS)) {
+                Matcher cheNetworkMatcher = CHE_NETWORK_PATTERN.matcher(network.getName());
+                if (cheNetworkMatcher.matches() && network.getContainers().isEmpty() && !additionalNetworks.contains(network.getName()) &&
+                    !runtimes.hasRuntime(cheNetworkMatcher.group(WORKSPACE_ID_REGEX_GROUP))) {
+                    try {
+                        dockerConnector.removeNetwork(network.getId());
+                    } catch (IOException e) {
+                        LOG.warn("Failed to remove abandoned network: " + network.getName(), e);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOG.error("Failed to get list of docker networks", e);
+        }
+    }
+
