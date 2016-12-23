@@ -5,17 +5,15 @@
      */
     @Override
     public ContainerCreated createContainer(CreateContainerParams createContainerParams) throws IOException {
-
         String containerName = getNormalizedContainerName(createContainerParams);
         String workspaceID = getCheWorkspaceId(createContainerParams);
         // Generate workspaceID if CHE_WORKSPACE_ID env var does not exist
         workspaceID = workspaceID.isEmpty() ? generateWorkspaceID() : workspaceID;
         String imageName = createContainerParams.getContainerConfig().getImage();
+
         Set<String> containerExposedPorts = createContainerParams.getContainerConfig().getExposedPorts().keySet();
         Set<String> imageExposedPorts = inspectImage(imageName).getConfig().getExposedPorts().keySet();
-        Set<String> exposedPorts = new HashSet<>();
-        exposedPorts.addAll(containerExposedPorts);
-        exposedPorts.addAll(imageExposedPorts);
+        Set<String> exposedPorts = getExposedPorts(containerExposedPorts, imageExposedPorts);
 
         boolean runContainerAsRoot = runContainerAsRoot(imageName);
 
@@ -34,7 +32,7 @@
 
         String containerID = waitAndRetrieveContainerID(deploymentName);
         if (containerID == null) {
-            throw new RuntimeException("Failed to get the ID of the container running in the OpenShift pod");
+            throw new OpenShiftException("Failed to get the ID of the container running in the OpenShift pod");
         }
 
         return new ContainerCreated(containerID, null);
