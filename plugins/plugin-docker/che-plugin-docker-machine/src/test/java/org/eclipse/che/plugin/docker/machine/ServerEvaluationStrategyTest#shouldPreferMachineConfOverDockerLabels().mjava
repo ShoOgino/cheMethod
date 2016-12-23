@@ -1,0 +1,38 @@
+    @Test
+    public void shouldPreferMachineConfOverDockerLabels() throws Exception {
+        // given
+        Map<String, List<PortBinding>> ports = getPorts();
+        when(networkSettings.getPorts()).thenReturn(ports);
+
+        labels.put(String.format(SERVER_CONF_LABEL_REF_KEY,      "8080/tcp"), "myserv1label");
+        labels.put(String.format(SERVER_CONF_LABEL_PROTOCOL_KEY, "8080/tcp"), "https");
+
+        labels.put(String.format(SERVER_CONF_LABEL_REF_KEY,      "9090/udp"), "myserv2label");
+        labels.put(String.format(SERVER_CONF_LABEL_PROTOCOL_KEY, "9090/udp"), "dhcp");
+        labels.put(String.format(SERVER_CONF_LABEL_PATH_KEY,     "9090/udp"), "/path");
+
+        serverConfs.put("8080/tcp", new ServerConfImpl("myserv1conf", "8080/tcp", "http", null));
+
+        final HashMap<String, ServerImpl> expectedServers = new HashMap<>();
+        expectedServers.put("8080/tcp", new ServerImpl("myserv1conf",
+                                                       "http",
+                                                       CONTAINERINFO_GATEWAY  + ":32100",
+                                                       "http://" + CONTAINERINFO_GATEWAY  + ":32100",
+                                                       new ServerPropertiesImpl(null,
+                                                                                CONTAINERINFO_GATEWAY  + ":32100",
+                                                                                "http://" + CONTAINERINFO_GATEWAY + ":32100")));
+        expectedServers.put("9090/udp", new ServerImpl("myserv2label",
+                                                       "dhcp",
+                                                       CONTAINERINFO_GATEWAY  + ":32101",
+                                                       "dhcp://" + CONTAINERINFO_GATEWAY  + ":32101/path",
+                                                       new ServerPropertiesImpl("/path",
+                                                                                CONTAINERINFO_GATEWAY  + ":32101",
+                                                                                "dhcp://" + CONTAINERINFO_GATEWAY + ":32101/path")));
+
+        // when
+        final Map<String, ServerImpl> servers = strategy.getServers(containerInfo, DEFAULT_HOSTNAME, serverConfs);
+
+        // then
+        assertEquals(servers, expectedServers);
+    }
+
