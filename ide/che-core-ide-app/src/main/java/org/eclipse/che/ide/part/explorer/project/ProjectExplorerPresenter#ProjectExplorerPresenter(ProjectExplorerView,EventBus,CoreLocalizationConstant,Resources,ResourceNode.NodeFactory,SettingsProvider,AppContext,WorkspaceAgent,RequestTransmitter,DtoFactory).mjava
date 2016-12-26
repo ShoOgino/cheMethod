@@ -1,0 +1,78 @@
+    @Inject
+    public ProjectExplorerPresenter(final ProjectExplorerView view,
+                                    EventBus eventBus,
+                                    CoreLocalizationConstant locale,
+                                    Resources resources,
+                                    final ResourceNode.NodeFactory nodeFactory,
+                                    final SettingsProvider settingsProvider,
+                                    final AppContext appContext,
+                                    final WorkspaceAgent workspaceAgent, RequestTransmitter requestTransmitter, DtoFactory dtoFactory) {
+        this.view = view;
+        this.eventBus = eventBus;
+        this.nodeFactory = nodeFactory;
+        this.settingsProvider = settingsProvider;
+        this.locale = locale;
+        this.resources = resources;
+        this.requestTransmitter = requestTransmitter;
+        this.dtoFactory = dtoFactory;
+        this.view.setDelegate(this);
+
+        eventBus.addHandler(ResourceChangedEvent.getType(), this);
+        eventBus.addHandler(MarkerChangedEvent.getType(), this);
+        eventBus.addHandler(SyntheticNodeUpdateEvent.getType(), this);
+        eventBus.addHandler(WorkspaceStoppedEvent.TYPE, new WorkspaceStoppedEvent.Handler() {
+            @Override
+            public void onWorkspaceStopped(WorkspaceStoppedEvent event) {
+                getTree().getNodeStorage().clear();
+            }
+        });
+
+        view.getTree().getSelectionModel().addSelectionChangedHandler(new SelectionChangedHandler() {
+            @Override
+            public void onSelectionChanged(SelectionChangedEvent event) {
+                setSelection(new Selection<>(event.getSelection()));
+            }
+        });
+
+        view.getTree().addBeforeExpandHandler(new BeforeExpandNodeEvent.BeforeExpandNodeHandler() {
+            @Override
+            public void onBeforeExpand(BeforeExpandNodeEvent event) {
+                final NodeDescriptor nodeDescriptor = view.getTree().getNodeDescriptor(event.getNode());
+
+                if (event.getNode() instanceof SyntheticNode && nodeDescriptor != null && nodeDescriptor.isExpandDeep()) {
+                    event.setCancelled(true);
+                }
+            }
+        });
+
+        view.getTree().getNodeLoader().addPostLoadHandler(new PostLoadEvent.PostLoadHandler() {
+            @Override
+            public void onPostLoad(PostLoadEvent event) {
+                for (Node node : event.getReceivedNodes()) {
+
+                    if (node instanceof ResourceNode && expandQueue.remove(((ResourceNode)node).getData().getLocation())) {
+                        view.getTree().setExpanded(node, true);
+                    }
+
+                }
+            }
+        });
+
+        treeExpander = new ProjectExplorerTreeExpander(view.getTree(), appContext);
+
+        registerNative();
+
+        final PartStack partStack = checkNotNull(workspaceAgent.getPartStack(PartStackType.NAVIGATION),
+                                                 "Navigation part stack should not be a null");
+        partStack.addPart(this);
+        partStack.setActivePart(this);
+
+        // when ide has already initialized, then we force set focus to the current part
+        eventBus.addHandler(ExtensionsInitializedEvent.getType(), new ExtensionsInitializedHandler() {
+            @Override
+            public void onExtensionsInitialized(ExtensionsInitializedEvent event) {
+                partStack.setActivePart(ProjectExplorerPresenter.this);
+            }
+        });
+    }
+

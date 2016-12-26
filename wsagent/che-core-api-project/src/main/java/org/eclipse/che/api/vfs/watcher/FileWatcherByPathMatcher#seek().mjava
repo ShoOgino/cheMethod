@@ -1,0 +1,42 @@
+    private void seek() {
+        for (PathMatcher matcher : matchers.keySet()) {
+            unwatch(it -> !exists(it));
+
+            try {
+                walkFileTree(root.toPath(), new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                        return watch(dir);
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        return watch(file);
+                    }
+
+                    private FileVisitResult watch(Path path) {
+                        if (matcher.matches(path)) {
+                            for (int operationId : matchers.get(matcher)) {
+                                paths.putIfAbsent(operationId, newConcurrentHashSet());
+                                if (paths.get(operationId).contains(path)) {
+                                    return CONTINUE;
+                                }
+
+                                paths.get(operationId).add(path);
+
+                                Operation operation = operations.get(operationId);
+                                int pathWatcherOperationId = watcher.watch(path, operation.create, operation.modify, operation.delete);
+                                pathWatchRegistrations.putIfAbsent(path, newConcurrentHashSet());
+                                pathWatchRegistrations.get(path).add(pathWatcherOperationId);
+                            }
+                        }
+
+                        return CONTINUE;
+                    }
+                });
+            } catch (IOException e) {
+                LOG.error("Error walking file tree for watching file by matcher {}", matcher, e);
+            }
+        }
+    }
+

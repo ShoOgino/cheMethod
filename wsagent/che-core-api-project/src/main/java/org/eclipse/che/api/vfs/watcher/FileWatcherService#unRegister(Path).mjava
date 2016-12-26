@@ -1,0 +1,27 @@
+    /**
+     * Cancels registration of a directory for being watched. Each call of this
+     * method decreases by one registration counter that corresponds to
+     * directory specified by the argument. If registration counter comes to
+     * zero directory watching is totally cancelled.
+     *
+     * @param dir
+     *         directory
+     */
+    void unRegister(Path dir) {
+        LOG.debug("Canceling directory '{}' registration", dir);
+
+        int previous = registrations.get(dir);
+        if (previous == 1) {
+            LOG.debug("Stopping watching directory '{}'", dir);
+            registrations.remove(dir);
+
+            Predicate<Entry<WatchKey, Path>> equalsDir = it -> it.getValue().equals(dir);
+
+            keys.entrySet().stream().filter(equalsDir).map(Entry::getKey).forEach(WatchKey::cancel);
+            keys.entrySet().removeIf(equalsDir);
+        } else {
+            LOG.debug("Directory is being watched by someone else, decreasing watch counter, previous value: {}", previous);
+            registrations.put(dir, previous - 1);
+        }
+    }
+

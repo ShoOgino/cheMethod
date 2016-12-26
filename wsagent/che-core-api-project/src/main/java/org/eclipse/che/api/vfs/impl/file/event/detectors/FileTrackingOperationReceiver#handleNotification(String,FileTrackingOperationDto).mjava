@@ -7,39 +7,47 @@
         switch (type) {
             case START: {
                 LOG.debug("Received file tracking operation START trigger.");
-
-                registry.add(path, endpointId);
-
+                int id = fileWatcherManager.registerByPath(path,
+                                                           EMPTY_CONSUMER,
+                                                           getModifyConsumer(endpointId, path),
+                                                           getDeleteConsumer(endpointId, path));
+                watchIdRegistry.put(path + endpointId, id);
                 break;
             }
             case STOP: {
                 LOG.debug("Received file tracking operation STOP trigger.");
 
-                registry.remove(path, endpointId);
+                int id = watchIdRegistry.remove(path + endpointId);
+                fileWatcherManager.unRegisterByPath(id);
 
                 break;
             }
             case SUSPEND: {
                 LOG.debug("Received file tracking operation SUSPEND trigger.");
 
-                registry.suspend(endpointId);
+                fileWatcherManager.suspend();
 
                 break;
             }
             case RESUME: {
                 LOG.debug("Received file tracking operation RESUME trigger.");
 
-                registry.resume(endpointId);
+                fileWatcherManager.resume();
 
                 break;
             }
             case MOVE: {
                 LOG.debug("Received file tracking operation MOVE trigger.");
 
-                registry.copy(oldPath, path);
-                // TODO temporary workaround to support multi-client refactoring
-                // file remove notification
-//                registry.move(oldPath, path);
+                int oldId = watchIdRegistry.remove(oldPath + endpointId);
+                fileWatcherManager.unRegisterByPath(oldId);
+
+                int newId = fileWatcherManager.registerByPath(path,
+                                                              EMPTY_CONSUMER,
+                                                              getModifyConsumer(endpointId, path),
+                                                              getDeleteConsumer(endpointId, path));
+                watchIdRegistry.put(path + endpointId, newId);
+
 
                 break;
             }
