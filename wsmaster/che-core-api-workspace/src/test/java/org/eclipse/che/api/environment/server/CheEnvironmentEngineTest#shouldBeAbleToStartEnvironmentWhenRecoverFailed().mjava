@@ -1,12 +1,9 @@
     @Test
-    public void shouldBeAbleToStartEnvironmentWithRrcover() throws Exception {
+    public void shouldBeAbleToStartEnvironmentWhenRecoverFailed() throws Exception {
         // given
-        SnapshotImpl snapshot = mock(SnapshotImpl.class);
-        MachineSourceImpl machineSource = new MachineSourceImpl("image", "registry.com/snapshot123:latest@sha256:abc1234567890", null);
-        when(snapshotDao.getSnapshot(anyString(), anyString(), anyString())).thenReturn(snapshot);
-        when(snapshot.getMachineSource()).thenReturn(machineSource);
+        String machineImage = "che/ubuntu_jdk";
+        when(snapshotDao.getSnapshot(anyString(), anyString(), anyString())).thenThrow(new NotFoundException("Snapshot not found"));
 
-        // given
         EnvironmentImpl env = createEnv();
         String envName = "env-1";
         String workspaceId = "wsId";
@@ -33,14 +30,18 @@
                     expectedMachines.add(instance);
                     return instance;
                 });
-        when(environmentParser.parse(env)).thenReturn(createCheServicesEnv());
+        CheServicesEnvironmentImpl servicesEnvironment = createCheServicesEnv();
+        for (CheServiceImpl service : servicesEnvironment.getServices().values()) {
+            service.setImage(machineImage);
+        }
+        when(environmentParser.parse(env)).thenReturn(servicesEnvironment);
 
         // when
         List<Instance> machines = engine.start(workspaceId,
-                     envName,
-                     env,
-                     true,
-                     messageConsumer);
+                                               envName,
+                                               env,
+                                               true,
+                                               messageConsumer);
 
         // then
         assertEquals(machines, expectedMachines);
@@ -56,6 +57,6 @@
                                              any(LineConsumer.class));
         CheServiceImpl actualService = captor.getValue();
 
-        assertEquals(actualService.getImage(), "registry.com/snapshot123:latest");
+        assertEquals(actualService.getImage(), machineImage);
     }
 
