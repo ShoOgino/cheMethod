@@ -1,10 +1,13 @@
-    @Transactional
-    protected void doRemove(String id) {
+    @Transactional(rollbackOn = {RuntimeException.class, ServerException.class})
+    protected Optional<WorkspaceImpl> doRemove(String id) throws ServerException {
         final WorkspaceImpl workspace = managerProvider.get().find(WorkspaceImpl.class, id);
-        if (workspace != null) {
-            final EntityManager manager = managerProvider.get();
-            manager.remove(workspace);
+        if (workspace == null) {
+            return Optional.empty();
         }
-        eventService.publish(new WorkspaceRemovedEvent(workspace));
+        final EntityManager manager = managerProvider.get();
+        eventService.publish(new BeforeWorkspaceRemovedEvent(new WorkspaceImpl(workspace))).propagateException();
+        manager.remove(workspace);
+        manager.flush();
+        return Optional.of(workspace);
     }
 

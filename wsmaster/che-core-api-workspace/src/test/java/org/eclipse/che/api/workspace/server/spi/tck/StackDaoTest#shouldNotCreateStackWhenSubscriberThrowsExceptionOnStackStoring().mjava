@@ -1,0 +1,19 @@
+    @Test(dependsOnMethods = "shouldThrowNotFoundExceptionWhenGettingNonExistingStack",
+          expectedExceptions = NotFoundException.class)
+    public void shouldNotCreateStackWhenSubscriberThrowsExceptionOnStackStoring() throws Exception {
+        final StackImpl stack = createStack("new-stack", "new-stack-name");
+
+        CascadeEventSubscriber<StackPersistedEvent> subscriber = mockCascadeEventSubscriber();
+        doThrow(new ConflictException("error")).when(subscriber).onCascadeEvent(any());
+        eventService.subscribe(subscriber, StackPersistedEvent.class);
+
+        try {
+            stackDao.create(stack);
+            fail("StackDao#create had to throw conflict exception");
+        } catch (ConflictException ignored) {
+        }
+
+        eventService.unsubscribe(subscriber, StackPersistedEvent.class);
+        stackDao.getById(stack.getId());
+    }
+

@@ -1,9 +1,13 @@
-    @Transactional
-    protected Optional<UserImpl> doRemove(String id) {
+    @Transactional(rollbackOn = {RuntimeException.class, ServerException.class})
+    protected Optional<UserImpl> doRemove(String id) throws ServerException {
         final EntityManager manager = managerProvider.get();
-        final Optional<UserImpl> user = Optional.ofNullable(manager.find(UserImpl.class, id));
-        user.ifPresent(manager::remove);
-        return user;
-
+        final UserImpl user = manager.find(UserImpl.class, id);
+        if (user == null) {
+            return Optional.empty();
+        }
+        eventService.publish(new BeforeUserRemovedEvent(user)).propagateException();
+        manager.remove(user);
+        manager.flush();
+        return Optional.of(user);
     }
 
