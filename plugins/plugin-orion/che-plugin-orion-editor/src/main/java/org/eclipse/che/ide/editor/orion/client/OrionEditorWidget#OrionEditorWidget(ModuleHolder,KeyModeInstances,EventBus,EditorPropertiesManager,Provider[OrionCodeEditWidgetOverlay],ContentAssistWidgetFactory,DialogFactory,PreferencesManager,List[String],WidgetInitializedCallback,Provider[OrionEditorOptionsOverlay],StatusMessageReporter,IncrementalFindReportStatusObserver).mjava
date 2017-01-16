@@ -8,7 +8,10 @@
                              final DialogFactory dialogFactory,
                              final PreferencesManager preferencesManager,
                              @Assisted final List<String> editorModes,
-                             @Assisted final WidgetInitializedCallback widgetInitializedCallback) {
+                             @Assisted final WidgetInitializedCallback widgetInitializedCallback,
+                             final Provider<OrionEditorOptionsOverlay> editorOptionsProvider,
+                             final StatusMessageReporter statusMessageReporter,
+                             final IncrementalFindReportStatusObserver incrementalFindObserver) {
         this.contentAssistWidgetFactory = contentAssistWidgetFactory;
         this.moduleHolder = moduleHolder;
         this.keyModeInstances = keyModeInstances;
@@ -29,8 +32,13 @@
         panel.getElement().setId("orion-parent-" + Document.get().createUniqueId());
         panel.getElement().addClassName(this.editorElementStyle.editorParent());
 
-        orionCodeEditWidgetProvider.get().createEditorView(panel.getElement(), JavaScriptObject.createObject())
-                                   .then(new EditorViewCreatedOperation(widgetInitializedCallback));
+        OrionEditorOptionsOverlay editorOptions = initEditorOptions(editorOptionsProvider.get(), statusMessageReporter);
+
+        orionCodeEditWidgetProvider.get().createEditorView(panel.getElement(), editorOptions)
+                                         .then(new EditorViewCreatedOperation(widgetInitializedCallback));
+
+        incrementalFindObserver.setEditorWidget(this);
+        statusMessageReporter.registerObserver(incrementalFindObserver);
 
         registerPromptFunction();
         eventBus.addHandler(EditorSettingsChangedEvent.TYPE, new EditorSettingsChangedHandler() {
