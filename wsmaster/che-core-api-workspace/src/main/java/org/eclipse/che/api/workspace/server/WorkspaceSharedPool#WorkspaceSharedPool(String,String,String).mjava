@@ -1,0 +1,31 @@
+    @Inject
+    public WorkspaceSharedPool(@Named("che.workspace.pool.type") String poolType,
+                               @Named("che.workspace.pool.exact_size") @Nullable String exactSizeProp,
+                               @Named("che.workspace.pool.cores_multiplier") @Nullable String coresMultiplierProp) {
+        ThreadFactory factory = new ThreadFactoryBuilder().setNameFormat("WorkspaceSharedPool-%d")
+                                                          .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+                                                          .setDaemon(false)
+                                                          .build();
+        switch (poolType.toLowerCase()) {
+            case "cached":
+                executor = Executors.newCachedThreadPool(factory);
+                break;
+            case "fixed":
+                Integer exactSize = exactSizeProp == null ? null : Ints.tryParse(exactSizeProp);
+                int size;
+                if (exactSize != null && exactSize > 0) {
+                    size = exactSize;
+                } else {
+                    size = Runtime.getRuntime().availableProcessors();
+                    Integer coresMultiplier = coresMultiplierProp == null ? null : Ints.tryParse(coresMultiplierProp);
+                    if (coresMultiplier != null && coresMultiplier > 0) {
+                        size *= coresMultiplier;
+                    }
+                }
+                executor = Executors.newFixedThreadPool(size, factory);
+                break;
+            default:
+                throw new IllegalArgumentException("The type of the pool '" + poolType + "' is not supported");
+        }
+    }
+

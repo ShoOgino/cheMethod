@@ -14,28 +14,35 @@
         workspaceDao.update(workspace);
         final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
 
-        // barrier, safely doesn't allow to start the workspace twice
-        final Future<RuntimeDescriptor> descriptor = runtimes.startAsync(workspace, env, recover);
-
-        sharedPool.execute(() -> {
-            try {
-                descriptor.get();
-                LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
-                         workspace.getNamespace(),
-                         workspace.getConfig().getName(),
-                         workspace.getId(),
-                         sessionUserNameOr("undefined"));
-            } catch (Exception ex) {
-                if (workspace.isTemporary()) {
-                    removeWorkspaceQuietly(workspace);
-                }
-                for (Throwable cause : getCausalChain(ex)) {
-                    if (cause instanceof SourceNotFoundException) {
-                        return;
+        runtimes.startAsync(workspace, env, recover)
+                .whenComplete((runtime, ex) -> {
+                    if (ex == null) {
+                        LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
+                                 workspace.getNamespace(),
+                                 workspace.getConfig().getName(),
+                                 workspace.getId(),
+                                 sessionUserNameOr("undefined"));
+                    } else {
+                        if (workspace.isTemporary()) {
+                            removeWorkspaceQuietly(workspace);
+                        }
+                        for (Throwable cause : getCausalChain(ex)) {
+                            if (cause instanceof SourceNotFoundException) {
+                                return;
+                            }
+                        }
+                        try {
+                            throw ex;
+                        } catch (EnvironmentException envEx) {
+                            // it's okay, e.g. recipe is invalid | start interrupted
+                            LOG.info("Workspace '{}:{}' can't be started because: {}",
+                                     workspace.getNamespace(),
+                                     workspace.getConfig().getName(),
+                                     envEx.getMessage());
+                        } catch (Throwable thr) {
+                            LOG.error(thr.getMessage(), thr);
+                        }
                     }
-                }
-                LOG.error(ex.getLocalizedMessage(), ex);
-            }
-        });
+                });
     }
 

@@ -1,0 +1,25 @@
+    @Test
+    public void stopsTheRunningWorkspaceWhileServerExceptionOccurs() throws Exception {
+        setRuntime("workspace", WorkspaceStatus.RUNNING);
+        doThrow(new ServerException("no!")).when(envEngine).stop("workspace");
+
+        try {
+            runtimes.stop("workspace");
+        } catch (ServerException x) {
+            assertEquals(x.getMessage(), "no!");
+        }
+
+        verify(envEngine).stop("workspace");
+        assertFalse(runtimeStates.containsKey("workspace"));
+        verifyEventsSequence(event("workspace",
+                                   WorkspaceStatus.RUNNING,
+                                   WorkspaceStatus.STOPPING,
+                                   EventType.STOPPING,
+                                   null),
+                             event("workspace",
+                                   WorkspaceStatus.STOPPING,
+                                   WorkspaceStatus.STOPPED,
+                                   EventType.ERROR,
+                                   "no!"));
+    }
+

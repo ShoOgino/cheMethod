@@ -1,6 +1,6 @@
     // Check for https://github.com/codenvy/codenvy/issues/593
     @Test(expectedExceptions = NotFoundException.class,
-          expectedExceptionsMessageRegExp = "Workspace with id '" + WORKSPACE_ID + "' is not running.")
+          expectedExceptionsMessageRegExp = "Workspace with id '" + WORKSPACE_ID + "' is not running")
     public void environmentEngineShouldDestroyAllMachinesBeforeRemovalOfEnvironmentRecord() throws Exception {
         // given
         EnvironmentDto environment = newDto(EnvironmentDto.class);
@@ -35,7 +35,9 @@
                                            any(LineConsumer.class)))
                 .thenReturn(instance);
 
-        runtimes.start(workspace, ENV_NAME, false);
+        runtimes.startAsync(workspace, ENV_NAME, false);
+        verify(sharedPool).submit(taskCaptor.capture());
+        taskCaptor.getValue().call();
 
         WaitingAnswer<Void> waitingAnswer = new WaitingAnswer<>();
         doAnswer(waitingAnswer).when(instance).destroy();
@@ -44,7 +46,7 @@
         executor.execute(() -> {
             try {
                 runtimes.stop(WORKSPACE_ID);
-            } catch (ApiException e) {
+            } catch (Exception e) {
                 LOG.error(e.getLocalizedMessage(), e);
             }
         });
@@ -53,7 +55,7 @@
 
         // then
         // no exception - environment and workspace are still running
-        runtimes.get(WORKSPACE_ID);
+        runtimes.getRuntime(WORKSPACE_ID);
         // let instance removal proceed
         waitingAnswer.completeAnswer();
         // verify destroying was called
@@ -62,6 +64,6 @@
         // wait to ensure that removal of runtime is finished
         Thread.sleep(500);
         // runtime is removed - now getting of it should throw an exception
-        runtimes.get(WORKSPACE_ID);
+        runtimes.getRuntime(WORKSPACE_ID);
     }
 

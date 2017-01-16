@@ -1,7 +1,7 @@
-    @Test(expectedExceptions = ServerException.class, expectedExceptionsMessageRegExp = "test")
+    @Test
     public void removesNewlyCreatedSnapshotsWhenFailedToSaveTheirsMetadata() throws Exception {
-        WorkspaceImpl workspace = createWorkspace();
-        runtimes.start(workspace, workspace.getConfig().getDefaultEnv(), false);
+        WorkspaceImpl workspace = newWorkspace("workspace", "env-name");
+        setRuntime(workspace.getId(), WorkspaceStatus.RUNNING, "env-name");
         doThrow(new SnapshotException("test")).when(snapshotDao)
                                               .replaceSnapshots(any(), any(), any());
         SnapshotImpl snapshot = mock(SnapshotImpl.class);
@@ -9,23 +9,21 @@
 
         try {
             runtimes.snapshot(workspace.getId());
-        } catch (Exception x) {
-            verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                                   .withStatus(WorkspaceStatus.SNAPSHOTTING)
-                                                   .withEventType(EventType.SNAPSHOT_CREATING)
-                                                   .withPrevStatus(WorkspaceStatus.RUNNING)
-                                                   .withWorkspaceId(workspace.getId()));
-            verify(eventService).publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                                   .withStatus(WorkspaceStatus.RUNNING)
-                                                   .withEventType(EventType.SNAPSHOT_CREATION_ERROR)
-                                                   .withWorkspaceId(workspace.getId())
-                                                   .withPrevStatus(WorkspaceStatus.SNAPSHOTTING)
-                                                   .withError("test"));
-            verify(snapshotDao).replaceSnapshots(any(),
-                                                 any(),
-                                                 snapshotsCaptor.capture());
-            verify(envEngine, times(snapshotsCaptor.getValue().size())).removeSnapshot(snapshot);
-            throw x;
+        } catch (ServerException x) {
+            assertEquals(x.getMessage(), "test");
         }
+
+        verify(snapshotDao).replaceSnapshots(any(), any(), snapshotsCaptor.capture());
+        verify(envEngine, times(snapshotsCaptor.getValue().size())).removeSnapshot(snapshot);
+        verifyEventsSequence(event(workspace.getId(),
+                                   WorkspaceStatus.RUNNING,
+                                   WorkspaceStatus.SNAPSHOTTING,
+                                   EventType.SNAPSHOT_CREATING,
+                                   null),
+                             event(workspace.getId(),
+                                   WorkspaceStatus.SNAPSHOTTING,
+                                   WorkspaceStatus.RUNNING,
+                                   EventType.SNAPSHOT_CREATION_ERROR,
+                                   "test"));
     }
 

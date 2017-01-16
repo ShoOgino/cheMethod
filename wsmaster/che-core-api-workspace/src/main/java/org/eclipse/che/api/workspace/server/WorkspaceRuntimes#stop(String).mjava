@@ -16,54 +16,52 @@
      * @see CheEnvironmentEngine#stop(String)
      * @see WorkspaceStatus#STOPPING
      */
-    public void stop(String workspaceId) throws NotFoundException, ServerException, ConflictException {
-        // This check allows to exit with an appropriate exception before blocking on lock.
-        // The double check is required as it is still possible to get unlucky timing
-        // between locking and stopping workspace.
-        ensurePreDestroyIsNotExecuted();
-        try (@SuppressWarnings("unused") CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
+    public void stop(String workspaceId) throws NotFoundException,
+                                                ServerException,
+                                                ConflictException,
+                                                EnvironmentException {
+        requireNonNull(workspaceId, "Required not-null workspace id");
+        RuntimeState prevState;
+        try (@SuppressWarnings("unused") Unlocker u = locks.writeLock(workspaceId)) {
             ensurePreDestroyIsNotExecuted();
-            WorkspaceState workspaceState = workspaces.get(workspaceId);
-            if (workspaceState == null) {
-                throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
-            }
-            if (workspaceState.status != WorkspaceStatus.RUNNING) {
-                throw new ConflictException(format("Couldn't stop '%s' workspace because its status is '%s'. " +
-                                                   "Workspace can be stopped only if it is 'RUNNING'",
+            RuntimeState state = getExistingState(workspaceId);
+            if (state.status != WorkspaceStatus.RUNNING && state.status != WorkspaceStatus.STARTING) {
+                throw new ConflictException(format("Couldn't stop the workspace '%s' because its status is '%s'. " +
+                                                   "Workspace can be stopped only if it is 'RUNNING' or 'STARTING'",
                                                    workspaceId,
-                                                   workspaceState.status));
+                                                   state.status));
             }
-
-            workspaceState.status = WorkspaceStatus.STOPPING;
+            prevState = new RuntimeState(state);
+            state.status = WorkspaceStatus.STOPPING;
         }
 
-        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                        .withWorkspaceId(workspaceId)
-                                        .withPrevStatus(WorkspaceStatus.RUNNING)
-                                        .withStatus(WorkspaceStatus.STOPPING)
-                                        .withEventType(EventType.STOPPING));
-        String error = null;
+        // workspace is running, stop normally
+        if (prevState.status == WorkspaceStatus.RUNNING) {
+            stopEnvironmentAndPublishEvents(workspaceId, WorkspaceStatus.RUNNING);
+            return;
+        }
+
+        // interrupt workspace start thread
+        prevState.startFuture.cancel(true);
+
+        // if task wasn't called by executor service, then
+        // no real machines were started but, the clients still
+        // have to be notified about the workspace shut down
+        StartTask startTask = prevState.startTask;
+        if (startTask.markAsUsed()) {
+            removeStateAndPublishStopEvents(workspaceId);
+            prevState.startTask.earlyComplete();
+            return;
+        }
+
+        // otherwise stop will be triggered by the start task, wait for it to finish
         try {
-            envEngine.stop(workspaceId);
-        } catch (ServerException | RuntimeException e) {
-            error = e.getLocalizedMessage();
-        } finally {
-            try (@SuppressWarnings("unused") CloseableLock lock = locks.acquireWriteLock(workspaceId)) {
-                workspaces.remove(workspaceId);
-            }
+            startTask.await();
+        } catch (EnvironmentStartInterruptedException ignored) {
+            // environment start successfully interrupted
+        } catch (InterruptedException x) {
+            Thread.currentThread().interrupt();
+            throw new ServerException("Interrupted while waiting for start task cancellation", x);
         }
-
-        final WorkspaceStatusEvent event = DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                                     .withWorkspaceId(workspaceId)
-                                                     .withPrevStatus(WorkspaceStatus.STOPPING);
-        if (error == null) {
-            event.setStatus(WorkspaceStatus.STOPPED);
-            event.setEventType(EventType.STOPPED);
-        } else {
-            event.setStatus(WorkspaceStatus.STOPPED);
-            event.setEventType(EventType.ERROR);
-            event.setError(error);
-        }
-        eventsService.publish(event);
     }
 

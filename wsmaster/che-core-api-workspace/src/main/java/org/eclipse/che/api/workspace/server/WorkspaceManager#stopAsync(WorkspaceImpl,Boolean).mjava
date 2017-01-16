@@ -1,5 +1,11 @@
     private void stopAsync(WorkspaceImpl workspace, @Nullable Boolean createSnapshot) throws ConflictException {
-        checkWorkspaceIsRunning(workspace, "stop");
+        if (workspace.getStatus() != WorkspaceStatus.RUNNING && workspace.getStatus() != WorkspaceStatus.STARTING) {
+            throw new ConflictException(format("Could not stop the workspace '%s:%s' because its status is '%s'. " +
+                                               "Workspace must be either 'STARTING' or 'RUNNING'",
+                                               workspace.getNamespace(),
+                                               workspace.getConfig().getName(),
+                                               workspace.getStatus()));
+        }
 
         sharedPool.execute(() -> {
             final String stoppedBy = sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY));
@@ -10,7 +16,7 @@
                      firstNonNull(stoppedBy, "undefined"));
 
             final boolean snapshotBeforeStop;
-            if (workspace.isTemporary()) {
+            if (workspace.isTemporary() || workspace.getStatus() == WorkspaceStatus.STARTING) {
                 snapshotBeforeStop = false;
             } else if (createSnapshot != null) {
                 snapshotBeforeStop = createSnapshot;
@@ -43,7 +49,7 @@
                          workspace.getConfig().getName(),
                          workspace.getId(),
                          firstNonNull(stoppedBy, "undefined"));
-            } catch (RuntimeException | ConflictException | NotFoundException | ServerException ex) {
+            } catch (Exception ex) {
                 LOG.error(ex.getLocalizedMessage(), ex);
             } finally {
                 if (workspace.isTemporary()) {

@@ -1,0 +1,25 @@
+    @Test
+    public void startsWorkspace() throws Exception {
+        WorkspaceImpl workspace = newWorkspace("workspace", "env-name");
+        List<Instance> machines = allowEnvironmentStart(workspace, "env-name");
+        prepareMachines(workspace.getId(), machines);
+
+        CompletableFuture<WorkspaceRuntimeImpl> cmpFuture = runtimes.startAsync(workspace, "env-name", false);
+        captureAsyncTaskAndExecuteSynchronously();
+        WorkspaceRuntimeImpl runtime = cmpFuture.get();
+
+        assertEquals(runtimes.getStatus(workspace.getId()), WorkspaceStatus.RUNNING);
+        assertEquals(runtime.getActiveEnv(), "env-name");
+        assertEquals(runtime.getMachines().size(), machines.size());
+        verifyEventsSequence(event("workspace",
+                                   WorkspaceStatus.STOPPED,
+                                   WorkspaceStatus.STARTING,
+                                   EventType.STARTING,
+                                   null),
+                             event("workspace",
+                                   WorkspaceStatus.STARTING,
+                                   WorkspaceStatus.RUNNING,
+                                   EventType.RUNNING,
+                                   null));
+    }
+

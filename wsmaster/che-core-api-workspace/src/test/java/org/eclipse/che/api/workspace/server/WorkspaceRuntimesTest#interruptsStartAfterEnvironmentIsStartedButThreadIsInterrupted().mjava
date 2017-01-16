@@ -1,0 +1,28 @@
+    @Test
+    public void interruptsStartAfterEnvironmentIsStartedButThreadIsInterrupted() throws Exception {
+        WorkspaceImpl workspace = newWorkspace("workspace", "env-name");
+        // the status is successfully updated from STARTING -> RUNNING but after
+        // that thread is interrupted so #stop is waiting for starting thread to stop the environment
+        allowEnvironmentStart(workspace, "env-name", () -> Thread.currentThread().interrupt());
+
+        CompletableFuture<WorkspaceRuntimeImpl> cmpFuture = runtimes.startAsync(workspace, "env-name", false);
+
+        captureAndVerifyRuntimeStateAfterInterruption(workspace, cmpFuture);
+        verifyEventsSequence(event("workspace",
+                                   WorkspaceStatus.STOPPED,
+                                   WorkspaceStatus.STARTING,
+                                   EventType.STARTING,
+                                   null),
+                             event("workspace",
+                                   WorkspaceStatus.STARTING,
+                                   WorkspaceStatus.STOPPING,
+                                   EventType.STOPPING,
+                                   null),
+                             event("workspace",
+                                   WorkspaceStatus.STOPPING,
+                                   WorkspaceStatus.STOPPED,
+                                   EventType.STOPPED,
+                                   null));
+        verify(envEngine).stop(workspace.getId());
+    }
+

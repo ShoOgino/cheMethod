@@ -1,0 +1,28 @@
+    /**
+     * Injects runtime information such as status and {@link WorkspaceRuntimeImpl}
+     * into the workspace object, if the workspace doesn't have runtime sets the
+     * status to {@link WorkspaceStatus#STOPPED}.
+     *
+     * @param workspace
+     *         the workspace to inject runtime into
+     */
+    public void injectRuntime(WorkspaceImpl workspace) {
+        requireNonNull(workspace, "Required non-null workspace");
+        RuntimeState state = null;
+        try (@SuppressWarnings("unused") Unlocker u = locks.readLock(workspace.getId())) {
+            if (states.containsKey(workspace.getId())) {
+                state = new RuntimeState(states.get(workspace.getId()));
+            }
+        }
+        if (state == null) {
+            workspace.setStatus(WorkspaceStatus.STOPPED);
+        } else {
+            workspace.setStatus(state.status);
+            try {
+                workspace.setRuntime(new WorkspaceRuntimeImpl(state.envName, envEngine.getMachines(workspace.getId())));
+            } catch (Exception x) {
+                workspace.setRuntime(new WorkspaceRuntimeImpl(state.envName, Collections.emptyList()));
+            }
+        }
+    }
+

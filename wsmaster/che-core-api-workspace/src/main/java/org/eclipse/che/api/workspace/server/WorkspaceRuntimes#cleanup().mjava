@@ -1,5 +1,5 @@
     /**
-     * Removes all workspaces from the in-memory storage, while
+     * Removes all states from the in-memory storage, while
      * {@link CheEnvironmentEngine} is responsible for environment destroying.
      */
     @PreDestroy
@@ -11,13 +11,13 @@
         sharedPool.terminateAndWait();
 
         List<String> idsToStop;
-        try (@SuppressWarnings("unused") CloseableLock l = locks.acquireWriteAllLock()) {
-            idsToStop = workspaces.entrySet()
-                                  .stream()
-                                  .filter(e -> e.getValue().status != STOPPING)
-                                  .map(Map.Entry::getKey)
-                                  .collect(Collectors.toList());
-            workspaces.clear();
+        try (@SuppressWarnings("unused") Unlocker u = locks.writeAllLock()) {
+            idsToStop = states.entrySet()
+                              .stream()
+                              .filter(e -> e.getValue().status != STOPPING)
+                              .map(Map.Entry::getKey)
+                              .collect(Collectors.toList());
+            states.clear();
         }
 
         // nothing to stop
@@ -25,7 +25,7 @@
             return;
         }
 
-        LOG.info("Shutdown running workspaces, workspaces to shutdown '{}'", idsToStop.size());
+        LOG.info("Shutdown running states, states to shutdown '{}'", idsToStop.size());
         ExecutorService executor =
                 Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors(),
                                              new ThreadFactoryBuilder().setNameFormat("StopEnvironmentsPool-%d")
@@ -35,6 +35,8 @@
             executor.execute(() -> {
                 try {
                     envEngine.stop(id);
+                } catch (EnvironmentNotRunningException ignored) {
+                    // could be stopped during workspace pool shutdown
                 } catch (Exception x) {
                     LOG.error(x.getMessage(), x);
                 }

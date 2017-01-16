@@ -1,24 +1,7 @@
     /**
-     * Starts provided environment.
-     * <p/>
-     * Environment starts if and only all machines in environment definition start successfully.<br/>
-     * Otherwise exception is thrown by this method.<br/>
-     * It is not defined whether environment start fails right after first failure or in the end of the process.<br/>
-     * Starting order of machines is not guarantied. Machines can start sequentially or in parallel.
+     * Starts workspace environment.
      *
-     * @param workspaceId
-     *         ID of workspace that owns provided environment
-     * @param envName
-     *         name of environment
-     * @param env
-     *         environment to start
-     * @param recover
-     *         whether machines from environment should be recovered or not
-     * @param messageConsumer
-     *         consumer of log messages from machines in the environment
-     * @return list of running machines of this environment
-     * @throws ServerException
-     *         if other error occurs
+     * @see #start(String, String, Environment, boolean, MessageConsumer, MachineStartedHandler)
      */
     public List<Instance> start(String workspaceId,
                                 String envName,
@@ -27,39 +10,6 @@
                                 MessageConsumer<MachineLogMessage> messageConsumer) throws ServerException,
                                                                                            ConflictException,
                                                                                            EnvironmentException {
-        // TODO move to machines provider
-        // add random chars to ensure that old environments that weren't removed by some reason won't prevent start
-        String networkId = NameGenerator.generate(workspaceId + "_", 16);
-
-        String namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
-
-        initializeEnvironment(namespace,
-                              workspaceId,
-                              envName,
-                              env,
-                              networkId,
-                              messageConsumer);
-
-        String devMachineName = getDevMachineName(env);
-        if (devMachineName == null) {
-            throw new ServerException("Agent 'org.eclipse.che.ws-agent' is not found in any of environment machines");
-        }
-
-        startEnvironmentQueue(namespace,
-                              workspaceId,
-                              devMachineName,
-                              networkId,
-                              recover);
-
-        try (@SuppressWarnings("unused") CloseableLock lock = stripedLocks.acquireWriteLock(workspaceId)) {
-            EnvironmentHolder environmentHolder = environments.get(workspaceId);
-            // possible only if environment was stopped during its start
-            if (environmentHolder == null) {
-                throw new ServerException("Environment start was interrupted by environment stopping");
-            }
-            environmentHolder.status = EnvStatus.RUNNING;
-            // prevent list modification
-            return new ArrayList<>(environmentHolder.machines);
-        }
+        return start(workspaceId, envName, env, recover, messageConsumer, NO_OP_HANDLER);
     }
 
