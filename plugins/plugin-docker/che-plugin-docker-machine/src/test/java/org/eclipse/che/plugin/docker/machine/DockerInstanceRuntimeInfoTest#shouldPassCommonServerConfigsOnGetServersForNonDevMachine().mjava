@@ -1,0 +1,42 @@
+    @Test
+    public void shouldPassCommonServerConfigsOnGetServersForNonDevMachine() throws Exception {
+        // given
+        Set<ServerConf> commonSystemServersConfigs = new HashSet<>();
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-tcp",
+                                                          "4301/tcp",
+                                                          "http",
+                                                          "/some/path"));
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer2-udp",
+                                                          "4302/udp",
+                                                          "dhcp",
+                                                          null));
+        commonSystemServersConfigs.add(new ServerConfImpl("sysServer1-udp",
+                                                          "4301/udp",
+                                                          null,
+                                                          "some/path"));
+        Set<ServerConf> devSystemServersConfigs = singleton(new ServerConfImpl("devSysServer1-tcp",
+                                                                               "4305/tcp",
+                                                                               "http",
+                                                                               null));
+        List<ServerConf> serversConfFromMachineConf = singletonList(new ServerConfImpl("machineConfServer1-tcp",
+                                                                                       "4306/tcp",
+                                                                                       "http",
+                                                                                       null));
+        when(machineConfig.getServers()).thenAnswer(invocation -> serversConfFromMachineConf);
+        when(machineConfig.isDev()).thenReturn(false);
+        runtimeInfo = new DockerInstanceRuntimeInfo(containerInfo,
+                                                    machineConfig,
+                                                    DEFAULT_HOSTNAME,
+                                                    provider,
+                                                    devSystemServersConfigs,
+                                                    commonSystemServersConfigs);
+
+        // when
+        Map<String, ServerImpl> servers = runtimeInfo.getServers();
+
+        // then
+        assertEquals(servers, serversMap);
+        verify(serverEvaluationStrategy).getServers(eq(containerInfo), eq(DEFAULT_HOSTNAME), serversCaptor.capture());
+        assertEquals(serversCaptor.getValue(), serversToMap(commonSystemServersConfigs, serversConfFromMachineConf));
+    }
+
