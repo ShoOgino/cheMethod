@@ -1,0 +1,21 @@
+    @Override
+    public ImageInfo inspectImage(InspectImageParams params) throws IOException {
+
+        String image = params.getImage();
+        String imageStreamTagName = KubernetesStringUtils.getTagNameFromRepoString(image);
+        if (imageStreamTagName.contains(":")) { // Image to inspect passed in with tag, which we don't support
+            imageStreamTagName = imageStreamTagName.replaceAll(":.*", "");
+        }
+
+        ImageStreamTag imageStreamTag = getImageStreamTagFromRepo(imageStreamTagName);
+
+        // The DockerImageConfig string here is the JSON that would be returned by a docker inspect,
+        // except that the capitalization is inconsistent, breaking deserialization. Top level elements
+        // are lowercased, while nested elements conform to FieldNamingPolicy.UPPER_CAMEL_CASE.
+        // We're only converting the config field for brevity; this means that other fields are null.
+        String dockerImageConfig = imageStreamTag.getImage().getDockerImageConfig();
+        ImageInfo info = GSON.fromJson(dockerImageConfig.replaceFirst("config", "Config"), ImageInfo.class);
+
+        return info;
+    }
+

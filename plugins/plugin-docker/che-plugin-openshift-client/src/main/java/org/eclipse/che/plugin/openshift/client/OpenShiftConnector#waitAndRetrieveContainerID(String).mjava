@@ -1,4 +1,4 @@
-    private String waitAndRetrieveContainerID(String deploymentName) {
+    private String waitAndRetrieveContainerID(String deploymentName) throws IOException {
         for (int i = 0; i < OPENSHIFT_WAIT_POD_TIMEOUT; i++) {
             try {
                 Thread.sleep(OPENSHIFT_WAIT_POD_DELAY);
@@ -6,26 +6,35 @@
                 Thread.currentThread().interrupt();
             }
 
-            PodList pods = openShiftClient.pods()
+            List<Pod> pods = openShiftClient.pods()
                                 .inNamespace(this.openShiftCheProjectName)
-                                .list();
+                                .withLabel(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName)
+                                .list()
+                                .getItems();
 
-            for (Pod p : pods.getItems()) {
-                String status = p.getStatus().getPhase();
-                String dc = p.getMetadata().getLabels().get(OPENSHIFT_DEPLOYMENT_LABEL);
-                if (OPENSHIFT_POD_STATUS_RUNNING.equals(status) && deploymentName.equals(dc)) {
-                    String containerID = p.getStatus().getContainerStatuses().get(0).getContainerID();
-                    String normalizedID = normalizeContainerID(containerID);
-                    openShiftClient.pods()
-                            .inNamespace(this.openShiftCheProjectName)
-                            .withName(p.getMetadata().getName())
-                            .edit()
-                            .editMetadata()
-                                .addToLabels(CHE_CONTAINER_IDENTIFIER_LABEL_KEY, getLabelFromContainerID(normalizedID))
-                            .endMetadata()
-                            .done();
-                    return normalizedID;
-                }
+            if (pods.size() < 1) {
+                throw new OpenShiftException(String.format("Pod with deployment name %s not found",
+                                                           deploymentName));
+            } else if (pods.size() > 1) {
+                throw new OpenShiftException(String.format("Multiple pods with deployment name %s found",
+                                                           deploymentName));
+            }
+
+            Pod pod = pods.get(0);
+            String status = pod.getStatus().getPhase();
+            if (OPENSHIFT_POD_STATUS_RUNNING.equals(status)) {
+                String containerID = pod.getStatus().getContainerStatuses().get(0).getContainerID();
+                String normalizedID = KubernetesStringUtils.normalizeContainerID(containerID);
+                openShiftClient.pods()
+                               .inNamespace(openShiftCheProjectName)
+                               .withName(pod.getMetadata().getName())
+                               .edit()
+                               .editMetadata()
+                                   .addToLabels(CHE_CONTAINER_IDENTIFIER_LABEL_KEY,
+                                                KubernetesStringUtils.getLabelFromContainerID(normalizedID))
+                               .endMetadata()
+                               .done();
+                return normalizedID;
             }
         }
         return null;

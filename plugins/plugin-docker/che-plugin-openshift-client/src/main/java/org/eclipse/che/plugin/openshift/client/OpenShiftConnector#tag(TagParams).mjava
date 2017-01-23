@@ -1,0 +1,64 @@
+    /**
+     * Creates an ImageStreamTag that tracks a given image.
+     *
+     * <p>
+     * The target is usually specified e.g. eclipse-che/workspace<unique string>.
+     * ImageStreamTags are labelled as {@code <registry>/<namespace>/<ImageStream>:<tag>}
+     * The ImageStream name must be unique to the source image (e.g. eclipse_ubuntu_jdk8)
+     * otherwise the sourceImage for this ImageStream will be overwritten when
+     * another Stack is used. This leaves only the tag to hold the new image name.
+     *
+     * @see DockerConnector#tag(TagParams)
+     */
+    @Override
+    public void tag(final TagParams params) throws ImageNotFoundException, IOException {
+        // E.g. `docker tag oldImageRepo newImageRepo`
+        String sourceImage = params.getImage();        // e.g. eclipse/ubuntu_jdk8
+        String targetImage = params.getRepository();   // e.g. eclipse-che/<identifier>
+        String tag = params.getTag();
+        if (tag == null || tag.isEmpty()) {
+            tag = "latest";
+        }
+
+        String sourceImageWithTag = String.format("%s:%s", sourceImage, tag);
+        String newImageStreamName = KubernetesStringUtils.getImageStreamTagName(sourceImage, targetImage);
+
+        try {
+            ImageStreamTag imageStreamTag = openShiftClient.imageStreamTags()
+                                                           .inNamespace(openShiftCheProjectName)
+                                                           .createOrReplaceWithNew()
+                                                           .withNewMetadata()
+                                                               .withName(newImageStreamName)
+                                                           .endMetadata()
+                                                           .withNewTag()
+                                                               .withNewFrom()
+                                                                   .withKind("DockerImage")
+                                                                   .withName(sourceImageWithTag)
+                                                               .endFrom()
+                                                           .endTag()
+                                                           .done();
+
+            // Wait up to 5 seconds for image metadata to be pulled
+            for (int waitCount = 0; waitCount < OPENSHIFT_IMAGESTREAM_MAX_WAIT; waitCount++) {
+                Thread.sleep(1000);
+
+                ImageStreamTag createdTag = openShiftClient.imageStreamTags()
+                                                           .inNamespace(openShiftCheProjectName)
+                                                           .withName(newImageStreamName)
+                                                           .get();
+                if (createdTag != null) {
+                    LOG.info(String.format("Created ImageStreamTag %s in namespace %s",
+                                           imageStreamTag.getMetadata().getName(),
+                                           openShiftCheProjectName));
+                    return;
+                }
+            }
+
+            throw new ImageNotFoundException(String.format("Image %s not found.", sourceImageWithTag));
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException(e.getLocalizedMessage(), e);
+        }
+    }
+

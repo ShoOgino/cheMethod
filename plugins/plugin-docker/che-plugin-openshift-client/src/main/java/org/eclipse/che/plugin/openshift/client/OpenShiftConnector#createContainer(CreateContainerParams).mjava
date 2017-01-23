@@ -5,17 +5,49 @@
      */
     @Override
     public ContainerCreated createContainer(CreateContainerParams createContainerParams) throws IOException {
-        String containerName = getNormalizedContainerName(createContainerParams);
+        String containerName = KubernetesStringUtils.getContainerName(createContainerParams.getContainerName());
         String workspaceID = getCheWorkspaceId(createContainerParams);
+
         // Generate workspaceID if CHE_WORKSPACE_ID env var does not exist
         workspaceID = workspaceID.isEmpty() ? generateWorkspaceID() : workspaceID;
-        String imageName = createContainerParams.getContainerConfig().getImage();
+
+        // imageForDocker is the docker version of the image repository. It's needed for other
+        // OpenShiftConnector API methods, but is not acceptable as an OpenShift name
+        String imageForDocker = createContainerParams.getContainerConfig().getImage();
+        // imageStreamTagName is imageForDocker converted into a form that can be used
+        // in OpenShift
+        String imageStreamTagName = KubernetesStringUtils.getTagNameFromRepoString(imageForDocker);
+
+        // imageStreamTagName is not enough to fill out a pull spec; it is only the tag, so we
+        // have to get the ImageStreamTag from the tag, and then get the full ImageStreamTag name
+        // from that tag. This works because the tags used in Che are unique.
+        ImageStreamTag imageStreamTag = getImageStreamTagFromRepo(imageStreamTagName);
+        String imageStreamTagPullSpec = imageStreamTag.getMetadata().getName();
+
+        // Next we need to get the address of the registry where the ImageStreamTag is stored
+        String imageStreamName = imageStreamTagPullSpec.contains(":") ? imageStreamTagPullSpec.split(":")[0]
+                                                                      : imageStreamTagPullSpec;
+        ImageStream imageStream = openShiftClient.imageStreams()
+                                                 .inNamespace(openShiftCheProjectName)
+                                                 .withName(imageStreamName)
+                                                 .get();
+        if (imageStream == null) {
+            throw new OpenShiftException("ImageStream not found");
+        }
+        String registryAddress = imageStream.getStatus()
+                                            .getDockerImageRepository()
+                                            .split("/")[0];
+
+        // The above needs to be combined to form a pull spec that will work when defining a container.
+        String dockerPullSpec = String.format("%s/%s/%s", registryAddress,
+                                                          openShiftCheProjectName,
+                                                          imageStreamTagPullSpec);
 
         Set<String> containerExposedPorts = createContainerParams.getContainerConfig().getExposedPorts().keySet();
-        Set<String> imageExposedPorts = inspectImage(imageName).getConfig().getExposedPorts().keySet();
+        Set<String> imageExposedPorts = inspectImage(imageForDocker).getConfig().getExposedPorts().keySet();
         Set<String> exposedPorts = getExposedPorts(containerExposedPorts, imageExposedPorts);
 
-        boolean runContainerAsRoot = runContainerAsRoot(imageName);
+        boolean runContainerAsRoot = runContainerAsRoot(imageForDocker);
 
         String[] envVariables = createContainerParams.getContainerConfig().getEnv();
         String[] volumes = createContainerParams.getContainerConfig().getHostConfig().getBinds();
@@ -23,7 +55,7 @@
         Map<String, String> additionalLabels = createContainerParams.getContainerConfig().getLabels();
         createOpenShiftService(workspaceID, exposedPorts, additionalLabels);
         String deploymentName = createOpenShiftDeployment(workspaceID,
-                                                          imageName,
+                                                          dockerPullSpec,
                                                           containerName,
                                                           exposedPorts,
                                                           envVariables,
