@@ -1,0 +1,21 @@
+    /**
+     * Stops some of the system services preparing system to lighter shutdown.
+     * System status is changed from {@link SystemStatus#RUNNING} to
+     * {@link SystemStatus#PREPARING_TO_SHUTDOWN}.
+     *
+     * @throws ConflictException
+     *         when system status is different from running
+     */
+    public void stopServices() throws ConflictException {
+        if (!statusRef.compareAndSet(RUNNING, PREPARING_TO_SHUTDOWN)) {
+            throw new ConflictException("System shutdown has been already called, system status: " + statusRef.get());
+        }
+        ExecutorService exec = Executors.newSingleThreadExecutor(
+                new ThreadFactoryBuilder().setDaemon(false)
+                                          .setNameFormat("ShutdownSystemServicesPool")
+                                          .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+                                          .build());
+        exec.execute(ThreadLocalPropagateContext.wrap(this::doStopServices));
+        exec.shutdown();
+    }
+

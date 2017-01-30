@@ -31,6 +31,10 @@
      * @return completable future describing the instance of running environment
      * @throws ConflictException
      *         when the workspace is already started
+     * @throws ConflictException
+     *         when workspaces start refused {@link #refuseWorkspacesStart()} was called
+     * @throws ServerException
+     *         when any other error occurs
      * @throws IllegalArgumentException
      *         when the workspace doesn't contain the environment
      * @throws NullPointerException
@@ -38,7 +42,7 @@
      */
     public CompletableFuture<WorkspaceRuntimeImpl> startAsync(Workspace workspace,
                                                               String envName,
-                                                              boolean recover) throws ConflictException {
+                                                              boolean recover) throws ConflictException, ServerException {
         requireNonNull(workspace, "Non-null workspace required");
         requireNonNull(envName, "Non-null environment name required");
         EnvironmentImpl environment = copyEnv(workspace, envName);
@@ -46,7 +50,12 @@
         CompletableFuture<WorkspaceRuntimeImpl> cmpFuture;
         StartTask startTask;
         try (@SuppressWarnings("unused") Unlocker u = locks.writeLock(workspaceId)) {
-            ensurePreDestroyIsNotExecuted();
+            checkIsNotTerminated("start the workspace");
+            if (isStartRefused.get()) {
+                throw new ConflictException(format("Start of the workspace '%s' is rejected by the system, " +
+                                                   "no more workspaces are allowed to start",
+                                                   workspace.getConfig().getName()));
+            }
             RuntimeState state = states.get(workspaceId);
             if (state != null) {
                 throw new ConflictException(format("Could not start workspace '%s' because its status is '%s'",

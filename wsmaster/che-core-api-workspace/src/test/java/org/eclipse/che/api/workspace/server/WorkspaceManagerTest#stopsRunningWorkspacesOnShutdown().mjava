@@ -1,0 +1,26 @@
+    @Test
+    public void stopsRunningWorkspacesOnShutdown() throws Exception {
+        when(runtimes.refuseWorkspacesStart()).thenReturn(true);
+
+        WorkspaceImpl stopped = createAndMockWorkspace();
+        mockRuntime(stopped, STOPPED);
+
+        WorkspaceImpl starting = createAndMockWorkspace();
+        mockRuntime(starting, STARTING);
+
+        WorkspaceImpl running = createAndMockWorkspace();
+        mockRuntime(running, RUNNING);
+
+        when(runtimes.getRuntimesIds()).thenReturn(new HashSet<>(asList(running.getId(), starting.getId())));
+
+        // action
+        workspaceManager.shutdown();
+
+        captureRunAsyncCallsAndRunSynchronously();
+        verify(runtimes).stop(running.getId());
+        verify(runtimes).stop(starting.getId());
+        verify(runtimes, never()).stop(stopped.getId());
+        verify(runtimes).shutdown();
+        verify(sharedPool).shutdown();
+    }
+
