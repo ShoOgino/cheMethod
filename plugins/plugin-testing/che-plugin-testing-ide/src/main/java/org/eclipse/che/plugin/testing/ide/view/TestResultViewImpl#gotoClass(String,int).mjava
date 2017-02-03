@@ -1,0 +1,29 @@
+    @Override
+    public void gotoClass(String packagePath, int line) {
+        lastWentLine = line;
+        final Project project = appContext.getRootProject();
+        String testSrcPath = project.getPath() + "/" + DEFAULT_TEST_SOURCE_FOLDER;
+        appContext.getWorkspaceRoot().getFile(testSrcPath + packagePath).then(new Operation<Optional<File>>() {
+            @Override
+            public void apply(Optional<File> file) throws OperationException {
+                if (file.isPresent()) {
+                    eventBus.fireEvent(FileEvent.createOpenFileEvent(file.get()));
+                    Timer t = new Timer() {
+                        @Override
+                        public void run() {
+                            EditorPartPresenter editorPart = editorAgent.getActiveEditor();
+                            Document doc = ((TextEditor) editorPart).getDocument();
+                            doc.setCursorPosition(new TextPosition(lastWentLine - 1, 0));
+                        }
+                    };
+                    t.schedule(500);
+                }
+            }
+        }).catchError(new Operation<PromiseError>() {
+            @Override
+            public void apply(PromiseError error) throws OperationException {
+                Log.info(TestResultViewImpl.class, error);
+            }
+        });
+    }
+
