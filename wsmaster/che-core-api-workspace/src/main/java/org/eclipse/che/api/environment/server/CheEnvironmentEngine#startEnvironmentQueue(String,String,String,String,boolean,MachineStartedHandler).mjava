@@ -14,6 +14,7 @@
         // Config will be null only if there are no machines left in the queue
         String envName;
         MessageConsumer<MachineLogMessage> envLogger;
+        String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
         try (@SuppressWarnings("unused") Unlocker u = stripedLocks.readLock(workspaceId)) {
             EnvironmentHolder environmentHolder = environments.get(workspaceId);
             if (environmentHolder == null) {
@@ -32,15 +33,16 @@
                 // Environment start is failed when any machine start is failed, so if any error
                 // occurs during machine creation then environment start fail is reported and
                 // start resources such as queue and descriptor must be cleaned up
-                String creator = EnvironmentContext.getCurrent().getSubject().getUserId();
 
                 CheServiceImpl service;
+                @Nullable ExtendedMachine extendedMachine;
                 try (@SuppressWarnings("unused") Unlocker u = stripedLocks.readLock(workspaceId)) {
                     EnvironmentHolder environmentHolder = environments.get(workspaceId);
                     if (environmentHolder == null) {
                         throw new ServerException("Environment start is interrupted.");
                     }
                     service = environmentHolder.environment.getServices().get(machineName);
+                    extendedMachine = environmentHolder.environmentConfig.getMachines().get(machineName);
                 }
                 // should not happen
                 if (service == null) {
@@ -89,7 +91,7 @@
                                                   machineStarter);
                 checkInterruption(workspaceId, envName);
 
-                startedHandler.started(instance);
+                startedHandler.started(instance, extendedMachine);
                 checkInterruption(workspaceId, envName);
 
                 // Machine destroying is an expensive operation which must be

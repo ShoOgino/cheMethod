@@ -1,12 +1,18 @@
     @Override
-    public void provision(Environment envConfig, CheServicesEnvironmentImpl internalEnv) throws EnvironmentException {
+    public void provision(EnvironmentImpl envConfig, CheServicesEnvironmentImpl internalEnv)
+            throws EnvironmentException {
         String devMachineName = getDevMachineName(envConfig);
         if (devMachineName == null) {
             throw new EnvironmentException("ws-machine is not found on agents applying");
         }
 
         CheServiceImpl devMachine = internalEnv.getServices().get(devMachineName);
-        List<String> devMachineVolumes = devMachine.getVolumes();
+
+        for (CheServiceImpl machine : internalEnv.getServices().values()) {
+            ArrayList<String> volumes = new ArrayList<>(machine.getVolumes());
+            volumes.add(terminalVolumeProvider.get());
+            machine.setVolumes(volumes);
+        }
 
         // add bind-mount volume for projects in a workspace
         String projectFolderVolume;
@@ -18,6 +24,7 @@
             throw new EnvironmentException("Error occurred on resolving path to files of workspace " +
                                            internalEnv.getWorkspaceId());
         }
+        List<String> devMachineVolumes = devMachine.getVolumes();
         devMachineVolumes.add(SystemInfo.isWindows() ? pathEscaper.escapePath(projectFolderVolume)
                                                      : projectFolderVolume);
         // add volume with ws-agent archive
@@ -27,12 +34,9 @@
         if (dockerExtConfVolume != null) {
             devMachineVolumes.add(dockerExtConfVolume);
         }
-        devMachine.getEnvironment().put(CheBootstrap.CHE_LOCAL_CONF_DIR,
-                                        DockerExtConfBindingProvider.EXT_CHE_LOCAL_CONF_DIR);
-
-        for (CheServiceImpl machine : internalEnv.getServices().values()) {
-            machine.getVolumes().add(terminalVolumeProvider.get());
-        }
+        HashMap<String, String> environmentVars = new HashMap<>(devMachine.getEnvironment());
+        environmentVars.put(CheBootstrap.CHE_LOCAL_CONF_DIR, DockerExtConfBindingProvider.EXT_CHE_LOCAL_CONF_DIR);
+        devMachine.setEnvironment(environmentVars);
 
         // apply basic infra (e.g. agents)
         super.provision(envConfig, internalEnv);
