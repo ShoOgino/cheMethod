@@ -1,0 +1,29 @@
+    @Override
+    public void receive(String endpointId, String message) {
+        checkNotNull(endpointId, "Endpoint ID must not be null");
+        checkArgument(!endpointId.isEmpty(), "Endpoint ID name must not be empty");
+        checkNotNull(message, "Message must not be null");
+        checkArgument(!message.isEmpty(), "Message must not be empty");
+
+        LOG.debug("Receiving message: " + message + ", from endpoint: " + endpointId);
+        try {
+            entityValidator.validate(message);
+
+            if (isArray(message)) {
+                LOG.debug("Message is an array, processing an array");
+
+                JsonRpcList list = jsonRpcFactory.createList(message);
+                List<String> messages = list.toStringifiedList();
+                for (String listMessage : messages) {
+                    processObject(endpointId, listMessage);
+                }
+            } else {
+                LOG.debug("Message is not an array");
+
+                processObject(endpointId, message);
+            }
+        } catch (JsonRpcException e) {
+            errorTransmitter.transmit(endpointId, e);
+        }
+    }
+
