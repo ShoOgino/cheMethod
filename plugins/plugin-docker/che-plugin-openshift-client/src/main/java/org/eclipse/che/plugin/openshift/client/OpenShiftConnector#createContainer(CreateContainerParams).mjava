@@ -5,18 +5,18 @@
      */
     @Override
     public ContainerCreated createContainer(CreateContainerParams createContainerParams) throws IOException {
-        String containerName = KubernetesStringUtils.getContainerName(createContainerParams.getContainerName());
+        String containerName = KubernetesStringUtils.convertToContainerName(createContainerParams.getContainerName());
         String workspaceID = getCheWorkspaceId(createContainerParams);
 
         // Generate workspaceID if CHE_WORKSPACE_ID env var does not exist
-        workspaceID = workspaceID.isEmpty() ? generateWorkspaceID() : workspaceID;
+        workspaceID = workspaceID.isEmpty() ? KubernetesStringUtils.generateWorkspaceID() : workspaceID;
 
         // imageForDocker is the docker version of the image repository. It's needed for other
         // OpenShiftConnector API methods, but is not acceptable as an OpenShift name
         String imageForDocker = createContainerParams.getContainerConfig().getImage();
         // imageStreamTagName is imageForDocker converted into a form that can be used
         // in OpenShift
-        String imageStreamTagName = KubernetesStringUtils.getTagNameFromRepoString(imageForDocker);
+        String imageStreamTagName = KubernetesStringUtils.convertPullSpecToTagName(imageForDocker);
 
         // imageStreamTagName is not enough to fill out a pull spec; it is only the tag, so we
         // have to get the ImageStreamTag from the tag, and then get the full ImageStreamTag name
@@ -25,8 +25,8 @@
         String imageStreamTagPullSpec = imageStreamTag.getMetadata().getName();
 
         // Next we need to get the address of the registry where the ImageStreamTag is stored
-        String imageStreamName = imageStreamTagPullSpec.contains(":") ? imageStreamTagPullSpec.split(":")[0]
-                                                                      : imageStreamTagPullSpec;
+        String imageStreamName = KubernetesStringUtils.getImageStreamNameFromPullSpec(imageStreamTagPullSpec);
+
         ImageStream imageStream = openShiftClient.imageStreams()
                                                  .inNamespace(openShiftCheProjectName)
                                                  .withName(imageStreamName)
@@ -44,7 +44,8 @@
                                                           imageStreamTagPullSpec);
 
         Set<String> containerExposedPorts = createContainerParams.getContainerConfig().getExposedPorts().keySet();
-        Set<String> imageExposedPorts = inspectImage(imageForDocker).getConfig().getExposedPorts().keySet();
+        Set<String> imageExposedPorts = inspectImage(InspectImageParams.create(imageForDocker))
+                                                    .getConfig().getExposedPorts().keySet();
         Set<String> exposedPorts = getExposedPorts(containerExposedPorts, imageExposedPorts);
 
         boolean runContainerAsRoot = runContainerAsRoot(imageForDocker);

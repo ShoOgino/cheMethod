@@ -1,21 +1,24 @@
-    /**
-     * @param container
-     * @return
-     * @throws IOException
-     */
     @Override
-    public ContainerInfo inspectContainer(String container) throws IOException {
-        // Proxy to DockerConnector
-        ContainerInfo info = super.inspectContainer(container);
-        if (info == null) {
+    public ContainerInfo inspectContainer(String containerId) throws IOException {
+
+        Pod pod = getChePodByContainerId(containerId);
+        if (pod == null ) {
+            LOG.warn("No Pod found by container ID {}", containerId);
             return null;
         }
 
-        Pod pod = getChePodByContainerId(info.getId());
-        if (pod == null ) {
-            LOG.warn("No Pod found by container ID {}", info.getId());
-            return null;
+        List<Container> podContainers = pod.getSpec().getContainers();
+        if (podContainers.size() > 1) {
+            throw new OpenShiftException("Multiple Containers found in Pod.");
+        } else if (podContainers.size() < 1 || isNullOrEmpty(podContainers.get(0).getImage())) {
+            throw new OpenShiftException(String.format("Container %s not found", containerId));
         }
+        String podPullSpec = podContainers.get(0).getImage();
+
+        String tagName = KubernetesStringUtils.getTagNameFromPullSpec(podPullSpec);
+
+        ImageStreamTag tag = getImageStreamTagFromRepo(tagName);
+        ImageInfo imageInfo = getImageInfoFromTag(tag);
 
         String deploymentName = pod.getMetadata().getLabels().get(OPENSHIFT_DEPLOYMENT_LABEL);
         if (deploymentName == null ) {
@@ -29,21 +32,6 @@
             return null;
         }
 
-        Map<String, String> annotations = KubernetesLabelConverter.namesToLabels(svc.getMetadata().getAnnotations());
-        Map<String, String> containerLabels = info.getConfig().getLabels();
-
-        Map<String, String> labels = Stream.concat(annotations.entrySet().stream(), containerLabels.entrySet().stream())
-                                           .filter(e -> e.getKey().startsWith(KubernetesLabelConverter.getCheServerLabelPrefix()))
-                                           .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
-
-        info.getConfig().setLabels(labels);
-
-        LOG.info("Container labels:");
-        info.getConfig().getLabels().entrySet()
-                        .stream().forEach(e -> LOG.info("- {}={}", e.getKey(), e.getValue()));
-
-        replaceNetworkSettings(info);
-
-        return info;
+        return createContainerInfo(svc, imageInfo, pod, containerId);
     }
 

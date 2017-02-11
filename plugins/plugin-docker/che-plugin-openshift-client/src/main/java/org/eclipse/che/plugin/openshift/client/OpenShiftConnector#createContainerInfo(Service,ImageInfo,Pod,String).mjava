@@ -1,0 +1,71 @@
+    /**
+     * Collects the relevant information from a Service, an ImageInfo, and a Pod into
+     * a docker ContainerInfo JSON object. The returned object is what would be returned
+     * by executing {@code docker inspect <container>}, with fields filled as available.
+     * @param svc
+     * @param imageInfo
+     * @param pod
+     * @param containerId
+     * @return
+     */
+    private ContainerInfo createContainerInfo(Service svc,
+                                              ImageInfo imageInfo,
+                                              Pod pod,
+                                              String containerId) {
+
+        // In Che on OpenShift, we only have one container per pod.
+        Container container = pod.getSpec().getContainers().get(0);
+        ContainerConfig imageContainerConfig = imageInfo.getContainerConfig();
+
+        // HostConfig
+        HostConfig hostConfig = new HostConfig();
+        hostConfig.setBinds(new String[0]);
+        hostConfig.setMemory(imageInfo.getConfig().getMemory());
+
+        // Env vars
+        List<String> imageEnv = Arrays.asList(imageContainerConfig.getEnv());
+        List<String> containerEnv = container.getEnv()
+                                             .stream()
+                                             .map(e -> String.format("%s=%s", e.getName(), e.getValue()))
+                                             .collect(Collectors.toList());
+        String[] env = Stream.concat(imageEnv.stream(), containerEnv.stream())
+                             .toArray(String[]::new);
+
+        // Exposed Ports
+        Map<String, List<PortBinding>> ports = getCheServicePorts(svc);
+        Map<String, Map<String, String>> exposedPorts = new HashMap<>();
+        for (String key : ports.keySet()) {
+            exposedPorts.put(key, Collections.emptyMap());
+        }
+
+        // Labels
+        Map<String, String> annotations = KubernetesLabelConverter.namesToLabels(svc.getMetadata().getAnnotations());
+        Map<String, String> containerLabels = imageInfo.getConfig().getLabels();
+        Map<String, String> labels = Stream.concat(annotations.entrySet().stream(), containerLabels.entrySet().stream())
+                                           .filter(e -> e.getKey().startsWith(KubernetesLabelConverter.getCheServerLabelPrefix()))
+                                           .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
+
+        // ContainerConfig
+        ContainerConfig config = imageContainerConfig;
+        config.setHostname(svc.getMetadata().getName());
+        config.setEnv(env);
+        config.setExposedPorts(exposedPorts);
+        config.setLabels(labels);
+        config.setImage(container.getImage());
+
+        // NetworkSettings
+        NetworkSettings networkSettings = new NetworkSettings();
+        networkSettings.setIpAddress(svc.getSpec().getClusterIP());
+        networkSettings.setGateway(svc.getSpec().getClusterIP());
+        networkSettings.setPorts(ports);
+
+        // Make final ContainerInfo
+        ContainerInfo info = new ContainerInfo();
+        info.setId(containerId);
+        info.setConfig(config);
+        info.setNetworkSettings(networkSettings);
+        info.setHostConfig(hostConfig);
+        info.setImage(imageInfo.getConfig().getImage());
+        return info;
+    }
+
