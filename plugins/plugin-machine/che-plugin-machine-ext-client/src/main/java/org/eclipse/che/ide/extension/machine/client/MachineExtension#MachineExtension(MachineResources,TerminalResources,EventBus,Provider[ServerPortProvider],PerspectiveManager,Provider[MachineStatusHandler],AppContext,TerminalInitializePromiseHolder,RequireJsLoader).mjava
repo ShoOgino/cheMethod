@@ -1,13 +1,17 @@
     @Inject
     public MachineExtension(final MachineResources machineResources,
+                            final TerminalResources terminalResources,
                             final EventBus eventBus,
                             final Provider<ServerPortProvider> machinePortProvider,
                             final PerspectiveManager perspectiveManager,
                             final Provider<MachineStatusHandler> machineStatusHandlerProvider,
-                            final AppContext appContext) {
+                            final AppContext appContext,
+                            final TerminalInitializePromiseHolder terminalModule,
+                            final RequireJsLoader requireJsLoader) {
         this.perspectiveManager = perspectiveManager;
 
         machineResources.getCss().ensureInjected();
+        terminalResources.getTerminalStyle().ensureInjected();
         machineStatusHandlerProvider.get();
 
         eventBus.addHandler(WsAgentStateEvent.TYPE, new WsAgentStateHandler() {
@@ -40,5 +44,13 @@
         if (appContext.getWorkspace() == null || WorkspaceStatus.RUNNING != appContext.getWorkspace().getStatus()) {
             maximizeTerminal();
         }
+
+        Promise<Void> termInitPromise = AsyncPromiseHelper.createFromAsyncRequest(new AsyncPromiseHelper.RequestCall<Void>() {
+            @Override
+            public void makeCall(AsyncCallback<Void> callback) {
+                injectTerminal(requireJsLoader, callback);
+            }
+        });
+        terminalModule.setInitializerPromise(termInitPromise);
     }
 
