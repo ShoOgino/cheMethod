@@ -1,38 +1,45 @@
         @Override
         public void onEvent(InstanceStateEvent event) {
-            if ((event.getType() == OOM) || (event.getType() == DIE)) {
-                EnvironmentHolder environmentHolder;
-                try (@SuppressWarnings("unused") Unlocker u = stripedLocks.readLock("workspaceId")) {
-                    environmentHolder = environments.get(event.getWorkspaceId());
-                }
-                if (environmentHolder != null) {
-                    for (Instance instance : environmentHolder.machines) {
-                        if (instance.getId().equals(event.getMachineId())) {
-                            String message = "Machine is destroyed. ";
-                            if (event.getType() == OOM) {
-                                message = message +
-                                          "The processes in this machine need more RAM. This machine started with " +
-                                          instance.getConfig().getLimits().getRam() +
-                                          "MB. Create a new machine configuration that allocates additional RAM or increase " +
-                                          "the workspace RAM limit in the user dashboard.";
-                            }
-
-                            try {
-                                if (!Strings.isNullOrEmpty(message)) {
-                                    instance.getLogger().writeLine(message);
-                                }
-                            } catch (IOException ignore) {
-                            }
-
-                            eventService.publish(newDto(MachineStatusEvent.class)
-                                                         .withEventType(MachineStatusEvent.EventType.DESTROYED)
-                                                         .withDev(instance.getConfig().isDev())
-                                                         .withMachineId(instance.getId())
-                                                         .withWorkspaceId(instance.getWorkspaceId())
-                                                         .withMachineName(instance.getConfig().getName()));
-                        }
+            String machineId = event.getMachineId();
+            String workspaceId = event.getWorkspaceId();
+            InstanceStateEvent.Type eventType = event.getType();
+            // cleanup machine if event about instance failure comes
+            if ((eventType == OOM) || (eventType == DIE)) {
+                sharedPool.execute(() -> {
+                    Instance instance = removeMachineFromEnvironment(workspaceId, machineId);
+                    if (instance == null) {
+                        // should not happen
+                        return;
                     }
-                }
+
+                    String message = "Machine is destroyed";
+                    if (eventType == OOM) {
+                        message = message +
+                                  ". The processes in this machine need more RAM. This machine started with " +
+                                  instance.getConfig().getLimits().getRam() +
+                                  "MB. Create a new machine configuration that allocates additional RAM or increase " +
+                                  "the workspace RAM limit in the user dashboard.";
+                    }
+                    MachineStatusEvent destroyedEvent = newDto(MachineStatusEvent.class)
+                            .withEventType(MachineStatusEvent.EventType.DESTROYED)
+                            .withDev(instance.getConfig().isDev())
+                            .withMachineId(machineId)
+                            .withWorkspaceId(workspaceId)
+                            .withMachineName(instance.getConfig().getName())
+                            .withError(message);
+
+                    try {
+                        instance.getLogger().writeLine(message);
+                    } catch (IOException ignore) {}
+
+                    try {
+                        instance.destroy();
+                    } catch (MachineException e) {
+                        LOG.warn("Destroying of machine {} in workspace {} where container was unexpectedly stopped failed. Error: {}, {}",
+                                 machineId, workspaceId, e.getLocalizedMessage());
+                    }
+                    eventService.publish(destroyedEvent);
+                });
             }
         }
 

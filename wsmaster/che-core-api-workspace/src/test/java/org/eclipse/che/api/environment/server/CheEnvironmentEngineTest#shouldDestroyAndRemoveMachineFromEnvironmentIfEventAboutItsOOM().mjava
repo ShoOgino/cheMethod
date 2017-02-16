@@ -1,0 +1,36 @@
+    @Test
+    public void shouldDestroyAndRemoveMachineFromEnvironmentIfEventAboutItsOOM() throws Exception {
+        // given
+        List<Instance> instances = startEnv();
+        Instance instance = instances.get(0);
+        String machineId = instance.getId();
+        String workspaceId = instance.getWorkspaceId();
+
+        when(instance.getLogger()).thenReturn(LineConsumer.DEV_NULL);
+        engine.init();
+        verify(eventService).subscribe(eventServiceSubscriberCaptor.capture());
+        EventSubscriber<InstanceStateEvent> subscriber = eventServiceSubscriberCaptor.getValue();
+        ArgumentCaptor<Runnable> runnableArgumentCaptor = ArgumentCaptor.forClass(Runnable.class);
+
+        // when
+        subscriber.onEvent(new InstanceStateEvent(machineId, workspaceId, InstanceStateEvent.Type.OOM));
+        // catch event actor
+        verify(sharedPool).execute(runnableArgumentCaptor.capture());
+        Runnable eventActor = runnableArgumentCaptor.getValue();
+        // run event actor to verify its behavior
+        eventActor.run();
+
+        // then
+        for (Instance instance1 : instances) {
+            // other machines are not destroyed
+            if (instance1.equals(instance)) {
+                verify(instance1).destroy();
+            } else {
+                verify(instance1, never()).destroy();
+            }
+        }
+        for (Instance instance1 : engine.getMachines(workspaceId)) {
+            assertNotEquals(instance1.getId(), machineId);
+        }
+    }
+
