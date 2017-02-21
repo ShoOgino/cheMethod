@@ -1,9 +1,14 @@
     @Override
     protected void configure() {
-        install(new JpaPersistModule("main"));
+        H2DBTestServer server = H2DBTestServer.startDefault();
+        install(new PersistTestModuleBuilder().setDriver(Driver.class)
+                                              .runningOn(server)
+                                              .addEntityClass(AccountImpl.class)
+                                              .setExceptionHandler(H2ExceptionHandler.class)
+                                              .build());
         bind(DBInitializer.class).asEagerSingleton();
-        bind(SchemaInitializer.class).toInstance(new FlywaySchemaInitializer(inMemoryDefault(), "che-schema"));
-        bind(TckResourcesCleaner.class).to(H2JpaCleaner.class);
+        bind(SchemaInitializer.class).toInstance(new FlywaySchemaInitializer(server.getDataSource(), "che-schema"));
+        bind(TckResourcesCleaner.class).toInstance(new H2JpaCleaner(server));
 
         bind(new TypeLiteral<TckRepository<AccountImpl>>() {}).toInstance(new JpaTckRepository<>(AccountImpl.class));
 
