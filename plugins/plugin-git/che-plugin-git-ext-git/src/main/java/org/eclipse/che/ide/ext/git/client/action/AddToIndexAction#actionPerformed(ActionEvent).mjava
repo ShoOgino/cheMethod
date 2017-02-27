@@ -7,26 +7,20 @@
         final GitOutputConsole console = gitOutputConsoleFactory.create(constant.addToIndexCommandName());
         consolesPanelPresenter.addCommandOutput(devMachine.getId(), console);
         service.getStatus(devMachine, appContext.getRootProject().getLocation())
-               .then(new Operation<Status>() {
-                   @Override
-                   public void apply(Status status) throws OperationException {
-                       if (containsInSelected(status.getUntracked())) {
-                           presenter.showDialog();
-                       } else if (containsInSelected(status.getModified())) {
-                           addToIndex(console);
-                       } else {
-                           String message = resources.length > 1 ? constant.nothingAddToIndexMultiSelect() : constant.nothingAddToIndex();
-                           console.print(message);
-                           notificationManager.notify(message);
-                       }
+               .then(status -> {
+                   if (containsInSelected(status.getUntracked())) {
+                       presenter.showDialog();
+                   } else if (containsInSelected(status.getModified()) || containsInSelected(status.getMissing())) {
+                       addToIndex(console);
+                   } else {
+                       String message = resources.length > 1 ? constant.nothingAddToIndexMultiSelect() : constant.nothingAddToIndex();
+                       console.print(message);
+                       notificationManager.notify(message);
                    }
                })
-               .catchError(new Operation<PromiseError>() {
-                   @Override
-                   public void apply(PromiseError error) throws OperationException {
-                       console.printError(constant.statusFailed());
-                       notificationManager.notify(constant.statusFailed(), FAIL, FLOAT_MODE);
-                   }
+               .catchError(error -> {
+                   console.printError(constant.statusFailed());
+                   notificationManager.notify(constant.statusFailed(), FAIL, FLOAT_MODE);
                });
     }
 
