@@ -1,0 +1,21 @@
+    @Test(dataProvider = "beforeAccountRemoveRollbackActions")
+    public void shouldRollbackTransactionWhenFailedToRemoveAnyOfEntriesDuringAccountRemoving(
+            Class<CascadeEventSubscriber<CascadeEvent>> subscriberClass,
+            Class<CascadeEvent> eventClass) throws Exception {
+        createTestData();
+        eventService.unsubscribe(injector.getInstance(subscriberClass), eventClass);
+
+        // Remove the user, all entries must be rolled back after fail
+        try {
+            accountDao.remove(account.getId());
+            fail("AccountDao#remove had to throw exception");
+        } catch (Exception ignored) {
+        }
+
+        // Check all the data rolled back
+        assertFalse(workspaceDao.getByNamespace(user.getName()).isEmpty());
+        assertFalse(snapshotDao.findSnapshots(workspace1.getId()).isEmpty());
+        assertFalse(snapshotDao.findSnapshots(workspace2.getId()).isEmpty());
+        wipeTestData();
+    }
+
