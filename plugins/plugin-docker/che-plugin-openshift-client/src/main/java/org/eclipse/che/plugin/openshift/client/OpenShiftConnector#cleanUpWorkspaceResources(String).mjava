@@ -1,0 +1,36 @@
+    private void cleanUpWorkspaceResources(String deploymentName) throws IOException {
+
+        Deployment deployment = getDeploymentByName(deploymentName);
+        Service service = getCheServiceBySelector(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
+
+        if (service != null) {
+            LOG.info("Removing OpenShift Service {}", service.getMetadata().getName());
+            openShiftClient.resource(service).delete();
+        }
+
+        if (deployment != null) {
+            LOG.info("Removing OpenShift Deployment {}", deployment.getMetadata().getName());
+            openShiftClient.resource(deployment).delete();
+        }
+
+        // Wait for all pods to terminate before returning.
+        try {
+            for (int waitCount = 0; waitCount < OPENSHIFT_WAIT_POD_TIMEOUT; waitCount++) {
+                List<Pod> pods = openShiftClient.pods()
+                                                .inNamespace(openShiftCheProjectName)
+                                                .withLabel(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName)
+                                                .list()
+                                                .getItems();
+                if (pods.size() == 0) {
+                    return;
+                }
+                Thread.sleep(OPENSHIFT_WAIT_POD_DELAY);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.info("Thread interrupted while cleaning up workspace");
+        }
+
+        throw new OpenShiftException("Timeout while waiting for pods to terminate");
+    }
+

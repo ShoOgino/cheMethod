@@ -54,18 +54,29 @@
         String[] volumes = createContainerParams.getContainerConfig().getHostConfig().getBinds();
 
         Map<String, String> additionalLabels = createContainerParams.getContainerConfig().getLabels();
-        createOpenShiftService(workspaceID, exposedPorts, additionalLabels);
-        String deploymentName = createOpenShiftDeployment(workspaceID,
-                                                          dockerPullSpec,
-                                                          containerName,
-                                                          exposedPorts,
-                                                          envVariables,
-                                                          volumes,
-                                                          runContainerAsRoot);
+        String containerID;
+        try {
+            createOpenShiftService(workspaceID, exposedPorts, additionalLabels);
+            String deploymentName = createOpenShiftDeployment(workspaceID,
+                                                              dockerPullSpec,
+                                                              containerName,
+                                                              exposedPorts,
+                                                              envVariables,
+                                                              volumes,
+                                                              runContainerAsRoot);
 
-        String containerID = waitAndRetrieveContainerID(deploymentName);
-        if (containerID == null) {
-            throw new OpenShiftException("Failed to get the ID of the container running in the OpenShift pod");
+            containerID = waitAndRetrieveContainerID(deploymentName);
+            if (containerID == null) {
+                throw new OpenShiftException("Failed to get the ID of the container running in the OpenShift pod");
+            }
+        } catch (IOException e) {
+            // Make sure we clean up deployment and service in case of an error -- otherwise Che can end up
+            // in an inconsistent state.
+            LOG.info("Error while creating Pod, removing deployment");
+            String deploymentName = CHE_OPENSHIFT_RESOURCES_PREFIX + workspaceID;
+            cleanUpWorkspaceResources(deploymentName);
+            openShiftClient.resource(imageStreamTag).delete();
+            throw e;
         }
 
         return new ContainerCreated(containerID, null);
