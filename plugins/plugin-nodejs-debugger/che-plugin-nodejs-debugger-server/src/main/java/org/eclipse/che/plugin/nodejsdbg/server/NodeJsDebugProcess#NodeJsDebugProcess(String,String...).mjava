@@ -2,24 +2,17 @@
         this.observers = new CopyOnWriteArrayList<>();
         this.outputSeparator = outputSeparator;
 
-        List<String> commands = new ArrayList<>(1 + options.length);
-        commands.add(NODEJS_COMMAND);
-        commands.addAll(Arrays.asList(options));
-
-        ProcessBuilder processBuilder = new ProcessBuilder(commands);
-        try {
-            process = processBuilder.start();
-        } catch (IOException e) {
-            throw new NodeJsDebuggerException("NodeJs process failed.", e);
-        }
-
+        process = initializeNodeJsDebugProcess(options);
         processWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
-        executor = Executors.newScheduledThreadPool(1, new ThreadFactoryBuilder().setNameFormat("nodejs-debugger-%d")
-                                                                                 .setUncaughtExceptionHandler(
-                                                                                         LoggingUncaughtExceptionHandler.getInstance())
-                                                                                 .setDaemon(true)
-                                                                                 .build());
-        executor.scheduleWithFixedDelay(new OutputReader(), 0, 100, TimeUnit.MILLISECONDS);
+        executor = Executors
+                .newScheduledThreadPool(1, new ThreadFactoryBuilder()
+                        .setNameFormat("nodejs-debugger-%d")
+                        .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+                        .setDaemon(true)
+                        .build());
+
+        OutputReader outputReader = new OutputReader(process, outputSeparator, this::notifyObservers);
+        executor.scheduleWithFixedDelay(outputReader, 0, 100, TimeUnit.MILLISECONDS);
     }
 
