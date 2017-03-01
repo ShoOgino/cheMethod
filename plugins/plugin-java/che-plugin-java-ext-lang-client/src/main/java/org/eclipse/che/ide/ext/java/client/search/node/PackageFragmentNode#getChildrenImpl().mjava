@@ -1,25 +1,23 @@
     @Override
     protected Promise<List<Node>> getChildrenImpl() {
-        return PromiseHelper.newPromise(new AsyncPromiseHelper.RequestCall<List<Node>>() {
-            @Override
-            public void makeCall(AsyncCallback<List<Node>> callback) {
-                List<Node> child = new ArrayList<Node>();
-                if (packageFragment.getKind() == PackageFragmentRoot.K_SOURCE) {
-                    for (CompilationUnit compilationUnit : packageFragment.getCompilationUnits()) {
-                        for (Type type : compilationUnit.getTypes()) {
-                            if (type.isPrimary()) {
-                                child.add(nodeFactory.create(type, compilationUnit, null, matches));
-                            }
-                        }
-                    }
-                } else {
-                    for (ClassFile classFile : packageFragment.getClassFiles()) {
-                        child.add(nodeFactory.create(classFile.getType(), null, classFile, matches));
-                    }
+        return createFromAsyncRequest(callback -> {
+            final List<Node> children = new ArrayList<>();
+            if (packageFragment.getKind() == PackageFragmentRoot.K_SOURCE) {
+                for (CompilationUnit compilationUnit : packageFragment.getCompilationUnits()) {
+                    final List<Type> types = compilationUnit.getTypes();
+                    final List<Node> nodes = types.stream()
+                                                  .filter(Type::isPrimary)
+                                                  .map(type -> nodeFactory.create(type, compilationUnit, null, matches))
+                                                  .collect(Collectors.toList());
+                    children.addAll(nodes);
                 }
-
-                callback.onSuccess(child);
+            } else {
+                children.addAll(packageFragment.getClassFiles().stream()
+                                               .map(classFile -> nodeFactory.create(classFile.getType(), null, classFile, matches))
+                                               .collect(Collectors.toList()));
             }
+
+            callback.onSuccess(children);
         });
     }
 

@@ -1,34 +1,31 @@
     @Override
     public Promise<FindUsagesResponse> findUsages(final FindUsagesRequest request) {
         final MessageBus messageBus = provider.getMachineMessageBus();
+        return createFromAsyncRequest(callback -> {
+            final MessageBuilder builder = new MessageBuilder(POST, pathToService + "find/usages");
+            builder.data(dtoFactory.toJson(request))
+                   .header(CONTENTTYPE, APPLICATION_JSON)
+                   .header(ACCEPT, APPLICATION_JSON);
+            loader.show();
 
-        return PromiseHelper.newPromise(new AsyncPromiseHelper.RequestCall<FindUsagesResponse>() {
-            @Override
-            public void makeCall(final AsyncCallback<FindUsagesResponse> callback) {
-                MessageBuilder builder = new MessageBuilder(RequestBuilder.POST, pathToService + "find/usages");
-                builder.data(dtoFactory.toJson(request))
-                       .header(CONTENTTYPE, APPLICATION_JSON)
-                       .header(ACCEPT, APPLICATION_JSON);
-                loader.show();
-                try {
-                    messageBus.send(builder.build(), new RequestCallback<FindUsagesResponse>(
-                            unmarshallerFactory.newWSUnmarshaller(FindUsagesResponse.class)) {
-                        @Override
-                        protected void onSuccess(FindUsagesResponse result) {
-                            loader.hide();
-                            callback.onSuccess(result);
-                        }
+            try {
+                messageBus.send(builder.build(), new RequestCallback<FindUsagesResponse>(
+                        unmarshallerFactory.newWSUnmarshaller(FindUsagesResponse.class)) {
+                    @Override
+                    protected void onSuccess(FindUsagesResponse result) {
+                        loader.hide();
+                        callback.onSuccess(result);
+                    }
 
-                        @Override
-                        protected void onFailure(Throwable exception) {
-                            loader.hide();
-                            callback.onFailure(exception);
-                        }
-                    });
-                } catch (WebSocketException e) {
-                    loader.hide();
-                    callback.onFailure(e);
-                }
+                    @Override
+                    protected void onFailure(Throwable exception) {
+                        loader.hide();
+                        callback.onFailure(exception);
+                    }
+                });
+            } catch (WebSocketException e) {
+                loader.hide();
+                callback.onFailure(e);
             }
         });
     }
