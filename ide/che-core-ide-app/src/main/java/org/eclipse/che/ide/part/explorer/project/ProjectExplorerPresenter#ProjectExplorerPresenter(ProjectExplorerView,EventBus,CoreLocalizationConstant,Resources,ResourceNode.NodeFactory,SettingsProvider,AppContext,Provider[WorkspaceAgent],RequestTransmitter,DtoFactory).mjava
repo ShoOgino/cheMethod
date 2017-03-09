@@ -1,12 +1,14 @@
     @Inject
     public ProjectExplorerPresenter(final ProjectExplorerView view,
-                                    EventBus eventBus,
-                                    CoreLocalizationConstant locale,
-                                    Resources resources,
+                                    final EventBus eventBus,
+                                    final CoreLocalizationConstant locale,
+                                    final Resources resources,
                                     final ResourceNode.NodeFactory nodeFactory,
                                     final SettingsProvider settingsProvider,
                                     final AppContext appContext,
-                                    final WorkspaceAgent workspaceAgent, RequestTransmitter requestTransmitter, DtoFactory dtoFactory) {
+                                    final Provider<WorkspaceAgent> workspaceAgentProvider,
+                                    final RequestTransmitter requestTransmitter,
+                                    final DtoFactory dtoFactory) {
         this.view = view;
         this.eventBus = eventBus;
         this.nodeFactory = nodeFactory;
@@ -62,15 +64,20 @@
 
         registerNative();
 
-        final PartStack partStack = checkNotNull(workspaceAgent.getPartStack(PartStackType.NAVIGATION),
-                                                 "Navigation part stack should not be a null");
-        partStack.addPart(this);
-        partStack.setActivePart(this);
-
         // when ide has already initialized, then we force set focus to the current part
         eventBus.addHandler(ExtensionsInitializedEvent.getType(), new ExtensionsInitializedHandler() {
             @Override
             public void onExtensionsInitialized(ExtensionsInitializedEvent event) {
+                partStack.setActivePart(ProjectExplorerPresenter.this);
+            }
+        });
+
+        Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
+            @Override
+            public void execute() {
+                final PartStack partStack = checkNotNull(workspaceAgentProvider.get().getPartStack(PartStackType.NAVIGATION),
+                        "Navigation part stack should not be a null");
+                partStack.addPart(ProjectExplorerPresenter.this);
                 partStack.setActivePart(ProjectExplorerPresenter.this);
             }
         });
