@@ -1,0 +1,28 @@
+    @Override
+    public void accept(Path path) {
+        if (!exists(path)) {
+            Set<Integer> operationIds = pathWatchRegistrations.remove(path);
+            operationIds.forEach(watcher::unwatch);
+            paths.values().forEach(it -> it.remove(path));
+            paths.entrySet().removeIf(it -> it.getValue().isEmpty());
+        }
+
+        for (PathMatcher matcher : matchers.keySet()) {
+            if (matcher.matches(path)) {
+                for (int operationId : matchers.get(matcher)) {
+                    paths.putIfAbsent(operationId, newConcurrentHashSet());
+                    if (paths.get(operationId).contains(path)) {
+                        return;
+                    }
+
+                    paths.get(operationId).add(path);
+
+                    Operation operation = operations.get(operationId);
+                    int pathWatcherOperationId = watcher.watch(path, operation.create, operation.modify, operation.delete);
+                    pathWatchRegistrations.putIfAbsent(path, newConcurrentHashSet());
+                    pathWatchRegistrations.get(path).add(pathWatcherOperationId);
+                }
+            }
+        }
+    }
+

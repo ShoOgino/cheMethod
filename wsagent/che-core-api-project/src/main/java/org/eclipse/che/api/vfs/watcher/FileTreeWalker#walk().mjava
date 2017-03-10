@@ -1,0 +1,46 @@
+    @ScheduleRate(period = 10)
+    void walk() {
+        try {
+            LOG.debug("Tree walk started");
+
+            Set<Path> deletedFiles = files.keySet().stream().filter(it -> !exists(it)).collect(toSet());
+            fileDeleteConsumers.forEach(deletedFiles::forEach);
+            files.keySet().removeAll(deletedFiles);
+
+            Set<Path> deletedDirectories = directories.keySet().stream().filter(it -> !exists(it)).collect(toSet());
+            directoryDeleteConsumers.forEach(deletedDirectories::forEach);
+            directories.keySet().removeAll(deletedDirectories);
+
+            walkFileTree(root.toPath(), new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    for (PathMatcher matcher : directoryExcludes) {
+                        if (matcher.matches(dir)) {
+                            return SKIP_SUBTREE;
+                        }
+                    }
+
+                    updateFsTreeAndAcceptConsumables(directories, directoryUpdateConsumers, directoryCreateConsumers, dir, attrs);
+
+                    return CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    for (PathMatcher matcher : fileExcludes) {
+                        if (matcher.matches(file)) {
+                            return CONTINUE;
+                        }
+                    }
+
+                    updateFsTreeAndAcceptConsumables(files, fileUpdateConsumers, fileCreateConsumers, file, attrs);
+
+                    return CONTINUE;
+                }
+            });
+            LOG.debug("Tree walk finished");
+        } catch (Exception e) {
+            LOG.error("Error while walking file tree", e);
+        }
+    }
+
