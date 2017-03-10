@@ -1,0 +1,49 @@
+    private Object create3xTestListener(ClassLoader loader, Class< ? > listenerClass, AbstractTestListener delegate) throws Exception {
+        ProxyFactory f = new ProxyFactory();
+        f.setSuperclass(Object.class);
+        f.setInterfaces(new Class< ? >[]{listenerClass});
+        f.setFilter(new MethodFilter() {
+            @Override
+            public boolean isHandled(Method m) {
+                String methodName = m.getName();
+                switch (methodName) {
+                    case "startTest":
+                    case "endTest":
+                    case "addError":
+                    case "addFailure":
+                        return true;
+                }
+                return false;
+            }
+        });
+        Class< ? > c = f.createClass();
+        MethodHandler mi = new MethodHandler() {
+            public Object invoke(Object self, Method method, Method proceed, Object[] args) throws Throwable {
+                String testKey = args[0].getClass().toString();
+                String testName = args[0].getClass().getName();
+                String methodName = method.getName();
+                switch (methodName) {
+                    case "startTest":
+                        delegate.startTest(testKey, testName);
+                        break;
+
+                    case "endTest":
+                        delegate.endTest(testKey, testName);
+                        break;
+
+                    case "addError":
+                        delegate.addError(testKey, (Throwable)args[1]);
+                        break;
+
+                    case "addFailure":
+                        delegate.addFailure(testKey, (Throwable)args[1]);
+                        break;
+                }
+                return null;
+            }
+        };
+        Object listener = c.getConstructor().newInstance();
+        ((javassist.util.proxy.Proxy)listener).setHandler(mi);
+        return listener;
+    }
+

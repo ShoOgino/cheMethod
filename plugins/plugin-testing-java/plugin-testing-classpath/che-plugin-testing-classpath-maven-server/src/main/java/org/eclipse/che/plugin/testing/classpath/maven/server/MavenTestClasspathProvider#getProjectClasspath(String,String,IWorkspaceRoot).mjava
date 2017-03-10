@@ -1,0 +1,40 @@
+    public URL[] getProjectClasspath(String projectAbsolutePath, String projectRelativePath, IWorkspaceRoot root) throws JavaModelException {
+        Stream<ClasspathEntryDto> rawClasspath = classpathService.getClasspath(projectRelativePath).stream();
+        Stream<ClasspathEntryDto> resolvedClasspath = toResolvedClassPath(rawClasspath);
+        return resolvedClasspath.map(dto -> {
+            try {
+                String dtoPath = dto.getPath();
+                IResource res = root.findMember(new Path(dtoPath));
+                File path;
+                switch (dto.getEntryKind()) {
+                    case IClasspathEntry.CPE_LIBRARY:
+                        if (res == null) {
+                            path = new File(dtoPath);
+                        } else {
+                            path = res.getLocation().toFile();
+                        }
+                        break;
+                    case IClasspathEntry.CPE_SOURCE:
+                        IPath relativePathFromProjectRoot = new Path(dtoPath).removeFirstSegments(1);
+                        String relativePathFromProjectRootStr = relativePathFromProjectRoot.toString();
+                        switch (relativePathFromProjectRootStr) {
+                            case "src/main/java":
+                                path = Paths.get(projectAbsolutePath, "target", "classes").toFile();
+                                break;
+                            case "src/test/java":
+                                path = Paths.get(projectAbsolutePath, "target", "test-classes").toFile();
+                                break;
+                            default:
+                                path = Paths.get(projectAbsolutePath, "target", "classes").toFile();
+                        }
+                        break;
+                    default:
+                        path = new File(dtoPath);
+                }
+                return path.toURI().toURL();
+            } catch (MalformedURLException e) {
+                return null;
+            }
+        }).filter(url -> url != null).distinct().toArray(URL[]::new);
+    }
+

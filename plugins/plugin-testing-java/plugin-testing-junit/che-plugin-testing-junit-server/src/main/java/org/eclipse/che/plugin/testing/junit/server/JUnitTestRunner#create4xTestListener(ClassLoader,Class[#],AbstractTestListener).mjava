@@ -1,0 +1,67 @@
+    private Object create4xTestListener(ClassLoader loader, Class< ? > listenerClass, AbstractTestListener delegate) throws Exception {
+        ProxyFactory f = new ProxyFactory();
+        f.setSuperclass(listenerClass);
+        f.setFilter(new MethodFilter() {
+            @Override
+            public boolean isHandled(Method m) {
+                String methodName = m.getName();
+                switch (methodName) {
+                    case "testStarted":
+                    case "testFinished":
+                    case "testFailure":
+                    case "testAssumptionFailure":
+                        return true;
+                }
+                return false;
+            }
+        });
+        Class< ? > c = f.createClass();
+        MethodHandler mi = new MethodHandler() {
+            @Override
+            public Object invoke(Object self, Method m, Method method, Object[] args) throws Throwable {
+                String methodName = m.getName();
+                Object description = null;
+                Throwable throwable = null;
+
+                switch (methodName) {
+                    case "testStarted":
+                    case "testFinished":
+                        description = args[0];
+                        throwable = null;
+                        break;
+                    case "testFailure":
+                    case "testAssumptionFailure":
+                        description = args[0].getClass().getMethod("getDescription", new Class< ? >[0]).invoke(args[0]);
+                        throwable = (Throwable)args[0].getClass().getMethod("getException", new Class< ? >[0]).invoke(args[0]);
+                        break;
+                    default:
+                        return null;
+                }
+
+                String testKey = (String)description.getClass().getMethod("getDisplayName", new Class< ? >[0]).invoke(description);
+                String testName = testKey;
+                switch (methodName) {
+                    case "testStarted":
+                        delegate.startTest(testKey, testName);
+                        break;
+
+                    case "testFinished":
+                        delegate.endTest(testKey, testName);
+                        break;
+
+                    case "testFailure":
+                        delegate.addFailure(testKey, throwable);
+                        break;
+
+                    case "testAssumptionFailure":
+                        delegate.addError(testKey, throwable);
+                        break;
+                }
+                return null;
+            }
+        };
+        Object listener = c.getConstructor().newInstance();
+        ((javassist.util.proxy.Proxy)listener).setHandler(mi);
+        return listener;
+    }
+

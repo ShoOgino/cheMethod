@@ -1,0 +1,20 @@
+    public Promise<CommandImpl> getOrCreateTestCompileCommand() {
+        List<CommandImpl> commands = commandManager.getCommands();
+        for (CommandImpl command : commands) {
+            if (command.getName() != null && command.getName().startsWith("test-compile") && "mvn".equals(command.getType())) {
+                return promiseProvider.resolve(command);
+            }
+        }
+        for (CommandImpl command : commands) {
+            if ("build".equals(command.getName()) && "mvn".equals(command.getType())) {
+                String commandLine = command.getCommandLine();
+                MatchResult result = mavenCleanBuildPattern.exec(commandLine);
+                if (result != null) {
+                    String testCompileCommandLine = mavenCleanBuildPattern.replace(commandLine, "$1mvn test-compile $2");
+                    return commandManager.create("test-compile", testCompileCommandLine, "mvn", new HashMap<String, String>());
+                }
+            }
+        }
+        return promiseProvider.resolve(null);
+    }
+
