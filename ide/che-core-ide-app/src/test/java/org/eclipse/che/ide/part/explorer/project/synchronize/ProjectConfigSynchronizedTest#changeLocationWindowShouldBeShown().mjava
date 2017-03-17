@@ -1,0 +1,38 @@
+    @Test
+    public void changeLocationWindowShouldBeShown() throws Exception {
+        String newLocation = "new/location";
+
+        when(sourceStorage.getLocation()).thenReturn(null);
+        when(changeLocationWidget.getText()).thenReturn(newLocation);
+        when(dialogFactory.createConfirmDialog(anyString(),
+                                               Matchers.<IsWidget>any(),
+                                               anyObject(),
+                                               anyObject())).thenReturn(changeConfirmDialog);
+
+        projectConfigSynchronized.onSelectionChanged(null);
+
+        verify(dialogFactory).createConfirmDialog(eq(SYNCH_DIALOG_TITLE),
+                                                  eq(SYNCH_DIALOG_CONTENT),
+                                                  eq(IMPORT_BUTTON),
+                                                  eq(REMOVE_BUTTON),
+                                                  confirmCallbackArgumentCaptor.capture(),
+                                                  cancelCallbackArgumentCaptor.capture());
+        verify(confirmDialog).show();
+
+        confirmCallbackArgumentCaptor.getValue().accepted();
+
+        verify(dialogFactory).createConfirmDialog(eq(SYNCH_DIALOG_TITLE),
+                                                  eq(changeLocationWidget),
+                                                  confirmCallbackArgumentCaptor.capture(),
+                                                  eq(null));
+        verify(changeConfirmDialog).show();
+
+        confirmCallbackArgumentCaptor.getValue().accepted();
+        verify(sourceStorage).setLocation(newLocation);
+        verify(sourceStorage).setType("github");
+
+        verify(wsRoot).importProject();
+        verify(projectRequest).withBody(rootProject);
+        verify(projectRequest).send();
+    }
+
