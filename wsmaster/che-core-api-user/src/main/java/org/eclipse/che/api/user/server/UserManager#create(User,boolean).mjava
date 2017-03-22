@@ -21,29 +21,8 @@
                                            newUser.getName(),
                                            firstNonNull(newUser.getPassword(), generate("", PASSWORD_LENGTH)),
                                            newUser.getAliases());
-        try {
-            userDao.create(user);
-            profileDao.create(new ProfileImpl(user.getId()));
-            preferencesDao.setPreferences(user.getId(), ImmutableMap.of("temporary", Boolean.toString(isTemporary),
-                                                                        "codenvy:created", Long.toString(currentTimeMillis())));
-        } catch (ConflictException | ServerException x) {
-            // optimistic rollback(won't remove profile if userDao.remove failed)
-            // remove operation is not-found-safe so if any exception
-            // during the either user or profile creation occurs remove all entities
-            // NOTE: this logic must be replaced with transaction management
-            try {
-                userDao.remove(user.getId());
-                profileDao.remove(user.getId());
-                preferencesDao.remove(user.getId());
-            } catch (ServerException rollbackEx) {
-                LOG.error(format("An attempt to clean up resources due to user creation failure was unsuccessful." +
-                                 "Now the system may be in inconsistent state. " +
-                                 "User with id '%s' must not exist",
-                                 user.getId()),
-                          rollbackEx);
-            }
-            throw x;
-        }
+        doCreate(user, isTemporary);
+        eventService.publish(new UserCreatedEvent(user));
         return user;
     }
 
