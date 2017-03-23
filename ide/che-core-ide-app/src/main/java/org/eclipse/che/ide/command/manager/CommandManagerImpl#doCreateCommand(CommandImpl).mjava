@@ -1,0 +1,50 @@
+    /** Does the actual work for command creation. Doesn't notify listeners. */
+    private Promise<CommandImpl> doCreateCommand(CommandImpl command) {
+        final ApplicableContext context = command.getApplicableContext();
+        if (!context.isWorkspaceApplicable() && context.getApplicableProjects().isEmpty()) {
+            return promiseProvider.reject(new Exception("Command has to be applicable to the workspace or at least one project"));
+        }
+
+        final CommandType commandType = commandTypeRegistry.getCommandTypeById(command.getType());
+        if (commandType == null) {
+            return promiseProvider.reject(new Exception("Unknown command type: '" + command.getType() + "'"));
+        }
+
+        final CommandImpl newCommand = new CommandImpl(command);
+        newCommand.setName(getUniqueCommandName(command.getType(), command.getName()));
+
+        final ArrayOf<Promise<?>> commandPromises = Collections.arrayOf();
+
+        if (context.isWorkspaceApplicable()) {
+            Promise<CommandImpl> p = workspaceCommandManager.createCommand(newCommand)
+                                                            .then((Function<CommandImpl, CommandImpl>)arg -> {
+                                                                newCommand.getApplicableContext().setWorkspaceApplicable(true);
+                                                                return newCommand;
+                                                            });
+
+            commandPromises.push(p);
+        }
+
+        for (final String projectPath : context.getApplicableProjects()) {
+            final Project project = getProjectByPath(projectPath);
+
+            if (project == null) {
+                continue;
+            }
+
+            Promise<CommandImpl> p = projectCommandManager.createCommand(project, newCommand)
+                                                          .then((Function<CommandImpl, CommandImpl>)arg -> {
+                                                              newCommand.getApplicableContext().addProject(projectPath);
+                                                              return newCommand;
+                                                          });
+
+            commandPromises.push(p);
+        }
+
+        return promiseProvider.all2(commandPromises)
+                              .then((Function<ArrayOf<?>, CommandImpl>)ignore -> {
+                                  commands.put(newCommand.getName(), newCommand);
+                                  return newCommand;
+                              });
+    }
+

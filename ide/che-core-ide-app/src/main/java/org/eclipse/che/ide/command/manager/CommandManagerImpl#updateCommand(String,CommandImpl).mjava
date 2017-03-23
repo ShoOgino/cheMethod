@@ -1,0 +1,18 @@
+    @Override
+    public Promise<CommandImpl> updateCommand(String name, CommandImpl commandToUpdate) {
+        final CommandImpl existedCommand = commands.get(name);
+
+        if (existedCommand == null) {
+            return promiseProvider.reject(new Exception("Command '" + name + "' does not exist."));
+        }
+
+        return doRemoveCommand(name).thenPromise(aVoid -> doCreateCommand(commandToUpdate)
+                .then((Function<CommandImpl, CommandImpl>)updatedCommand -> {
+                    // listeners should be notified after returning from #updateCommand method
+                    // so let's postpone notification
+                    Scheduler.get().scheduleDeferred(() -> notifyCommandUpdated(existedCommand, updatedCommand));
+
+                    return updatedCommand;
+                }));
+    }
+

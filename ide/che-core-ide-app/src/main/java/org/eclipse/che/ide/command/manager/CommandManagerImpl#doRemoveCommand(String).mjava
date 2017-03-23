@@ -1,0 +1,43 @@
+    /** Removes the command without notifying listeners. */
+    private Promise<Void> doRemoveCommand(String name) {
+        final CommandImpl command = commands.get(name);
+
+        if (command == null) {
+            return promiseProvider.reject(new Exception("Command '" + name + "' does not exist."));
+        }
+
+        final ApplicableContext context = command.getApplicableContext();
+
+        final ArrayOf<Promise<?>> commandPromises = Collections.arrayOf();
+
+        if (context.isWorkspaceApplicable()) {
+            final Promise<Void> p = workspaceCommandManager.removeCommand(name).then((Function<Void, Void>)aVoid -> {
+                command.getApplicableContext().setWorkspaceApplicable(false);
+                return null;
+            });
+
+            commandPromises.push(p);
+        }
+
+        for (final String projectPath : context.getApplicableProjects()) {
+            final Project project = getProjectByPath(projectPath);
+
+            if (project == null) {
+                continue;
+            }
+
+            final Promise<Void> p = projectCommandManager.removeCommand(project, name).then((Function<Void, Void>)aVoid -> {
+                command.getApplicableContext().removeProject(projectPath);
+                return null;
+            });
+
+            commandPromises.push(p);
+        }
+
+        return promiseProvider.all2(commandPromises)
+                              .then((Function<ArrayOf<?>, Void>)arg -> {
+                                  commands.remove(command.getName());
+                                  return null;
+                              });
+    }
+

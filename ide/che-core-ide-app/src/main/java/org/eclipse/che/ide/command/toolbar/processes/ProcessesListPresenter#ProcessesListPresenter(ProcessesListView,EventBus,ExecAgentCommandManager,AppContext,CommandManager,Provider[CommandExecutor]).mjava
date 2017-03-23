@@ -1,0 +1,51 @@
+    @Inject
+    public ProcessesListPresenter(final ProcessesListView view,
+                                  EventBus eventBus,
+                                  final ExecAgentCommandManager execAgentClient,
+                                  final AppContext appContext,
+                                  CommandManager commandManager,
+                                  Provider<CommandExecutor> commandExecutorProvider) {
+        this.view = view;
+        this.eventBus = eventBus;
+        this.execAgentClient = execAgentClient;
+        this.appContext = appContext;
+        this.commandManager = commandManager;
+        this.commandExecutorProvider = commandExecutorProvider;
+
+        view.setDelegate(this);
+
+        runningProcesses = new HashMap<>();
+
+        eventBus.addHandler(WsAgentStateEvent.TYPE, new WsAgentStateHandler() {
+            @Override
+            public void onWsAgentStarted(WsAgentStateEvent event) {
+                updateView();
+            }
+
+            @Override
+            public void onWsAgentStopped(WsAgentStateEvent event) {
+                runningProcesses.clear();
+                view.clearList();
+            }
+        });
+
+        eventBus.addHandler(ProcessStartedEvent.TYPE, event -> addProcessToList(event.getProcessID(),
+                                                                                event.getMachine()));
+
+        eventBus.addHandler(ProcessFinishedEvent.TYPE, event -> {
+            final Process process = runningProcesses.get(event.getProcessID());
+
+            if (process != null) {
+                view.processStopped(process);
+            }
+        });
+
+        eventBus.addHandler(ProcessOutputClosedEvent.TYPE, event -> {
+            final Process process = runningProcesses.get(event.getPid());
+
+            if (process != null) {
+                view.removeProcess(process);
+            }
+        });
+    }
+

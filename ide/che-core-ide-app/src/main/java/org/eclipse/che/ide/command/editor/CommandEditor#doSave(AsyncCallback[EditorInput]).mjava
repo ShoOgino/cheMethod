@@ -1,0 +1,29 @@
+    @Override
+    public void doSave(AsyncCallback<EditorInput> callback) {
+        commandManager.updateCommand(commandNameInitial, editedCommand).then(arg -> {
+            updateDirtyState(false);
+
+            // according to the CommandManager#updateCommand contract
+            // command's name after updating may differ from the proposed name
+            // in order to prevent name duplication
+            editedCommand.setName(arg.getName());
+
+            if (!commandNameInitial.equals(editedCommand.getName())) {
+                input.setFile(nodeFactory.newCommandFileNode(editedCommand));
+            }
+
+            initializePages();
+
+            callback.onSuccess(getEditorInput());
+        }).catchError((Operation<PromiseError>)arg -> {
+            notificationManager.notify(messages.editorMessageUnableToSave(),
+                                       arg.getMessage(),
+                                       WARNING,
+                                       EMERGE_MODE);
+
+            callback.onFailure(arg.getCause());
+
+            throw new OperationException(arg.getMessage());
+        });
+    }
+

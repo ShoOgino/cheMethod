@@ -1,4 +1,3 @@
-    /** {@inheritDoc} */
     @Override
     public void complete(@NotNull final CompleteCallback callback) {
         if (mode == CREATE) {
@@ -9,38 +8,32 @@
                       .then(onComplete(callback))
                       .catchError(onFailure(callback));
         } else if (mode == UPDATE) {
-            appContext.getWorkspaceRoot().getContainer(Path.valueOf(dataObject.getPath())).then(new Operation<Optional<Container>>() {
-                @Override
-                public void apply(Optional<Container> optContainer) throws OperationException {
-                    checkState(optContainer.isPresent(), "Failed to update non existed path");
+            appContext.getWorkspaceRoot()
+                      .getContainer(Path.valueOf(dataObject.getPath()))
+                      .then(optContainer -> {
+                          checkState(optContainer.isPresent(), "Failed to update non existed path");
 
-                    final Container container = optContainer.get();
-                    if (container.getResourceType() == PROJECT) {
-                        ((Project)container).update()
-                                            .withBody(dataObject)
-                                            .send()
-                                            .then(onComplete(callback))
-                                            .catchError(onFailure(callback));
-                    } else if (container.getResourceType() == FOLDER) {
-                        ((Folder)container).toProject()
-                                           .withBody(dataObject)
-                                           .send()
-                                           .then(onComplete(callback))
-                                           .catchError(onFailure(callback));
-                    }
-                }
-            });
+                          final Container container = optContainer.get();
+                          if (container.getResourceType() == PROJECT) {
+                              ((Project)container).update()
+                                                  .withBody(dataObject)
+                                                  .send()
+                                                  .then(onComplete(callback))
+                                                  .catchError(onFailure(callback));
+                          } else if (container.getResourceType() == FOLDER) {
+                              ((Folder)container).toProject()
+                                                 .withBody(dataObject)
+                                                 .send()
+                                                 .then(onComplete(callback))
+                                                 .catchError(onFailure(callback));
+                          }
+                      });
         } else if (mode == IMPORT) {
             appContext.getWorkspaceRoot()
                       .newProject()
                       .withBody(dataObject)
                       .send()
-                      .thenPromise(new Function<Project, Promise<Project>>() {
-                          @Override
-                          public Promise<Project> apply(Project project) throws FunctionException {
-                              return project.update().withBody(dataObject).send();
-                          }
-                      })
+                      .thenPromise(project -> project.update().withBody(dataObject).send())
                       .then(addCommands(callback))
                       .catchError(onFailure(callback));
         }
