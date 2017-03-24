@@ -1,42 +1,20 @@
     Promise<Folder> createFolder(final Container parent, final String name) {
         final Path path = Path.valueOf(name);
 
-        return findResource(parent.getLocation().append(path), true).thenPromise(new Function<Optional<Resource>, Promise<Folder>>() {
-            @Override
-            public Promise<Folder> apply(Optional<Resource> resource) throws FunctionException {
-                checkState(!resource.isPresent(), "Resource already exists");
-                checkArgument(!parent.getLocation().isRoot(), "Failed to create folder in workspace root");
+        return findResource(parent.getLocation().append(path), true).thenPromise(resource -> {
+            checkState(!resource.isPresent(), "Resource already exists");
+            checkArgument(!parent.getLocation().isRoot(), "Failed to create folder in workspace root");
 
-                if (path.segmentCount() == 1) {
-                    checkArgument(checkFolderName(name), "Invalid folder name");
-                }
-
-                return ps.createFolder(parent.getLocation().append(name)).thenPromise(new Function<ItemReference, Promise<Folder>>() {
-                    @Override
-                    public Promise<Folder> apply(final ItemReference reference) throws FunctionException {
-
-                        return getRemoteResources(parent, path.segmentCount(), true)
-                                .then(new Function<Resource[], Folder>() {
-                                    @Override
-                                    public Folder apply(Resource[] resources) throws FunctionException {
-
-                                        final Path referencePath = Path.valueOf(reference.getPath());
-
-                                        for (Resource descendant : resources) {
-                                            if (descendant.getLocation().equals(referencePath)) {
-                                                eventBus.fireEvent(
-                                                        new ResourceChangedEvent(new ResourceDeltaImpl(descendant, ADDED | DERIVED)));
-
-                                                return (Folder)descendant;
-                                            }
-                                        }
-
-                                        throw new IllegalArgumentException("Failed to locate created folder");
-                                    }
-                                });
-                    }
-                });
+            if (path.segmentCount() == 1) {
+                checkArgument(checkFolderName(name), "Invalid folder name");
             }
+
+            return ps.createFolder(parent.getLocation().append(name)).thenPromise(reference -> {
+                final Resource createdFolder = newResourceFrom(reference);
+                store.register(createdFolder);
+
+                return promises.resolve(createdFolder.asFolder());
+            });
         });
     }
 

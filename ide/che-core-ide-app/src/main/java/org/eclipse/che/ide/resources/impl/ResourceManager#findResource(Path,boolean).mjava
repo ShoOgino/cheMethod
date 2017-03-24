@@ -1,38 +1,22 @@
     private Promise<Optional<Resource>> findResource(final Path absolutePath, boolean quiet) {
+        return ps.getItem(absolutePath).thenPromise(itemReference -> {
+            final Resource resource = newResourceFrom(itemReference);
 
-        //search resource in local cache
-        final Optional<Resource> optionalCachedResource = store.getResource(absolutePath);
-        if (optionalCachedResource.isPresent()) {
-            return promises.resolve(optionalCachedResource);
-        }
+            store.dispose(absolutePath, false);
+            store.register(resource);
 
-        //request from server
-        final Path projectPath = Path.valueOf(absolutePath.segment(0)).makeAbsolute();
-        final Optional<Resource> optProject = store.getResource(projectPath);
-        final boolean isPresent = optProject.isPresent();
-
-        checkState(isPresent || quiet, "Resource with path '" + projectPath + "' doesn't exists");
-
-        if (!isPresent) {
-            return promises.resolve(Optional.<Resource>absent());
-        }
-
-        final Resource project = optProject.get();
-        checkState(project.getResourceType() == PROJECT, "Resource with path '" + projectPath + "' isn't a project");
-
-        final int seekDepth = absolutePath.segmentCount() - 1;
-
-        return getRemoteResources((Container)project, seekDepth, true).then(new Function<Resource[], Optional<Resource>>() {
-            @Override
-            public Optional<Resource> apply(Resource[] resources) throws FunctionException {
-                for (Resource resource : resources) {
-                    if (absolutePath.equals(resource.getLocation())) {
-                        return of(resource);
-                    }
-                }
-
-                return absent();
+            if (resource.isProject()) {
+                inspectProject(resource.asProject());
             }
+
+            return promises.resolve(fromNullable(resource));
+        }).catchErrorPromise(arg -> {
+
+            if (!quiet) {
+                throw new IllegalStateException(arg.getCause());
+            }
+
+            return promises.resolve(absent());
         });
     }
 

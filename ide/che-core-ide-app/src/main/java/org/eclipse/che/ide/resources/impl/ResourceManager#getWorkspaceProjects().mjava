@@ -6,46 +6,43 @@
      * @since 4.4.0
      */
     public Promise<Project[]> getWorkspaceProjects() {
-        return ps.getProjects().then(new Function<List<ProjectConfigDto>, Project[]>() {
-            @Override
-            public Project[] apply(List<ProjectConfigDto> dtoConfigs) throws FunctionException {
-                store.clear();
+        return ps.getProjects().then((Function<List<ProjectConfigDto>, Project[]>)dtoConfigs -> {
+            store.clear();
 
-                if (dtoConfigs.isEmpty()) {
-                    cachedConfigs = new ProjectConfigDto[0];
-                    return NO_PROJECTS;
-                }
-
-                cachedConfigs = dtoConfigs.toArray(new ProjectConfigDto[dtoConfigs.size()]);
-
-                Project[] projects = NO_PROJECTS;
-
-                for (ProjectConfigDto config : dtoConfigs) {
-                    if (Path.valueOf(config.getPath()).segmentCount() == 1) {
-                        final Project project = resourceFactory.newProjectImpl(config, ResourceManager.this);
-                        store.register(project);
-
-                        final Optional<ProblemProjectMarker> optionalMarker = getProblemMarker(config);
-
-                        if (optionalMarker.isPresent()) {
-                            project.addMarker(optionalMarker.get());
-                        }
-
-                        Project[] tmpProjects = copyOf(projects, projects.length + 1);
-                        tmpProjects[projects.length] = project;
-                        projects = tmpProjects;
-                    }
-                }
-
-                /* We need to guarantee that list of projects would be sorted by the logic provided in compareTo method implementation. */
-                java.util.Arrays.sort(projects);
-
-                for (Project project : projects) {
-                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(project, ADDED | DERIVED)));
-                }
-
-                return projects;
+            if (dtoConfigs.isEmpty()) {
+                cachedConfigs = new ProjectConfigDto[0];
+                return NO_PROJECTS;
             }
+
+            cachedConfigs = dtoConfigs.toArray(new ProjectConfigDto[dtoConfigs.size()]);
+
+            Project[] projects = NO_PROJECTS;
+
+            for (ProjectConfigDto config : dtoConfigs) {
+                if (Path.valueOf(config.getPath()).segmentCount() == 1) {
+                    final Project project = resourceFactory.newProjectImpl(config, ResourceManager.this);
+                    store.register(project);
+
+                    final Optional<ProblemProjectMarker> optionalMarker = getProblemMarker(config);
+
+                    if (optionalMarker.isPresent()) {
+                        project.addMarker(optionalMarker.get());
+                    }
+
+                    Project[] tmpProjects = copyOf(projects, projects.length + 1);
+                    tmpProjects[projects.length] = project;
+                    projects = tmpProjects;
+                }
+            }
+
+            /* We need to guarantee that list of projects would be sorted by the logic provided in compareTo method implementation. */
+            java.util.Arrays.sort(projects);
+
+            for (Project project : projects) {
+                eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(project, ADDED | DERIVED)));
+            }
+
+            return projects;
         });
     }
 

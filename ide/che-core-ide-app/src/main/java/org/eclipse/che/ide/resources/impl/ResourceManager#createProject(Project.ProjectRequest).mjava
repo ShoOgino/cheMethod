@@ -3,50 +3,39 @@
         checkArgument(typeRegistry.getProjectType(createRequest.getBody().getType()) != null, "Invalid project type");
 
         final Path path = Path.valueOf(createRequest.getBody().getPath());
-        return findResource(path, true).thenPromise(new Function<Optional<Resource>, Promise<Project>>() {
-            @Override
-            public Promise<Project> apply(Optional<Resource> resource) throws FunctionException {
-                if (resource.isPresent()) {
-                    if (resource.get().isProject()) {
-                        throw new IllegalStateException("Project already exists");
-                    } else if (resource.get().isFile()) {
-                        throw new IllegalStateException("File can not be converted to project");
-                    }
-
-                    return update(path, createRequest);
+        return findResource(path, true).thenPromise(resource -> {
+            if (resource.isPresent()) {
+                if (resource.get().isProject()) {
+                    throw new IllegalStateException("Project already exists");
+                } else if (resource.get().isFile()) {
+                    throw new IllegalStateException("File can not be converted to project");
                 }
 
-                final MutableProjectConfig projectConfig = (MutableProjectConfig)createRequest.getBody();
-                final List<NewProjectConfig> projectConfigList = projectConfig.getProjects();
-                projectConfigList.add(asDto(projectConfig));
-                final List<NewProjectConfigDto> configDtoList = asDto(projectConfigList);
-
-                return ps.createBatchProjects(configDtoList).thenPromise(new Function<List<ProjectConfigDto>, Promise<Project>>() {
-                    @Override
-                    public Promise<Project> apply(final List<ProjectConfigDto> configList) throws FunctionException {
-
-                        return ps.getProjects().then(new Function<List<ProjectConfigDto>, Project>() {
-                            @Override
-                            public Project apply(List<ProjectConfigDto> updatedConfiguration) throws FunctionException {
-                                //cache new configs
-                                cachedConfigs = updatedConfiguration.toArray(new ProjectConfigDto[updatedConfiguration.size()]);
-
-                                for (ProjectConfigDto projectConfigDto : configList) {
-                                    if (projectConfigDto.getPath().equals(path.toString())) {
-                                        final Project newResource = resourceFactory.newProjectImpl(projectConfigDto, ResourceManager.this);
-                                        store.register(newResource);
-                                        eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(newResource, ADDED | DERIVED)));
-
-                                        return newResource;
-                                    }
-                                }
-
-                                throw new IllegalStateException("Created project is not found");
-                            }
-                        });
-                    }
-                });
+                return update(path, createRequest);
             }
+
+            final MutableProjectConfig projectConfig = (MutableProjectConfig)createRequest.getBody();
+            final List<NewProjectConfig> projectConfigList = projectConfig.getProjects();
+            projectConfigList.add(asDto(projectConfig));
+            final List<NewProjectConfigDto> configDtoList = asDto(projectConfigList);
+
+            return ps.createBatchProjects(configDtoList).thenPromise(
+                    configList -> ps.getProjects().then((Function<List<ProjectConfigDto>, Project>)updatedConfiguration -> {
+                        //cache new configs
+                        cachedConfigs = updatedConfiguration.toArray(new ProjectConfigDto[updatedConfiguration.size()]);
+
+                        for (ProjectConfigDto projectConfigDto : configList) {
+                            if (projectConfigDto.getPath().equals(path.toString())) {
+                                final Project newResource = resourceFactory.newProjectImpl(projectConfigDto, ResourceManager.this);
+                                store.register(newResource);
+                                eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(newResource, ADDED | DERIVED)));
+
+                                return newResource;
+                            }
+                        }
+
+                        throw new IllegalStateException("Created project is not found");
+                    }));
         });
     }
 

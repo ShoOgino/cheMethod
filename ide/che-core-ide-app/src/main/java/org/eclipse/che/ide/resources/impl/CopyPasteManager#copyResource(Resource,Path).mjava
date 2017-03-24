@@ -1,101 +1,58 @@
     private Promise<Void> copyResource(final Resource resource, final Path destination) {
         //simple copy without overwriting
-        return resource.copy(destination).thenPromise(new Function<Resource, Promise<Void>>() {
-            @Override
-            public Promise<Void> apply(Resource resource) throws FunctionException {
-                eventBus.fireEvent(new RevealResourceEvent(resource));
-                return promises.resolve(null);
-            }
-        }).catchErrorPromise(new Function<PromiseError, Promise<Void>>() {
-            @Override
-            public Promise<Void> apply(final PromiseError error) throws FunctionException {
+        return resource.copy(destination)
+                       .thenPromise((Function<Resource, Promise<Void>>)resource1 -> promises.resolve(null))
+                       .catchErrorPromise(error -> {
 
-                //resource may already exists
-                if (error.getMessage().contains("exists")) {
+                           //resource may already exists
+                           if (error.getMessage().contains("exists")) {
 
-                    //create dialog with overwriting option
-                    return createFromAsyncRequest(new RequestCall<Void>() {
-                        @Override
-                        public void makeCall(final AsyncCallback<Void> callback) {
+                               //create dialog with overwriting option
+                               return createFromAsyncRequest((RequestCall<Void>)callback -> {
 
-                            //handle overwrite operation
-                            final ConfirmCallback overwrite = new ConfirmCallback() {
-                                @Override
-                                public void accepted() {
+                                   //handle overwrite operation
+                                   final ConfirmCallback overwrite = () -> {
 
-                                    //copy with overwriting
-                                    resource.copy(destination, true).then(new Operation<Resource>() {
-                                        @Override
-                                        public void apply(Resource ignored) throws OperationException {
-                                            callback.onSuccess(null);
-                                        }
-                                    }).catchError(new Operation<PromiseError>() {
-                                        @Override
-                                        public void apply(PromiseError error) throws OperationException {
-                                            callback.onFailure(error.getCause());
-                                        }
-                                    });
-                                }
-                            };
+                                       //copy with overwriting
+                                       resource.copy(destination, true).then(ignored -> {
+                                           callback.onSuccess(null);
+                                       }).catchError(error1 -> {
+                                           callback.onFailure(error1.getCause());
+                                       });
+                                   };
 
-                            //skip this resource
-                            final ConfirmCallback skip = new ConfirmCallback() {
-                                @Override
-                                public void accepted() {
-                                    callback.onSuccess(null);
-                                }
-                            };
+                                   //skip this resource
+                                   final ConfirmCallback skip = () -> callback.onSuccess(null);
 
-                            //change destination name
-                            final ConfirmCallback rename = new ConfirmCallback() {
-                                @Override
-                                public void accepted() {
-                                    dialogFactory.createInputDialog("Enter new name", "Enter new name",
-                                                                    new InputCallback() {
-                                                                        @Override
-                                                                        public void accepted(String value) {
-                                                                            final Path newPath = destination.parent().append(value);
+                                   //change destination name
+                                   final ConfirmCallback rename = () ->
+                                           dialogFactory.createInputDialog("Enter new name", "Enter new name",
+                                                                           value -> {
+                                                                               final Path newPath = destination.parent().append(value);
 
-                                                                            copyResource(resource, newPath).then(new Operation<Void>() {
-                                                                                @Override
-                                                                                public void apply(Void result) throws OperationException {
-                                                                                    callback.onSuccess(result);
-                                                                                }
-                                                                            }).catchError(new Operation<PromiseError>() {
-                                                                                @Override
-                                                                                public void apply(PromiseError error)
-                                                                                        throws OperationException {
-                                                                                    callback.onFailure(error.getCause());
-                                                                                }
-                                                                            });
-                                                                        }
-                                                                    },
-                                                                    new CancelCallback() {
-                                                                        @Override
-                                                                        public void cancelled() {
+                                                                               copyResource(resource, newPath)
+                                                                                       .then(callback::onSuccess)
+                                                                                       .catchError(error1 -> {
+                                                                                           callback.onFailure(error1.getCause());
+                                                                                       });
+                                                                           },
+                                                                           null).show();
 
-                                                                        }
-                                                                    }).show();
-                                }
-                            };
+                                   dialogFactory.createChoiceDialog("Error",
+                                                                    error.getMessage(),
+                                                                    "Overwrite",
+                                                                    "Skip",
+                                                                    "Change Name",
+                                                                    overwrite,
+                                                                    skip,
+                                                                    rename).show();
+                               });
+                           } else {
+                               //notify user about failed copying
+                               notificationManager.notify("Error copying resource", error.getMessage(), FAIL, FLOAT_MODE);
 
-                            dialogFactory.createChoiceDialog("Error",
-                                                             error.getMessage(),
-                                                             "Overwrite",
-                                                             "Skip",
-                                                             "Change Name",
-                                                             overwrite,
-                                                             skip,
-                                                             rename).show();
-                        }
-                    });
-                } else {
-                    //notify user about failed copying
-                    notificationManager.notify("Error copying resource", error.getMessage(), FAIL, FLOAT_MODE);
-
-                    return promises.resolve(null);
-                }
-            }
-        });
+                               return promises.resolve(null);
+                           }
+                       });
     }
 

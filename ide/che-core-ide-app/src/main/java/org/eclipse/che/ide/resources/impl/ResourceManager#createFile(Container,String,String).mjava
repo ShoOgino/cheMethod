@@ -1,38 +1,16 @@
     Promise<File> createFile(final Container parent, final String name, final String content) {
         checkArgument(checkFileName(name), "Invalid file name");
 
-        return findResource(parent.getLocation().append(name), true).thenPromise(new Function<Optional<Resource>, Promise<File>>() {
-            @Override
-            public Promise<File> apply(Optional<Resource> resource) throws FunctionException {
-                checkState(!resource.isPresent(), "Resource already exists");
-                checkArgument(!parent.getLocation().isRoot(), "Failed to create file in workspace root");
+        return findResource(parent.getLocation().append(name), true).thenPromise(resource -> {
+            checkState(!resource.isPresent(), "Resource already exists");
+            checkArgument(!parent.getLocation().isRoot(), "Failed to create file in workspace root");
 
-                return ps.createFile(parent.getLocation().append(name), content).thenPromise(new Function<ItemReference, Promise<File>>() {
-                    @Override
-                    public Promise<File> apply(final ItemReference reference) throws FunctionException {
+            return ps.createFile(parent.getLocation().append(name), content).thenPromise(reference -> {
+                final Resource createdFile = newResourceFrom(reference);
+                store.register(createdFile);
 
-                        return getRemoteResources(parent, DEPTH_ONE, true)
-                                .then(new Function<Resource[], File>() {
-                                    @Override
-                                    public File apply(Resource[] resources) throws FunctionException {
-
-                                        final Path referencePath = Path.valueOf(reference.getPath());
-
-                                        for (Resource descendant : resources) {
-                                            if (descendant.getLocation().equals(referencePath)) {
-                                                eventBus.fireEvent(
-                                                        new ResourceChangedEvent(new ResourceDeltaImpl(descendant, ADDED | DERIVED)));
-
-                                                return (File)descendant;
-                                            }
-                                        }
-
-                                        throw new IllegalArgumentException("Failed to locate created file");
-                                    }
-                                });
-                    }
-                });
-            }
+                return promises.resolve(createdFile.asFile());
+            });
         });
     }
 

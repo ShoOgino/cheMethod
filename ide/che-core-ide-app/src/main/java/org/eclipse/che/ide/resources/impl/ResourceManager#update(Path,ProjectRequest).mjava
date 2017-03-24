@@ -38,47 +38,44 @@
                                                .withAttributes(projectConfig.getAttributes())
                                                .withSource(sourceDto);
 
-        return ps.updateProject(dto).thenPromise(new Function<ProjectConfigDto, Promise<Project>>() {
-            @Override
-            public Promise<Project> apply(ProjectConfigDto reference) throws FunctionException {
+        return ps.updateProject(dto).thenPromise(reference -> {
 
-                /* Note: After update, project may become to be other type,
-                   e.g. blank -> java or maven, or ant, or etc. And this may
-                   cause sub-project creations. Simultaneously on the client
-                   side there is outdated information about sub-projects, so
-                   we need to get updated project list. */
+            /* Note: After update, project may become to be other type,
+               e.g. blank -> java or maven, or ant, or etc. And this may
+               cause sub-project creations. Simultaneously on the client
+               side there is outdated information about sub-projects, so
+               we need to get updated project list. */
 
-                //dispose outdated resource
-                final Optional<Resource> outdatedResource = store.getResource(path);
+            //dispose outdated resource
+            final Optional<Resource> outdatedResource = store.getResource(path);
 
-                checkState(outdatedResource.isPresent(), "Outdated resource wasn't found");
+            checkState(outdatedResource.isPresent(), "Outdated resource wasn't found");
 
-                final Resource resource = outdatedResource.get();
+            final Resource resource = outdatedResource.get();
 
-                checkState(resource instanceof Container, "Outdated resource is not a container");
+            checkState(resource instanceof Container, "Outdated resource is not a container");
 
-                Container container = (Container)resource;
+            Container container = (Container)resource;
 
-                if (resource instanceof Folder) {
-                    Container parent = resource.getParent();
-                    checkState(parent != null, "Parent of the resource wasn't found");
-                    container = parent;
-                }
-
-                return synchronize(container).then(new Function<Resource[], Project>() {
-                    @Override
-                    public Project apply(Resource[] synced) throws FunctionException {
-                        final Optional<Resource> updatedProject = store.getResource(path);
-
-                        checkState(updatedProject.isPresent(), "Updated resource is not present");
-                        checkState(updatedProject.get().isProject(), "Updated resource is not a project");
-
-                        eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(updatedProject.get(), UPDATED)));
-
-                        return (Project)updatedProject.get();
-                    }
-                });
+            if (resource instanceof Folder) {
+                Container parent = resource.getParent();
+                checkState(parent != null, "Parent of the resource wasn't found");
+                container = parent;
             }
+
+            return synchronize(container).then(new Function<Resource[], Project>() {
+                @Override
+                public Project apply(Resource[] synced) throws FunctionException {
+                    final Optional<Resource> updatedProject = store.getResource(path);
+
+                    checkState(updatedProject.isPresent(), "Updated resource is not present");
+                    checkState(updatedProject.get().isProject(), "Updated resource is not a project");
+
+                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(updatedProject.get(), UPDATED)));
+
+                    return (Project)updatedProject.get();
+                }
+            });
         });
     }
 
