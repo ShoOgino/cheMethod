@@ -1,0 +1,62 @@
+    @Test
+    public void shouldAddExecAgentOnSaveFactoryFromFormData() throws Exception {
+        final Factory factory = createFactory();
+        final FactoryDto factoryDto = asDto(factory, user);
+
+        EnvironmentDto environment = newDto(EnvironmentDto.class);
+        ExtendedMachineDto machine = newDto(ExtendedMachineDto.class);
+        factoryDto.getWorkspace().setEnvironments(ImmutableMap.of("e1", cloneDto(environment).withMachines(
+                ImmutableMap.of("m1", cloneDto(machine).withAgents(asList("org.eclipse.che.terminal",
+                                                                          "org.eclipse.che.ls.php",
+                                                                          "org.eclipse.che.ls.json")),
+                                "m2", cloneDto(machine).withAgents(asList("org.eclipse.che.ls.php",
+                                                                          "org.eclipse.che.terminal",
+                                                                          "org.eclipse.che.ls.json")),
+                                "m3", cloneDto(machine).withAgents(asList("org.eclipse.che.ls.php",
+                                                                          "org.eclipse.che.ls.json")))
+                                                                  ),
+                                                                  "e2", cloneDto(environment).withMachines(
+                        ImmutableMap.of("m4", cloneDto(machine).withAgents(asList("org.eclipse.che.terminal",
+                                                                                  "org.eclipse.che.ls.php",
+                                                                                  "org.eclipse.che.ls.json")),
+                                        "m5", cloneDto(machine).withAgents(asList("org.eclipse.che.ls.php",
+                                                                                  "org.eclipse.che.ls.json")))
+                )));
+        Map<String, EnvironmentDto> expectedEnvs = ImmutableMap.of("e1", cloneDto(environment).withMachines(
+                ImmutableMap.of("m1", cloneDto(machine).withAgents(asList("org.eclipse.che.terminal",
+                                                                          "org.eclipse.che.ls.php",
+                                                                          "org.eclipse.che.ls.json",
+                                                                          "org.eclipse.che.exec")),
+                                "m2", cloneDto(machine).withAgents(asList("org.eclipse.che.ls.php",
+                                                                          "org.eclipse.che.terminal",
+                                                                          "org.eclipse.che.ls.json",
+                                                                          "org.eclipse.che.exec")),
+                                "m3", cloneDto(machine).withAgents(asList("org.eclipse.che.ls.php",
+                                                                          "org.eclipse.che.ls.json")))
+                                                                   ),
+                                                                   "e2", cloneDto(environment).withMachines(
+                        ImmutableMap.of("m4", cloneDto(machine).withAgents(asList("org.eclipse.che.terminal",
+                                                                                  "org.eclipse.che.ls.php",
+                                                                                  "org.eclipse.che.ls.json",
+                                                                                  "org.eclipse.che.exec")),
+                                        "m5", cloneDto(machine).withAgents(asList("org.eclipse.che.ls.php",
+                                                                                  "org.eclipse.che.ls.json")))
+                ));
+
+        when(factoryManager.saveFactory(any(FactoryDto.class),
+                                        anySetOf(FactoryImage.class)))
+                .thenAnswer(invocation -> new FactoryImpl((Factory)invocation.getArguments()[0], null));
+        doReturn(factoryDto).when(factoryBuilderSpy).build(any(InputStream.class));
+
+        final Response response = given().auth()
+                                         .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+                                         .multiPart("factory", JsonHelper.toJson(factoryDto), APPLICATION_JSON)
+//                                         .expect()
+//                                         .statusCode(200)
+                                         .when()
+                                         .post(SERVICE_PATH);
+        final FactoryDto result = getFromResponse(response, FactoryDto.class);
+        Map<String, EnvironmentDto> actualEnvs = result.getWorkspace().getEnvironments();
+        assertEquals(actualEnvs, expectedEnvs);
+    }
+
