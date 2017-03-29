@@ -1,0 +1,37 @@
+    private void restoreCreateEditor(final VirtualFile resourceFile, JsonObject file, final EditorPartStack editorPartStack,
+                                     final AsyncCallback<Void> openCallback,
+                                     final Map<EditorPartPresenter, EditorPartStack> activeEditors) {
+        String providerId = file.getString("EDITOR_PROVIDER");
+        final OpenEditorCallback callback;
+        if (file.hasKey("CURSOR_OFFSET") && file.hasKey("TOP_VISIBLE_LINE")) {
+            final int cursorOffset = (int)file.getNumber("CURSOR_OFFSET");
+            final int topLine = (int)file.getNumber("TOP_VISIBLE_LINE");
+            callback = new RestoreStateEditorCallBack(cursorOffset, topLine);
+        } else {
+            callback = new OpenEditorCallbackImpl();
+        }
+        final boolean active = file.hasKey("ACTIVE") && file.getBoolean("ACTIVE");
+
+        final EditorProvider provider = editorRegistry.findEditorProviderById(providerId);
+        if (provider instanceof AsyncEditorProvider) {
+            ((AsyncEditorProvider)provider).createEditor(resourceFile).then(new Operation<EditorPartPresenter>() {
+                @Override
+                public void apply(EditorPartPresenter arg) throws OperationException {
+                    restoreInitEditor(resourceFile, callback, fileTypeRegistry.getFileTypeByFile(resourceFile), arg, provider,
+                                      editorPartStack);
+                    if (active) {
+                        activeEditors.put(arg, editorPartStack);
+                    }
+
+                }
+            });
+        } else {
+            EditorPartPresenter editor = provider.getEditor();
+            restoreInitEditor(resourceFile, callback, fileTypeRegistry.getFileTypeByFile(resourceFile), editor, provider, editorPartStack);
+            if (active) {
+                activeEditors.put(editor, editorPartStack);
+            }
+        }
+        openCallback.onSuccess(null);
+    }
+
