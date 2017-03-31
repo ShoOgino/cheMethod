@@ -1,0 +1,45 @@
+    /** Asynchronously starts given workspace. */
+    private void startAsync(WorkspaceImpl workspace,
+                            String envName,
+                            Map <String, String> options) throws ConflictException,
+                                                    NotFoundException,
+                                                    ServerException {
+        if (envName != null && !workspace.getConfig().getEnvironments().containsKey(envName)) {
+            throw new NotFoundException(format("Workspace '%s:%s' doesn't contain environment '%s'",
+                                               workspace.getNamespace(),
+                                               workspace.getConfig().getName(),
+                                               envName));
+        }
+        workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
+        workspaceDao.update(workspace);
+        final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
+
+        states.put(workspace.getId(), WorkspaceStatus.STARTING);
+        // barrier, safely doesn't allow to start the workspace twice
+        final Future<Runtime> descriptor = runtimes.startAsync(workspace, env, options);
+
+        sharedPool.execute(() -> {
+            try {
+                descriptor.get();
+
+                states.put(workspace.getId(), WorkspaceStatus.RUNNING);
+
+                LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
+                         workspace.getNamespace(),
+                         workspace.getConfig().getName(),
+                         workspace.getId(),
+                         sessionUserNameOr("undefined"));
+            } catch (Exception ex) {
+                if (workspace.isTemporary()) {
+                    removeWorkspaceQuietly(workspace);
+                }
+                for (Throwable cause : getCausalChain(ex)) {
+                    if (cause instanceof SourceNotFoundException) {
+                        return;
+                    }
+                }
+                LOG.error(ex.getLocalizedMessage(), ex);
+            }
+        });
+    }
+

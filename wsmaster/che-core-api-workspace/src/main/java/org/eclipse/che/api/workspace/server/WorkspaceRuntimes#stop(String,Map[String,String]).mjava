@@ -1,0 +1,41 @@
+    /**
+     * Stops running workspace runtime.
+     *
+     * <p>Stops environment in an implementation specific way.
+     * During the stop of the workspace its runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status.
+     * Workspace may be stopped only if its status is {@link WorkspaceStatus#RUNNING}.
+     *
+     * @param workspaceId
+     *         identifier of workspace which should be stopped
+     * @throws NotFoundException
+     *         when workspace with specified identifier is not running
+     * @throws ServerException
+     *         when any error occurs during workspace stopping
+     * @throws ConflictException
+     *         when running workspace status is different from {@link WorkspaceStatus#RUNNING}
+     * @see WorkspaceStatus#STOPPING
+     */
+    public void stop(String workspaceId, Map<String, String> options) throws NotFoundException, ServerException, ConflictException {
+
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withWorkspaceId(workspaceId)
+                                        .withPrevStatus(WorkspaceStatus.RUNNING)
+                                        .withStatus(WorkspaceStatus.STOPPING)
+                                        .withEventType(EventType.STOPPING));
+
+        InternalRuntime runtime = runtimes.get(workspaceId);
+        if (runtime == null)
+            throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
+
+        runtime.getContext().stop(options);
+
+        runtimes.remove(workspaceId);
+
+        final WorkspaceStatusEvent event = DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                                     .withWorkspaceId(workspaceId)
+                                                     .withPrevStatus(WorkspaceStatus.STOPPING);
+        event.setStatus(WorkspaceStatus.STOPPED);
+        event.setEventType(EventType.STOPPED);
+        eventsService.publish(event);
+    }
+

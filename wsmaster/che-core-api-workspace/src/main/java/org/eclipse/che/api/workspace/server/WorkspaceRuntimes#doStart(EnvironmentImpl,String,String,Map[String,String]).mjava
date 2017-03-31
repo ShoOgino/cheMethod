@@ -1,0 +1,56 @@
+    private void doStart(EnvironmentImpl environment,
+                         String workspaceId, String envName,
+                         Map<String, String> options) throws ApiException, ValidationException, IOException {
+
+        requireNonNull(environment, "Environment should not be null " + workspaceId);
+        requireNonNull(environment.getRecipe(), "OldRecipe should not be null " + workspaceId);
+        requireNonNull(environment.getRecipe().getType(), "OldRecipe type should not be null " + workspaceId);
+
+        RuntimeInfrastructure infra = infraByRecipe.get(environment.getRecipe().getType());
+        if (infra == null)
+            throw new NotFoundException("No infrastructure found of type: " + environment.getRecipe().getType() +
+                                        " for workspace: " + workspaceId);
+
+        if (runtimes.containsKey(workspaceId))
+            throw new ConflictException("Could not start workspace '" + workspaceId + "' because its status is 'RUNNING'");
+
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withWorkspaceId(workspaceId)
+                                        .withStatus(WorkspaceStatus.STARTING)
+                                        .withEventType(EventType.STARTING)
+                                        .withPrevStatus(WorkspaceStatus.STOPPED));
+
+
+        // Start environment
+        //MessageConsumer<MachineLogMessage> logger = getEnvironmentLogger(workspaceId);
+        if (options == null)
+            options = new HashMap<>();
+
+        Subject subject = EnvironmentContext.getCurrent().getSubject();
+        RuntimeIdentity runtimeId = new RuntimeIdentity(workspaceId, envName, subject.getUserName());
+
+        InternalRuntime runtime = infra.prepare(runtimeId, environment).start(options);
+
+        if (runtime == null)
+            throw new ServerException("SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
+                                      + RuntimeInfrastructure.class);
+
+
+//        // Phase 2: start agents if any
+//        for (Map.Entry<String, MachineConfigImpl> machineEntry : environment.getMachines().entrySet()) {
+//            if (!machineEntry.getValue().getAgents().isEmpty()) {
+//                Machine machine = runtime.getMachines().get(machineEntry.getKey());
+//                // TODO
+//                // installAgents(machine);
+//            }
+//        }
+
+        runtimes.put(workspaceId, runtime);
+        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                        .withWorkspaceId(workspaceId)
+                                        .withStatus(WorkspaceStatus.RUNNING)
+                                        .withEventType(EventType.RUNNING)
+                                        .withPrevStatus(WorkspaceStatus.STARTING));
+
+    }
+

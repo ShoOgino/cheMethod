@@ -1,0 +1,36 @@
+    @Inject
+    public WorkspaceRuntimes(EventService eventsService,
+                             Set<RuntimeInfrastructure> infrastructures,
+                             WorkspaceSharedPool sharedPool) {
+
+
+        this.eventsService = eventsService;
+        this.runtimes = new ConcurrentHashMap<>();
+
+        this.infraByRecipe = new ConcurrentHashMap<>();
+
+        //TODO move it to post-create?
+        for (RuntimeInfrastructure infra : infrastructures) {
+
+            // If several entries - last wins (TODO should we throw conflict exception?)
+            for (String type : infra.getRecipeTypes())
+                infraByRecipe.put(type, infra);
+
+            // try to recover from infrastructures
+            try {
+                for (RuntimeIdentity id : infra.getIdentities()) {
+                    runtimes.put(id.getWorkspaceId(), validate(infra.getRuntime(id)));
+                }
+            } catch (NotSupportedException e) {
+                LOG.warn("Not recoverable infrastructure: " + infra.getName() + " Reason: " + e.getMessage());
+            }
+
+        }
+        //
+
+        // 16 - experimental value for stripes count, it comes from default hash map size
+        this.locks = new StripedLocks(16);
+        this.sharedPool = sharedPool;
+
+    }
+
