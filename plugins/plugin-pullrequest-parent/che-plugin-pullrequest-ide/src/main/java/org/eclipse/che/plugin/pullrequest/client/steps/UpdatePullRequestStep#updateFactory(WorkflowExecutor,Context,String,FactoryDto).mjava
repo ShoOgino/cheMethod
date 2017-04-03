@@ -1,0 +1,32 @@
+    private Promise<FactoryDto> updateFactory(final WorkflowExecutor executor,
+                                           final Context context,
+                                           final String factoryId,
+                                           final FactoryDto currentFactory) {
+        return factoryService.updateFactory(factoryId, currentFactory)
+                             .then(new Operation<FactoryDto>() {
+                                 @Override
+                                 public void apply(FactoryDto updatedFactory) throws OperationException {
+                                     context.setReviewFactoryUrl(FactoryHelper.getAcceptFactoryUrl(updatedFactory));
+                                     executor.done(UpdatePullRequestStep.this, context);
+                                 }
+                             })
+                             .catchError(new Operation<PromiseError>() {
+                                 @Override
+                                 public void apply(PromiseError error) throws OperationException {
+                                     createNewFactory(executor,
+                                                      context,
+                                                      currentFactory,
+                                                      new Operation<FactoryDto>() {
+                                                          @Override
+                                                          public void apply(FactoryDto factory) throws OperationException {
+                                                              final PullRequest pull = context.getPullRequest();
+                                                              doUpdate(executor,
+                                                                       context,
+                                                                       pull,
+                                                                       pull.getDescription().replaceAll(factoryId, factory.getId()));
+                                                          }
+                                                      });
+                                 }
+                             });
+    }
+

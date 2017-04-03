@@ -1,0 +1,30 @@
+    @Override
+    public void execute(final WorkflowExecutor executor, final Context context) {
+        context.getVcsHostingService()
+               .getPullRequest(context.getOriginRepositoryOwner(),
+                               context.getOriginRepositoryName(),
+                               context.getHostUserLogin(),
+                               context.getWorkBranchName())
+               .then(new Operation<PullRequest>() {
+                   @Override
+                   public void apply(final PullRequest pr) throws OperationException {
+                       notificationManager.notify(messages.stepDetectPrExistsTitle(),
+                                                  messages.stepDetectPrExistsTitle(context.getWorkBranchName()),
+                                                  StatusNotification.Status.FAIL,
+                                                  FLOAT_MODE);
+                       context.setPullRequest(pr);
+                       context.setPullRequestIssueNumber(pr.getNumber());
+                       context.setForkedRepositoryName(context.getOriginRepositoryName());
+                       context.setStatus(READY_TO_UPDATE_PR);
+                       executor.fail(DetectPullRequestStep.this, context, messages.stepDetectPrExistsTitle());
+                   }
+               })
+               .catchError(new Operation<PromiseError>() {
+                   @Override
+                   public void apply(final PromiseError error) throws OperationException {
+                       // keep going if pr already exists
+                       executor.done(DetectPullRequestStep.this, context);
+                   }
+               });
+    }
+

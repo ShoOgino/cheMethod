@@ -1,0 +1,31 @@
+    /**
+     * Import source projects and if it's already exist in workspace
+     * then show warning notification
+     *
+     * @param projectsToImport
+     *         set of project names that already exist in workspace and will be imported on file system
+     */
+    private void importProjects(Set<String> projectsToImport) {
+        final List<Promise<Project>> promises = new ArrayList<>();
+        for (final ProjectConfigDto projectConfig : factory.getWorkspace().getProjects()) {
+            if (projectsToImport.contains(projectConfig.getName())) {
+                promises.add(startImport(Path.valueOf(projectConfig.getPath()), projectConfig.getSource()).thenPromise(
+                        new Function<Project, Promise<Project>>() {
+                            @Override
+                            public Promise<Project> apply(Project project) throws FunctionException {
+                                return project.update().withBody(projectConfig).send();
+                            }
+                        }));
+            }
+        }
+
+        Promises.all(promises.toArray(new Promise<?>[promises.size()]))
+                .then(arg -> {
+                    callback.onSuccess(null);
+                })
+                .catchError(promiseError -> {
+                    // If it is unable to import any number of projects then factory import status will be success anyway
+                    callback.onSuccess(null);
+                });
+    }
+

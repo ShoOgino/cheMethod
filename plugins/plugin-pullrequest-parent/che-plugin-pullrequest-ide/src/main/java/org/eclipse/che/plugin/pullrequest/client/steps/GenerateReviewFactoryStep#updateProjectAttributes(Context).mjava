@@ -1,0 +1,26 @@
+    private Function<FactoryDto, FactoryDto> updateProjectAttributes(final Context context) {
+        return new Function<FactoryDto, FactoryDto>() {
+            @Override
+            public FactoryDto apply(FactoryDto factory) throws FunctionException {
+                final Optional<ProjectConfigDto> projectOpt = FluentIterable.from(factory.getWorkspace().getProjects())
+                                                                            .filter(new Predicate<ProjectConfigDto>() {
+                                                                                @Override
+                                                                                public boolean apply(ProjectConfigDto project) {
+                                                                                    return project.getName()
+                                                                                                  .equals(context.getProject().getName());
+                                                                                }
+                                                                            }).first();
+                if (projectOpt.isPresent()) {
+                    final ProjectConfigDto project = projectOpt.get();
+                    project.getSource().getParameters().put("branch", context.getWorkBranchName());
+
+                    if (context.isForkAvailable()) {
+                        project.getSource().setLocation(context.getVcsHostingService()
+                               .makeHttpRemoteUrl(context.getHostUserLogin(), context.getOriginRepositoryName()));
+                    }
+                }
+                return factory;
+            }
+        };
+    }
+

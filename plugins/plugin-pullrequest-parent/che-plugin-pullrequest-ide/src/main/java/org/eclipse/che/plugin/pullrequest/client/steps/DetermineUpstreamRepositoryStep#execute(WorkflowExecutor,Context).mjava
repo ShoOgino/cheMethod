@@ -1,0 +1,27 @@
+    @Override
+    public void execute(final WorkflowExecutor executor, final Context context) {
+        final VcsHostingService hostingService = context.getVcsHostingService();
+        hostingService.getRepository(context.getOriginRepositoryOwner(), context.getOriginRepositoryName())
+                      .then(new Operation<Repository>() {
+                          @Override
+                          public void apply(Repository repo) throws OperationException {
+                              if (repo.isFork() && context.getOriginRepositoryOwner().equalsIgnoreCase(context.getHostUserLogin())) {
+                                  final String upstreamUrl = repo.getParent().getCloneUrl();
+                                  context.setUpstreamRepositoryName(hostingService.getRepositoryNameFromUrl(upstreamUrl));
+                                  context.setUpstreamRepositoryOwner(hostingService.getRepositoryOwnerFromUrl(upstreamUrl));
+                              } else {
+                                  context.setUpstreamRepositoryName(context.getOriginRepositoryName());
+                                  context.setUpstreamRepositoryOwner(context.getOriginRepositoryOwner());
+                              }
+                              executor.done(DetermineUpstreamRepositoryStep.this, context);
+                          }
+                      })
+                      .catchError(new Operation<PromiseError>() {
+                          @Override
+                          public void apply(PromiseError error) throws OperationException {
+                              notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
+                              executor.fail(DetermineUpstreamRepositoryStep.this, context, error.getMessage());
+                          }
+                      });
+    }
+

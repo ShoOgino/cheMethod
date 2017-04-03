@@ -1,0 +1,32 @@
+    /**
+     * Should be invoked when step execution is failed.
+     *
+     * @param step
+     *         step which execution is failed
+     * @param context
+     *         execution context
+     * @param message
+     *         error message
+     */
+    public void fail(final Step step, final Context context, final String message) {
+        // restore context status from the processing to stable
+        // the simple implementation of the status spec
+        Log.error(getClass(), "Exec error " + step.getClass() + ", msg: " + message);
+        switch (context.getStatus()) {
+            case INITIALIZING:
+                invalidateContext(context.getProject());
+                break;
+            case CREATING_PR:
+                context.setStatus(READY_TO_CREATE_PR);
+                break;
+            case UPDATING_PR:
+                context.setStatus(READY_TO_UPDATE_PR);
+                break;
+            default:
+                break;
+        }
+        if (!(step instanceof SyntheticStep)) {
+            eventBus.fireEvent(new StepEvent(context, step, false, message));
+        }
+    }
+

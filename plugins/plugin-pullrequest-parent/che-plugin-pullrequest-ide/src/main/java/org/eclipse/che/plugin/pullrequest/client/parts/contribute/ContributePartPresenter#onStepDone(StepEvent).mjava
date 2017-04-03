@@ -1,0 +1,44 @@
+    @Override
+    public void onStepDone(final StepEvent event) {
+        final Class<? extends Step> stepClass = event.getStep().getClass();
+        final Context context = event.getContext();
+
+        // if it is necessarily to display stages on this step
+        if (getProvider(context).getDisplayStagesType(context) == stepClass) {
+            context.getViewState().setStages(getProvidedStages(context));
+            updateView(context, new StatusSectionUpdate());
+        }
+
+        // if current step is in list of provided stages types
+        // then this step is done and view should be affected
+        if (!context.getViewState().getStages().isEmpty() && getProvidedStepDoneTypes(context).contains(stepClass)) {
+            context.getViewState().setStageDone(true);
+            updateView(context, new DisplayCurrentStepResultUpdate(true));
+        } else if (stepClass == WorkflowExecutor.ChangeContextStatusStep.class) {
+            if (context.getStatus() == WorkflowStatus.READY_TO_UPDATE_PR) {
+                final List<ViewUpdate> updates = new ArrayList<>();
+                // Display status message
+                final String message;
+                if (context.getPreviousStatus() == WorkflowStatus.CREATING_PR) {
+                    message = messages.contributePartStatusSectionContributionCreatedMessage();
+                } else {
+                    message = messages.contributePartStatusSectionContributionUpdatedMessage();
+                }
+                context.getViewState().setStatusMessage(message, false);
+                updates.add(new StatusMessageUpdate());
+
+                // Contribution button
+                updates.add(new ContributionButtonUpdate(messages));
+
+                // Config panel
+                updates.add(new ContributionTitleUpdate());
+                updates.add(new ContributionCommentUpdate());
+
+                // New contribution panel
+                updates.add(new NewContributionPanelUpdate());
+
+                updateView(context, updates);
+            }
+        }
+    }
+

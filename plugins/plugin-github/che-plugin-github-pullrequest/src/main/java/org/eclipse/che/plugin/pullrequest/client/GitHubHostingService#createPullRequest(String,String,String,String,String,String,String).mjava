@@ -1,0 +1,41 @@
+    @Override
+    public Promise<PullRequest> createPullRequest(final String owner,
+                                                  final String repository,
+                                                  final String username,
+                                                  final String headBranchName,
+                                                  final String baseBranchName,
+                                                  final String title,
+                                                  final String body) {
+        final String brName = username + ":" + headBranchName;
+        final GitHubPullRequestCreationInput input = dtoFactory.createDto(GitHubPullRequestCreationInput.class)
+                                                               .withTitle(title)
+                                                               .withHead(brName)
+                                                               .withBase(baseBranchName)
+                                                               .withBody(body);
+        return gitHubClientService.createPullRequest(owner, repository, input)
+                                  .then(new Function<GitHubPullRequest, PullRequest>() {
+                                      @Override
+                                      public PullRequest apply(GitHubPullRequest arg) throws FunctionException {
+                                          return valueOf(arg);
+                                      }
+                                  })
+                                  .catchErrorPromise(new Function<PromiseError, Promise<PullRequest>>() {
+                                      @Override
+                                      public Promise<PullRequest> apply(PromiseError err) throws FunctionException {
+                                          final String msg = err.getMessage();
+                                          if (containsIgnoreCase(msg, NO_COMMITS_IN_PULL_REQUEST_ERROR_MESSAGE)) {
+                                              return Promises.reject(JsPromiseError.create(new NoCommitsInPullRequestException(brName,
+                                                                                                                               baseBranchName)));
+                                          } else if (containsIgnoreCase(msg, PULL_REQUEST_ALREADY_EXISTS_ERROR_MESSAGE)) {
+                                              return Promises.reject(JsPromiseError.create(new PullRequestAlreadyExistsException(brName)));
+                                          } else if (containsIgnoreCase(msg, NO_HISTORYIN_COMMON_ERROR_MESSAGE)) {
+                                              return Promises.reject(JsPromiseError.create(new NoHistoryInCommonException(
+                                                      "The " + brName + " branch has no history in common with " + owner + ':' +
+                                                      baseBranchName)));
+                                          }
+
+                                          return Promises.reject(err);
+                                      }
+                                  });
+    }
+
