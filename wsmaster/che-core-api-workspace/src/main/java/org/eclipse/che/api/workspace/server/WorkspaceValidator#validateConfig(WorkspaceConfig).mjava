@@ -1,13 +1,42 @@
-    /**
-     * Checks that workspace configuration is valid.
-     *
-     * @param config
-     *         workspace configuration for validation
-     * @throws BadRequestException
-     *         in the case of constrain violation
-     * @throws ServerException
-     *         when constraint can not be validated because of network or other errors
-     */
-    void validateConfig(WorkspaceConfig config) throws BadRequestException,
-                                                       ServerException, NotFoundException;
+    public void validateConfig(WorkspaceConfig config) throws BadRequestException,
+                                                              NotFoundException,
+                                                              ServerException {
+        // configuration object itself
+        checkNotNull(config.getName(), "Workspace name required");
+        checkArgument(WS_NAME.matcher(config.getName()).matches(),
+                      "Incorrect workspace name, it must be between 3 and 20 characters and may contain digits, " +
+                      "latin letters, underscores, dots, dashes and should start and end only with digits, " +
+                      "latin letters or underscores");
+
+
+        //environments
+        checkArgument(!isNullOrEmpty(config.getDefaultEnv()), "Workspace default environment name required");
+        checkNotNull(config.getEnvironments(), "Workspace should contain at least one environment");
+        checkArgument(config.getEnvironments().containsKey(config.getDefaultEnv()),
+                      "Workspace default environment configuration required");
+
+        for (Map.Entry<String, ? extends Environment> envEntry : config.getEnvironments().entrySet()) {
+            try {
+
+                validateEnvironment(envEntry.getValue());
+
+            } catch (IllegalArgumentException e) {
+                throw new BadRequestException(e.getLocalizedMessage());
+            }
+        }
+
+        //commands
+        for (Command command : config.getCommands()) {
+            checkArgument(!isNullOrEmpty(command.getName()),
+                          "Workspace %s contains command with null or empty name",
+                          config.getName());
+            checkArgument(!isNullOrEmpty(command.getCommandLine()),
+                          "Command line required for command '%s' in workspace '%s'",
+                          command.getName(),
+                          config.getName());
+        }
+
+        //projects
+        //TODO
+    }
 
