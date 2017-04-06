@@ -1,7 +1,6 @@
     @POST
     @Consumes(APPLICATION_JSON)
     @Produces(APPLICATION_JSON)
-    @GenerateLink(rel = LINK_REL_CREATE_WORKSPACE)
     @ApiOperation(value = "Create a new workspace based on the configuration",
                   notes = "This operation can be performed only by authorized user," +
                           "this user will be the owner of the created workspace",
@@ -13,36 +12,39 @@
                                                       "(e.g. The workspace with such name already exists)"),
                    @ApiResponse(code = 500, message = "Internal server error occurred")})
     public Response create(@ApiParam(value = "The configuration to create the new workspace", required = true)
-                           WorkspaceConfigDto config,
+                                   WorkspaceConfigDto config,
                            @ApiParam(value = "Workspace attribute defined in 'attrName:attrValue' format. " +
                                              "The first ':' is considered as attribute name and value separator",
                                      examples = @Example({@ExampleProperty("stackId:stack123"),
                                                           @ExampleProperty("attrName:value-with:colon")}))
                            @QueryParam("attribute")
-                           List<String> attrsList,
+                                   List<String> attrsList,
                            @ApiParam("If true then the workspace will be immediately " +
                                      "started after it is successfully created")
                            @QueryParam("start-after-create")
                            @DefaultValue("false")
-                           Boolean startAfterCreate,
+                                   Boolean startAfterCreate,
                            @ApiParam("Namespace where workspace should be created")
                            @QueryParam("namespace")
-                           String namespace) throws ConflictException,
-                                                    ServerException,
-                                                    BadRequestException,
-                                                    ForbiddenException,
-                                                    NotFoundException {
+                                   String namespace) throws ConflictException,
+                                                            ServerException,
+                                                            BadRequestException,
+                                                            ForbiddenException,
+                                                            NotFoundException {
         requiredNotNull(config, "Workspace configuration");
         final Map<String, String> attributes = parseAttrs(attrsList);
-//        validator.validateAttributes(attributes);
-//        validator.validateConfig(config);
         relativizeRecipeLinks(config);
         if (namespace == null) {
             namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
         }
-        final WorkspaceImpl workspace = workspaceManager.createWorkspace(config,
-                                                                         namespace,
-                                                                         attributes);
+
+        WorkspaceImpl workspace;
+        try {
+            workspace = workspaceManager.createWorkspace(config, namespace, attributes);
+        } catch (ValidationException x) {
+            throw new BadRequestException(x.getMessage());
+        }
+
         if (startAfterCreate) {
             workspaceManager.startWorkspace(workspace.getId(), null, new HashMap<>());
         }

@@ -14,25 +14,29 @@
                                                       "(e.g. workspace with such name already exists"),
                    @ApiResponse(code = 500, message = "Internal server error occurred")})
     public WorkspaceDto startFromConfig(@ApiParam(value = "The configuration to start the workspace from", required = true)
-                                        WorkspaceConfigDto config,
+                                                WorkspaceConfigDto config,
                                         @ApiParam("Weather this workspace is temporary or not")
                                         @QueryParam("temporary")
-                                        Boolean isTemporary,
+                                        @DefaultValue("false")
+                                                Boolean isTemporary,
                                         @ApiParam("Namespace where workspace should be created")
                                         @QueryParam("namespace")
-                                        String namespace) throws BadRequestException,
-                                                                 ForbiddenException,
-                                                                 NotFoundException,
-                                                                 ServerException,
-                                                                 ConflictException {
+                                                String namespace) throws BadRequestException,
+                                                                         ForbiddenException,
+                                                                         NotFoundException,
+                                                                         ServerException,
+                                                                         ConflictException {
         requiredNotNull(config, "Workspace configuration");
-        //validator.validateConfig(config);
         relativizeRecipeLinks(config);
         if (namespace == null) {
             namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
         }
-        return linksInjector.injectLinks(asDto(workspaceManager.startWorkspace(config,
-                                                                               namespace,
-                                                                               firstNonNull(isTemporary, false), new HashMap<>())), getServiceContext());
+
+        try {
+            Workspace workspace = workspaceManager.startWorkspace(config, namespace, isTemporary, new HashMap<>());
+            return linksInjector.injectLinks(asDto(workspace), getServiceContext());
+        } catch (ValidationException x) {
+            throw new BadRequestException(x.getMessage());
+        }
     }
 
