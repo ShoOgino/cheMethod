@@ -1,0 +1,78 @@
+    protected void validateMachine(String machineName,
+                                   @Nullable MachineConfig machineConfig,
+                                   DockerService service,
+                                   Set<String> servicesNames) throws ValidationException {
+        checkArgument(MACHINE_NAME_PATTERN.matcher(machineName).matches(),
+                      "Name of machine '%s' in environment is invalid",
+                      machineName);
+
+        checkArgument(!isNullOrEmpty(service.getImage()) ||
+                      (service.getBuild() != null && (!isNullOrEmpty(service.getBuild().getContext()) ||
+                                                      !isNullOrEmpty(service.getBuild().getDockerfileContent()))),
+                      "Field 'image' or 'build.context' is required in machine '%s' in environment",
+                      machineName);
+
+        checkArgument(service.getBuild() == null || (isNullOrEmpty(service.getBuild().getContext()) !=
+                                                     isNullOrEmpty(service.getBuild().getDockerfileContent())),
+                      "Machine '%s' in environment contains mutually exclusive dockerfile content and build context.",
+                      machineName);
+
+        if (machineConfig != null) {
+            validateExtendedMachine(machineConfig, machineName);
+        }
+
+        for (String expose : service.getExpose()) {
+            checkArgument(EXPOSE_PATTERN.matcher(expose).matches(),
+                          "Exposed port '%s' in machine '%s' in environment is invalid",
+                          expose, machineName);
+        }
+
+        for (String link : service.getLinks()) {
+            Matcher matcher = LINK_PATTERN.matcher(link);
+
+            checkArgument(matcher.matches(),
+                          "Link '%s' in machine '%s' in environment is invalid",
+                          link, machineName);
+
+            String serviceFromLink = matcher.group("serviceName");
+            checkArgument(servicesNames.contains(serviceFromLink),
+                          "Machine '%s' in environment contains link to non existing machine '%s'",
+                          machineName, serviceFromLink);
+        }
+
+        for (String depends : service.getDependsOn()) {
+            checkArgument(MACHINE_NAME_PATTERN.matcher(depends).matches(),
+                          "Dependency '%s' in machine '%s' in environment is invalid",
+                          depends, machineName);
+
+            checkArgument(servicesNames.contains(depends),
+                          "Machine '%s' in environment contains dependency to non existing machine '%s'",
+                          machineName, depends);
+        }
+
+        for (String volumesFrom : service.getVolumesFrom()) {
+            Matcher matcher = VOLUME_FROM_PATTERN.matcher(volumesFrom);
+
+            checkArgument(matcher.matches(),
+                          "Machine name '%s' in field 'volumes_from' of machine '%s' in environment is invalid",
+                          volumesFrom, machineName);
+
+            String serviceFromVolumesFrom = matcher.group("serviceName");
+            checkArgument(servicesNames.contains(serviceFromVolumesFrom),
+                          "OldMachine '%s' in environment contains non existing machine '%s' in 'volumes_from' field",
+                          machineName, serviceFromVolumesFrom);
+        }
+
+        checkArgument(service.getPorts() == null || service.getPorts().isEmpty(),
+                      "Ports binding is forbidden but found in machine '%s' of environment",
+                      machineName);
+
+        checkArgument(service.getVolumes() == null || service.getVolumes().isEmpty(),
+                      "Volumes binding is forbidden but found in machine '%s' of environment",
+                      machineName);
+
+        checkArgument(service.getNetworks() == null || service.getNetworks().isEmpty(),
+                      "Networks configuration is forbidden but found in machine '%s' of environment",
+                      machineName);
+    }
+
