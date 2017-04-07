@@ -1,6 +1,22 @@
-    public RuntimeContext prepare(RuntimeIdentity id, Environment environment) throws ValidationException,
-                                                                                      ApiException,
-                                                                                      IOException {
-        throw new ApiException("");
+    @Override
+    public RuntimeContext prepare(RuntimeIdentity identity, Environment environment) throws ValidationException,
+                                                                                            ApiException,
+                                                                                            IOException {
+        DockerEnvironment dockerEnvironment = dockerEnvironmentParser.parse(environment);
+        dockerEnvironmentValidator.validate(environment, dockerEnvironment);
+        // check that order can be resolved
+        List<String> orderedServices = startStrategy.order(dockerEnvironment);
+
+        infrastructureProvisioner.provision(environment, dockerEnvironment);
+
+        environmentNormalizer.normalize(environment, dockerEnvironment, identity);
+
+        // environment holder
+        return new DockerRuntimeContext(dockerEnvironment,
+                                        environment,
+                                        identity,
+                                        this,
+                                        null,
+                                        orderedServices);
     }
 

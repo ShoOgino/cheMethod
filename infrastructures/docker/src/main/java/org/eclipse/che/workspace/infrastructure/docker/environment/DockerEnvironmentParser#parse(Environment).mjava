@@ -4,41 +4,41 @@
      * @param environment
      *         environment to parse
      * @return environment representation as compose environment
-     * @throws IllegalArgumentException
+     * @throws ValidationException
      *         if provided environment is illegal
      * @throws ServerException
      *         if fetching of environment recipe content fails
      */
-    public DockerEnvironment parse(Environment environment) throws IllegalArgumentException,
-                                                                   ServerException, ValidationException {
+    public DockerEnvironment parse(Environment environment) throws ValidationException,
+                                                                   ServerException {
 
         checkNotNull(environment, "Environment should not be null");
         Recipe recipe = environment.getRecipe();
         checkNotNull(recipe, "Environment recipe should not be null");
         checkNotNull(recipe.getType(), "Environment recipe type should not be null");
         checkArgument(recipe.getContent() != null || recipe.getLocation() != null,
-                      "OldRecipe of environment must contain location or content");
+                      "Recipe of environment must contain location or content");
+        checkArgument(recipe.getContent() == null || recipe.getLocation() == null,
+                      "Recipe of environment contains mutually exclusive fields location and content");
 
-        String envType = recipe.getType();
-        Set<String> envTypes = getEnvironmentTypes();
-
-        if (!envTypes.contains(envType)) {
-            throw new IllegalArgumentException(format("Environment type '%s' is not supported. " +
-                                                      "Supported environment types: %s",
-                                                      envType,
-                                                      Joiner.on(", ").join(envTypes)));
+        TypeSpecificEnvironmentParser parser = environmentParsers.get(recipe.getType());
+        if (parser == null) {
+            throw new ValidationException(format("Environment type '%s' is not supported. " +
+                                                 "Supported environment types: %s",
+                                                 recipe.getType(),
+                                                 Joiner.on(", ").join(environmentParsers.keySet())));
         }
 
-        TypeSpecificEnvironmentParser parser = environmentParsers.get(envType);
-        DockerEnvironment cheServicesEnvironment = parser.parse(environment);
 
-        cheServicesEnvironment.getServices().forEach((name, service) -> {
-            MachineConfig machineConfig = environment.getMachines().get(name);
+        DockerEnvironment dockerEnvironment = parser.parse(environment);
+
+        for (Map.Entry<String, DockerService> entry : dockerEnvironment.getServices().entrySet()) {
+            MachineConfig machineConfig = environment.getMachines().get(entry.getKey());
             if (machineConfig != null) {
-                normalizeMachine(name, service, machineConfig);
+                normalizeMachine(entry.getKey(), entry.getValue(), machineConfig);
             }
-        });
+        }
 
-        return cheServicesEnvironment;
+        return dockerEnvironment;
     }
 

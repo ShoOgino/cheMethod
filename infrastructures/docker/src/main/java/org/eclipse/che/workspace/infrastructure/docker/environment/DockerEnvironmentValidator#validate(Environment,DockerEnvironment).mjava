@@ -1,26 +1,5 @@
-    public Environment validate(Environment env) throws ValidationException,
+    public void validate(Environment env, DockerEnvironment dockerEnvironment) throws ValidationException,
                                                         ServerException {
-        checkNotNull(env.getRecipe(), "Environment recipe should not be null");
-        checkArgument(SUPPORTED_RECIPE_TYPES.contains(env.getRecipe().getType()),
-                      "Environment type '%s' is not supported. Supported types: %s",
-                      env.getRecipe().getType(),
-                      SUPPORTED_RECIPE_TYPES_STRING);
-        checkArgument(env.getRecipe().getContent() != null || env.getRecipe().getLocation() != null,
-                      "Recipe of environment must contain location or content");
-        checkArgument(env.getRecipe().getContent() == null || env.getRecipe().getLocation() == null,
-                      "Recipe of environment contains mutually exclusive fields location and content");
-
-        DockerEnvironment dockerEnvironment;
-        try {
-            dockerEnvironment = dockerEnvironmentParser.parse(env);
-        } catch (ServerException e) {
-            throw new ServerException(
-                    format("Parsing of recipe of environment failed. Error: %s", e.getLocalizedMessage()));
-        } catch (IllegalArgumentException e) {
-            throw new ValidationException(
-                    format("Parsing of recipe of environment failed. Error: %s", e.getLocalizedMessage()));
-        }
-
         checkArgument(dockerEnvironment.getServices() != null && !dockerEnvironment.getServices().isEmpty(),
                       "Environment should contain at least 1 machine");
 
@@ -60,16 +39,5 @@
                             entry.getValue(),
                             servicesNames);
         }
-
-        // check that order can be resolved
-        try {
-            startStrategy.order(dockerEnvironment);
-        } catch (IllegalArgumentException e) {
-            throw new ValidationException(
-                    format("Start order of machine in environment is not resolvable. Error: %s",
-                           e.getLocalizedMessage()));
-        }
-
-        return env;
     }
 
