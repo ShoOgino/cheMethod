@@ -1,0 +1,25 @@
+    @Inject
+    public void configureWorkspaceOutputMessageHandler(AppContext appContext, RequestHandlerConfigurator configurator, EventBus eventBus) {
+        JsonRpcRequestBiOperation<List<String>> operation = (String endpointId, List<String> messages) -> {
+            Log.debug(getClass(), "Received notification from endpoint: " + endpointId);
+
+            if (appContext.getActiveRuntime() == null || appContext.getDevMachine() == null) {
+                Log.error(getClass(), "Runtime or dev machine is not properly initialized for this action");
+                return;
+            }
+
+            if (messages.isEmpty()) {
+                Log.error(getClass(), "Received empty messages list");
+                return;
+            }
+
+            eventBus.fireEvent(new EnvironmentOutputEvent(messages.get(0), appContext.getDevMachine().getDisplayName()));
+        };
+
+        configurator.newConfiguration()
+                    .methodName("event:ws-agent-output:message")
+                    .paramsAsListOfString()
+                    .noResult()
+                    .withOperation(operation);
+    }
+

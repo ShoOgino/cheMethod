@@ -11,10 +11,20 @@
         // copy to not affect/be affected by changes in origin
         service = new CheServiceImpl(service);
 
+        JsonRpcMessageConsumer<MachineLogMessage> messageConsumer =
+                new JsonRpcMessageConsumer<>("event:environment-output:message", transmitter, endpointIdsHolder.getEndpointIds());
+
+        LineConsumer logger = new CompositeLineConsumer(machineLogger, new AbstractLineConsumer() {
+            @Override
+            public void writeLine(String line) throws IOException {
+                messageConsumer.consume(new MachineLogMessageImpl(machineName, line));
+            }
+        });
+
         ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
         ProgressMonitor progressMonitor = currentProgressStatus -> {
             try {
-                machineLogger.writeLine(progressLineFormatter.format(currentProgressStatus));
+                logger.writeLine(progressLineFormatter.format(currentProgressStatus));
             } catch (IOException e) {
                 LOG.error(e.getLocalizedMessage(), e);
             }
@@ -41,7 +51,7 @@
             readContainerLogsInSeparateThread(container,
                                               workspaceId,
                                               service.getId(),
-                                              machineLogger);
+                                              logger);
 
             DockerNode node = dockerMachineFactory.createNode(workspaceId, container);
 
@@ -76,7 +86,7 @@
                                                        container,
                                                        image,
                                                        node,
-                                                       machineLogger);
+                                                       logger);
         } catch (SourceNotFoundException e) {
             throw e;
         } catch (RuntimeException | ServerException | NotFoundException | IOException e) {

@@ -7,12 +7,23 @@
                 workspaceServiceClient.getWorkspace(workspaceId).then(new Operation<WorkspaceDto>() {
                     @Override
                     public void apply(WorkspaceDto workspace) throws OperationException {
-                        String devMachineName = getDevMachineName(workspace);
-                        if (devMachineName != null) {
-                            subscribeOnWsAgentOutputChannel(workspace, devMachineName);
+                        if (appContext.getActiveRuntime() != null && appContext.getDevMachine() != null) {
+                            String id = appContext.getDevMachine().getId();
+                            Operation<PromiseError> failedWorkspaceGetOperation =
+                                    it -> Log.error(WorkspaceEventsHandler.this.getClass(),
+                                                    "Tried to subscribe to environment status events, but got error" + ": " +
+                                                    it.getMessage());
+
+                            Operation<WorkspaceDto> successfulWorkspaceGetOperation =
+                                    it -> transmitter.transmitStringToNone("ws-master", "event:environment-output:subscribe", id);
+
+                            workspaceServiceClient.getWorkspace(browserAddress.getWorkspaceKey())
+                                                  .then(successfulWorkspaceGetOperation)
+                                                  .catchError(failedWorkspaceGetOperation);
+                            machineLogsRestorer.restore(appContext.getDevMachine());
                         }
 
-                        workspaceComponent.setCurrentWorkspace(workspace);
+                        appContext.setWorkspace(workspace);
 
                 		loader.show(LoaderPresenter.Phase.STARTING_WORKSPACE_RUNTIME);
                         eventBus.fireEvent(new WorkspaceStartingEvent(workspace));
