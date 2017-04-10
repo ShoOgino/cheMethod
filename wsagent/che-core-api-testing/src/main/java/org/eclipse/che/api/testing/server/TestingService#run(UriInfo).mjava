@@ -8,28 +8,32 @@
      *                     the name returned by {@link TestRunner#getName()} implementation.
      * </pre>
      *
-     * @param uriInfo
-     *            JAX-RS implementation of UrlInfo with set of query parameters.
+     * @param uriInfo JAX-RS implementation of UrlInfo with set of query parameters.
      * @return the test result of test case
-     * @throws Exception
-     *             when the test runner failed to execute test cases.
+     * @throws Exception when the test runner failed to execute test cases.
      */
     @GET
     @Path("run")
     @Produces(MediaType.APPLICATION_JSON)
-    @ApiOperation(value = "Execute Java tests and return results", notes = "The GET parameters are passed to the test framework implementation.")
-    @ApiResponses({ @ApiResponse(code = 200, message = "OK"), @ApiResponse(code = 500, message = "Server error") })
+    @ApiOperation(value = "Execute Java tests and return results",
+        notes = "The GET parameters are passed to the test framework implementation.")
+    @ApiResponses({@ApiResponse(code = 200, message = "OK"), @ApiResponse(code = 500, message = "Server error")})
     public TestResult run(@Context UriInfo uriInfo) throws Exception {
-        Map<String, String> queryParameters = getMap(uriInfo.getQueryParameters());
-        String projectPath = queryParameters.get("projectPath");
-        String absoluteProjectPath = ResourcesPlugin.getPathToWorkspace() + projectPath;
-        queryParameters.put("absoluteProjectPath", absoluteProjectPath);
-        String testFramework = queryParameters.get("testFramework");
-        TestRunner runner = frameworkRegistry.getTestRunner(testFramework);
-        if (runner == null) {
-            throw new Exception("No test frameworks found: " + testFramework);
+        try {
+            Map<String, String> queryParameters = getMap(uriInfo.getQueryParameters());
+            String projectPath = queryParameters.get("projectPath");
+            String absoluteProjectPath = ResourcesPlugin.getPathToWorkspace() + projectPath;
+            queryParameters.put("absoluteProjectPath", absoluteProjectPath);
+            String testFramework = queryParameters.get("testFramework");
+            TestRunner runner = frameworkRegistry.getTestRunner(testFramework);
+            if (runner == null) {
+                throw new WebApplicationException("No test frameworks found: " + testFramework);
+            }
+            TestResult result = frameworkRegistry.getTestRunner(testFramework).execute(queryParameters);
+            return result;
+        } catch (Throwable e) {
+            throw translateException(e);
         }
-        TestResult result = frameworkRegistry.getTestRunner(testFramework).execute(queryParameters);
-        return result;
+
     }
 

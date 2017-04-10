@@ -1,16 +1,25 @@
     private void buildTree() {
         resultTree.getNodeStorage().clear();
         outputResult.setText("");
-        TestResultGroupNode root = nodeFactory.getTestResultGroupNode(lastTestResult);
-        HashMap<String, List<Node>> classNodeHashMap = new HashMap<>();
-        for (Failure failure : lastTestResult.getFailures()) {
-            if (!classNodeHashMap.containsKey(failure.getFailingClass())) {
-                List<Node> methodNodes = new ArrayList<>();
-                classNodeHashMap.put(failure.getFailingClass(), methodNodes);
+        TestResultGroupNode root = nodeFactory.getTestResultGroupNode(lastTestResult, showFailuresOnly, new Runnable() {
+            @Override
+            public void run() {
+                showFailuresOnly = !showFailuresOnly;
+                buildTree();
             }
-            classNodeHashMap.get(failure.getFailingClass())
-                    .add(nodeFactory.getTestResultMethodNodeNode(failure.getFailingMethod(), failure.getTrace(),
-                            failure.getMessage(), failure.getFailingLine(), this));
+        });
+        HashMap<String, List<Node>> classNodeHashMap = new LinkedHashMap<>();
+        for (TestCase testCase : lastTestResult.getTestCases()) {
+            if (!testCase.isFailed() && showFailuresOnly) {
+                continue;
+            }
+            if (!classNodeHashMap.containsKey(testCase.getClassName())) {
+                List<Node> methodNodes = new ArrayList<>();
+                classNodeHashMap.put(testCase.getClassName(), methodNodes);
+            }
+            classNodeHashMap.get(testCase.getClassName())
+                            .add(nodeFactory.getTestResultMethodNodeNode(!testCase.isFailed(), testCase.getMethod(), testCase.getTrace(),
+                                                                         testCase.getMessage(), testCase.getFailingLine(), this));
         }
         List<Node> classNodes = new ArrayList<>();
         for (Map.Entry<String, List<Node>> entry : classNodeHashMap.entrySet()) {
@@ -20,5 +29,6 @@
         }
         root.setChildren(classNodes);
         resultTree.getNodeStorage().add(root);
+        resultTree.expandAll();
     }
 
