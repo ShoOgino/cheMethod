@@ -1,21 +1,21 @@
+    // TODO what should be thrown if start is interrupted in another thread, in current thread
+    // TODO which error will be thrown if start fails because of something we don't control
+    // and admin doesn't want to know about this problem
     @Override
     protected InternalRuntime internalStart(Map<String, String> startOptions) throws ServerException {
-        // https://github.com/eclipse/che/blob/master/wsmaster/che-core-api-workspace/src/main/java/org/eclipse/che/api/environment/server/CheEnvironmentEngine.java#L728
-        // peek machine
-        // start each machine
-        // start agents in each machine
-        // peek machine
         dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
-        String machine = queuePeek();
+        String machine = startQueue.peek();
         while (machine != null) {
-            DockerService service = getService(machine);
-            MachineRuntime machineRuntime = serviceStarter.startService(dockerEnvironment.getNetwork(),
-                                                                        service,
-                                                                        logger);
-            startedHandler.started(machineRuntime, agents);
-            machine = queuePeek();
+            // add infrastructural things such as backup/restore
+            DockerService service = dockerEnvironment.getServices().get(machine);
+            DockerMachine machineRuntime = startMachine(service, startOptions);
+            machines.add(machineRuntime);
+            // add agents start
+            startQueue.poll();
+            machine = startQueue.peek();
         }
 
-        return null;
+        return getInternalRuntime();
+        // TODO catch error. Cleanup env
     }
 
