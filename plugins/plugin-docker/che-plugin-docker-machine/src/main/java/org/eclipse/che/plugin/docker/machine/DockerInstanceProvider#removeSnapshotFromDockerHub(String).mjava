@@ -1,0 +1,39 @@
+    /**
+     * Removes snapshot repository from docker hub.
+     *
+     * @param repository
+     *         snapshot repository name
+     * @throws SnapshotException
+     *         when an error occurs while deleting snapshot
+     */
+    private void removeSnapshotFromDockerHub(String repository) throws SnapshotException {
+        try {
+            URL url = UriBuilder.fromUri("https://" + DOCKER_HUB_BASE_URI)
+                                // we use v1 here because docker hub doesn't provide open v2 REST API for repository deletion
+                                .path("/v1/repositories/{repository}/")
+                                .build(repository)
+                                .toURL();
+            final HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+            try {
+                conn.setConnectTimeout(30 * 1000);
+                conn.setRequestMethod("DELETE");
+                conn.setRequestProperty("Authorization", authResolver.getBasicAuthHeaderValue(DOCKER_HUB_BASE_URI, null));
+                final int responseCode = conn.getResponseCode();
+                if (responseCode != 202 && responseCode != 404) { // if snapshot is already deleted then just skip it
+                    InputStream in = conn.getErrorStream();
+                    if (in == null) {
+                        in = conn.getInputStream();
+                    }
+                    LOG.error("An error occurred while deleting snapshot with url: {}\nError stream: {}",
+                              url,
+                              IoUtil.readAndCloseQuietly(in));
+                    throw new SnapshotException("Internal server error occurs. Can't remove snapshot");
+                }
+            } finally {
+                conn.disconnect();
+            }
+        } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+        }
+    }
+
