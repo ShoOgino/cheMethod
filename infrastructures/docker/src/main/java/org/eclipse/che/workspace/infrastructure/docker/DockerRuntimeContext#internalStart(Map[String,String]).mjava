@@ -1,21 +1,48 @@
     // TODO what should be thrown if start is interrupted in another thread, in current thread
     // TODO which error will be thrown if start fails because of something we don't control
     // and admin doesn't want to know about this problem
+    // TODO if this thread is interrupted and stop is not called!
+    // TODO interrupted exception, closedbyinteruptionexception
+    // TODO add infrastructural things such as backup/restore
+    // TODO simplify code
     @Override
-    protected InternalRuntime internalStart(Map<String, String> startOptions) throws ServerException {
-        dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
-        String machine = startQueue.peek();
-        while (machine != null) {
-            // add infrastructural things such as backup/restore
-            DockerService service = dockerEnvironment.getServices().get(machine);
-            DockerMachine machineRuntime = startMachine(service, startOptions);
-            machines.add(machineRuntime);
-            // add agents start
-            startQueue.poll();
-            machine = startQueue.peek();
-        }
+    protected InternalRuntime internalStart(Map<String, String> startOptions) throws InfrastructureException {
+        setStartThread();
+        try {
+            checkStartInterruption();
+            dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
 
-        return getInternalRuntime();
-        // TODO catch error. Cleanup env
+            String machine = startQueue.peek();
+            while (machine != null) {
+                DockerService service = dockerEnvironment.getServices().get(machine);
+                checkStartInterruption();
+                DockerMachine machineRuntime = startMachine(service, startOptions);
+                machines.add(machineRuntime);
+                // add agents start
+                startQueue.poll();
+                machine = startQueue.peek();
+            }
+
+            return getInternalRuntime();
+        } catch (Exception e) {
+            boolean interrupted = Thread.interrupted();
+            try {
+                destroyRuntime();
+            } catch (Exception destExc) {
+                LOG.error(destExc.getLocalizedMessage(), destExc);
+            }
+            if (interrupted) {
+                // TODO throw that it is interrupted
+                throw new InfrastructureException("");
+            }
+            try {
+                throw e;
+            } catch (InfrastructureException rethrow) {
+                throw rethrow;
+            } catch (Exception wrap) {
+                throw new InfrastructureException(wrap.getLocalizedMessage(), wrap);
+            }
+            // TODO InterruptedException | ClosedByInterruptException
+        }
     }
 
