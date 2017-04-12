@@ -12,24 +12,36 @@
             checkStartInterruption();
             dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
 
-            String machine = startQueue.peek();
-            while (machine != null) {
-                DockerService service = dockerEnvironment.getServices().get(machine);
+            String machineName = startQueue.peek();
+            DockerMachine dockerMachine;
+            while (machineName != null) {
+                DockerService service = dockerEnvironment.getServices().get(machineName);
                 checkStartInterruption();
-                DockerMachine machineRuntime = startMachine(service, startOptions);
-                machines.add(machineRuntime);
+                dockerMachine = startMachine(machineName, service, startOptions);
+                addMachine(machineName, dockerMachine);
                 // add agents start
                 startQueue.poll();
-                machine = startQueue.peek();
+                machineName = startQueue.peek();
             }
 
             return getInternalRuntime();
-        } catch (Exception e) {
+        } catch (InfrastructureException | RuntimeException e) {
+            // TODO remove starting machine if present
+            // TODO Check if interruption came from stop or because of another reason
+            // TODO if because of another reason stop environment
+            boolean runtimeDestroyingNeeded = true;
+            synchronized (this) {
+                if (stopIsCalled) {
+                    runtimeDestroyingNeeded = false;
+                }
+            }
             boolean interrupted = Thread.interrupted();
-            try {
-                destroyRuntime();
-            } catch (Exception destExc) {
-                LOG.error(destExc.getLocalizedMessage(), destExc);
+            if (runtimeDestroyingNeeded) {
+                try {
+                    destroyRuntime();
+                } catch (Exception destExc) {
+                    LOG.error(destExc.getLocalizedMessage(), destExc);
+                }
             }
             if (interrupted) {
                 // TODO throw that it is interrupted

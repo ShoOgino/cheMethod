@@ -1,16 +1,26 @@
     @Override
-    public RuntimeContext prepare(RuntimeIdentity identity, Environment environment) throws ValidationException,
+    public RuntimeContext prepare(RuntimeIdentity identity, Environment originEnv) throws ValidationException,
                                                                                             InfrastructureException {
+        // Copy to be able to change env and protect from env changes on the go
+        EnvironmentImpl environment = new EnvironmentImpl(originEnv);
         DockerEnvironment dockerEnvironment = dockerEnvironmentParser.parse(environment);
         dockerEnvironmentValidator.validate(environment, dockerEnvironment);
-        // check that order can be resolved
+        // check that services start order can be resolved
         List<String> orderedServices = startStrategy.order(dockerEnvironment);
+        for (MachineConfigImpl machineConfig : environment.getMachines().values()) {
+            try {
+                List<AgentKey> agentKeys = agentSorter.sort(machineConfig.getAgents());
+                machineConfig.setAgents(agentKeys.stream().map(AgentKey::getId).collect(Collectors.toList()));
+            } catch (AgentException e) {
+                throw new InfrastructureException(e.getLocalizedMessage(), e);
+            }
+        }
 
+        // modify environment with everything needed to use docker machines on particular (cloud) infrastructure
         infrastructureProvisioner.provision(environment, dockerEnvironment);
-
+        //
         environmentNormalizer.normalize(environment, dockerEnvironment, identity);
 
-        // environment holder
         return new DockerRuntimeContext(dockerEnvironment,
                                         environment,
                                         identity,
@@ -18,6 +28,9 @@
                                         null,
                                         orderedServices,
                                         networkLifecycle,
-                                        serviceStarter);
+                                        serviceStarter,
+                                        urlRewriter,
+                                        dockerConnector,
+                                        agentRegistry);
     }
 

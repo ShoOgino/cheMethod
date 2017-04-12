@@ -1,0 +1,65 @@
+    public DockerMachine startService(String networkName,
+                                      String machineName,
+                                      DockerService service,
+                                      RuntimeIdentity identity,
+                                      Map<String, String> startOptions) throws InfrastructureException {
+        String workspaceId = identity.getWorkspaceId();
+        LineConsumer machineLogger = new ListLineConsumer();
+
+        // copy to not affect/be affected by changes in origin
+        service = new DockerService(service);
+
+        ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
+        ProgressMonitor progressMonitor = currentProgressStatus -> {
+            try {
+                machineLogger.writeLine(progressLineFormatter.format(currentProgressStatus));
+            } catch (IOException e) {
+                LOG.error(e.getLocalizedMessage(), e);
+            }
+        };
+
+        String container = null;
+        try {
+            String image = prepareImage(machineName,
+                                        service,
+                                        progressMonitor);
+
+            container = createContainer(workspaceId,
+                                        machineName,
+//                                        isDev,
+                                        image,
+                                        networkName,
+                                        service);
+
+            connectContainerToAdditionalNetworks(container,
+                                                 service);
+
+            docker.startContainer(StartContainerParams.create(container));
+
+            readContainerLogsInSeparateThread(container,
+                                              workspaceId,
+                                              service.getId(),
+                                              machineLogger);
+
+//            DockerNode node = dockerMachineFactory.createNode(workspaceId, container);
+
+            dockerInstanceStopDetector.startDetection(container,
+                                                      service.getId(),
+                                                      workspaceId);
+
+            return new DockerMachine(docker,
+                                     container,
+                                     image,
+                                     serverEvaluationStrategyProvider);
+
+//            return dockerMachineFactory.createInstance(machine,
+//                                                       container,
+//                                                       image,
+//                                                       node,
+//                                                       machineLogger);
+        } catch (RuntimeException | ServerException | NotFoundException | IOException e) {
+            cleanUpContainer(container);
+            throw new InfrastructureException(e.getLocalizedMessage(), e);
+        }
+    }
+

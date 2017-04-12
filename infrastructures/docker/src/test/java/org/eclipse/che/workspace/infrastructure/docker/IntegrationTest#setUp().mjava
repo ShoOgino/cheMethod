@@ -1,0 +1,84 @@
+    @BeforeMethod
+    public void setUp() throws Exception {
+        // docker
+        InitialAuthConfig initialAuthConfig = new InitialAuthConfig();
+        UserSpecificDockerRegistryCredentialsProvider credentialsProvider = mock(UserSpecificDockerRegistryCredentialsProvider.class);
+        connectorConfiguration = new DockerConnectorConfiguration(URI.create("unix:///var/run/docker.sock"),
+                                                                  null,
+                                                                  initialAuthConfig,
+                                                                  new DefaultNetworkFinder());
+        connectionFactory = new DockerConnectionFactory(connectorConfiguration);
+        resolver = new DockerRegistryAuthResolver(initialAuthConfig, new NoOpDockerRegistryDynamicAuthResolverImpl());
+        dockerApiVersion = new DockerApiVersionPathPrefixProvider("1.20");
+        docker = new DockerConnector(connectorConfiguration, connectionFactory, resolver, dockerApiVersion);
+
+        // agent stuff
+        agentRegistry = new AgentRegistryImpl(ImmutableSet.of(new WsAgent(), new ExecAgent(), new TerminalAgent()));
+        agentSorter = new AgentSorter(agentRegistry);
+        agentConfigApplier = new AgentConfigApplier(agentSorter, agentRegistry);
+
+        // other
+        urlRewriter = new TestURLRewriter();
+        recipeDownloader = mock(RecipeDownloader.class);
+        Pattern recipePattern = Pattern.compile(".*");
+
+        // docker runtime
+        DockerContainerNameGenerator dockerContainerNameGenerator = new DockerContainerNameGenerator();
+        DockerInstanceStopDetector stopDetector = mock(DockerInstanceStopDetector.class);
+        parser = new DockerEnvironmentParser(singletonMap("dockerimage", new DockerImageEnvironmentParser()));
+        validator = new DockerEnvironmentValidator();
+        strategy = new DockerServicesStartStrategy();
+        ServerEvaluationStrategy serverEvaluationStrategy = new LocalDockerServerEvaluationStrategy("localhost", "localhost");
+        ServerEvaluationStrategyProvider strategyProvider = new ServerEvaluationStrategyProvider(singletonMap("strategy1", serverEvaluationStrategy), "strategy1");
+        normalizer = new DockerEnvironmentNormalizer(recipeDownloader, recipePattern, dockerContainerNameGenerator, 2_000_000_000);
+        starter = new DockerServiceStarter(docker,
+                                           credentialsProvider,
+                                           stopDetector,
+                                           emptySet(),
+                                           emptySet(),
+                                           emptySet(),
+                                           emptySet(),
+                                           false,
+                                           false,
+                                           0,
+                                           emptySet(),
+                                           emptySet(),
+                                           false,
+                                           -1,
+                                           emptySet(),
+                                           null,
+                                           null,
+                                           0,
+                                           0,
+                                           new WindowsPathEscaper(),
+                                           emptySet(),
+                                           null,
+                                           strategyProvider);
+        networkLifecycle = new DockerNetworkLifecycle(docker, null);
+        WorkspaceFolderPathProvider workspaceFolderPathProvider = mock(WorkspaceFolderPathProvider.class);
+        WsAgentVolumeProvider wsAgentVolumeProvider = mock(WsAgentVolumeProvider.class);
+        TerminalVolumeProvider terminalVolumeProvider = mock(TerminalVolumeProvider.class);
+        ExecAgentVolumeProvider execAgentVolumeProvider = mock(ExecAgentVolumeProvider.class);
+        provisioner = new LocalCheInfrastructureProvisioner(agentConfigApplier,
+                                                            workspaceFolderPathProvider,
+                                                            new WindowsPathEscaper(),
+                                                            "/projects",
+                                                            null,
+                                                            wsAgentVolumeProvider,
+                                                            new DockerExtConfBindingProvider(),
+                                                            terminalVolumeProvider,
+                                                            execAgentVolumeProvider);
+
+        // desired class
+        infra = new DockerRuntimeInfrastructure(parser,
+                                                validator,
+                                                strategy,
+                                                provisioner,
+                                                normalizer,
+                                                starter,
+                                                networkLifecycle,
+                                                urlRewriter,
+                                                docker,
+                                                agentRegistry, agentSorter);
+    }
+

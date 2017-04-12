@@ -1,0 +1,69 @@
+    /**
+     * Constructs a map of {@link ServerImpl} from provided parameters, using selected strategy
+     * for evaluating addresses and ports.
+     *
+     * <p>Keys consist of port number and transport protocol (tcp or udp) separated by
+     * a forward slash (e.g. 8080/tcp)
+     *
+     * @param containerInfo
+     *         the {@link ContainerInfo} describing the container.
+     * @param internalHost
+     *         alternative hostname to use, if address cannot be obtained from containerInfo
+     * @param serverConfMap
+     *         additional Map of {@link OldServerConfImpl}. Configurations here override those found
+     *         in containerInfo.
+     * @return a Map of the servers exposed by the container.
+     */
+    public Map<String, ServerImpl> getServers(ContainerInfo containerInfo,
+                                              String internalHost,
+                                              Map<String, OldServerConfImpl> serverConfMap) {
+
+        Map<String, List<PortBinding>> portBindings;
+        Map<String, String> labels = Collections.emptyMap();
+
+        if (containerInfo.getNetworkSettings() != null && containerInfo.getNetworkSettings().getPorts() != null) {
+            portBindings = containerInfo.getNetworkSettings().getPorts();
+        } else {
+            // If we can't get PortBindings, we can't return servers.
+            return Collections.emptyMap();
+        }
+        if (containerInfo.getConfig() != null && containerInfo.getConfig().getLabels() != null) {
+            labels = containerInfo.getConfig().getLabels();
+        }
+
+        Map<String, String> internalAddressesAndPorts = getInternalAddressesAndPorts(containerInfo, internalHost);
+        Map<String, String> externalAddressesAndPorts = getExternalAddressesAndPorts(containerInfo, internalHost);
+
+        Map<String, ServerImpl> servers = new LinkedHashMap<>();
+
+        for (String portProtocol : portBindings.keySet()) {
+            String internalAddressAndPort = internalAddressesAndPorts.get(portProtocol);
+            String externalAddressAndPort = externalAddressesAndPorts.get(portProtocol);
+            OldServerConfImpl serverConf = getServerConfImpl(portProtocol, labels, serverConfMap);
+
+            // Add protocol and path to internal/external address, if applicable
+            String internalUrl = null;
+            String externalUrl = null;
+            if (serverConf.getProtocol() != null) {
+                String pathSuffix = serverConf.getPath();
+                if (pathSuffix != null && !pathSuffix.isEmpty()) {
+                    if (pathSuffix.charAt(0) != '/') {
+                        pathSuffix = "/" + pathSuffix;
+                    }
+                } else {
+                    pathSuffix = "";
+                }
+                internalUrl = serverConf.getProtocol() + "://" + internalAddressAndPort + pathSuffix;
+                externalUrl = serverConf.getProtocol() + "://" + externalAddressAndPort + pathSuffix;
+            }
+
+            ServerProperties properties = new ServerPropertiesImpl(serverConf.getPath(),
+                                                                   internalAddressAndPort,
+                                                                   internalUrl);
+
+            servers.put(portProtocol, new ServerImpl(externalUrl));
+        }
+
+        return servers;
+    }
+
