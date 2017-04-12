@@ -1,0 +1,21 @@
+    private Promise<Project> addMixin(final Project project) {
+        final VcsService vcsService = vcsServiceProvider.getVcsService(project);
+
+        if (vcsService == null || project.getMixins().contains(CONTRIBUTION_PROJECT_TYPE_ID)) {
+            return Promises.resolve(project);
+        }
+
+        return vcsService.getBranchName(project)
+                         .thenPromise(new Function<String, Promise<Project>>() {
+                             @Override
+                             public Promise<Project> apply(String branchName) throws FunctionException {
+                                 MutableProjectConfig mutableConfig = new MutableProjectConfig(project);
+                                 mutableConfig.getMixins().add(CONTRIBUTION_PROJECT_TYPE_ID);
+                                 mutableConfig.getAttributes().put(CONTRIBUTE_TO_BRANCH_VARIABLE_NAME,
+                                                                   singletonList(branchName));
+
+                                 return project.update().withBody(mutableConfig).send();
+                             }
+                         });
+    }
+

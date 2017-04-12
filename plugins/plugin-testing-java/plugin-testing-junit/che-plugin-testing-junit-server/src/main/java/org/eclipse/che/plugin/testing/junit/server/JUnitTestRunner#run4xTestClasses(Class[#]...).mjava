@@ -1,6 +1,8 @@
     private TestResult run4xTestClasses(Class< ? >... classes) throws Exception {
         ClassLoader classLoader = projectClassLoader;
         Class< ? > clsJUnitCore = Class.forName("org.junit.runner.JUnitCore", true, classLoader);
+        Class< ? > clsRequest = Class.forName("org.junit.runner.Request", true, classLoader);
+        Class< ? > clsRunner = Class.forName("org.junit.runner.Runner", true, classLoader);
         Class< ? > clsResult = Class.forName("org.junit.runner.Result", true, classLoader);
         Class< ? > clsFailure = Class.forName("org.junit.runner.notification.Failure", true, classLoader);
         Class< ? > clsDescription = Class.forName("org.junit.runner.Description", true, classLoader);
@@ -10,13 +12,18 @@
         Object jUnitCore = clsJUnitCore.getConstructor().newInstance();
 
         Object result;
+
+        List<Object> allRunTests = new ArrayList<Object>();
         try (OutputTestListener outputListener = new OutputTestListener(this.getClass().getName() + ".run4xTestClasses")) {
-            Object testListener = create4xTestListener(classLoader, clsTestRunner, outputListener);
+            Object testListener = create4xTestListener(classLoader, clsTestRunner, allRunTests, outputListener);
             ClassLoader tccl = Thread.currentThread().getContextClassLoader();
             try {
                 Thread.currentThread().setContextClassLoader(projectClassLoader);
                 clsJUnitCore.getMethod("addListener", clsTestRunner).invoke(jUnitCore, testListener);
-                result = clsJUnitCore.getMethod("run", Class[].class).invoke(jUnitCore, new Object[]{classes});
+                Object request = clsRequest.getMethod("classes", Class[].class).invoke(null, new Object[]{classes});
+                Object runner = clsRequest.getMethod("getRunner").invoke(request);
+                Object suiteDescription = clsRunner.getMethod("getDescription").invoke(runner);
+                result = clsJUnitCore.getMethod("run", clsRequest).invoke(jUnitCore, request);
             } finally {
                 Thread.currentThread().setContextClassLoader(tccl);
                 clsJUnitCore.getMethod("removeListener", clsTestRunner).invoke(jUnitCore, testListener);
@@ -25,41 +32,64 @@
 
         TestResult dtoResult = DtoFactory.getInstance().createDto(TestResult.class);
         boolean isSuccess = (Boolean)clsResult.getMethod("wasSuccessful").invoke(result);
+
+        Map<String, TestCase> testCases = new HashMap<>();
+
+        for (Object testDescription : allRunTests) {
+            String testKey = (String)clsDescription.getMethod("getDisplayName").invoke(testDescription);
+            TestCase dtoTestCase = DtoFactory.getInstance().createDto(TestCase.class);
+            String className = (String)clsDescription.getMethod("getClassName").invoke(testDescription);
+            String methodName = (String)clsDescription.getMethod("getMethodName").invoke(testDescription);
+            dtoTestCase.setClassName(className);
+            dtoTestCase.setMethod(methodName);
+            dtoTestCase.setFailingLine(-1);
+            dtoTestCase.setMessage("");
+            dtoTestCase.setTrace("");
+            testCases.put(testKey, dtoTestCase);
+        }
+
         List< ? > failures = (List< ? >)clsResult.getMethod("getFailures").invoke(result);
-        List<Failure> jUnitFailures = new ArrayList<>();
         for (Object failure : failures) {
-            Failure dtoFailure = DtoFactory.getInstance().createDto(Failure.class);
-            String message = (String)clsFailure.getMethod("getMessage").invoke(failure);
+            TestCase dtoFailure = DtoFactory.getInstance().createDto(TestCase.class);
             Object description = clsFailure.getMethod("getDescription").invoke(failure);
-            String failClassName = (String)clsDescription.getMethod("getClassName").invoke(description);
+            String testKey = (String)clsDescription.getMethod("getDisplayName").invoke(description);
+
+            String className = (String)clsDescription.getMethod("getClassName").invoke(description);
+            String methodName = (String)clsDescription.getMethod("getMethodName").invoke(description);
+
+            String message = (String)clsFailure.getMethod("getMessage").invoke(failure);
             Object exception = clsFailure.getMethod("getException").invoke(failure);
             Object stackTrace = clsThrowable.getMethod("getStackTrace").invoke(exception);
-            String failMethod = "";
             Integer failLine = null;
             if (stackTrace.getClass().isArray()) {
                 int length = Array.getLength(stackTrace);
                 for (int i = 0; i < length; i++) {
                     Object stackElement = Array.get(stackTrace, i);
                     String failClass = (String)clsStackTraceElement.getMethod("getClassName").invoke(stackElement);
-                    if (failClass.equals(failClassName)) {
-                        failMethod = (String)clsStackTraceElement.getMethod("getMethodName").invoke(stackElement);
+                    String failMethod = (String)clsStackTraceElement.getMethod("getMethodName").invoke(stackElement);
+                    if (failClass.equals(className) && failMethod.equals(methodName)) {
                         failLine = (Integer)clsStackTraceElement.getMethod("getLineNumber").invoke(stackElement);
                         break;
                     }
                 }
             }
             String trace = (String)clsFailure.getMethod("getTrace").invoke(failure);
-            dtoFailure.setFailingClass(failClassName);
-            dtoFailure.setFailingMethod(failMethod);
-            dtoFailure.setFailingLine(failLine);
+            dtoFailure.setClassName(className);
+            dtoFailure.setMethod(methodName);
+            dtoFailure.setFailed(true);
+            dtoFailure.setFailingLine(failLine == null ? -1 : failLine);
             dtoFailure.setMessage(message);
             dtoFailure.setTrace(trace);
-            jUnitFailures.add(dtoFailure);
+            testCases.put(testKey, dtoFailure);
         }
+
         dtoResult.setTestFramework("JUnit4x");
         dtoResult.setSuccess(isSuccess);
-        dtoResult.setFailureCount(jUnitFailures.size());
-        dtoResult.setFailures(jUnitFailures);
+        dtoResult.setFailureCount(failures.size());
+        dtoResult.setTestCaseCount(testCases.size());
+        List<TestCase> testList = new ArrayList<>(testCases.size());
+        testList.addAll(testCases.values());
+        dtoResult.setTestCases(testList);
         return dtoResult;
     }
 

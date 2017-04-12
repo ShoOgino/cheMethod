@@ -1,0 +1,27 @@
+    @Override
+    public StepsChain creationChain(final Context context) {
+        return StepsChain.first(commitWorkingTreeStep)
+                         .then(authorizeCodenvyOnVCSHostStep)
+                         .then(defineExecutionConfiguration)
+                         .then(determineUpstreamRepositoryStep)
+                         .then(detectPullRequestStep)
+                         .thenChainIf(new Supplier<Boolean>() {
+                                          @Override
+                                          public Boolean get() {
+                                              return context.isForkAvailable();
+                                          }
+                                      },
+                                      StepsChain.first(createForkStep)
+                                                .then(addHttpForkRemoteStep)
+                                                .then(pushBranchOnForkStep),
+                                      StepsChain.first(pushBranchOnOriginStep))
+                         .then(generateReviewFactoryStep)
+                         .thenIf(new Supplier<Boolean>() {
+                             @Override
+                             public Boolean get() {
+                                 return context.getReviewFactoryUrl() != null;
+                             }
+                         }, addReviewFactoryLinkStep)
+                         .then(issuePullRequestStep);
+    }
+

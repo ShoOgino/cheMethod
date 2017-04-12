@@ -7,25 +7,19 @@
         Promise<DebugSessionDto> connect = service.connect(debuggerType, connectionProperties);
         final DebuggerDescriptor debuggerDescriptor = toDescriptor(connectionProperties);
 
-        Promise<Void> promise = connect.then(new Function<DebugSessionDto, Void>() {
-            @Override
-            public Void apply(final DebugSessionDto arg) throws FunctionException {
-                DebuggerInfo debuggerInfo = arg.getDebuggerInfo();
-                debuggerDescriptor.setInfo(debuggerInfo.getName() + " " + debuggerInfo.getVersion());
+        Promise<Void> promise = connect.then((Function<DebugSessionDto, Void>)debugSession -> {
+            DebuggerInfo debuggerInfo = debugSession.getDebuggerInfo();
+            debuggerDescriptor.setInfo(debuggerInfo.getName() + " " + debuggerInfo.getVersion());
 
-                setDebugSession(arg);
-                preserveDebuggerState();
-                startCheckingEvents();
-                startDebugger(arg);
+            setDebugSession(debugSession);
+            preserveDebuggerState();
+            startCheckingEvents();
+            startDebugger(debugSession);
 
-                return null;
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                Log.error(AbstractDebugger.class, arg.getMessage());
-                throw new OperationException(arg.getCause());
-            }
+            return null;
+        }).catchError((Operation<PromiseError>)error -> {
+            Log.error(AbstractDebugger.class, error.getMessage());
+            throw new OperationException(error.getCause());
         });
 
         for (DebuggerObserver observer : observers) {

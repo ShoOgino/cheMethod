@@ -1,0 +1,22 @@
+    @Override
+    public StepsChain updateChain(final Context context) {
+        final StepsChain forkChain = StepsChain.firstIf(new Supplier<Boolean>() {
+            @Override
+            public Boolean get() {
+                return context.getForkedRemoteName() == null;
+            }
+        }, addHttpForkRemoteStep).then(pushBranchOnForkStep);
+
+        final StepsChain originChain = StepsChain.first(pushBranchOnOriginStep);
+
+        return StepsChain.first(commitWorkingTreeStep)
+                         .then(authorizeCodenvyOnVCSHostStep)
+                         .thenChainIf(new Supplier<Boolean>() {
+                             @Override
+                             public Boolean get() {
+                                 return context.isForkAvailable();
+                             }
+                         }, forkChain, originChain)
+                         .then(updatePullRequestStep);
+    }
+

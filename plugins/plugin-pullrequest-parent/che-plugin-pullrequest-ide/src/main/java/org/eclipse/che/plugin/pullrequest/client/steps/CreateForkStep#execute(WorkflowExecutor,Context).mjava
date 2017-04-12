@@ -1,0 +1,36 @@
+    @Override
+    public void execute(final WorkflowExecutor executor, final Context context) {
+        final String originRepositoryOwner = context.getOriginRepositoryOwner();
+        final String originRepositoryName = context.getOriginRepositoryName();
+        final String upstreamRepositoryOwner = context.getUpstreamRepositoryOwner();
+        final String upstreamRepositoryName = context.getUpstreamRepositoryName();
+
+        // the upstream repository has been cloned a fork must be created
+        if (originRepositoryOwner.equalsIgnoreCase(upstreamRepositoryOwner) &&
+            originRepositoryName.equalsIgnoreCase(upstreamRepositoryName)) {
+
+            context.getVcsHostingService()
+                   .getUserFork(context.getHostUserLogin(), upstreamRepositoryOwner, upstreamRepositoryName)
+                   .then(new Operation<Repository>() {
+                       @Override
+                       public void apply(Repository fork) throws OperationException {
+                           proceed(fork.getName(), executor, context);
+                       }
+                   })
+                   .catchError(new Operation<PromiseError>() {
+                       @Override
+                       public void apply(PromiseError error) throws OperationException {
+                           if (error.getCause() instanceof NoUserForkException) {
+                               createFork(executor, context, upstreamRepositoryOwner, upstreamRepositoryName);
+                               return;
+                           }
+
+                           executor.fail(CreateForkStep.this, context, error.getCause().getMessage());
+                       }
+                   });
+        } else {
+            // user fork has been cloned
+            proceed(originRepositoryName, executor, context);
+        }
+    }
+

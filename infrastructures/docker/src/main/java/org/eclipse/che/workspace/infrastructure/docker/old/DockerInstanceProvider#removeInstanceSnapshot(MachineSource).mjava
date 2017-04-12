@@ -24,40 +24,16 @@
             return;
         }
 
-        final String registry = dockerMachineSource.getRegistry();
         final String repository = dockerMachineSource.getRepository();
-        if (registry == null || repository == null) {
+        if (repository == null) {
             LOG.error("Failed to remove instance snapshot: invalid machine source: {}", dockerMachineSource);
             throw new SnapshotException("Snapshot removing failed. Snapshot attributes are not valid");
         }
 
-        try {
-            URL url = UriBuilder.fromUri("http://" + registry) // TODO make possible to use https here
-                                .path("/v2/{repository}/manifests/{digest}")
-                                .build(repository, dockerMachineSource.getDigest())
-                                .toURL();
-            final HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-            try {
-                conn.setConnectTimeout(30 * 1000);
-                conn.setRequestMethod("DELETE");
-                // TODO add auth header for secured registry
-                // conn.setRequestProperty("Authorization", authHeader);
-                final int responseCode = conn.getResponseCode();
-                if ((responseCode / 100) != 2) {
-                    InputStream in = conn.getErrorStream();
-                    if (in == null) {
-                        in = conn.getInputStream();
-                    }
-                    LOG.error("An error occurred while deleting snapshot with url: {}\nError stream: {}",
-                              url,
-                              IoUtil.readAndCloseQuietly(in));
-                    throw new SnapshotException("Internal server error occurs. Can't remove snapshot");
-                }
-            } finally {
-                conn.disconnect();
-            }
-        } catch (IOException e) {
-            LOG.error(e.getLocalizedMessage(), e);
+        if (DEFAULT_REGISTRY_SYNONYMS.contains(dockerMachineSource.getRegistry())) {
+            removeSnapshotFromDockerHub(repository);
+        } else {
+            removeSnapshotFromRegistry(dockerMachineSource);
         }
     }
 

@@ -1,0 +1,54 @@
+    @Inject
+    public ContributePartPresenter(final ContributePartView view,
+                                   final ContributeMessages messages,
+                                   final WorkspaceAgent workspaceAgent,
+                                   final EventBus eventBus,
+                                   final WorkflowExecutor workflow,
+                                   final AppContext appContext,
+                                   final NotificationManager notificationManager,
+                                   final DialogFactory dialogFactory,
+                                   final Map<String, StagesProvider> stagesProviders) {
+        this.view = view;
+        this.workspaceAgent = workspaceAgent;
+        this.workflowExecutor = workflow;
+        this.messages = messages;
+        this.appContext = appContext;
+        this.notificationManager = notificationManager;
+        this.dialogFactory = dialogFactory;
+        this.stagesProviders = stagesProviders;
+
+        this.view.setDelegate(this);
+
+        view.addContributionTitleChangedHandler(new TextChangedHandler() {
+            @Override
+            public void onTextChanged(String newText) {
+                final Context curContext = workflowExecutor.getCurrentContext();
+                curContext.getViewState().setContributionTitle(newText);
+            }
+        });
+
+        view.addContributionCommentChangedHandler(new TextChangedHandler() {
+            @Override
+            public void onTextChanged(String newText) {
+                final Context curContext = workflowExecutor.getCurrentContext();
+                curContext.getViewState().setContributionComment(newText);
+            }
+        });
+
+        view.addBranchChangedHandler(new TextChangedHandler() {
+            @Override
+            public void onTextChanged(String branchName) {
+                final Context curContext = workflowExecutor.getCurrentContext();
+                if (!branchName.equals(messages.contributePartConfigureContributionSectionContributionBranchNameCreateNewItemText()) &&
+                    !branchName.equals(curContext.getWorkBranchName())) {
+                    checkoutBranch(curContext, branchName, false);
+                }
+            }
+        });
+
+        eventBus.addHandler(StepEvent.TYPE, this);
+        eventBus.addHandler(ContextPropertyChangeEvent.TYPE, this);
+        eventBus.addHandler(CurrentContextChangedEvent.TYPE, this);
+        eventBus.addHandler(ContextInvalidatedEvent.TYPE, this);
+    }
+
