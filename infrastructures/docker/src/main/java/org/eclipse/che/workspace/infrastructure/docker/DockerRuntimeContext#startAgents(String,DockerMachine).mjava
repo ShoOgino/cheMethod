@@ -1,0 +1,20 @@
+    private void startAgents(String machineName, DockerMachine dockerMachine) throws InfrastructureException {
+        List<String> agents = environment.getMachines().get(machineName).getAgents();
+        for (String agent : agents) {
+            String agentScript;
+            try {
+                agentScript = agentRegistry.getAgent(new AgentKeyImpl(agent)).getScript();
+            } catch (AgentException e) {
+                throw new InfrastructureException(e.getLocalizedMessage(), e);
+            }
+            MessageProcessor<LogMessage> messageProcessor = message -> LOG.error(message.toString());
+            try {
+                Exec exec = docker.createExec(CreateExecParams.create(dockerMachine.getContainer(),
+                                                                      new String[] {"/bin/sh", "-c",  agentScript}));
+                docker.startExec(StartExecParams.create(exec.getId()), messageProcessor);
+            } catch (IOException e) {
+                throw new InfrastructureException(e.getLocalizedMessage(), e);
+            }
+        }
+    }
+
