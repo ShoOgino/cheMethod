@@ -2,38 +2,25 @@
     public WorkspaceRuntimes(EventService eventsService,
                              Set<RuntimeInfrastructure> infrastructures,
                              WorkspaceSharedPool sharedPool) {
-
-
-        this.eventsService = eventsService;
         this.runtimes = new ConcurrentHashMap<>();
-
-        this.infraByRecipe = new ConcurrentHashMap<>();
-
-        //TODO move it to post-create?
-        for (RuntimeInfrastructure infra : infrastructures) {
-
-            // If several entries - last wins (TODO should we throw conflict exception?)
-            for (String type : infra.getRecipeTypes())
-                infraByRecipe.put(type, infra);
-
-            // try to recover from infrastructures
-            try {
-                for (RuntimeIdentity id : infra.getIdentities()) {
-                    runtimes.put(id.getWorkspaceId(), validate(infra.getRuntime(id)));
-                }
-            } catch (UnsupportedOperationException e) {
-                LOG.warn("Not recoverable infrastructure: " + infra.getName() + " Reason: " + e.getMessage());
-            } catch (InfrastructureException x) {
-                LOG.error("An error occurred while attempting to recover runtimes using infrastructure '{}'. Reason: '{}'",
-                          infra.getName(),
-                          x.getMessage());
-            }
-        }
-        //
-
-        // 16 - experimental value for stripes count, it comes from default hash map size
-        this.locks = new StripedLocks(16);
+        this.eventsService = eventsService;
         this.sharedPool = sharedPool;
 
+        // TODO: consider extracting to a strategy interface(1. pick the last, 2. fail with conflict)
+        Map<String, RuntimeInfrastructure> tmp = new HashMap<>();
+        for (RuntimeInfrastructure infra : infrastructures) {
+            for (String type : infra.getRecipeTypes()) {
+                LOG.info("Register infrastructure '{}' recipe type '{}'", infra.getName(), type);
+                RuntimeInfrastructure existingInfra = tmp.put(type, infra);
+                if (existingInfra != null) {
+                    LOG.warn("Both '{}' and '{}' infrastructures support recipe of type '{}', infrastructure '{}' will be used",
+                             infra.getName(),
+                             existingInfra.getName(),
+                             type,
+                             infra.getName());
+                }
+            }
+        }
+        infraByRecipe = ImmutableMap.copyOf(tmp);
     }
 
