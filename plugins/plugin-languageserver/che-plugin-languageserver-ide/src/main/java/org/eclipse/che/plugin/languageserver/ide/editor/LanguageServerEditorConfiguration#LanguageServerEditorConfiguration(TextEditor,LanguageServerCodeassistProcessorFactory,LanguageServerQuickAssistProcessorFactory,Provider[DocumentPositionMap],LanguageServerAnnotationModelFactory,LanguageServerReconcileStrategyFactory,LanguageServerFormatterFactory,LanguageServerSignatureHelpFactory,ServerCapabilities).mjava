@@ -1,0 +1,34 @@
+    @Inject
+    public LanguageServerEditorConfiguration(@Assisted TextEditor editor, LanguageServerCodeassistProcessorFactory codeAssistProcessor,
+                                             LanguageServerQuickAssistProcessorFactory quickAssistProcessorFactory,
+                                             Provider<DocumentPositionMap> docPositionMapProvider,
+                                             LanguageServerAnnotationModelFactory annotationModelFactory,
+                                             LanguageServerReconcileStrategyFactory reconcileStrategyProviderFactory,
+                                             LanguageServerFormatterFactory formatterFactory,
+                                             LanguageServerSignatureHelpFactory signatureHelpFactory,
+                                             @Assisted ServerCapabilities serverCapabilities) {
+        codeAssistProcessorFactory = codeAssistProcessor;
+        quickAssistProcessor = quickAssistProcessorFactory.create(editor);
+        if ((serverCapabilities.isDocumentFormattingProvider() != null && serverCapabilities.isDocumentFormattingProvider())
+                        || (serverCapabilities.isDocumentRangeFormattingProvider() != null
+                                        && serverCapabilities.isDocumentRangeFormattingProvider())
+                        || serverCapabilities.getDocumentOnTypeFormattingProvider() != null) {
+            this.formatter = formatterFactory.create(serverCapabilities);
+        } else {
+            this.formatter= null;
+        }
+        this.serverCapabilities = serverCapabilities;
+        DocumentPositionMap documentPositionMap = docPositionMapProvider.get();
+        documentPositionMap.addPositionCategory(DocumentPositionMap.Categories.DEFAULT_CATEGORY);
+        this.annotationModel = annotationModelFactory.get(documentPositionMap);
+
+        this.reconciler = new ReconcilerWithAutoSave(DocumentPartitioner.DEFAULT_CONTENT_TYPE, getPartitioner());
+        reconciler.addReconcilingStrategy(DocumentPartitioner.DEFAULT_CONTENT_TYPE,
+                                          reconcileStrategyProviderFactory.build(serverCapabilities));
+        if (serverCapabilities.getSignatureHelpProvider() != null) {
+            signatureHelpProvider = signatureHelpFactory.create(serverCapabilities);
+        } else {
+            signatureHelpProvider = null;
+        }
+    }
+
