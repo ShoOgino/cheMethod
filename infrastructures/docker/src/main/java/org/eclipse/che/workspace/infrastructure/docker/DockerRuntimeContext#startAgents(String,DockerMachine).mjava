@@ -1,20 +1,23 @@
+    // TODO rework to agent launchers
     private void startAgents(String machineName, DockerMachine dockerMachine) throws InfrastructureException {
+        MessageProcessor<LogMessage> messageProcessor = message -> {
+            LOG.error("Type:{}, Content:{}", message.getType(), message.getContent());
+        };
         List<String> agents = environment.getMachines().get(machineName).getAgents();
         for (String agent : agents) {
             String agentScript;
             try {
                 agentScript = agentRegistry.getAgent(new AgentKeyImpl(agent)).getScript();
+                if (runCommands.containsKey(agent)) {
+                    agentScript = agentScript + '\n' + runCommands.get(agent);
+                }
             } catch (AgentException e) {
                 throw new InfrastructureException(e.getLocalizedMessage(), e);
             }
-            MessageProcessor<LogMessage> messageProcessor = message -> LOG.error(message.toString());
-            try {
-                Exec exec = docker.createExec(CreateExecParams.create(dockerMachine.getContainer(),
-                                                                      new String[] {"/bin/sh", "-c",  agentScript}));
-                docker.startExec(StartExecParams.create(exec.getId()), messageProcessor);
-            } catch (IOException e) {
-                throw new InfrastructureException(e.getLocalizedMessage(), e);
-            }
+            String effectiveFinalScript = agentScript;
+            Thread thread = new Thread(() -> startExec(dockerMachine.getContainer(), effectiveFinalScript, messageProcessor));
+            thread.setDaemon(true);
+            thread.start();
         }
     }
 
