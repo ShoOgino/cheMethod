@@ -1,13 +1,6 @@
-    // TODO what should be thrown if start is interrupted in another thread, in current thread
-    // TODO which error will be thrown if start fails because of something we don't control
-    // and admin doesn't want to know about this problem
-    // TODO if this thread is interrupted and stop is not called!
-    // TODO interrupted exception, closedbyinteruptionexception
-    // TODO add infrastructural things such as backup/restore
-    // TODO simplify code
     @Override
     protected InternalRuntime internalStart(Map<String, String> startOptions) throws InfrastructureException {
-        setStartThread();
+        startSynchronizer.setStartThread();
         try {
             checkStartInterruption();
             dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
@@ -18,24 +11,16 @@
                 DockerService service = dockerEnvironment.getServices().get(machineName);
                 checkStartInterruption();
                 dockerMachine = startMachine(machineName, service, startOptions);
-                addMachine(machineName, dockerMachine);
-                // add agents start
+                checkStartInterruption();
+                startSynchronizer.addMachine(machineName, dockerMachine);
                 startQueue.poll();
                 machineName = startQueue.peek();
             }
 
             return getInternalRuntime();
         } catch (InfrastructureException | RuntimeException e) {
-            // TODO remove starting machine if present
-            // TODO Check if interruption came from stop or because of another reason
-            // TODO if because of another reason stop environment
-            boolean runtimeDestroyingNeeded = true;
-            synchronized (this) {
-                if (stopIsCalled) {
-                    runtimeDestroyingNeeded = false;
-                }
-            }
             boolean interrupted = Thread.interrupted();
+            boolean runtimeDestroyingNeeded = !startSynchronizer.isStopCalled();
             if (runtimeDestroyingNeeded) {
                 try {
                     destroyRuntime();
@@ -44,7 +29,7 @@
                 }
             }
             if (interrupted) {
-                // TODO throw that it is interrupted
+                // TODO throw StartInterruptedException
                 throw new InfrastructureException("");
             }
             try {
@@ -54,7 +39,6 @@
             } catch (Exception wrap) {
                 throw new InfrastructureException(wrap.getLocalizedMessage(), wrap);
             }
-            // TODO InterruptedException | ClosedByInterruptException
         }
     }
 
