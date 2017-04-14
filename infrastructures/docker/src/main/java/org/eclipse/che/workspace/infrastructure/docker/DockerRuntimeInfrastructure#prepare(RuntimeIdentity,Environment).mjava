@@ -1,36 +1,31 @@
     @Override
-    public DockerRuntimeContext prepare(RuntimeIdentity identity, Environment originEnv) throws ValidationException,
-                                                                                            InfrastructureException {
-        // Copy to be able to change env and protect from env changes on the go
+    public DockerRuntimeContext prepare(RuntimeIdentity identity, Environment originEnv)
+            throws ValidationException, InfrastructureException {
+        // Copy to be able to change env and protect from env changes by method caller
         EnvironmentImpl environment = new EnvironmentImpl(originEnv);
         DockerEnvironment dockerEnvironment = dockerEnvironmentParser.parse(environment);
         dockerEnvironmentValidator.validate(environment, dockerEnvironment);
         // check that services start order can be resolved
         List<String> orderedServices = startStrategy.order(dockerEnvironment);
+        // TODO rething agent stuff
         for (MachineConfigImpl machineConfig : environment.getMachines().values()) {
             try {
                 List<AgentKey> agentKeys = agentSorter.sort(machineConfig.getAgents());
                 machineConfig.setAgents(agentKeys.stream().map(AgentKey::getId).collect(Collectors.toList()));
             } catch (AgentException e) {
-                throw new InfrastructureException(e.getLocalizedMessage(), e);
+                throw new ValidationException(e.getLocalizedMessage(), e);
             }
         }
 
         // modify environment with everything needed to use docker machines on particular (cloud) infrastructure
         infrastructureProvisioner.provision(environment, dockerEnvironment);
-        //
+        // normalize env to provide environment description with absolutely everything expected in
         environmentNormalizer.normalize(environment, dockerEnvironment, identity);
 
-        return new DockerRuntimeContext(dockerEnvironment,
-                                        environment,
-                                        identity,
-                                        this,
-                                        null,
-                                        orderedServices,
-                                        networkLifecycle,
-                                        serviceStarter,
-                                        urlRewriter,
-                                        dockerConnector,
-                                        agentRegistry);
+        return runtimeFactory.createContext(this,
+                                            identity,
+                                            environment,
+                                            dockerEnvironment,
+                                            orderedServices);
     }
 
