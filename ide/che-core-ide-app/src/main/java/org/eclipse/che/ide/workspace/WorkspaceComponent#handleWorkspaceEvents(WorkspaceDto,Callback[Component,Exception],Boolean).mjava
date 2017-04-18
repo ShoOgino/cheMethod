@@ -22,15 +22,7 @@
         subscribe(ENV_STATUS_ERROR_MSG, "event:environment-status:subscribe", workspaceId);
 
         if (appContext.getActiveRuntime() != null) {
-            appContext.getActiveRuntime().getMachines().forEach(machine -> {
-
-                String endpointId = "ws-master";
-                String subscribeByName = "event:environment-output:subscribe-by-machine-name";
-                String workspaceIdPlusMachineName =
-                        appContext.getWorkspaceId() + "::" + machine.getDisplayName();
-
-                transmitter.transmitStringToNone(endpointId, subscribeByName, workspaceIdPlusMachineName);
-            });
+            appContext.getActiveRuntime().getMachines().forEach(machine -> subscribeEnvironmentOutput(machine.getDisplayName()));
         }
 
         WorkspaceStatus workspaceStatus = workspace.getStatus();
@@ -51,8 +43,10 @@
                 workspaceServiceClient.getSettings()
                                       .then((Function<Map<String, String>, Map<String, String>>)settings -> {
                                           if (Boolean.parseBoolean(settings.getOrDefault(CHE_WORKSPACE_AUTO_START, "true"))) {
-                                              startWorkspaceById(workspaceId, workspace.getConfig().getDefaultEnv(),
-                                                                 restoreFromSnapshot);
+                                              final WorkspaceConfig config = workspace.getConfig();
+                                              config.getEnvironments().get(config.getDefaultEnv()).getMachines().keySet()
+                                                    .forEach(machine -> subscribeEnvironmentOutput(machine));
+                                              startWorkspaceById(workspaceId, config.getDefaultEnv(), restoreFromSnapshot);
                                           } else {
                                               loader.show(WORKSPACE_STOPPED);
                                           }
