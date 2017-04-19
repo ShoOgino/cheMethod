@@ -5,30 +5,31 @@
         QueryAnnotationsEvent.QueryCallback annotationCallback = new QueryAnnotationsEvent.QueryCallback() {
 
             @Override
-            public void respond(Map<Annotation, Position> annotations) {
-                List<DiagnosticDTO> diagnostics = new ArrayList<>();
+            public void respond(Map<Annotation, org.eclipse.che.ide.api.editor.text.Position> annotations) {
+                List<Diagnostic> diagnostics = new ArrayList<>();
                 // iteration with range never returns anything; need to filter ourselves.
                 // https://github.com/eclipse/che/issues/4338
                 annotations.entrySet().stream().filter((e) -> e.getValue().overlapsWith(range.getStartOffset(), range.getLength()))
                                 .map(Entry::getKey).map(a -> (DiagnosticAnnotation) a).map(DiagnosticAnnotation::getDiagnostic)
                                 .collect(Collectors.toList());
 
-                CodeActionContextDTO context = CodeActionContextDTOImpl.make().withDiagnostics(diagnostics);
-                CodeActionParamsDTO params = CodeActionParamsDTOImpl.make().withContext(context);
-                params.setTextDocument(TextDocumentIdentifierDTOImpl.make().withUri(document.getFile().getLocation().toString()));
+                CodeActionContext context = new CodeActionContext(diagnostics);
 
                 TextPosition start = document.getPositionFromIndex(range.getStartOffset());
                 TextPosition end = document.getPositionFromIndex(range.getStartOffset() + range.getLength());
-                PositionDTO rangeStart = toPositionDto(start);
-                PositionDTO rangeEnd = toPositionDto(end);
-                RangeDTO rangeParam = RangeDTOImpl.make().withStart(rangeStart);
+                Position rangeStart = new Position(start.getLine(), start.getCharacter());
+                Position rangeEnd = new Position(end.getLine(), end.getCharacter());
+                Range rangeParam = new Range(rangeStart, rangeEnd);
                 rangeParam.setEnd(rangeEnd);
-                params.setRange(rangeParam);
 
-                Promise<List<CommandDTO>> codeAction = textDocumentService.codeAction(params);
+                TextDocumentIdentifier textDocumentIdentifier = new TextDocumentIdentifier(document.getFile().getLocation().toString());
+
+                CodeActionParams params = new CodeActionParams(textDocumentIdentifier, rangeParam, context);
+
+                Promise<List<Command>> codeAction = textDocumentService.codeAction(params);
                 List<CompletionProposal> proposals = new ArrayList<>();
                 codeAction.then((commands) -> {
-                    for (CommandDTO command : commands) {
+                    for (Command command : commands) {
                         Action action = actionManager.getAction(command.getCommand());
                         if (action != null) {
                             proposals.add(new ActionCompletionProposal(command, action));
@@ -37,12 +38,6 @@
                     ;
                     callback.proposalComputed(proposals);
                 });
-            }
-
-            private PositionDTO toPositionDto(TextPosition start) {
-                PositionDTO rangeStart = PositionDTOImpl.make().withLine(start.getLine());
-                rangeStart.setCharacter(start.getCharacter());
-                return rangeStart;
             }
         };
         QueryAnnotationsEvent event = new QueryAnnotationsEvent.Builder().withFilter(a -> a instanceof DiagnosticAnnotation)

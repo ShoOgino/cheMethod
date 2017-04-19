@@ -1,0 +1,33 @@
+    private void generateEitherConversion(String indent, PrintWriter out, String varName, String valueAccess, Type paramType) {
+        String innerName = varName + "e";
+        String typesName = innerName + "cls";
+
+        Collection<Type> allDisjoinTypes = EitherUtil.getAllDisjoinTypes(EitherUtil.getLeftDisjointType(paramType));
+        Set<Class<?>> leftClasses = allDisjoinTypes.stream().map(t -> getRawClass(t)).collect(Collectors.toSet());
+
+        out.println(indent + String.format("JsonDecision[] %1$s= new JsonDecision[] {", typesName));
+        boolean first = true;
+        for (Class<?> startClass : leftClasses) {
+            out.print(indent + INDENT + getJsonDecision(startClass));
+            if (first) {
+                first = false;
+            } else {
+                out.print(",");
+            }
+            out.println();
+        }
+        out.println(indent + "};");
+
+        out.println(indent + String.format("%1$s %2$s;", paramType.getTypeName(), varName));
+        out.println(indent + String.format("if (EitherUtil.matches(%1$s, %2$s)) {", valueAccess, typesName));
+
+        generateFromJson(indent + INDENT, out, innerName, valueAccess, EitherUtil.getLeftDisjointType(paramType));
+
+        out.println(indent + INDENT + String.format("%1$s= Either.forLeft(%2$s);", varName, innerName));
+        out.println(indent + "} else  {");
+
+        generateFromJson(indent + INDENT, out, innerName, valueAccess, EitherUtil.getRightDisjointType(paramType));
+        out.println(indent + INDENT + String.format("%1$s= Either.forRight(%2$s);", varName, innerName));
+        out.println(indent + "}");
+    }
+
