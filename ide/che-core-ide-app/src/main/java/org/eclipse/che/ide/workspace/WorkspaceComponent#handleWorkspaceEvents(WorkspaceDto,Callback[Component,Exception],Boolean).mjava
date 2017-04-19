@@ -21,11 +21,8 @@
         subscribe(WS_AGENT_OUTPUT_ERROR_MSG, "event:ws-agent-output:subscribe", workspaceId);
         subscribe(ENV_STATUS_ERROR_MSG, "event:environment-status:subscribe", workspaceId);
 
-        if (appContext.getActiveRuntime() != null && appContext.getDevMachine() != null) {
-            subscribe(ENV_OUTPUT_ERROR_MSG, "event:environment-output:subscribe", appContext.getDevMachine().getId());
-
-            machineLogsRestorer.restore(appContext.getDevMachine());
-
+        if (appContext.getActiveRuntime() != null) {
+            appContext.getActiveRuntime().getMachines().forEach(machine -> subscribeEnvironmentOutput(machine.getDisplayName()));
         }
 
         WorkspaceStatus workspaceStatus = workspace.getStatus();
@@ -34,8 +31,6 @@
                 loader.show(CREATING_WORKSPACE_SNAPSHOT);
                 break;
             case STARTING:
-                subscribe(ENV_OUTPUT_ERROR_MSG, "event:environment-output:subscribe", appContext.getDevMachine().getId());
-
                 eventBus.fireEvent(new WorkspaceStartingEvent(workspace));
                 break;
             case RUNNING:
@@ -48,8 +43,10 @@
                 workspaceServiceClient.getSettings()
                                       .then((Function<Map<String, String>, Map<String, String>>)settings -> {
                                           if (Boolean.parseBoolean(settings.getOrDefault(CHE_WORKSPACE_AUTO_START, "true"))) {
-                                              startWorkspaceById(workspaceId, workspace.getConfig().getDefaultEnv(),
-                                                                 restoreFromSnapshot);
+                                              final WorkspaceConfig config = workspace.getConfig();
+                                              config.getEnvironments().get(config.getDefaultEnv()).getMachines().keySet()
+                                                    .forEach(machine -> subscribeEnvironmentOutput(machine));
+                                              startWorkspaceById(workspaceId, config.getDefaultEnv(), restoreFromSnapshot);
                                           } else {
                                               loader.show(WORKSPACE_STOPPED);
                                           }
