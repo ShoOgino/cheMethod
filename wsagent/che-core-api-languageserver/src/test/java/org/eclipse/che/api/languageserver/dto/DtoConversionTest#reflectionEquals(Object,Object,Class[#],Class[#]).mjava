@@ -1,0 +1,38 @@
+    private boolean reflectionEquals(Object left, Object right, Class<?> leftClass, Class<?> rightClass) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+
+        if (leftClass.isPrimitive() || rightClass.isPrimitive()) {
+            return left.equals(right);
+        }
+        if (leftClass.isArray()) {
+            if (!rightClass.isArray()) {
+                return false;
+            }
+            return compareArrays(left, right);
+        }
+        while (leftClass != null) {
+            Field[] fields = leftClass.getDeclaredFields();
+            Field.setAccessible(fields, true);
+            for (Field field : fields) {
+                try {
+                    if (!field.isSynthetic() && !Modifier.isStatic(field.getModifiers())) {
+                        if (!reflectionEquals(field.get(left), field.get(right), field.getType(), field.getType())) {
+                            return false;
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    return false;
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException("should not happen", e);
+                }
+            }
+            leftClass = leftClass.getSuperclass();
+        }
+        return true;
+    }
+

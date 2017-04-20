@@ -11,22 +11,22 @@
         }
 
         LanguageServerEditorConfiguration configuration = (LanguageServerEditorConfiguration)editor.getConfiguration();
-        if (configuration.getServerCapabilities().isHoverProvider() == null || !configuration.getServerCapabilities().isHoverProvider()) {
+        if (configuration.getServerCapabilities().getHoverProvider() == null
+            || !configuration.getServerCapabilities().getHoverProvider()) {
             return null;
         }
 
         Document document = editor.getDocument();
-        TextDocumentPositionParamsDTO paramsDTO = helper.createTDPP(document, context.getOffset());
+        TextDocumentPositionParams paramsDTO = helper.createTDPP(document, context.getOffset());
 
-
-        Promise<HoverDTO> promise = client.hover(paramsDTO);
-        Promise<OrionHoverOverlay> then = promise.then(new Function<HoverDTO, OrionHoverOverlay>() {
+        Promise<Hover> promise = client.hover(paramsDTO);
+        Promise<OrionHoverOverlay> then = promise.then(new Function<Hover, OrionHoverOverlay>() {
             @Override
-            public OrionHoverOverlay apply(HoverDTO arg) throws FunctionException {
+            public OrionHoverOverlay apply(Hover arg) throws FunctionException {
                 OrionHoverOverlay hover = OrionHoverOverlay.create();
                 hover.setType("markdown");
                 String content = renderContent(arg);
-                //do not show hover with only white spaces
+                // do not show hover with only white spaces
                 if (StringUtils.isNullOrWhitespace(content)) {
                     return null;
                 }
@@ -35,17 +35,11 @@
                 return hover;
             }
 
-            private String renderContent(HoverDTO hover) {
+            private String renderContent(Hover hover) {
                 List<String> contents = new ArrayList<String>();
-                for (MarkedStringDTO dto : hover.getContents()) {
-                    String lang = dto.getLanguage();
-                    if (lang == null || MarkedString.PLAIN_STRING.equals(lang)) {
-                        // plain markdown text
-                        contents.add(dto.getValue());
-                    } else {
-                        // markdown code block
-                        contents.add("```" + lang + "\n" + dto.getValue() + "\n```");
-                    }
+                for (String dto : hover.getContents()) {
+                    // plain markdown text
+                    contents.add(dto);
                 }
                 return Joiner.on("\n\n").join(contents);
             }
