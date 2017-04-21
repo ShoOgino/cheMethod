@@ -1,0 +1,57 @@
+    @Test
+    public void shouldBeAbleToRestartEnvironmentAfterAgentException() throws Exception {
+        // given
+        EnvironmentImpl env = createEnv();
+        String envName = "env-1";
+        String workspaceId = "wsId";
+        when(machineProvider.startService(anyString(),
+                                          eq(workspaceId),
+                                          eq(envName),
+                                          anyString(),
+                                          anyBoolean(),
+                                          anyString(),
+                                          any(CheServiceImpl.class),
+                                          any(LineConsumer.class)))
+                .thenAnswer(invocationOnMock -> {
+                    Object[] arguments = invocationOnMock.getArguments();
+                    String machineName = (String)arguments[3];
+                    boolean isDev = (boolean)arguments[4];
+                    CheServiceImpl service = (CheServiceImpl)arguments[6];
+                    Machine machine = createMachine(workspaceId,
+                                                    envName,
+                                                    service,
+                                                    machineName,
+                                                    isDev);
+                    return new NoOpMachineInstance(machine);
+                });
+        when(environmentParser.parse(env)).thenReturn(createCheServicesEnv());
+        String testAgentExcMessage = "test agent exception";
+        doThrow(new AgentException(testAgentExcMessage)).when(startedHandler)
+                                                        .started(any(Instance.class), any(ExtendedMachine.class));
+
+        // when
+        // env start must fails because of agent exception
+        try {
+            engine.start(workspaceId,
+                         envName,
+                         env,
+                         false,
+                         messageConsumer,
+                         startedHandler);
+            fail("Agent exception should be thrown");
+        } catch (AgentException e) {
+            assertEquals(e.getMessage(), testAgentExcMessage);
+        }
+
+        doNothing().when(startedHandler).started(any(Instance.class), any(ExtendedMachine.class));
+
+        // then
+        // env start succeeds
+        engine.start(workspaceId,
+                     envName,
+                     env,
+                     false,
+                     messageConsumer,
+                     startedHandler);
+    }
+
