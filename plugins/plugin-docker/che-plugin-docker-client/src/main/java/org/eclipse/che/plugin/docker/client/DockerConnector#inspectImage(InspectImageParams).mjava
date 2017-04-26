@@ -2,6 +2,8 @@
      * Gets detailed information about docker image.
      *
      * @return detailed information about {@code image}
+     * @throws ImageNotFoundException
+     *          when docker api return 404 status
      * @throws IOException
      *          when a problem occurs with docker api calls
      */
@@ -10,7 +12,11 @@
                                                             .method("GET")
                                                             .path(apiVersionPathPrefix + "/images/" + params.getImage() + "/json")) {
             final DockerResponse response = connection.request();
-            if (OK.getStatusCode() != response.getStatus()) {
+            final int status = response.getStatus();
+            if (status == NOT_FOUND.getStatusCode()) {
+                throw new ImageNotFoundException(readAndCloseQuietly(response.getInputStream()));
+            }
+            if (OK.getStatusCode() != status) {
                 throw getDockerException(response);
             }
             return parseResponseStreamAndClose(response.getInputStream(), ImageInfo.class);
