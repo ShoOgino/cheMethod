@@ -1,0 +1,47 @@
+    @Test
+    public void shouldAddCommonsSystemVolumesOnlyOnNonDevInstanceCreationFromSnapshot() throws Exception {
+        String[] bindMountVolumesFromMachine = new String[] {"/my/bind/mount1:/from/host1",
+                                                             "/my/bind/mount2:/from/host2:ro",
+                                                             "/my/bind/mount3:/from/host3:ro,Z"};
+        String[] volumesFromMachine = new String[] {"/projects",
+                                                    "/something",
+                                                    "/something/else"};
+        String[] allMachinesSystemVolumes = new String[] {"/some/thing/else:/home/some/thing/else",
+                                                          "/other/path:/home/other/path",
+                                                          "/home/other/path2"};
+        String[] devMachinesSystemVolumes = new String[] {"/etc:/tmp/etc:ro",
+                                                          "/some/thing:/home/some/thing",
+                                                          "/some/thing2:/home/some/thing2:ro,z",
+                                                          "/home/some/thing3"};
+        String[] expectedBindMountVolumes = new String[] {"/my/bind/mount1:/from/host1",
+                                                          "/my/bind/mount2:/from/host2:ro",
+                                                          "/my/bind/mount3:/from/host3:ro,Z",
+                                                          "/some/thing/else:/home/some/thing/else",
+                                                          "/other/path:/home/other/path"};
+        Map<String, Volume> expectedVolumes = Stream.of("/projects",
+                                                        "/something",
+                                                        "/something/else",
+                                                        "/home/other/path2")
+                                                    .collect(toMap(Function.identity(), v -> new Volume()));
+
+
+        provider = new MachineProviderBuilder()
+                .setDevMachineVolumes(new HashSet<>(asList(devMachinesSystemVolumes)))
+                .setAllMachineVolumes(new HashSet<>(asList(allMachinesSystemVolumes)))
+                .build();
+
+        CheServiceImpl service = createService();
+        service.setVolumes(Stream.concat(Stream.of(bindMountVolumesFromMachine), Stream.of(volumesFromMachine))
+                                 .collect(Collectors.toList()));
+        createInstanceFromSnapshot(service, false);
+
+
+        ArgumentCaptor<CreateContainerParams> argumentCaptor = ArgumentCaptor.forClass(CreateContainerParams.class);
+        verify(dockerConnector).createContainer(argumentCaptor.capture());
+
+        String[] actualBindMountVolumes = argumentCaptor.getValue().getContainerConfig().getHostConfig().getBinds();
+        Map<String, Volume> actualVolumes = argumentCaptor.getValue().getContainerConfig().getVolumes();
+        assertEquals(actualVolumes, expectedVolumes);
+        assertEqualsNoOrder(actualBindMountVolumes, expectedBindMountVolumes);
+    }
+
