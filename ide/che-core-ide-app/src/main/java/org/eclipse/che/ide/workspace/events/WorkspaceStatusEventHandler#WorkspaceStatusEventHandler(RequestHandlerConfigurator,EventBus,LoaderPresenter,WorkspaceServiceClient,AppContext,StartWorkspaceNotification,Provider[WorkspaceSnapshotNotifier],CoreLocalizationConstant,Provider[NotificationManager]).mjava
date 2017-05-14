@@ -1,0 +1,32 @@
+    @Inject
+    WorkspaceStatusEventHandler(RequestHandlerConfigurator configurator,
+                                EventBus eventBus,
+                                LoaderPresenter loader,
+                                WorkspaceServiceClient workspaceServiceClient,
+                                AppContext appContext,
+                                StartWorkspaceNotification startWorkspaceNotification,
+                                Provider<WorkspaceSnapshotNotifier> snapshotNotifierProvider,
+                                CoreLocalizationConstant messages,
+                                Provider<NotificationManager> notificationManagerProvider) {
+        this.eventBus = eventBus;
+        this.wsStatusNotification = loader;
+        this.wsServiceClient = workspaceServiceClient;
+        this.startWorkspaceNotification = startWorkspaceNotification;
+        this.snapshotNotifierProvider = snapshotNotifierProvider;
+        this.messages = messages;
+        this.notificationManagerProvider = notificationManagerProvider;
+
+        configurator.newConfiguration()
+                    .methodName("event:workspace-status:changed")
+                    .paramsAsDto(WorkspaceStatusEvent.class)
+                    .noResult()
+                    .withOperation((endpointId, event) -> {
+                        Log.debug(getClass(), "Received notification from endpoint: " + endpointId);
+
+                        wsServiceClient.getWorkspace(event.getWorkspaceId()).then(workspace -> {
+                            appContext.setWorkspace(workspace);
+                            handleEvent(event);
+                        });
+                    });
+    }
+
