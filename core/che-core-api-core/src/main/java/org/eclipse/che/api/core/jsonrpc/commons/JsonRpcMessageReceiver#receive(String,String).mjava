@@ -1,0 +1,25 @@
+    @Override
+    public void receive(String endpointId, String message) {
+        checkNotNull(endpointId, "Endpoint ID must not be null");
+        checkArgument(!endpointId.isEmpty(), "Endpoint ID name must not be empty");
+        checkNotNull(message, "Message must not be null");
+        checkArgument(!message.isEmpty(), "Message must not be empty");
+
+        LOGGER.debug("Receiving message: " + message + ", from endpoint: " + endpointId);
+        if (!jsonRpcQualifier.isValidJson(message)) {
+            String error = "An error occurred on the server while parsing the JSON text";
+            errorTransmitter.transmit(endpointId, new JsonRpcException(-32700, error));
+        }
+
+        List<String> messages = jsonRpcUnmarshaller.unmarshalArray(message);
+        for (String innerMessage : messages) {
+            if (jsonRpcQualifier.isJsonRpcRequest(innerMessage)) {
+                processRequest(endpointId, innerMessage);
+            } else if (jsonRpcQualifier.isJsonRpcResponse(innerMessage)) {
+                processResponse(endpointId, innerMessage);
+            } else {
+                processError();
+            }
+        }
+    }
+
