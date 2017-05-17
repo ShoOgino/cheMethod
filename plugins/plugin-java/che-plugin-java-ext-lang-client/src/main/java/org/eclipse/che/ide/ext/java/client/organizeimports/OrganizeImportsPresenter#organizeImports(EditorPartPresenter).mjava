@@ -20,29 +20,9 @@
             }
 
             final String fqn = JavaUtil.resolveFQN((Container)srcFolder.get(), (Resource)file);
-
-            eventBus.fireEvent(newFileTrackingSuspendEvent());
-            javaCodeAssistClient.organizeImports(project.get().getLocation().toString(), fqn)
-                                .then(new Operation<OrganizeImportResult>() {
-                                    @Override
-                                    public void apply(OrganizeImportResult result) throws OperationException {
-                                        if (result.getConflicts() != null && !result.getConflicts().isEmpty()) {
-                                            show(result.getConflicts());
-                                        } else {
-                                            applyChanges(document, result.getChanges());
-                                        }
-                                        eventBus.fireEvent(newFileTrackingResumeEvent());
-                                    }
-                                })
-                                .catchError(new Operation<PromiseError>() {
-                                    @Override
-                                    public void apply(PromiseError arg) throws OperationException {
-                                        String title = locale.failedToProcessOrganizeImports();
-                                        String message = arg.getMessage();
-                                        notificationManager.notify(title, message, FAIL, FLOAT_MODE);
-                                        eventBus.fireEvent(newFileTrackingResumeEvent());
-                                    }
-                                });
+            clientServerEventService.sendFileTrackingSuspendEvent().then(arg -> {
+                doOrganizeImports(fqn, project);
+            });
         }
     }
 

@@ -17,20 +17,19 @@
             final Path relPath = document.getFile().getLocation().removeFirstSegments(movedFrom.segmentCount());
             final Path newPath = delta.getToPath().append(relPath);
 
-            appContext.getWorkspaceRoot().getFile(newPath).then(new Operation<Optional<File>>() {
-                @Override
-                public void apply(Optional<File> file) throws OperationException {
-                    if (file.isPresent()) {
-                        final Path location = document.getFile().getLocation();
-                        deletedFilesController.add(location.toString());
-                        generalEventBus.fireEvent(newFileTrackingStartEvent(file.get().getLocation().toString()));
+            appContext.getWorkspaceRoot().getFile(newPath).then(optional -> {
+                if (optional.isPresent()) {
+                    final Path location = document.getFile().getLocation();
+                    deletedFilesController.add(location.toString());
 
-                        document.setFile(file.get());
-                        input.setFile(file.get());
-                        updateTabReference(file.get(), location);
-
-                        updateContent();
-                    }
+                    File file = optional.get();
+                    clientServerEventService.sendFileTrackingStartEvent(file.getLocation().toString())
+                                            .then(aVoid -> {
+                                                document.setFile(file);
+                                                input.setFile(file);
+                                                updateTabReference(file, location);
+                                                updateContent();
+                                            });
                 }
             });
         }
