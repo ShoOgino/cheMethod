@@ -1,0 +1,36 @@
+    private void bootstrap() {
+        // init CurrentUser
+        currentUserInitializer.init().then(aVoid -> {
+            // init UI
+            ((ThemeAgentImpl)themeAgent).applyUserTheme();
+            styleInjector.inject();
+
+            // init IDE
+            ideInitializer.init().then(arg -> {
+                // show UI
+                standardComponentsInitializerProvider.get().initialize();
+                appStateManager.readStateFromPreferences();
+                showRootPresenter();
+
+                // start extensions
+                extensionInitializer.startExtensions();
+                Scheduler.get().scheduleDeferred(this::notifyShowIDE);
+
+                // start WS
+                workspaceStarter.startWorkspace();
+            }).catchError(err -> {
+                // can't get WS or Factory
+                dialogFactory.createMessageDialog("IDE initialization failed",
+                                                  err.getMessage(),
+                                                  null).show();
+
+                // temporary solution while dashboard doesn't work
+                createWs();
+            });
+        }).catchError(err -> {
+            // error has been occurred before IDE UI initialization
+            // can't use DialogFactory
+            onInitializationFailed(err.getMessage());
+        });
+    }
+
