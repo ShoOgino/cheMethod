@@ -1,11 +1,16 @@
     @Override
     public Promise<Void> init() {
-        return getWorkspaceToStart().then((Function<WorkspaceDto, Void>)workspace -> {
-            appContext.setWorkspace(workspace);
-//            browserAddress.setAddress(workspace.getNamespace(), workspace.getConfig().getName());
-            return null;
-        }).catchError((Operation<PromiseError>)err -> {
-            throw new OperationException("Can not get workspace: " + err.getCause());
-        });
+        return userInitializer.init()
+                              .catchError((Operation<PromiseError>)err -> {
+                                  // Error occurred before UI initialization.
+                                  // As a fallback, let's try to inject CSS styles at least
+                                  // in order to be able to use DialogFactory
+                                  // for showing an error information to the user.
+                                  styleInjector.inject();
+                                  throw new OperationException(err.getMessage(), err.getCause());
+                              })
+                              .then(initUI())
+                              .thenPromise(initAppContext())
+                              .then(showUI());
     }
 
