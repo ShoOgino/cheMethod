@@ -1,0 +1,33 @@
+    private void normalize(String namespace,
+                           String workspaceId,
+                           String machineName,
+                           DockerContainerConfig service) throws InfrastructureException {
+        // set default mem limit for service if it is not set
+        if (service.getMemLimit() == null || service.getMemLimit() == 0) {
+            service.setMemLimit(defaultMachineMemorySizeBytes);
+        }
+        // download dockerfile if it is hosted by API to avoid problems with unauthorized requests from docker daemon
+        if (service.getBuild() != null &&
+            service.getBuild().getContext() != null &&
+            recipeApiPattern.matcher(service.getBuild().getContext()).matches()) {
+
+            String recipeContent;
+            try {
+                recipeContent = recipeDownloader.getRecipe(service.getBuild().getContext());
+            } catch (ServerException e) {
+                throw new InfrastructureException(e.getLocalizedMessage(), e);
+            }
+            service.getBuild().setDockerfileContent(recipeContent);
+            service.getBuild().setContext(null);
+            service.getBuild().setDockerfilePath(null);
+        }
+        if (service.getId() == null) {
+            service.setId(generateMachineId());
+        }
+
+        service.setContainerName(containerNameGenerator.generateContainerName(workspaceId,
+                                                                              service.getId(),
+                                                                              namespace,
+                                                                              machineName));
+    }
+

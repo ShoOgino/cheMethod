@@ -1,0 +1,52 @@
+    protected void buildImage(DockerContainerConfig service,
+                              String machineImageName,
+                              boolean doForcePullOnBuild,
+                              ProgressMonitor progressMonitor)
+            throws ServerException {
+
+        File workDir = null;
+        try {
+            BuildImageParams buildImageParams;
+            if (service.getBuild() != null &&
+                service.getBuild().getDockerfileContent() != null) {
+
+                workDir = Files.createTempDirectory(null).toFile();
+                final File dockerfileFile = new File(workDir, "Dockerfile");
+                try (FileWriter output = new FileWriter(dockerfileFile)) {
+                    output.append(service.getBuild().getDockerfileContent());
+                }
+
+                buildImageParams = BuildImageParams.create(dockerfileFile);
+            } else {
+                buildImageParams = BuildImageParams.create(service.getBuild().getContext())
+                                                   .withDockerfile(service.getBuild().getDockerfilePath());
+            }
+            Map<String, String> buildArgs;
+            if (service.getBuild().getArgs() == null || service.getBuild().getArgs().isEmpty()) {
+                buildArgs = this.buildArgs;
+            } else {
+                buildArgs = new HashMap<>();
+                buildArgs.putAll(service.getBuild().getArgs());
+                buildArgs.putAll(this.buildArgs);
+            }
+            buildImageParams.withForceRemoveIntermediateContainers(true)
+                            .withRepository(machineImageName)
+                            .withAuthConfigs(dockerCredentials.getCredentials())
+                            .withDoForcePull(doForcePullOnBuild)
+                            .withMemoryLimit(service.getMemLimit())
+                            .withMemorySwapLimit(-1)
+                            .withCpusetCpus(cpusetCpus)
+                            .withCpuPeriod(cpuPeriod)
+                            .withCpuQuota(cpuQuota)
+                            .withBuildArgs(buildArgs);
+
+            docker.buildImage(buildImageParams, progressMonitor);
+        } catch (IOException e) {
+            throw new ServerException(e.getLocalizedMessage(), e);
+        } finally {
+            if (workDir != null) {
+                FileCleaner.addFile(workDir);
+            }
+        }
+    }
+

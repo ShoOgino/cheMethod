@@ -29,7 +29,6 @@
 
 
         // Start environment
-        //MessageConsumer<MachineLogMessage> logger = getEnvironmentLogger(workspaceId);
         if (options == null) {
             options = new HashMap<>();
         }
@@ -37,28 +36,26 @@
         Subject subject = EnvironmentContext.getCurrent().getSubject();
         RuntimeIdentity runtimeId = new RuntimeIdentity(workspaceId, envName, subject.getUserName());
 
-        InternalRuntime runtime = infra.prepare(runtimeId, environment).start(options);
+        try {
+            InternalRuntime runtime = infra.prepare(runtimeId, environment).start(options);
 
-        if (runtime == null)
-            throw new IllegalStateException("SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
-                                            + RuntimeInfrastructure.class);
+            if (runtime == null) {
+                throw new IllegalStateException(
+                        "SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
+                        + RuntimeInfrastructure.class);
+            }
 
-
-//        // Phase 2: start agents if any
-//        for (Map.Entry<String, MachineConfigImpl> machineEntry : environment.getMachines().entrySet()) {
-//            if (!machineEntry.getValue().getAgents().isEmpty()) {
-//                Machine machine = runtime.getMachines().get(machineEntry.getKey());
-//                // TODO
-//                // installAgents(machine);
-//            }
-//        }
-
-        runtimes.put(workspaceId, runtime);
-        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                        .withWorkspaceId(workspaceId)
-                                        .withStatus(WorkspaceStatus.RUNNING)
-                                        .withEventType(EventType.RUNNING)
-                                        .withPrevStatus(WorkspaceStatus.STARTING));
-
+            runtimes.put(workspaceId, runtime);
+            eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                            .withWorkspaceId(workspaceId)
+                                            .withStatus(WorkspaceStatus.RUNNING)
+                                            .withEventType(EventType.RUNNING)
+                                            .withPrevStatus(WorkspaceStatus.STARTING));
+        } catch (InternalInfrastructureException e) {
+            LOG.error(format("Error occurs on workspace '%s' start. Error: %s", workspaceId, e));
+        } catch (RuntimeException e) {
+            LOG.error(format("Error occurs on workspace '%s' start. Error: %s", workspaceId, e));
+            throw new InternalInfrastructureException(e.getMessage(), e);
+        }
     }
 
