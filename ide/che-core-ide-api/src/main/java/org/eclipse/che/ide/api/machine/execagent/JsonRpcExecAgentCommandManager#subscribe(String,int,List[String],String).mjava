@@ -1,6 +1,6 @@
     @Override
-    public ExecAgentPromise<ProcessSubscribeResponseDto> subscribe(final String endpointId, int pid, List<String> eventTypes,
-                                                                   String after) {
+    public ExecAgentConsumer<ProcessSubscribeResponseDto> subscribe(final String endpointId, int pid, List<String> eventTypes,
+                                                                    String after) {
         Log.debug(getClass(), "Subscribing to a process. PID: " + pid + ", event types: " + eventTypes + ", after timestamp: " + after);
 
         ProcessSubscribeRequestDto dto = dtoFactory.createDto(ProcessSubscribeRequestDto.class)
@@ -8,16 +8,15 @@
                                                    .withEventTypes(join(eventTypes, ","))
                                                    .withAfter(after);
 
-        final ExecAgentPromise<ProcessSubscribeResponseDto> execAgentPromise = new ExecAgentPromise<>();
+        final ExecAgentConsumer<ProcessSubscribeResponseDto> execAgentConsumer = new ExecAgentConsumer<>();
 
-        transmitter.transmitOneToOne(endpointId, PROCESS_SUBSCRIBE, dto, ProcessSubscribeResponseDto.class).then(
-                new Operation<ProcessSubscribeResponseDto>() {
-                    @Override
-                    public void apply(ProcessSubscribeResponseDto arg) throws OperationException {
-                        subscribe(endpointId, execAgentPromise, arg);
-                    }
-                });
-
-        return execAgentPromise;
+        transmitter.newRequest()
+                   .endpointId(endpointId)
+                   .methodName(PROCESS_SUBSCRIBE)
+                   .paramsAsDto(dto)
+                   .sendAndReceiveResultAsDto(ProcessSubscribeResponseDto.class)
+                   .onSuccess((s, processSubscribeResponseDto) -> subscribe(endpointId, execAgentConsumer,
+                                                                            processSubscribeResponseDto));
+        return execAgentConsumer;
     }
 

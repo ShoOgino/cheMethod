@@ -9,20 +9,18 @@
         initializer.initialize("ws-agent", singletonMap("url", wsAgentUrl));
         initializer.initialize(devMachineId, singletonMap("url", execAgentUrl));
 
-        for(MachineEntity machineEntity : appContext.getActiveRuntime().getMachines()) {
+        for (MachineEntity machineEntity : appContext.getActiveRuntime().getMachines()) {
             if (!machineEntity.isDev()) {
                 initializer.initialize(machineEntity.getId(), singletonMap("url", machineEntity.getExecAgentUrl()));
                 execAgentCommandManager.getProcesses(machineEntity.getId(), false)
-                                       .then(processes -> {
+                                       .onSuccess(processes -> {
                                            Consumer<Integer> pidConsumer = pid -> execAgentCommandManager
                                                    .getProcessLogs(machineEntity.getId(), pid, null, null, 50, 0)
-                                                   .then(logs -> {
-                                                       logs.forEach(log -> {
-                                                           String fixedLog = log.getText().replaceAll("\\[STDOUT\\] ", "");
-                                                           String machineName = machineEntity.getDisplayName();
-                                                           eventBus.fireEvent(new EnvironmentOutputEvent(fixedLog, machineName));
-                                                       });
-                                                   });
+                                                   .onSuccess(logs -> logs.forEach(log -> {
+                                                       String fixedLog = log.getText().replaceAll("\\[STDOUT\\] ", "");
+                                                       String machineName = machineEntity.getDisplayName();
+                                                       eventBus.fireEvent(new EnvironmentOutputEvent(fixedLog, machineName));
+                                                   }));
 
                                            processes.stream()
                                                     .filter(it -> "CheWsAgent".equals(it.getName()))

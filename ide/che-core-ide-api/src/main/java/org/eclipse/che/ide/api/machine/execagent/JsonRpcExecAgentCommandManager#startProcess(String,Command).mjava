@@ -1,5 +1,5 @@
     @Override
-    public ExecAgentPromise<ProcessStartResponseDto> startProcess(final String endpointId, Command command) {
+    public ExecAgentConsumer<ProcessStartResponseDto> startProcess(final String endpointId, Command command) {
         String name = command.getName();
         String commandLine = command.getCommandLine();
         String type = command.getType();
@@ -11,16 +11,15 @@
                                                .withName(name)
                                                .withType(type);
 
-        final ExecAgentPromise<ProcessStartResponseDto> execAgentPromise = new ExecAgentPromise<>();
+        final ExecAgentConsumer<ProcessStartResponseDto> execAgentConsumer = new ExecAgentConsumer<>();
 
-        transmitter.transmitOneToOne(endpointId, PROCESS_START, dto, ProcessStartResponseDto.class)
-                   .then(new Operation<ProcessStartResponseDto>() {
-                       @Override
-                       public void apply(ProcessStartResponseDto arg) throws OperationException {
-                           subscribe(endpointId, execAgentPromise, arg);
-                       }
-                   });
+        transmitter.newRequest()
+                   .endpointId(endpointId)
+                   .methodName(PROCESS_START)
+                   .paramsAsDto(dto)
+                   .sendAndReceiveResultAsDto(ProcessStartResponseDto.class)
+                   .onSuccess(processStartResponseDto -> subscribe(endpointId, execAgentConsumer, processStartResponseDto));
 
-        return execAgentPromise;
+        return execAgentConsumer;
     }
 
