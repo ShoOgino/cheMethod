@@ -7,15 +7,20 @@
                 switch (result.getSeverity()) {
                     case OK:
                     case INFO:
-                        final VirtualFile file = textEditor.getDocument().getFile();
+                        List<ChangeInfo> changes = result.getChanges();
+                        refactoringUpdater.updateAfterRefactoring(changes).then(arg -> {
+                            final VirtualFile file = textEditor.getDocument().getFile();
 
-                        if (file instanceof Resource) {
-                            final Optional<Project> project = ((Resource)file).getRelatedProject();
+                            if (file instanceof Resource) {
+                                final Optional<Project> project = ((Resource)file).getRelatedProject();
 
-                            refactoringServiceClient.reindexProject(project.get().getLocation().toString());
-                        }
+                                refactoringServiceClient.reindexProject(project.get().getLocation().toString());
+                            }
 
-                        refactoringUpdater.updateAfterRefactoring(result.getChanges());
+                            enableAutoSave();
+                            refactoringUpdater.handleMovingFiles(changes).then(clientServerEventService.sendFileTrackingResumeEvent());
+                        });
+
                         break;
                     case WARNING:
                     case ERROR:
@@ -27,6 +32,8 @@
                         break;
                     case FATAL:
                         undoChanges();
+
+                        clientServerEventService.sendFileTrackingResumeEvent();
 
                         notificationManager.notify(locale.failedToRename(), result.getEntries().get(0).getMessage(), FAIL, FLOAT_MODE);
                         break;

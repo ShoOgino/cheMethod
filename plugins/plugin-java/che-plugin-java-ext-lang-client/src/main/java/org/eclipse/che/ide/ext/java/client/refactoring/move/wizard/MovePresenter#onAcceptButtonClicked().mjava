@@ -7,33 +7,8 @@
             @Override
             public void apply(ChangeCreationResult arg) throws OperationException {
                 if (arg.isCanShowPreviewPage()) {
-                    eventBus.fireEvent(newFileTrackingSuspendEvent());
-
-                    refactorService.applyRefactoring(session).then(new Operation<RefactoringResult>() {
-                        @Override
-                        public void apply(RefactoringResult arg) throws OperationException {
-                            if (arg.getSeverity() == OK) {
-                                view.hide();
-                                refactoringUpdater.updateAfterRefactoring(arg.getChanges());
-
-                                final Resource[] resources = refactorInfo.getResources();
-
-                                if (resources != null && resources.length == 1) {
-                                    refactorService.reindexProject(resources[0].getRelatedProject().get().getLocation().toString());
-                                }
-
-                            } else {
-                                view.showErrorMessage(arg);
-                            }
-
-                            for (ChangeInfo change : arg.getChanges()) {
-                                final String path = change.getPath();
-                                final String oldPath = change.getOldPath();
-
-                                eventBus.fireEvent(newFileTrackingMoveEvent(path, oldPath));
-                            }
-                            eventBus.fireEvent(newFileTrackingResumeEvent());
-                        }
+                    clientServerEventService.sendFileTrackingSuspendEvent().then(success -> {
+                        applyRefactoring(session);
                     });
                 } else {
                     view.showErrorMessage(arg.getStatus());

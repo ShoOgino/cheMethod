@@ -1,48 +1,15 @@
     private void applyRefactoring(RefactoringSession session) {
-        eventBus.fireEvent(newFileTrackingSuspendEvent());
-        refactorService.applyRefactoring(session).then(new Operation<RefactoringResult>() {
-            @Override
-            public void apply(RefactoringResult arg) throws OperationException {
-                if (arg.getSeverity() == OK) {
-                    view.hide();
-                    refactoringUpdater.updateAfterRefactoring(arg.getChanges());
-
-                    final Resource[] resources = refactorInfo != null ? refactorInfo.getResources() : null;
-                    Project project = null;
-
-                    if (resources != null && resources.length == 1) {
-                        final Optional<Project> optProject = resources[0].getRelatedProject();
-                        if (optProject.isPresent()) {
-                            project = optProject.get();
-                        }
-                    } else {
-                        final Resource resource = appContext.getResource();
-
-                        if (resource != null) {
-                            final Optional<Project> optProject = resource.getRelatedProject();
-                            if (optProject.isPresent()) {
-                                project = optProject.get();
-                            }
-                        }
-                    }
-
-                    if (project != null) {
-                        refactorService.reindexProject(project.getLocation().toString());
-                    }
-
-                    setEditorFocus();
-                } else {
-                    view.showErrorMessage(arg);
-                }
-
-                for (ChangeInfo change : arg.getChanges()) {
-                    final String path = change.getPath();
-                    final String oldPath = change.getOldPath();
-
-                    eventBus.fireEvent(newFileTrackingMoveEvent(path, oldPath));
-                }
-                eventBus.fireEvent(newFileTrackingResumeEvent());
-
+        refactorService.applyRefactoring(session).then(refactoringResult -> {
+            List<ChangeInfo> changes = refactoringResult.getChanges();
+            if (refactoringResult.getSeverity() == OK) {
+                view.hide();
+                updateAfterRefactoring(changes)
+                        .then(refactoringUpdater.handleMovingFiles(changes)
+                                                .then(clientServerEventService.sendFileTrackingResumeEvent()));
+            } else {
+                view.showErrorMessage(refactoringResult);
+                refactoringUpdater.handleMovingFiles(changes)
+                                  .then(clientServerEventService.sendFileTrackingResumeEvent());
             }
         });
     }

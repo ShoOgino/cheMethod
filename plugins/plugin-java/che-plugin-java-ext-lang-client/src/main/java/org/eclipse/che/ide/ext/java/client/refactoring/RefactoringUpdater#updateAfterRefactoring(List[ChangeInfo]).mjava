@@ -6,9 +6,9 @@
      * @param changes
      *         applied changes
      */
-    public void updateAfterRefactoring(List<ChangeInfo> changes) {
+    public Promise<Void> updateAfterRefactoring(List<ChangeInfo> changes) {
         if (changes == null || changes.isEmpty()) {
-            return;
+            return promises.resolve(null);
         }
 
         ExternalResourceDelta[] deltas = new ExternalResourceDelta[0];
@@ -54,33 +54,20 @@
         }
 
         if (deltas.length > 0) {
-            appContext.getWorkspaceRoot().synchronize(deltas).then(new Operation<ResourceDelta[]>() {
-                @Override
-                public void apply(final ResourceDelta[] appliedDeltas) throws OperationException {
-                    for (ResourceDelta delta : appliedDeltas) {
-                        eventBus.fireEvent(new RevealResourceEvent(delta.getToPath()));
-                    }
-                    for (EditorPartPresenter editorPartPresenter : editorAgent.getOpenedEditors()) {
-                        final String path = editorPartPresenter.getEditorInput().getFile().getLocation().toString();
-                        if (pathChanged.contains(path)) {
-                            eventBus.fireEvent(
-                                    new FileContentUpdateEvent(editorPartPresenter.getEditorInput().getFile().getLocation().toString()));
-                        }
-                    }
-                    setActiveEditor();
+            List<EditorPartPresenter> editorsToUpdate = editorAgent.getOpenedEditors().stream()
+                                                                   .filter(editor -> {
+                                                                       VirtualFile file = editor.getEditorInput().getFile();
+                                                                       String editorPath = file.getLocation().toString();
+                                                                       return pathChanged.contains(editorPath);
+                                                                   })
+                                                                   .collect(toList());
+            return appContext.getWorkspaceRoot().synchronize(deltas).then(appliedDeltas -> {
+                for (ResourceDelta delta : appliedDeltas) {
+                    eventBus.fireEvent(new RevealResourceEvent(delta.getToPath()));
                 }
-            });
+            }).then(updateEditors(editorsToUpdate));
         } else {
-            Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
-                @Override
-                public void execute() {
-                    for (EditorPartPresenter editorPartPresenter : editorAgent.getOpenedEditors()) {
-                        eventBus.fireEvent(
-                                new FileContentUpdateEvent(editorPartPresenter.getEditorInput().getFile().getLocation().toString()));
-                    }
-                    setActiveEditor();
-                }
-            });
+            return updateEditors(editorAgent.getOpenedEditors());
         }
     }
 
