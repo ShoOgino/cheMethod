@@ -1,0 +1,63 @@
+    private SpanElement createMachineElement(final ProcessTreeNode node) {
+        final MachineEntity machine = (MachineEntity)node.getData();
+        final String machineId = machine.getId();
+        final MachineConfig machineConfig = machine.getConfig();
+
+        SpanElement root = Elements.createSpanElement();
+
+        Workspace workspace = appContext.getWorkspace();
+        if (workspace != null && RUNNING == workspace.getStatus() && node.hasTerminalAgent()) {
+            SpanElement newTerminalButton = Elements.createSpanElement(resources.getCss().newTerminalButton());
+            newTerminalButton.appendChild((Node)new SVGImage(resources.addTerminalIcon()).getElement());
+            root.appendChild(newTerminalButton);
+
+            Tooltip.create(newTerminalButton, BOTTOM, MIDDLE, locale.viewNewTerminalTooltip());
+
+            newTerminalButton.addEventListener(Event.CLICK, event -> {
+                event.stopPropagation();
+                event.preventDefault();
+
+                if (addTerminalClickHandler != null) {
+                    addTerminalClickHandler.onAddTerminalClick(machineId);
+                }
+            }, true);
+
+            EventListener blockMouseListener = event -> {
+                event.stopPropagation();
+                event.preventDefault();
+            };
+
+            newTerminalButton.addEventListener(Event.MOUSEDOWN, blockMouseListener, true);
+            newTerminalButton.addEventListener(Event.MOUSEUP, blockMouseListener, true);
+            newTerminalButton.addEventListener(Event.CLICK, blockMouseListener, true);
+            newTerminalButton.addEventListener(Event.DBLCLICK, blockMouseListener, true);
+        }
+
+        if (node.isRunning() && node.hasSSHAgent()) {
+            SpanElement sshButton = Elements.createSpanElement(resources.getCss().sshButton());
+            sshButton.setTextContent("SSH");
+            root.appendChild(sshButton);
+
+            sshButton.addEventListener(Event.CLICK, event -> {
+                if (previewSshClickHandler != null) {
+                    previewSshClickHandler.onPreviewSshClick(machineId);
+                }
+            }, true);
+
+            Tooltip.create(sshButton, BOTTOM, MIDDLE, locale.connectViaSSH());
+        }
+
+        Element monitorsElement = Elements.createSpanElement(resources.getCss().machineMonitors());
+        root.appendChild(monitorsElement);
+
+        Node monitorNode = (Node)machineMonitors.getMonitorWidget(machineId, this).getElement();
+        monitorsElement.appendChild(monitorNode);
+
+        Element nameElement = Elements.createSpanElement(resources.getCss().nameLabel());
+        nameElement.setTextContent(machineConfig.getName());
+        Tooltip.create(nameElement, BOTTOM, MIDDLE, machineConfig.getName());
+        root.appendChild(nameElement);
+
+        return root;
+    }
+
