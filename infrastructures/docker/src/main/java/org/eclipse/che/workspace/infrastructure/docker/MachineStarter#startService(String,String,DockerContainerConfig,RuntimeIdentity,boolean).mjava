@@ -1,14 +1,37 @@
+    /**
+     * Start Docker machine by performing all needed operations such as pull, build, create container, etc.
+     *
+     * @param networkName
+     *         name of a network Docker container should use
+     * @param machineName
+     *         name of Docker machine
+     * @param containerConfig
+     *         configuration of container to start
+     * @param identity
+     *         identity of user that starts machine
+     * @param isDev
+     *         whether machine is dev or not
+     * @return {@link DockerMachine} instance that represents started container
+     * @throws InternalInfrastructureException
+     *         if internal error occurs
+     * @throws SourceNotFoundException
+     *         if image for container creation is missing
+     * @throws InfrastructureException
+     *         if any other error occurs
+     */
     public DockerMachine startService(String networkName,
                                       String machineName,
-                                      DockerContainerConfig service,
+                                      DockerContainerConfig containerConfig,
                                       RuntimeIdentity identity,
                                       boolean isDev) throws InfrastructureException {
         String workspaceId = identity.getWorkspaceId();
-        LineConsumer machineLogger = new ListLineConsumer();
 
         // copy to not affect/be affected by changes in origin
-        service = new DockerContainerConfig(service);
+        containerConfig = new DockerContainerConfig(containerConfig);
 
+        // TODO spi fix in #5102
+        ProgressMonitor progressMonitor = ProgressMonitor.DEV_NULL;
+        /*LineConsumer machineLogger = new ListLineConsumer();
         ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
         ProgressMonitor progressMonitor = currentProgressStatus -> {
             try {
@@ -16,12 +39,12 @@
             } catch (IOException e) {
                 LOG.error(e.getLocalizedMessage(), e);
             }
-        };
+        };*/
 
         String container = null;
         try {
             String image = prepareImage(machineName,
-                                        service,
+                                        containerConfig,
                                         progressMonitor);
 
             container = createContainer(workspaceId,
@@ -29,31 +52,37 @@
                                         isDev,
                                         image,
                                         networkName,
-                                        service);
+                                        containerConfig);
 
             connectContainerToAdditionalNetworks(container,
-                                                 service);
+                                                 containerConfig);
 
             docker.startContainer(StartContainerParams.create(container));
 
             checkContainerIsRunning(container);
 
-            readContainerLogsInSeparateThread(container,
+            // TODO spi fix in #5102
+            /*readContainerLogsInSeparateThread(container,
                                               workspaceId,
                                               service.getId(),
-                                              machineLogger);
+                                              machineLogger);*/
 
             dockerInstanceStopDetector.startDetection(container,
-                                                      service.getId(),
+                                                      containerConfig.getId(),
                                                       workspaceId);
 
             return new DockerMachine(docker,
                                      container,
                                      image,
-                                     serverEvaluationStrategyProvider);
-        } catch (RuntimeException | ServerException | NotFoundException | IOException e) {
+                                     serverEvaluationStrategyProvider,
+                                     dockerInstanceStopDetector);
+        } catch (RuntimeException | IOException | InfrastructureException e) {
             cleanUpContainer(container);
-            throw new InfrastructureException(e.getLocalizedMessage(), e);
+            if (e instanceof InfrastructureException) {
+                throw (InfrastructureException)e;
+            } else {
+                throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
+            }
         }
     }
 

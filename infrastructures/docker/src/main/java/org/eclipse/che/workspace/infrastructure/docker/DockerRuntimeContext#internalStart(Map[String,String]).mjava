@@ -2,6 +2,7 @@
     protected InternalRuntime internalStart(Map<String, String> startOptions) throws InfrastructureException {
         startSynchronizer.setStartThread();
         try {
+            contextsStorage.add(this);
             checkStartInterruption();
             dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
 
@@ -20,6 +21,7 @@
             return getInternalRuntime();
         } catch (InfrastructureException | RuntimeException e) {
             boolean interrupted = Thread.interrupted();
+            contextsStorage.remove(this);
             boolean runtimeDestroyingNeeded = !startSynchronizer.isStopCalled();
             if (runtimeDestroyingNeeded) {
                 try {
@@ -31,12 +33,10 @@
             if (interrupted) {
                 throw new InfrastructureException("Docker runtime start was interrupted");
             }
-            try {
+            if (e instanceof InfrastructureException) {
                 throw e;
-            } catch (InfrastructureException rethrow) {
-                throw rethrow;
-            } catch (Exception wrap) {
-                throw new InternalInfrastructureException(wrap.getLocalizedMessage(), wrap);
+            } else {
+                throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
             }
         }
     }
