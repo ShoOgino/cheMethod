@@ -1,0 +1,28 @@
+    /** Starts the workspace with the default environment. */
+    private void startWorkspace(Workspace workspace, boolean restoreFromSnapshot) {
+        wsStatusNotification.show(STARTING_WORKSPACE_RUNTIME);
+
+        final WorkspaceStatus workspaceStatus = workspace.getStatus();
+
+        if (workspaceStatus == RUNNING) {
+            wsStatusEventHandler.handleWorkspaceStatusChanged();
+        } else if (workspaceStatus == STOPPED || workspaceStatus == STOPPING) {
+            wsStatusNotification.show(STARTING_WORKSPACE_RUNTIME);
+
+            workspaceServiceClient.getSettings().then(settings -> {
+                if (Boolean.parseBoolean(settings.getOrDefault(CHE_WORKSPACE_AUTO_START, "true"))) {
+                    workspaceServiceClient.startById(workspace.getId(), workspace.getConfig().getDefaultEnv(), restoreFromSnapshot)
+                                          .catchError(error -> {
+                                              notificationManagerProvider.get().notify(messages.startWsErrorTitle(),
+                                                                                       error.getMessage(),
+                                                                                       FAIL,
+                                                                                       FLOAT_MODE);
+                                              wsStatusNotification.setError(STARTING_WORKSPACE_RUNTIME);
+                                          });
+                } else {
+                    wsStatusNotification.show(WORKSPACE_STOPPED);
+                }
+            });
+        }
+    }
+

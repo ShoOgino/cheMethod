@@ -1,0 +1,42 @@
+    /**
+     * Imports the new project by given {@code source} configuration.
+     *
+     * @param path
+     *         path to the future project
+     * @param source
+     *         source configuration
+     * @return a promise that will resolve when the project has been imported, or rejects with an error
+     * @see Path
+     * @see SourceStorageDto
+     * @since 4.4.0
+     */
+    public Promise<Void> importProject(final Path path,
+                                       final SourceStorageDto source) {
+        return createFromAsyncRequest(callback -> {
+            final String url = PROJECT + IMPORT + path(path.toString());
+            final Message message = new MessageBuilder(POST, url).data(dtoFactory.toJson(source))
+                                                                 .header(CONTENTTYPE, APPLICATION_JSON)
+                                                                 .build();
+
+            wsAgentStateController.getMessageBus().then(messageBus -> {
+                try {
+                    messageBus.send(message, new RequestCallback<Void>() {
+                        @Override
+                        protected void onSuccess(Void result) {
+                            callback.onSuccess(result);
+                        }
+
+                        @Override
+                        protected void onFailure(Throwable exception) {
+                            callback.onFailure(exception);
+                        }
+                    });
+                } catch (WebSocketException e) {
+                    callback.onFailure(e);
+                }
+            }).catchError(error -> {
+                callback.onFailure(error.getCause());
+            });
+        });
+    }
+
