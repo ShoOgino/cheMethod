@@ -4,14 +4,16 @@
             return Promises.resolve(projectToInitResult.get(key));
         } else {
             //call initialize service
-            client.initializeServer(filePath);
-            //wait for response
-            return CallbackPromiseHelper.createFromCallback(new CallbackPromiseHelper.Call<ExtendedInitializeResult, Throwable>() {
-                @Override
-                public void makeCall(Callback<ExtendedInitializeResult, Throwable> callback) {
-                    callbackMap.put(key, callback);
-                }
+            final MessageLoader loader = loaderFactory.newLoader("Initializing Language Server for " + ext);
+            loader.show();
+            client.initializeServer(filePath).then(arg -> {
+                loader.hide();
+            }).catchError(arg -> {
+                notificationManager.notify("Initializing Language Server for " + ext, arg.getMessage(), FAIL, EMERGE_MODE);
+                loader.hide();
             });
+            //wait for response
+            return CallbackPromiseHelper.createFromCallback(callback -> callbackMap.put(key, callback));
         }
     }
 
