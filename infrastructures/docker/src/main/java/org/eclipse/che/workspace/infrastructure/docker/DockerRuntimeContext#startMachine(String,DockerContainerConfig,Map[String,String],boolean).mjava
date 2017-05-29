@@ -1,30 +1,41 @@
     private DockerMachine startMachine(String name,
-                                       DockerContainerConfig container,
+                                       DockerContainerConfig containerConfig,
                                        Map<String, String> startOptions,
                                        boolean isDev) throws InfrastructureException {
         DockerMachine dockerMachine;
         // TODO property name
-        if ("true".equals(startOptions.get("recover"))) {
+        if ("true".equals(startOptions.get("restore"))) {
+            MachineSourceImpl machineSource = null;
             try {
-                // TODO set snapshot stuff #5101
-//        container = normalizeSource(container, null);
+                SnapshotImpl snapshot = snapshotDao.getSnapshot(identity.getWorkspaceId(),
+                                                                identity.getEnvName(),
+                                                                name);
+                machineSource = snapshot.getMachineSource();
+                // Snapshot image location has SHA-256 digest which needs to be removed,
+                // otherwise it will be pulled without tag and cause problems
+                String imageName = machineSource.getLocation();
+                if (imageName.contains("@sha256:")) {
+                    machineSource.setLocation(imageName.substring(0, imageName.indexOf('@')));
+                }
+
+                DockerContainerConfig imageContainerConfig = normalizeSource(containerConfig, machineSource);
                 dockerMachine = serviceStarter.startService(dockerEnvironment.getNetwork(),
                                                    name,
-                                                   container,
+                                                   imageContainerConfig,
                                                    identity,
                                                    isDev);
-            } catch (SourceNotFoundException e) {
+            } catch (NotFoundException | SnapshotException | SourceNotFoundException e) {
                 // slip to start without recovering
                 dockerMachine = serviceStarter.startService(dockerEnvironment.getNetwork(),
                                                             name,
-                                                            container,
+                                                            containerConfig,
                                                             identity,
                                                             isDev);
             }
         } else {
             dockerMachine = serviceStarter.startService(dockerEnvironment.getNetwork(),
                                                         name,
-                                                        container,
+                                                        containerConfig,
                                                         identity,
                                                         isDev);
         }
