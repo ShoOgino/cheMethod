@@ -1,0 +1,56 @@
+    /**
+     * Provides machine node:
+     * <li>creates new machine node when this one not exist or {@code replace} is {@code true}</li>
+     * <li>returns old machine node when this one exist and {@code replace} is {@code false}</li>
+     *
+     * @param machine
+     *         machine to creating node
+     * @param replace
+     *         existed node will be replaced when {@code replace} is {@code true}
+     * @return machine node
+     */
+    private ProcessTreeNode provideMachineNode(MachineImpl machine, boolean replace) {
+        final String machineId = machine.getName();
+        final ProcessTreeNode existedMachineNode = findTreeNodeById(machineId);
+        if (!replace && existedMachineNode != null) {
+            return existedMachineNode;
+        }
+
+        //we need to keep old machine node children
+        ArrayList<ProcessTreeNode> children = new ArrayList<>();
+
+        // remove existed node
+        for (ProcessTreeNode node : rootNode.getChildren()) {
+            if (machine.getName().equals(node.getName())) {
+                children.addAll(node.getChildren());
+                rootNode.getChildren().remove(node);
+                break;
+            }
+        }
+
+        // create new node
+        final ProcessTreeNode newMachineNode = new ProcessTreeNode(MACHINE_NODE, rootNode, machine, null, children);
+        newMachineNode.setRunning(/*RUNNING == machine.getStatus()*/true);
+        newMachineNode.setHasTerminalAgent(hasAgent(machine.getName(), TERMINAL_AGENT) || hasTerminal(machineId));
+        newMachineNode.setHasSSHAgent(hasAgent(machine.getName(), SSH_AGENT));
+        for (ProcessTreeNode child : children) {
+            child.setParent(newMachineNode);
+        }
+
+        machineNodes.put(machineId, newMachineNode);
+
+        // add to children
+        rootNode.getChildren().add(newMachineNode);
+
+        // update the view
+        view.setProcessesData(rootNode);
+
+        // add output for the machine if it is not exist
+        if (!consoles.containsKey(machine.getName())) {
+            OutputConsole outputConsole = commandConsoleFactory.create(machine.getName());
+            addOutputConsole(machine.getName(), newMachineNode, outputConsole, true);
+        }
+
+        return newMachineNode;
+    }
+

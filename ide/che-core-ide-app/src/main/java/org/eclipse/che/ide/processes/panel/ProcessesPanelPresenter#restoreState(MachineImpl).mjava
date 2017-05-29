@@ -1,0 +1,94 @@
+    private void restoreState(final MachineImpl machine) {
+        execAgentCommandManager.getProcesses(machine.getName(), false)
+                               .onSuccess(new BiConsumer<String, List<GetProcessesResponseDto>>() {
+                                   @Override
+                                   public void accept(String endpointId, List<GetProcessesResponseDto> processes) {
+                                       for (GetProcessesResponseDto process : processes) {
+                                           final int pid = process.getPid();
+                                           final String type = process.getType();
+
+                    /*
+                     * Do not show the process if the command line has prefix #hidden
+                     */
+                                           if (!isNullOrEmpty(process.getCommandLine()) &&
+                                               process.getCommandLine().startsWith("#hidden")) {
+                                               continue;
+                                           }
+
+                    /*
+                     * Hide the processes which are launched by command of unknown type
+                     */
+                                           if (commandTypeRegistry.getCommandTypeById(type).isPresent()) {
+                                               final String processName = process.getName();
+                                               final CommandImpl commandByName = getWorkspaceCommandByName(processName);
+
+                                               if (commandByName == null) {
+                                                   final String commandLine = process.getCommandLine();
+                                                   final CommandImpl command = new CommandImpl(processName, commandLine, type);
+                                                   final CommandOutputConsole console = commandConsoleFactory.create(command, machine);
+
+                                                   getAndPrintProcessLogs(console, pid);
+                                                   subscribeToProcess(console, pid);
+
+                                                   addCommandOutput(machine.getName(), console);
+                                               } else {
+                                                   macroProcessorProvider.get().expandMacros(commandByName.getCommandLine())
+                                                                         .then(new Operation<String>() {
+                                                                             @Override
+                                                                             public void apply(String expandedCommandLine)
+                                                                                     throws OperationException {
+                                                                                 final CommandImpl command =
+                                                                                         new CommandImpl(commandByName.getName(),
+                                                                                                         expandedCommandLine,
+                                                                                                         commandByName.getType(),
+                                                                                                         commandByName.getAttributes());
+
+                                                                                 final CommandOutputConsole console =
+                                                                                         commandConsoleFactory.create(command, machine);
+
+                                                                                 getAndPrintProcessLogs(console, pid);
+                                                                                 subscribeToProcess(console, pid);
+
+                                                                                 addCommandOutput(machine.getName(), console);
+                                                                             }
+                                                                         });
+                                               }
+                                           }
+                                       }
+                                   }
+
+                                   private void getAndPrintProcessLogs(final CommandOutputConsole console, final int pid) {
+                                       String from = null;
+                                       String till = null;
+                                       int limit = 50;
+                                       int skip = 0;
+                                       execAgentCommandManager.getProcessLogs(machine.getName(), pid, from, till, limit, skip)
+                                                              .onSuccess(logs -> {
+                                                                  for (GetProcessLogsResponseDto log : logs) {
+                                                                      String text = log.getText();
+                                                                      console.printOutput(text);
+                                                                  }
+                                                              })
+                                                              .onFailure((s, error) -> Log.error(getClass(),
+                                                                                                 "Error trying to get process log with pid: " +
+                                                                                                 pid + ". " +
+                                                                                                 error.getMessage()));
+                                   }
+
+                                   private void subscribeToProcess(CommandOutputConsole console, int pid) {
+                                       String stderr = "stderr";
+                                       String stdout = "stdout";
+                                       String processStatus = "process_status";
+                                       String after = null;
+                                       execAgentCommandManager
+                                               .subscribe(machine.getName(), pid, asList(stderr, stdout, processStatus), after)
+                                               .thenIfProcessStartedEvent(console.getProcessStartedConsumer())
+                                               .thenIfProcessDiedEvent(console.getProcessDiedConsumer())
+                                               .thenIfProcessStdOutEvent(console.getStdOutConsumer())
+                                               .thenIfProcessStdErrEvent(console.getStdErrConsumer())
+                                               .then(console.getProcessSubscribeConsumer());
+                                   }
+                               }).onFailure(
+                (endpointId, error) -> notificationManager.notify(localizationConstant.failedToGetProcesses(machine.getName())));
+    }
+

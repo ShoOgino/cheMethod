@@ -1,0 +1,22 @@
+    @Override
+    public void executeCommand(Command command, MachineImpl machine) {
+        final String name = command.getName();
+        final String type = command.getType();
+        final String commandLine = command.getCommandLine();
+        final Map<String, String> attributes = command.getAttributes();
+
+        macroProcessor.expandMacros(commandLine).then(expandedCommandLine -> {
+            final CommandImpl expandedCommand = new CommandImpl(name, expandedCommandLine, type, attributes);
+            final CommandOutputConsole console = commandConsoleFactory.create(expandedCommand, machine);
+            final String machineId = machine.getName();
+
+            processesPanelPresenter.addCommandOutput(machineId, console);
+
+            execAgentClient.startProcess(machineId, expandedCommand)
+                           .thenIfProcessStartedEvent(console.getProcessStartedConsumer())
+                           .thenIfProcessDiedEvent(console.getProcessDiedConsumer())
+                           .thenIfProcessStdOutEvent(console.getStdOutConsumer())
+                           .thenIfProcessStdErrEvent(console.getStdErrConsumer());
+        });
+    }
+

@@ -1,0 +1,39 @@
+    @Override
+    public Promise<Void> add(final Path project, final boolean update, final Path[] paths) {
+        return createFromAsyncRequest(new RequestCall<Void>() {
+            @Override
+            public void makeCall(final AsyncCallback<Void> callback) {
+                final AddRequest addRequest = dtoFactory.createDto(AddRequest.class).withUpdate(update);
+
+                if (paths == null) {
+                    addRequest.setFilePattern(AddRequest.DEFAULT_PATTERN);
+                } else {
+
+                    final List<String> patterns = new ArrayList<>(); //need for compatible with server side
+                    for (Path path : paths) {
+                        patterns.add(path.isEmpty() ? "." : path.toString());
+                    }
+
+                    addRequest.setFilePattern(patterns);
+                }
+
+                final String url = ADD + "?projectPath=" + project.toString();
+                final Message message = new MessageBuilder(POST, url).data(dtoFactory.toJson(addRequest))
+                                                                     .header(CONTENTTYPE, APPLICATION_JSON)
+                                                                     .build();
+
+                sendMessageToWS(message, new RequestCallback<Void>() {
+                    @Override
+                    protected void onSuccess(Void result) {
+                        callback.onSuccess(result);
+                    }
+
+                    @Override
+                    protected void onFailure(Throwable exception) {
+                        callback.onFailure(exception);
+                    }
+                });
+            }
+        });
+    }
+
