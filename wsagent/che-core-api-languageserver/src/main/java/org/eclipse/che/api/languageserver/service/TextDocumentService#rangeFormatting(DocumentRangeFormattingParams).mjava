@@ -1,16 +1,15 @@
-    @POST
-    @Path("rangeFormatting")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public List<? extends TextEditDto> rangeFormatting(DocumentRangeFormattingParams params)
-            throws InterruptedException, ExecutionException, LanguageServerException {
-        params.getTextDocument().setUri(prefixURI(params.getTextDocument().getUri()));
-        LanguageServer server = getServer(params.getTextDocument().getUri());
-        if (server == null) {
-            return Collections.emptyList();
+    private List<TextEditDto> rangeFormatting(DocumentRangeFormattingParams documentRangeFormattingParams) {
+        try {
+            documentRangeFormattingParams.getTextDocument().setUri(prefixURI(documentRangeFormattingParams.getTextDocument().getUri()));
+            LanguageServer server = getServer(documentRangeFormattingParams.getTextDocument().getUri());
+            return server == null ? Collections.emptyList()
+                                  : server.getTextDocumentService()
+                                          .rangeFormatting(documentRangeFormattingParams)
+                                          .get().stream()
+                                          .map(TextEditDto::new)
+                                          .collect(Collectors.toList());
+        } catch (InterruptedException | ExecutionException | LanguageServerException e) {
+            throw new JsonRpcException(-27000, e.getMessage());
         }
-        return server.getTextDocumentService().rangeFormatting(params).get().stream().map(o -> new TextEditDto(o))
-                     .collect(Collectors.toList());
-
     }
 

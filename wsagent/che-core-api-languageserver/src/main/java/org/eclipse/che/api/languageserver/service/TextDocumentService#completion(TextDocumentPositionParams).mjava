@@ -1,18 +1,14 @@
-    @SuppressWarnings("deprecation")
-    @POST
-    @Path("completion")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public CompletionListDto completion(TextDocumentPositionParams textDocumentPositionParams)
-            throws InterruptedException, ExecutionException, LanguageServerException {
-        textDocumentPositionParams.getTextDocument().setUri(prefixURI(textDocumentPositionParams.getTextDocument().getUri()));
-        textDocumentPositionParams.setUri(prefixURI(textDocumentPositionParams.getUri()));
-        LanguageServer server = getServer(textDocumentPositionParams.getTextDocument().getUri());
-        if (server == null) {
-            return null;
-        }
-        CompletionList result = server.getTextDocumentService().completion(textDocumentPositionParams).get();
+    private CompletionListDto completion(TextDocumentPositionParams textDocumentPositionParams) {
+        try {
+            TextDocumentIdentifier textDocument = textDocumentPositionParams.getTextDocument();
+            textDocument.setUri(prefixURI(textDocument.getUri()));
+            textDocumentPositionParams.setUri(prefixURI(textDocumentPositionParams.getUri()));
+            LanguageServer server = getServer(textDocument.getUri());
+            return server != null ? new CompletionListDto(server.getTextDocumentService().completion(textDocumentPositionParams).get())
+                                  : null;
 
-        return new CompletionListDto(result);
+        } catch (LanguageServerException | InterruptedException | ExecutionException e) {
+            throw new JsonRpcException(-27000, e.getMessage());
+        }
     }
 
