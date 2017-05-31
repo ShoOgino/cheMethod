@@ -1,33 +1,23 @@
-    /** {@inheritDoc} */
     @Override
     public void setAmendCommitMessage() {
-        service.log(appContext.getDevMachine(), project.getLocation(), null, false)
-               .then(new Operation<LogResponse>() {
-                   @Override
-                   public void apply(LogResponse log) throws OperationException {
-                       final List<Revision> commits = log.getCommits();
-                       String message = "";
-                       if (commits != null && (!commits.isEmpty())) {
-                           final Revision tip = commits.get(0);
-                           if (tip != null) {
-                               message = tip.getMessage();
-                           }
-                       }
-                       CommitPresenter.this.view.setMessage(message);
-                       CommitPresenter.this.view.setEnableCommitButton(!message.isEmpty());
+        service.log(appContext.getDevMachine(), project.getLocation(), null, -1, -1, false)
+               .then(log -> {
+                   String message = "";
+                   final Revision revision = getFirst(log.getCommits(), null);
+                   if (revision != null) {
+                       message = revision.getMessage();
                    }
+                   CommitPresenter.this.view.setMessage(message);
+                   CommitPresenter.this.view.setEnableCommitButton(!message.isEmpty());
                })
-               .catchError(new Operation<PromiseError>() {
-                   @Override
-                   public void apply(PromiseError error) throws OperationException {
-                       if (getErrorCode(error.getCause()) == ErrorCodes.INIT_COMMIT_WAS_NOT_PERFORMED) {
-                           dialogFactory.createMessageDialog(constant.commitTitle(),
-                                                             constant.initCommitWasNotPerformed(),
-                                                             null).show();
-                       } else {
-                           CommitPresenter.this.view.setMessage("");
-                           notificationManager.notify(constant.logFailed(), FAIL, NOT_EMERGE_MODE);
-                       }
+               .catchError(error -> {
+                   if (getErrorCode(error.getCause()) == ErrorCodes.INIT_COMMIT_WAS_NOT_PERFORMED) {
+                       dialogFactory.createMessageDialog(constant.commitTitle(),
+                                                         constant.initCommitWasNotPerformed(),
+                                                         null).show();
+                   } else {
+                       CommitPresenter.this.view.setMessage("");
+                       notificationManager.notify(constant.logFailed(), FAIL, NOT_EMERGE_MODE);
                    }
                });
     }

@@ -1,16 +1,30 @@
-    /** {@inheritDoc} */
     @Override
     public void onCommitClicked() {
-        final String message = view.getMessage();
-        final boolean addAll = view.isAddAllExceptNew();
-        final boolean addSelected = view.isAddSelectedFiles();
-        final boolean commitAll = view.isCommitAllFiles();
-        final boolean amend = view.isAmend();
+        DevMachine devMachine = appContext.getDevMachine();
+        Path location = project.getLocation();
+        Path[] filesToCommitArray = getFilesToCommitArray();
 
-        if (addSelected) {
-            addSelectedAndCommit(message, commitAll, amend);
-        } else {
-            doCommit(message, addAll, commitAll, amend);
-        }
+        service.add(devMachine, location, false, filesToCommitArray)
+               .then(arg -> {
+                   service.commit(devMachine,
+                                  location,
+                                  view.getMessage(),
+                                  false,
+                                  filesToCommitArray,
+                                  view.isAmend())
+                          .then(revision -> {
+                              onCommitSuccess(revision);
+                              if (view.isPushAfterCommit()) {
+                                  push(devMachine, location);
+                              }
+                              view.close();
+                          })
+                          .catchError(error -> {
+                              handleError(error.getCause());
+                          });
+               })
+               .catchError(error -> {
+                   notificationManager.notify(constant.addFailed(), FAIL, FLOAT_MODE);
+               });
     }
 
