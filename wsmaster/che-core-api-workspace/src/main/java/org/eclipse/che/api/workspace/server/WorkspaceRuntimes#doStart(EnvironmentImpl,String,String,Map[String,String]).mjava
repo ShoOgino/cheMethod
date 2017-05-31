@@ -6,54 +6,5 @@
                                                              ValidationException,
                                                              IOException {
 
-        requireNonNull(environment, "Environment should not be null " + workspaceId);
-        requireNonNull(environment.getRecipe(), "OldRecipe should not be null " + workspaceId);
-        requireNonNull(environment.getRecipe().getType(), "OldRecipe type should not be null " + workspaceId);
-
-        RuntimeInfrastructure infra = infraByRecipe.get(environment.getRecipe().getType());
-        if (infra == null) {
-            throw new NotFoundException("No infrastructure found of type: " + environment.getRecipe().getType() +
-                                        " for workspace: " + workspaceId);
-        }
-
-        if (runtimes.containsKey(workspaceId)) {
-            throw new ConflictException("Could not start workspace '" + workspaceId +
-                                        "' because its status is 'RUNNING'");
-        }
-
-        eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                       .withWorkspaceId(workspaceId)
-                                       .withStatus(WorkspaceStatus.STARTING)
-                                       .withEventType(EventType.STARTING)
-                                       .withPrevStatus(WorkspaceStatus.STOPPED));
-
-
-        // Start environment
-        if (options == null) {
-            options = new HashMap<>();
-        }
-
-        Subject subject = EnvironmentContext.getCurrent().getSubject();
-        RuntimeIdentity runtimeId = new RuntimeIdentityImpl(workspaceId, envName, subject.getUserName());
-
-        try {
-            InternalRuntime runtime = infra.prepare(runtimeId, environment).start(options);
-
-            if (runtime == null) {
-                throw new IllegalStateException(
-                        "SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
-                        + RuntimeInfrastructure.class);
-            }
-
-            runtimes.put(workspaceId, runtime);
-            eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                           .withWorkspaceId(workspaceId)
-                                           .withStatus(WorkspaceStatus.RUNNING)
-                                           .withEventType(EventType.RUNNING)
-                                           .withPrevStatus(WorkspaceStatus.STARTING));
-        } catch (InternalInfrastructureException e) {
-            LOG.error(format("Error occurs on workspace '%s' start. Error: %s", workspaceId, e));
-            throw new InfrastructureException(e.getMessage(), e);
-        }
     }
 

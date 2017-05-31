@@ -1,9 +1,9 @@
     /** Asynchronously starts given workspace. */
-    private void startAsync(WorkspaceImpl workspace,
-                            String envName,
-                            Map<String, String> options) throws ConflictException,
-                                                                NotFoundException,
-                                                                ServerException {
+    private CompletableFuture<Void> startAsync(WorkspaceImpl workspace,
+                                               String envName,
+                                               Map<String, String> options) throws ConflictException,
+                                                                                   NotFoundException,
+                                                                                   ServerException {
         if (envName != null && !workspace.getConfig().getEnvironments().containsKey(envName)) {
             throw new NotFoundException(format("Workspace '%s:%s' doesn't contain environment '%s'",
                                                workspace.getNamespace(),
@@ -15,32 +15,30 @@
         final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
 
         states.put(workspace.getId(), WorkspaceStatus.STARTING);
-        // barrier, safely doesn't allow to start the workspace twice
-        final Future<Runtime> descriptor = runtimes.startAsync(workspace, env, options);
+        return runtimes.startAsync(workspace, env, firstNonNull(options, Collections.emptyMap()))
+                       .thenRunAsync(ThreadLocalPropagateContext.wrap(() -> {
+                           states.put(workspace.getId(), WorkspaceStatus.RUNNING);
 
-        sharedPool.execute(() -> {
-            try {
-                descriptor.get();
-
-                states.put(workspace.getId(), WorkspaceStatus.RUNNING);
-
-                LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
-                         workspace.getNamespace(),
-                         workspace.getConfig().getName(),
-                         workspace.getId(),
-                         sessionUserNameOr("undefined"));
-            } catch (Exception ex) {
-                if (workspace.isTemporary()) {
-                    removeWorkspaceQuietly(workspace);
-                }
-                for (Throwable cause : getCausalChain(ex)) {
-                    // TODO spi
+                           LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
+                                    workspace.getNamespace(),
+                                    workspace.getConfig().getName(),
+                                    workspace.getId(),
+                                    sessionUserNameOr("undefined"));
+                       }))
+                       .exceptionally(ex -> {
+                           if (workspace.isTemporary()) {
+                               removeWorkspaceQuietly(workspace);
+                           }
+                           for (Throwable cause : getCausalChain(ex)) {
+                               // TODO spi
 //                    if (cause instanceof SourceNotFoundException) {
 //                        return;
 //                    }
-                }
-                LOG.error(ex.getLocalizedMessage(), ex);
-            }
-        });
+                           }
+                           LOG.error(ex.getLocalizedMessage(), ex);
+                           return null;
+                       });
+
+
     }
 
