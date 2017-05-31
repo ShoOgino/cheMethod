@@ -6,17 +6,14 @@
             return;
         }
 
-        final Optional<MachineImpl> machine = runtime.getMachineByName(machineName);
+        runtime.getMachineByName(machineName)
+               .ifPresent(m -> {
+                   subscribeToMachineOutput(machineName);
+                   eventBus.fireEvent(new MachineStartingEvent(m));
 
-        if (machine.isPresent()) {
-            subscribeToMachineOutput(machineName);
-            eventBus.fireEvent(new MachineStartingEvent(machine.get()));
-        }
+                   // fire deprecated MachineStateEvent for backward compatibility
+                   eventBus.fireEvent(new MachineStateEvent(new MachineEntityImpl(machineName, m), CREATING));
 
-
-        // fire deprecated MachineStateEvent for backward compatibility
-        final ActiveRuntime activeRuntime = appContext.getActiveRuntime();
-        final Optional<MachineEntity> machineEntity = activeRuntime.getMachineByName(machineName);
-        machineEntity.ifPresent(m -> eventBus.fireEvent(new MachineStateEvent(m, CREATING)));
+               });
     }
 
