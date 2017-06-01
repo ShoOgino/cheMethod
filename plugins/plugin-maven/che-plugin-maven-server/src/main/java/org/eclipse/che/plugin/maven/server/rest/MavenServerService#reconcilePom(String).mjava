@@ -4,43 +4,8 @@
     @ApiResponses({@ApiResponse(code = 200, message = "OK")})
     @Produces("application/json")
     public List<Problem> reconcilePom(@ApiParam(value = "The paths to pom.xml file which need to be reconciled")
-                                      @QueryParam("pompath") String pomPath) {
-        VirtualFileEntry entry = null;
-        List<Problem> result = new ArrayList<>();
-        try {
-            entry = cheProjectManager.getProjectsRoot().getChild(pomPath);
-            if (entry == null) {
-                return result;
-            }
-
-            Model.readFrom(entry.getVirtualFile());
-            org.eclipse.che.api.vfs.Path path = entry.getPath();
-            String pomContent = entry.getVirtualFile().getContentAsString();
-            MavenProject mavenProject =
-                    mavenProjectManager.findMavenProject(ResourcesPlugin.getWorkspace().getRoot().getProject(path.getParent().toString()));
-            if (mavenProject == null) {
-                return result;
-            }
-
-            List<MavenProjectProblem> problems = mavenProject.getProblems();
-            int start = pomContent.indexOf("<project ") + 1;
-            int end = start + "<project ".length();
-
-            List<Problem> problemList = problems.stream().map(mavenProjectProblem -> DtoFactory.newDto(Problem.class)
-                                                                                               .withError(true)
-                                                                                               .withSourceStart(start)
-                                                                                               .withSourceEnd(end)
-                                                                                               .withMessage(mavenProjectProblem.getDescription()))
-                                                .collect(Collectors.toList());
-            result.addAll(problemList);
-        } catch (ServerException | ForbiddenException | IOException e) {
-            LOG.error(e.getMessage(), e);
-        } catch (XMLTreeException exception) {
-            Throwable cause = exception.getCause();
-            if (cause != null && cause instanceof SAXParseException) {
-                result.add(createProblem(entry, (SAXParseException)cause));
-            }
-        }
-        return result;
+                                      @QueryParam("pompath") String pomPath)
+            throws ForbiddenException, ConflictException, NotFoundException, ServerException {
+        return pomReconciler.reconcile(pomPath);
     }
 

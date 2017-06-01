@@ -1,38 +1,28 @@
     /** {@inheritDoc} */
     @Override
     public void actionPerformed(ActionEvent actionEvent) {
-        final Resource[] resources = appContext.getResources();
-
-        if (resources == null || resources.length > 1) {
+        List<EditorPartPresenter> dirtyEditors = editorAgent.getDirtyEditors();
+        if (dirtyEditors.isEmpty()) {
+            performAction();
             return;
         }
 
-        final Resource resource = resources[0];
+        AsyncCallback<Void> savingOperationCallback = new AsyncCallback<Void>() {
+            @Override
+            public void onFailure(Throwable caught) {
+                Log.error(getClass(), caught);
+            }
 
-        final Optional<Project> project = resource.getRelatedProject();
+            @Override
+            public void onSuccess(Void result) {
+                performAction();
+            }
+        };
 
-        if (!JavaUtil.isJavaProject(project.get())) {
-            return;
-        }
-
-        final Optional<Resource> srcFolder = resource.getParentWithMarker(SourceFolderMarker.ID);
-
-        if (!srcFolder.isPresent() || resource.getLocation().equals(srcFolder.get().getLocation())) {
-            return;
-        }
-
-        RefactoredItemType renamedItemType = null;
-
-        if (resource.getResourceType() == FILE && isJavaFile((File)resource)) {
-            renamedItemType = COMPILATION_UNIT;
-        } else if (resource instanceof Container) {
-            renamedItemType = PACKAGE;
-        }
-
-        if (renamedItemType == null) {
-            return;
-        }
-
-        movePresenter.show(RefactorInfo.of(REFACTOR_MENU, renamedItemType, resources));
+        dialogFactory.createConfirmDialog(locale.unsavedDataDialogTitle(),
+                                          locale.unsavedDataDialogPromptSaveChanges(),
+                                          () -> editorAgent.saveAll(savingOperationCallback),
+                                          null)
+                     .show();
     }
 

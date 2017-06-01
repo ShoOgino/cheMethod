@@ -1,0 +1,28 @@
+    private void createPersistentWorkingCopy(String originalFilePath) throws ServerException, ForbiddenException, ConflictException {
+        try {
+            EditorWorkingCopy workingCopy = workingCopiesStorage.get(originalFilePath);
+            if (workingCopy == null) {
+                throw new ServerException("Can not create recovery file for " + originalFilePath);
+            }
+
+            byte[] content = workingCopy.getContentAsBytes();
+            String projectPath = workingCopy.getProjectPath();
+
+            VirtualFileEntry persistentWorkingCopy = getPersistentWorkingCopy(originalFilePath, projectPath);
+            if (persistentWorkingCopy != null) {
+                persistentWorkingCopy.getVirtualFile().updateContent(content);
+                return;
+            }
+
+            FolderEntry persistentWorkingCopiesStorage = getPersistentWorkingCopiesStorage(projectPath);
+            if (persistentWorkingCopiesStorage == null) {
+                persistentWorkingCopiesStorage = createPersistentWorkingCopiesStorage(projectPath);
+            }
+
+            persistentWorkingCopiesStorage.createFile(workingCopy.getPath(), content);
+        } catch (ConflictException | ForbiddenException e) {
+            LOG.error(e.getLocalizedMessage());
+            throw new ServerException("Can not create recovery file for " + originalFilePath);
+        }
+    }
+

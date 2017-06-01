@@ -6,30 +6,26 @@
                 return;
             }
 
-            try {
-                client.reconcile(project.get().getLocation().toString(), JavaUtil.resolveFQN(getFile()),
-                                 new JavaReconcileClient.ReconcileCallback() {
-                                     @Override
-                                     public void onReconcile(ReconcileResult result) {
-                                         if (resolvingProjectStateHolder != null && resolvingProjectStateHolder.getState() == IN_PROGRESS) {
-                                             disableReconciler(localizationConstant.codeAssistErrorMessageResolvingProject());
-                                             return;
-                                         } else {
-                                             codeAssistProcessor.enableCodeAssistant();
-                                         }
+            String fqn = JavaUtil.resolveFQN(getFile());
+            String projectPath = project.get().getLocation().toString();
 
-                                         if (result == null) {
-                                             return;
-                                         }
-                                         doReconcile(result.getProblems());
-                                         highlighter.reconcile(result.getHighlightedPositions());
-                                     }
-                                 });
-            } catch (RuntimeException e) {
-                Log.info(getClass(), e.getMessage());
-            }
+            client.reconcile(fqn, projectPath).onSuccess(reconcileResult -> {
+                if (isProjectResolving()) {
+                    disableReconciler(localizationConstant.codeAssistErrorMessageResolvingProject());
+                    return;
+                } else {
+                    codeAssistProcessor.enableCodeAssistant();
+                }
+
+                if (reconcileResult == null) {
+                    return;
+                }
+
+                doReconcile(reconcileResult.getProblems());
+                highlighter.reconcile(reconcileResult.getHighlightedPositions());
+            }).onFailure(jsonRpcError -> {
+                Log.info(getClass(), jsonRpcError.getMessage());
+            });
         }
-
-
     }
 

@@ -1,0 +1,28 @@
+    private void reconcileAndTransmit(String filePath, String projectPath, String endpointId) {
+        ICompilationUnit compilationUnit;
+        try {
+            compilationUnit = getCompilationUnit(filePath, projectPath);
+            if (compilationUnit == null) {
+                return;
+            }
+        } catch (JavaModelException e) {
+            return; //ignore - we haven't compilation unit to reconcile
+        }
+
+        try {
+            ReconcileResult reconcileResult = reconcile(compilationUnit, getJavaProject(projectPath));
+            transmitter.newRequest()
+                       .endpointId(endpointId)
+                       .methodName(RECONCILE_STATE_CHANGED_METHOD)
+                       .paramsAsDto(reconcileResult)
+                       .sendAndSkipResult();
+        } catch (JavaModelException e) {
+            String errorMessage =
+                    format("Can't reconcile class: %s in project: %s, the reason is %s", filePath, projectPath, e.getLocalizedMessage());
+
+            LOG.error(errorMessage);
+
+            transmitError(500, errorMessage, endpointId);
+        }
+    }
+

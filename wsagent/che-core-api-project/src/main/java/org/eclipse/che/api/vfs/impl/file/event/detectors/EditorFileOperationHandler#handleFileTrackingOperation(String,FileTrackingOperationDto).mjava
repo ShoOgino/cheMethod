@@ -1,9 +1,24 @@
     private Void handleFileTrackingOperation(String endpointId, FileTrackingOperationDto operation) {
         try {
+            Type operationType = operation.getType();
+            if (operationType == SUSPEND || operationType == RESUME) {
+                eventService.publish(new FileTrackingOperationEvent(endpointId, operation));
+                return null;
+            }
+
+            String filePath = operation.getPath();
+            if (filePath.isEmpty()) {
+                throw new NotFoundException(format("Path for the file should be defined for %s operation", operationType));
+            }
+
+            if (operationType == MOVE && operation.getOldPath().isEmpty()) {
+                throw new NotFoundException("Old path should be defined for 'MOVE' operation");
+            }
+
             eventService.publish(new FileTrackingOperationEvent(endpointId, operation));
             return null;
         } catch (Exception e) {
-            throw new JsonRpcException(500, e.getLocalizedMessage());
+            throw new JsonRpcException(500, "Can not handle file operation: " + e.getLocalizedMessage());
         }
     }
 
