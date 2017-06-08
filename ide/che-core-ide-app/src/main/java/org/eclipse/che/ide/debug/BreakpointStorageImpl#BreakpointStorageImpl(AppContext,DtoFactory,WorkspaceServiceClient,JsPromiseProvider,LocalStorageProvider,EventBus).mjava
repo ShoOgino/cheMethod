@@ -1,0 +1,29 @@
+    @Inject
+    public BreakpointStorageImpl(AppContext appContext,
+                                 DtoFactory dtoFactory,
+                                 WorkspaceServiceClient workspaceServiceClient,
+                                 JsPromiseProvider promiseProvider,
+                                 LocalStorageProvider localStorageProvider,
+                                 EventBus eventBus) {
+        this.appContext = appContext;
+        this.dtoFactory = dtoFactory;
+        this.workspaceServiceClient = workspaceServiceClient;
+        this.promiseProvider = promiseProvider;
+        this.eventBus = eventBus;
+        this.storage = localStorageProvider.get();
+        this.breakpoints = new LinkedList<>();
+        this.storageKey = LOCAL_STORAGE_BREAKPOINTS_KEY_PREFIX + appContext.getWorkspaceId();
+
+        if (storage == null) {
+            LOG.warning("Local storage is not supported. Breakpoints won't be preserved.");
+            this.readAllBreakpointMarker = promiseProvider.resolve(null);
+        } else {
+            this.readAllBreakpointMarker = getReadAllBreakpointsMarker();
+            this.readAllBreakpointMarker.then(onFulfilled -> {
+                preserve();
+            });
+
+            clearOutdatedRecords();
+        }
+    }
+

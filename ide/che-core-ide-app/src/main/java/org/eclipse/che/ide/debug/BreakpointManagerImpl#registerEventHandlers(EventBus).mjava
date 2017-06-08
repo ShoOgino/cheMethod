@@ -5,49 +5,40 @@
         eventBus.addHandler(WorkspaceReadyEvent.getType(), new WorkspaceReadyEvent.WorkspaceReadyHandler() {
             @Override
             public void onWorkspaceReady(WorkspaceReadyEvent event) {
-                restoreBreakpoints();
+                breakpointStorage.readAll().then(breakpoints -> {
+                    breakpoints.forEach(BreakpointManagerImpl.this::addBreakpoint);
+                });
             }
         });
 
-        eventBus.addHandler(EditorOpenedEvent.TYPE, new EditorOpenedEventHandler() {
-            @Override
-            public void onEditorOpened(EditorOpenedEvent event) {
-                onOpenEditor(event.getFile().getLocation().toString(), event.getEditor());
+        eventBus.addHandler(EditorOpenedEvent.TYPE, event -> onOpenEditor(event.getFile().getLocation().toString(), event.getEditor()));
+
+        eventBus.addHandler(DeleteProjectEvent.TYPE, event -> {
+            if (breakpoints.isEmpty()) {
+                return;
             }
+
+            ProjectConfigDto config = event.getProjectConfig();
+            String path = config.getPath() + "/";
+            deleteBreakpoints(getBreakpointPaths(path));
         });
 
-        eventBus.addHandler(DeleteProjectEvent.TYPE, new DeleteProjectHandler() {
-            @Override
-            public void onProjectDeleted(DeleteProjectEvent event) {
+        eventBus.addHandler(ResourceChangedEvent.getType(), event -> {
+            if (event.getDelta().getKind() == ResourceDelta.REMOVED) {
                 if (breakpoints.isEmpty()) {
                     return;
                 }
 
-                ProjectConfigDto config = event.getProjectConfig();
-                String path = config.getPath() + "/";
-                deleteBreakpoints(getBreakpointPaths(path));
-            }
-        });
+                final Resource resource = event.getDelta().getResource();
 
-        eventBus.addHandler(ResourceChangedEvent.getType(), new ResourceChangedEvent.ResourceChangedHandler() {
-            @Override
-            public void onResourceChanged(ResourceChangedEvent event) {
-                if (event.getDelta().getKind() == ResourceDelta.REMOVED) {
-                    if (breakpoints.isEmpty()) {
-                        return;
-                    }
+                Path path = resource.getLocation();
 
-                    final Resource resource = event.getDelta().getResource();
+                if (resource.isFolder()) {
+                    path.addTrailingSeparator();
 
-                    Path path = resource.getLocation();
-
-                    if (resource.isFolder()) {
-                        path.addTrailingSeparator();
-
-                        deleteBreakpoints(getBreakpointPaths(path.toString()));
-                    } else if (resource.isFile()) {
-                        deleteBreakpoints(Collections.singleton(path.toString()));
-                    }
+                    deleteBreakpoints(getBreakpointPaths(path.toString()));
+                } else if (resource.isFile()) {
+                    deleteBreakpoints(Collections.singleton(path.toString()));
                 }
             }
         });
