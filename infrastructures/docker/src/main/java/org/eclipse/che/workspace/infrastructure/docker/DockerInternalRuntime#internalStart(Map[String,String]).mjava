@@ -11,7 +11,24 @@
             while (machineName != null) {
                 DockerContainerConfig service = dockerEnvironment.getServices().get(machineName);
                 checkStartInterruption();
-                dockerMachine = startMachine(machineName, service, startOptions, machineName.equals(devMachineName));
+                eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
+                                               .withIdentity(DtoConverter.asDto(identity))
+                                               .withEventType(MachineStatusEvent.EventType.STARTING)
+                                               .withMachineName(machineName));
+                try {
+                    dockerMachine = startMachine(machineName, service, startOptions, machineName.equals(devMachineName));
+                    eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
+                                                   .withIdentity(DtoConverter.asDto(identity))
+                                                   .withEventType(MachineStatusEvent.EventType.RUNNING)
+                                                   .withMachineName(machineName));
+                } catch (InfrastructureException e) {
+                    eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
+                                                   .withIdentity(DtoConverter.asDto(identity))
+                                                   .withEventType(MachineStatusEvent.EventType.FAILED)
+                                                   .withMachineName(machineName)
+                                                   .withError(e.getMessage()));
+                    throw e;
+                }
                 checkStartInterruption();
                 startSynchronizer.addMachine(machineName, dockerMachine);
                 startQueue.poll();
