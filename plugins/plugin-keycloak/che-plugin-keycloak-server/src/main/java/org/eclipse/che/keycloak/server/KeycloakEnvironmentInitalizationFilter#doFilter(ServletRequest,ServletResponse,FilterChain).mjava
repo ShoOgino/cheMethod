@@ -1,0 +1,39 @@
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
+            throws IOException, ServletException {
+
+        final HttpServletRequest httpRequest = (HttpServletRequest)request;
+        final HttpSession session = httpRequest.getSession();
+        final KeycloakSecurityContext  context = (KeycloakSecurityContext)session.getAttribute(KeycloakSecurityContext.class.getName());
+
+        User user;
+
+        try {
+            user = userManager.getById(context.getIdToken().getSubject());
+        } catch (NotFoundException ex) {
+            try {
+                final UserImpl cheUser = new UserImpl(context.getIdToken().getSubject(),
+                                                      context.getIdToken().getEmail(),
+                                                      context.getIdToken().getPreferredUsername(),
+                                                      "secret",
+                                                      emptyList());
+                user = userManager.create(cheUser, false);
+            } catch (ServerException | ConflictException e) {
+                throw new ServletException("Unable to create new user");
+            }
+        } catch (ServerException e) {
+            throw new ServletException("Unable to get user");
+        }
+        final Subject subject =
+                new SubjectImpl(user.getName(), user.getId(), context.getTokenString(), false);
+        session.setAttribute("codenvy_user", subject);
+
+        final EnvironmentContext environmentContext = EnvironmentContext.getCurrent();
+        try {
+            environmentContext.setSubject(subject);
+            filterChain.doFilter(addUserInRequest(httpRequest, subject), response);
+        } finally {
+            EnvironmentContext.reset();
+        }
+    }
+
