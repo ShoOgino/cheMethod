@@ -7,7 +7,7 @@
             Log.debug(getClass(), "Received notification from endpoint: " + endpointId);
 
             workspaceServiceClient.getWorkspace(appContext.getWorkspaceId()).then(workspace -> {
-                // Update workspace model returned by AppContext before firing an event.
+                // Update workspace model in AppContext before firing an event.
                 // Because AppContext always must return an actual workspace model.
                 ((AppContextImpl)appContext).setWorkspace(workspace);
 
@@ -16,6 +16,9 @@
 
                     if (WSAGENT_REFERENCE.equals(event.getServerName())) {
                         eventBus.fireEvent(new WsAgentServerRunningEvent());
+
+                        // fire deprecated WsAgentStateEvent for backward compatibility with IDE 5.x
+                        eventBus.fireEvent(createWsAgentStartedEvent());
                     }
                 } else if (event.getStatus() == STOPPED) {
                     eventBus.fireEvent(new ServerStoppedEvent(event.getServerName(), event.getMachineName()));
@@ -32,5 +35,12 @@
                     .paramsAsDto(ServerStatusEvent.class)
                     .noResult()
                     .withBiConsumer(operation);
+
+        // fire deprecated WsAgentStateEvent for backward compatibility with IDE 5.x
+        eventBus.addHandler(BasicIDEInitializedEvent.TYPE, e -> {
+            if (appContext.getWorkspace().getStatus() == WorkspaceStatus.RUNNING) {
+                eventBus.fireEvent(WsAgentStateEvent.createWsAgentStartedEvent());
+            }
+        });
     }
 
