@@ -1,0 +1,50 @@
+    /**
+     * Bootstraps installers and wait while they finished.
+     *
+     * @throws InfrastructureException
+     *         when bootstrapping timeout reached
+     * @throws InfrastructureException
+     *         when bootstrapping failed
+     * @throws InfrastructureException
+     *         when any other error occurs while bootstrapping
+     */
+    public void bootstrap() throws InfrastructureException {
+        if (finishEventFuture != null) {
+            throw new IllegalStateException("Bootstrap method must be called only once.");
+        }
+        this.finishEventFuture = new CompletableFuture<>();
+
+        injectBootstrapper();
+
+        this.eventService.subscribe(bootstrapperStatusListener, BootstrapperStatusEvent.class);
+        try {
+            String endpoint = installerEndpoint + ENDPOINT_IDS.getAndIncrement();
+            dockerMachine.exec(BOOTSTRAPPER_DIR + BOOTSTRAPPER_FILE +
+                               " -machine-name " + machineName +
+                               " -runtime-id " + String.format("%s:%s:%s", runtimeIdentity.getWorkspaceId(),
+                                                               runtimeIdentity.getEnvName(),
+                                                               runtimeIdentity.getOwner()) +
+                               " -push-endpoint " + endpoint +
+                               " -push-logs-endpoint " + endpoint +
+                               " -server-check-period " + serverCheckPeriodSeconds +
+                               " -installer-timeout " + installerTimeoutSeconds +
+                               " -file " + BOOTSTRAPPER_DIR + CONFIG_FILE,
+                               null);
+
+            //waiting for DONE or FAILED bootstrapper status event
+            BootstrapperStatusEvent resultEvent = finishEventFuture.get(bootstrappingTimeoutMinutes, TimeUnit.MINUTES);
+            if (resultEvent.getStatus().equals(BootstrapperStatus.FAILED)) {
+                throw new InfrastructureException(resultEvent.getError());
+            }
+        } catch (ExecutionException e) {
+            throw new InfrastructureException(e.getCause().getMessage(), e);
+        } catch (TimeoutException e) {
+            throw new InfrastructureException("Bootstrapping of machine " + machineName + " reached timeout");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InfrastructureException("Bootstrapping of machine " + machineName + " was interrupted");
+        } finally {
+            this.eventService.unsubscribe(bootstrapperStatusListener, BootstrapperStatusEvent.class);
+        }
+    }
+
