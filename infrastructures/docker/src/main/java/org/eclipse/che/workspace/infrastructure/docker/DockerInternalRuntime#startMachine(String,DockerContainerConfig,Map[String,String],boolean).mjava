@@ -40,14 +40,23 @@
                                                         identity,
                                                         isDev);
         }
+
         try {
             checkStartInterruption();
             startSynchronizer.addMachine(name, dockerMachine);
+
+            InternalMachineConfig machineConfig = getContext().getMachineConfigs().get(name);
+            if (machineConfig == null) {
+                throw new InfrastructureException("Machine %s is not found in internal machines config of RuntimeContext");
+            }
+
+            bootstrapperFactory.create(name, identity, dockerMachine, machineConfig.getAgents())
+                               .bootstrap();
+
+            checkServersReadiness(name, dockerMachine);
         } catch (InfrastructureException e) {
             destroyMachineQuietly(name, dockerMachine);
             throw e;
         }
-        startAgents(name, dockerMachine);
-        checkServersReadiness(name, dockerMachine);
     }
 
