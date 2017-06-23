@@ -1,0 +1,18 @@
+    private void restoreLogs(String machineName) {
+        execAgentCommandManager.getProcesses(machineName, false)
+                               .onSuccess(processes -> {
+                                   Consumer<Integer> pidConsumer = pid -> execAgentCommandManager
+                                           .getProcessLogs(machineName, pid, null, null, 50, 0)
+                                           .onSuccess(logs -> logs.forEach(log -> {
+                                               final String fixedLog = log.getText().replaceAll("\\[STDOUT\\] ", "");
+
+                                               eventBus.fireEvent(new EnvironmentOutputEvent(fixedLog, machineName));
+                                           }));
+
+                                   processes.stream()
+                                            .filter(it -> "CheWsAgent".equals(it.getName()))
+                                            .map(DtoWithPid::getPid)
+                                            .forEach(pidConsumer);
+                               });
+    }
+

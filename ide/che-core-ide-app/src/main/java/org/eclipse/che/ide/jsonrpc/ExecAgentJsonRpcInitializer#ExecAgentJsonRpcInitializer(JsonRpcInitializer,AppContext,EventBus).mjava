@@ -1,0 +1,35 @@
+    @Inject
+    public ExecAgentJsonRpcInitializer(JsonRpcInitializer initializer, AppContext appContext, EventBus eventBus) {
+        this.appContext = appContext;
+        this.initializer = initializer;
+
+        eventBus.addHandler(ServerRunningEvent.TYPE, event -> {
+            if (event.getServerName().equals(EXEC_AGENT_REFERENCE)) {
+                initializeJsonRpcService(event.getMachineName());
+            }
+        });
+
+        eventBus.addHandler(ServerStoppedEvent.TYPE, event -> {
+            if (event.getServerName().equals(EXEC_AGENT_REFERENCE)) {
+                initializer.terminate(event.getMachineName());
+            }
+        });
+
+        // in case workspace is already running
+        eventBus.addHandler(BasicIDEInitializedEvent.TYPE, event -> {
+            final WorkspaceImpl workspace = appContext.getWorkspace();
+
+            if (workspace.getStatus() == RUNNING) {
+                final RuntimeImpl runtime = workspace.getRuntime();
+
+                if (runtime != null) {
+                    runtime.getMachines()
+                           .values()
+                           .stream()
+                           .map(MachineImpl::getName)
+                           .forEach(this::initializeJsonRpcService);
+                }
+            }
+        });
+    }
+

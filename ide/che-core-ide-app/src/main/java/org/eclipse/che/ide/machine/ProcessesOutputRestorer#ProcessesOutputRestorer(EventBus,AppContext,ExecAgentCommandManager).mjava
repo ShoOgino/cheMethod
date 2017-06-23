@@ -1,0 +1,26 @@
+    @Inject
+    public ProcessesOutputRestorer(EventBus eventBus, AppContext appContext, ExecAgentCommandManager execAgentCommandManager) {
+        this.eventBus = eventBus;
+        this.execAgentCommandManager = execAgentCommandManager;
+
+        eventBus.addHandler(ServerRunningEvent.TYPE, event -> {
+            if (event.getServerName().equals(EXEC_AGENT_REFERENCE)) {
+                restoreLogs(event.getMachineName());
+            }
+        });
+
+        // in case workspace is already running
+        eventBus.addHandler(BasicIDEInitializedEvent.TYPE, event -> {
+            final WorkspaceImpl workspace = appContext.getWorkspace();
+
+            if (workspace.getStatus() == RUNNING) {
+                final RuntimeImpl runtime = workspace.getRuntime();
+
+                if (runtime != null) {
+                    runtime.getMachines().values()
+                           .forEach(m -> restoreLogs(m.getName()));
+                }
+            }
+        });
+    }
+
