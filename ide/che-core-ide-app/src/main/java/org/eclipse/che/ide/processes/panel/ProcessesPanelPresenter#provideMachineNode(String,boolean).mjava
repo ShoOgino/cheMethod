@@ -3,15 +3,15 @@
      * <li>creates new machine node when this one not exist or {@code replace} is {@code true}</li>
      * <li>returns old machine node when this one exist and {@code replace} is {@code false}</li>
      *
-     * @param machine
-     *         machine to creating node
+     * @param machineName
+     *         name of the machine to creating node
      * @param replace
      *         existed node will be replaced when {@code replace} is {@code true}
      * @return machine node
      */
-    private ProcessTreeNode provideMachineNode(MachineImpl machine, boolean replace) {
-        final String machineId = machine.getName();
-        final ProcessTreeNode existedMachineNode = findTreeNodeById(machineId);
+    @Nullable
+    private ProcessTreeNode provideMachineNode(String machineName, boolean replace) {
+        final ProcessTreeNode existedMachineNode = findTreeNodeById(machineName);
         if (!replace && existedMachineNode != null) {
             return existedMachineNode;
         }
@@ -21,7 +21,7 @@
 
         // remove existed node
         for (ProcessTreeNode node : rootNode.getChildren()) {
-            if (machine.getName().equals(node.getName())) {
+            if (machineName.equals(node.getName())) {
                 children.addAll(node.getChildren());
                 rootNode.getChildren().remove(node);
                 break;
@@ -29,15 +29,24 @@
         }
 
         // create new node
-        final ProcessTreeNode newMachineNode = new ProcessTreeNode(MACHINE_NODE, rootNode, machine, null, children);
+        RuntimeImpl runtime = appContext.getWorkspace().getRuntime();
+        if (runtime == null) {
+            return null;
+        }
+        Optional<MachineImpl> machineByName = runtime.getMachineByName(machineName);
+        if (!machineByName.isPresent()) {
+            return null;
+        }
+
+        final ProcessTreeNode newMachineNode = new ProcessTreeNode(MACHINE_NODE, rootNode, machineByName.get(), null, children);
         newMachineNode.setRunning(/*RUNNING == machine.getStatus()*/true);
-        newMachineNode.setHasTerminalAgent(hasAgent(machine.getName(), TERMINAL_AGENT) || hasTerminal(machineId));
-        newMachineNode.setHasSSHAgent(hasAgent(machine.getName(), SSH_AGENT));
+        newMachineNode.setHasTerminalAgent(hasAgent(machineName, TERMINAL_AGENT) || hasTerminal(machineName));
+        newMachineNode.setHasSSHAgent(hasAgent(machineName, SSH_AGENT));
         for (ProcessTreeNode child : children) {
             child.setParent(newMachineNode);
         }
 
-        machineNodes.put(machineId, newMachineNode);
+        machineNodes.put(machineName, newMachineNode);
 
         // add to children
         rootNode.getChildren().add(newMachineNode);
@@ -46,9 +55,9 @@
         view.setProcessesData(rootNode);
 
         // add output for the machine if it is not exist
-        if (!consoles.containsKey(machine.getName())) {
-            OutputConsole outputConsole = commandConsoleFactory.create(machine.getName());
-            addOutputConsole(machine.getName(), newMachineNode, outputConsole, true);
+        if (!consoles.containsKey(machineName)) {
+            OutputConsole outputConsole = commandConsoleFactory.create(machineName);
+            addOutputConsole(machineName, newMachineNode, outputConsole, true);
         }
 
         return newMachineNode;
