@@ -11,26 +11,11 @@
         if (context == null) {
             throw new ServletException("Unable to get security context.");
         }
-
-        User user;
-
         final IDToken token = context.getIdToken() != null ? context.getIdToken() : context.getToken();
-        try {
-            user = userManager.getById(token.getSubject());
-        } catch (NotFoundException ex) {
-            try {
-                final UserImpl cheUser = new UserImpl(token.getSubject(),
-                                                      token.getEmail(),
-                                                      token.getPreferredUsername(),
-                                                      "secret",
-                                                      emptyList());
-                user = userManager.create(cheUser, false);
-            } catch (ServerException | ConflictException e) {
-                throw new ServletException("Unable to create new user");
-            }
-        } catch (ServerException e) {
-            throw new ServletException("Unable to get user");
-        }
+
+        User user = getOrCreateUser(token.getSubject(), token.getEmail(), token.getPreferredUsername());
+        getOrCreateAccount(token.getPreferredUsername(), token.getPreferredUsername());
+
         final Subject subject =
                 new SubjectImpl(user.getName(), user.getId(), context.getTokenString(), false);
         httpRequest.getSession().setAttribute("codenvy_user", subject);
