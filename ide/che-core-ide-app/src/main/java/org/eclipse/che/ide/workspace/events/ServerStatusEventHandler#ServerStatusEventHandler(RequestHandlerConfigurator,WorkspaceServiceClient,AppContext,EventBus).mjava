@@ -1,0 +1,27 @@
+    @Inject
+    ServerStatusEventHandler(RequestHandlerConfigurator configurator,
+                             WorkspaceServiceClient workspaceServiceClient,
+                             AppContext appContext,
+                             EventBus eventBus) {
+        this.workspaceServiceClient = workspaceServiceClient;
+        this.appContext = appContext;
+        this.eventBus = eventBus;
+
+        configurator.newConfiguration()
+                    .methodName("server/statusChanged")
+                    .paramsAsDto(ServerStatusEvent.class)
+                    .noResult()
+                    .withBiConsumer((endpointId, event) -> {
+                        Log.debug(getClass(), "Received notification from endpoint: " + endpointId);
+
+                        processStatus(event);
+                    });
+
+        // fire deprecated WsAgentStateEvent for backward compatibility with IDE 5.x
+        eventBus.addHandler(BasicIDEInitializedEvent.TYPE, e -> {
+            if (appContext.getWorkspace().getStatus() == WorkspaceStatus.RUNNING) {
+                eventBus.fireEvent(WsAgentStateEvent.createWsAgentStartedEvent());
+            }
+        });
+    }
+
