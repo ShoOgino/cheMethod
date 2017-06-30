@@ -1,0 +1,47 @@
+    /**
+     * A callback that is to be called for an anchor
+     * 
+     * @param qualifiedName
+     * @param fileName
+     * @param lineNumber
+     */
+    public void handleAnchorClick(String qualifiedName, String fileName, final int lineNumber) {
+        if (qualifiedName == null || fileName == null) {
+            return;
+        }
+
+        String qualifiedClassName = qualifiedName.lastIndexOf('.') != -1
+                ? qualifiedName.substring(0, qualifiedName.lastIndexOf('.'))
+                : qualifiedName;
+        final String packageName = qualifiedClassName.lastIndexOf('.') != -1
+                ? qualifiedClassName.substring(0, qualifiedClassName.lastIndexOf('.'))
+                : "";
+
+        String relativeFilePath = (packageName.isEmpty() ? "" : 
+            (packageName.replace(".", "/") + "/")) + fileName;
+
+        collectChildren(appContext.getWorkspaceRoot(), Path.valueOf(relativeFilePath)).then(files -> {
+            if (!files.isEmpty()) {
+                editorAgent.openEditor(files.get(0), new OpenEditorCallbackImpl() {
+                    @Override
+                    public void onEditorOpened(EditorPartPresenter editor) {
+                        Timer t = new Timer() {
+                            @Override
+                            public void run() {
+                                EditorPartPresenter editorPart = editorAgent.getActiveEditor();
+                                selectRange(editorPart, lineNumber);
+                            }
+                        };
+                        t.schedule(500);
+                    }
+
+                    @Override
+                    public void onEditorActivated(EditorPartPresenter editor) {
+                        selectRange(editor, lineNumber);
+                    }
+                });
+
+            }
+        });
+    }
+

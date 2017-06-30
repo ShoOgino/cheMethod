@@ -1,0 +1,26 @@
+    @SuppressWarnings("unchecked")
+    private boolean hasComposerRunner(String projectPath) {
+        VirtualFileEntry composerJson;
+        try {
+            composerJson = projectManager.getProjectsRoot().getChild(projectPath + "/composer.json");
+            if (composerJson == null)
+                return false;
+        } catch (ServerException e) {
+            return false;
+        }
+        try (InputStream inputStream = composerJson.getVirtualFile().getContent();
+             InputStreamReader reader = new InputStreamReader(inputStream);) {
+            Gson gson = new GsonBuilder().create();
+            Map<String, ?> composerJsonMap = gson.fromJson(reader, LinkedTreeMap.class);
+            Map<String, String> requireDev = (Map<String, String>) composerJsonMap.get("require-dev");
+            if (requireDev != null && requireDev.get("phpunit/phpunit") != null)
+                return true;
+            Map<String, String> require = (Map<String, String>) composerJsonMap.get("require");
+            if (require != null && require.get("phpunit/phpunit") != null)
+                return true;
+        } catch (Exception e) {
+            LOG.error(e.getMessage(), e);
+        }
+        return false;
+    }
+
