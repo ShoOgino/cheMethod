@@ -1,0 +1,21 @@
+    private void initInstallers(List<String> installersKeys) throws InfrastructureException {
+        try {
+            // TODO ensure already contains dependencies
+            List<Installer> sortedInstallers = installerRegistry.getOrderedInstallers(installersKeys);
+            for (Installer installer : sortedInstallers) {
+                this.installers.add(new InstallerImpl(installer));
+                for (Map.Entry<String, ? extends ServerConfig> serverEntry : installer.getServers().entrySet()) {
+                    if (servers.putIfAbsent(serverEntry.getKey(), serverEntry.getValue()) != null &&
+                        servers.get(serverEntry.getKey()).equals(serverEntry.getValue())) {
+                        throw new InfrastructureException(
+                                format("Installer '%s' contains server '%s' conflicting with machine configuration",
+                                       installer.getId(), serverEntry.getKey()));
+                    }
+                }
+            }
+        } catch (InstallerException e) {
+            // TODO installers has circular dependency or missing, what should we throw in that case?
+            throw new InfrastructureException(e.getLocalizedMessage(), e);
+        }
+    }
+
