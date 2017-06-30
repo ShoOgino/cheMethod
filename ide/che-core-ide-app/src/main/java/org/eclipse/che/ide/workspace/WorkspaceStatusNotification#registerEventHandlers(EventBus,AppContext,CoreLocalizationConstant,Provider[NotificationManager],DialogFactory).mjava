@@ -1,0 +1,53 @@
+    @Inject
+    private void registerEventHandlers(EventBus eventBus,
+                                       AppContext appContext,
+                                       CoreLocalizationConstant messages,
+                                       Provider<NotificationManager> notificationManagerProvider,
+                                       DialogFactory dialogFactory) {
+
+        eventBus.addHandler(BasicIDEInitializedEvent.TYPE, e -> {
+            WorkspaceStatus status = appContext.getWorkspace().getStatus();
+
+            if (status == STARTING) {
+                show(STARTING_WORKSPACE_RUNTIME);
+            } else if (status == STOPPING) {
+                show(STOPPING_WORKSPACE);
+            }
+        });
+
+        eventBus.addHandler(WorkspaceStartingEvent.TYPE, e -> {
+            setSuccess(WORKSPACE_STOPPED);
+            show(STARTING_WORKSPACE_RUNTIME);
+        });
+
+        eventBus.addHandler(WorkspaceRunningEvent.TYPE, e -> setSuccess(STARTING_WORKSPACE_RUNTIME));
+
+        eventBus.addHandler(WorkspaceStoppingEvent.TYPE, e -> {
+            setSuccess(STARTING_WORKSPACE_RUNTIME);
+            show(STOPPING_WORKSPACE);
+        });
+
+        eventBus.addHandler(WorkspaceStoppedEvent.TYPE, e -> {
+            setSuccess(STOPPING_WORKSPACE);
+            setSuccess(STARTING_WORKSPACE_RUNTIME);
+
+            if (e.isError()) {
+                notificationManagerProvider.get().notify(messages.workspaceStartFailed(), FAIL, FLOAT_MODE);
+
+                String errorMessage = e.getErrorMessage();
+                if (!errorMessage.isEmpty()) {
+                    WorkspaceImpl currentWorkspace = appContext.getWorkspace();
+                    String workspaceName = currentWorkspace.getConfig().getName();
+
+                    dialogFactory.createMessageDialog(messages.startWsErrorTitle(),
+                                                      messages.startWsErrorContent(workspaceName, errorMessage),
+                                                      null).show();
+                }
+            }
+        });
+
+        eventBus.addHandler(SnapshotCreatingEvent.TYPE, e -> show(CREATING_WORKSPACE_SNAPSHOT));
+        eventBus.addHandler(SnapshotCreatedEvent.TYPE, e -> setSuccess(CREATING_WORKSPACE_SNAPSHOT));
+        eventBus.addHandler(SnapshotCreationErrorEvent.TYPE, e -> setError(CREATING_WORKSPACE_SNAPSHOT));
+    }
+
