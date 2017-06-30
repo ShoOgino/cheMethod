@@ -3,19 +3,23 @@
         startSynchronizer.setStartThread();
         try {
             contextsStorage.add((DockerRuntimeContext)getContext());
-            checkStartInterruption();
             dockerNetworkLifecycle.createNetwork(dockerEnvironment.getNetwork());
+
+            boolean restore = isRestoreEnabled(startOptions);
 
             String machineName = startQueue.peek();
             while (machineName != null) {
                 DockerContainerConfig service = dockerEnvironment.getServices().get(machineName);
-                checkStartInterruption();
                 eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
                                                .withIdentity(DtoConverter.asDto(identity))
                                                .withEventType(MachineStatus.STARTING)
                                                .withMachineName(machineName));
                 try {
-                    startMachine(machineName, service, startOptions, machineName.equals(devMachineName));
+                    if (restore) {
+                        restoreMachine(machineName, service);
+                    } else {
+                        startMachine(machineName, service);
+                    }
                     eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
                                                    .withIdentity(DtoConverter.asDto(identity))
                                                    .withEventType(MachineStatus.RUNNING)

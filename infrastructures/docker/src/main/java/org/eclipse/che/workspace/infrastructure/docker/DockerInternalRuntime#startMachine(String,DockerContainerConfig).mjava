@@ -1,0 +1,28 @@
+    private void startMachine(String name, DockerContainerConfig containerConfig) throws InfrastructureException {
+        InternalMachineConfig machineCfg = getContext().getMachineConfigs().get(name);
+
+        Map<String, String> labels = new HashMap<>(containerConfig.getLabels());
+        labels.putAll(Labels.newSerializer()
+                            .machineName(name)
+                            .runtimeId(identity)
+                            .servers(machineCfg.getServers())
+                            .labels());
+        containerConfig.setLabels(labels);
+
+        DockerMachine machine = serviceStarter.startService(dockerEnvironment.getNetwork(),
+                                                            name,
+                                                            containerConfig,
+                                                            identity,
+                                                            devMachineName.equals(name));
+        try {
+            startSynchronizer.addMachine(name, machine);
+
+            bootstrapperFactory.create(name, identity, machine, machineCfg.getInstallers()).bootstrap();
+
+            checkServersReadiness(name, machine);
+        } catch (InfrastructureException e) {
+            destroyMachineQuietly(name, machine);
+            throw e;
+        }
+    }
+

@@ -1,9 +1,14 @@
     private void destroyRuntime(Map<String, String> stopOptions) throws InfrastructureException {
-        if (stopOptions != null && "true".equals(stopOptions.get("create-snapshot"))) {
-            snapshotMachines(startSynchronizer.removeMachines());
-        } else {
-            startSynchronizer.removeMachines()
-                             .forEach(this::destroyMachineQuietly);
+        Map<String, DockerMachine> machines = startSynchronizer.removeMachines();
+        if (isSnapshotEnabled(stopOptions)) {
+            snapshotMachines(machines);
+        }
+        for (Map.Entry<String, DockerMachine> entry : machines.entrySet()) {
+            destroyMachineQuietly(entry.getKey(), entry.getValue());
+            eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
+                                           .withEventType(MachineStatus.STOPPED)
+                                           .withIdentity(DtoConverter.asDto(identity))
+                                           .withMachineName(entry.getKey()));
         }
         // TODO what happens when context throws exception here
         dockerNetworkLifecycle.destroyNetwork(dockerEnvironment.getNetwork());
