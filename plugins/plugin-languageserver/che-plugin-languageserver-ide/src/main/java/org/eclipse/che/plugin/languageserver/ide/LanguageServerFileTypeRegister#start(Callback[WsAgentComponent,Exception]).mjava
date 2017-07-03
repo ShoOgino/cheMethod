@@ -4,40 +4,40 @@
         registeredLanguages.then(new Operation<List<LanguageDescription>>() {
             @Override
             public void apply(List<LanguageDescription> langs) throws OperationException {
+                LOGGER.info("registering language descriptions");
                 if (!langs.isEmpty()) {
                     JsArrayString contentTypes = JsArrayString.createArray().cast();
                     for (LanguageDescription lang : langs) {
-                        String primaryExtension = lang.getFileExtensions().get(0);
                         for (String ext : lang.getFileExtensions()) {
                             final FileType fileType = new FileType(resources.file(), ext);
-                            fileTypeRegistry.registerFileType(fileType);
+                            lsRegistry.registerFileType(fileType, lang);
                             editorRegistry.registerDefaultEditor(fileType, editorProvider);
-                            ext2langId.put(ext, lang.getLanguageId());
                         }
-                        List<String> mimeTypes = lang.getMimeTypes();
-                        if (mimeTypes.isEmpty()) {
-                            mimeTypes = newArrayList("text/x-" + lang.getLanguageId());
+                        for (String fileName : lang.getFileNames()) {
+                            final FileType fileType = new FileType(resources.file(), null, RegExp.quote(fileName));
+                            lsRegistry.registerFileType(fileType, lang);
+                            editorRegistry.registerDefaultEditor(fileType, editorProvider);
                         }
-                        for (String contentTypeId : mimeTypes) {
-                            contentTypes.push(contentTypeId);
-                            OrionContentTypeOverlay contentType = OrionContentTypeOverlay.create();
-                            contentType.setId(contentTypeId);
-                            contentType.setName(lang.getLanguageId());
-                            contentType.setExtension(primaryExtension);
-                            contentType.setExtends("text/plain");
+                        String mimeType = lang.getMimeType();
+                        contentTypes.push(mimeType);
+                        OrionContentTypeOverlay contentType = OrionContentTypeOverlay.create();
+                        contentType.setId(mimeType);
+                        contentType.setName(lang.getLanguageId());
+                        contentType.setFileName(lang.getFileNames().toArray(new String[lang.getFileNames().size()]));
+                        contentType.setExtension(lang.getFileExtensions().toArray(new String[lang.getFileExtensions().size()]));
+                        contentType.setExtends("text/plain");
 
-                            // highlighting
-                            OrionHighlightingConfigurationOverlay config = OrionHighlightingConfigurationOverlay
-                                    .create();
-                            config.setId(lang.getLanguageId() + ".highlighting");
-                            config.setContentTypes(contentTypeId);
-                            config.setPatterns(lang.getHighlightingConfiguration());
-                            Logger logger = Logger.getLogger(LanguageServerFileTypeRegister.class.getName());
-                            contentTypeRegistrant.registerFileType(contentType, config);
-                        }
+                        // highlighting
+                        OrionHighlightingConfigurationOverlay config = OrionHighlightingConfigurationOverlay.create();
+                        config.setId(lang.getLanguageId() + ".highlighting");
+                        config.setContentTypes(mimeType);
+                        config.setPatterns(lang.getHighlightingConfiguration());
+                        contentTypeRegistrant.registerFileType(contentType, config);
+                        LOGGER.info("registered language description for " + lang.getLanguageId());
                     }
                     orionHoverRegistrant.registerHover(contentTypes, hoverProvider);
                     orionOccurrencesRegistrant.registerOccurrencesHandler(contentTypes, occurrencesProvider);
+
                 }
                 callback.onSuccess(LanguageServerFileTypeRegister.this);
             }
