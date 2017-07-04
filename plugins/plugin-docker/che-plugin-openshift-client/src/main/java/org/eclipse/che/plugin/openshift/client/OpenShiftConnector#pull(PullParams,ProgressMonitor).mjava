@@ -14,28 +14,34 @@
         String tag = params.getTag();           // e.g. latest, usually
 
         String imageStreamName = KubernetesStringUtils.convertPullSpecToImageStreamName(repo);
+        ImageStream existingImageStream;
 
-        ImageStream existingImageStream = openShiftClient.imageStreams()
-                                                         .inNamespace(openShiftCheProjectName)
-                                                         .withName(imageStreamName)
-                                                         .get();
+        try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+            existingImageStream = openShiftClient.imageStreams()
+                                                 .inNamespace(openShiftCheProjectName)
+                                                 .withName(imageStreamName)
+                                                 .get();
+        }
+
         if (existingImageStream == null) {
-            openShiftClient.imageStreams()
-                           .inNamespace(openShiftCheProjectName)
-                           .createNew()
-                           .withNewMetadata()
-                               .withName(imageStreamName) // imagestream id
-                           .endMetadata()
-                           .withNewSpec()
-                               .addNewTag()
-                                   .withName(tag)
-                                   .endTag()
-                           .withDockerImageRepository(repo) // tracking repo
-                           .endSpec()
-                           .withNewStatus()
-                               .withDockerImageRepository("")
-                           .endStatus()
-                           .done();
+            try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+                openShiftClient.imageStreams()
+                               .inNamespace(openShiftCheProjectName)
+                               .createNew()
+                               .withNewMetadata()
+                                   .withName(imageStreamName) // imagestream id
+                               .endMetadata()
+                               .withNewSpec()
+                                   .addNewTag()
+                                       .withName(tag)
+                                       .endTag()
+                               .withDockerImageRepository(repo) // tracking repo
+                               .endSpec()
+                               .withNewStatus()
+                                   .withDockerImageRepository("")
+                               .endStatus()
+                               .done();
+            }
         }
 
         // Wait for Image metadata to be obtained.
@@ -47,10 +53,13 @@
                 Thread.currentThread().interrupt();
             }
 
-            createdImageStream = openShiftClient.imageStreams()
-                                                .inNamespace(openShiftCheProjectName)
-                                                .withName(imageStreamName)
-                                                .get();
+            try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+                createdImageStream = openShiftClient.imageStreams()
+                                                    .inNamespace(openShiftCheProjectName)
+                                                    .withName(imageStreamName)
+                                                    .get();
+            }
+
 
             if (createdImageStream != null
                     && createdImageStream.getStatus().getDockerImageRepository() != null) {

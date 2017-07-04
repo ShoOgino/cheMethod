@@ -2,19 +2,33 @@
 
         Deployment deployment = getDeploymentByName(deploymentName);
         Service service = getCheServiceBySelector(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
+        List<Route> routes = getRoutesByLabel(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
+        List<ReplicaSet> replicaSets = getReplicaSetByLabel(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
 
-        if (service != null) {
-            LOG.info("Removing OpenShift Service {}", service.getMetadata().getName());
-            openShiftClient.resource(service).delete();
-        }
+        try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+            if (routes != null) {
+                for (Route route: routes) {
+                    LOG.info("Removing OpenShift Route {}", route.getMetadata().getName());
+                    openShiftClient.resource(route).delete();
+                }
+            }
 
-        if (deployment != null) {
-            LOG.info("Removing OpenShift Deployment {}", deployment.getMetadata().getName());
-            openShiftClient.resource(deployment).delete();
-        }
+            if (service != null) {
+                LOG.info("Removing OpenShift Service {}", service.getMetadata().getName());
+                openShiftClient.resource(service).delete();
+            }
 
-        // Wait for all pods to terminate before returning.
-        try {
+            if (deployment != null) {
+                LOG.info("Removing OpenShift Deployment {}", deployment.getMetadata().getName());
+                openShiftClient.resource(deployment).delete();
+            }
+
+            if (replicaSets != null && replicaSets.size() > 0) {
+                LOG.info("Removing OpenShift ReplicaSets for deployment {}", deploymentName);
+                replicaSets.forEach(rs -> openShiftClient.resource(rs).delete());
+            }
+
+            // Wait for all pods to terminate before returning.
             for (int waitCount = 0; waitCount < OPENSHIFT_WAIT_POD_TIMEOUT; waitCount++) {
                 List<Pod> pods = openShiftClient.pods()
                                                 .inNamespace(openShiftCheProjectName)
