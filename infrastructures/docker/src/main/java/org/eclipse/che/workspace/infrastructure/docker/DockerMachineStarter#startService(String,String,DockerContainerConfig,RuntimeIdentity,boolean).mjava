@@ -28,24 +28,10 @@
 
         // copy to not affect/be affected by changes in origin
         containerConfig = new DockerContainerConfig(containerConfig);
-
-        // TODO spi fix in #5102
-        ProgressMonitor progressMonitor = ProgressMonitor.DEV_NULL;
-        /*LineConsumer machineLogger = new ListLineConsumer();
-        ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
-        ProgressMonitor progressMonitor = currentProgressStatus -> {
-            try {
-                machineLogger.writeLine(progressLineFormatter.format(currentProgressStatus));
-            } catch (IOException e) {
-                LOG.error(e.getLocalizedMessage(), e);
-            }
-        };*/
-
+        final ProgressMonitor progressMonitor = machineLoggerFactory.newProgressMonitor(machineName, identity);
         String container = null;
         try {
-            String image = prepareImage(machineName,
-                                        containerConfig,
-                                        progressMonitor);
+            String image = prepareImage(machineName, containerConfig, progressMonitor);
 
             container = createContainer(workspaceId,
                                         machineName,
@@ -54,18 +40,16 @@
                                         networkName,
                                         containerConfig);
 
-            connectContainerToAdditionalNetworks(container,
-                                                 containerConfig);
+            connectContainerToAdditionalNetworks(container, containerConfig);
 
             docker.startContainer(StartContainerParams.create(container));
 
             checkContainerIsRunning(container);
 
-            // TODO spi fix in #5102
-            /*readContainerLogsInSeparateThread(container,
+            readContainerLogsInSeparateThread(container,
                                               workspaceId,
-                                              service.getId(),
-                                              machineLogger);*/
+                                              containerConfig.getId(),
+                                              machineLoggerFactory.newLogsProcessor(machineName, identity));
 
             dockerInstanceStopDetector.startDetection(container,
                                                       containerConfig.getId(),
@@ -78,7 +62,8 @@
                                      container,
                                      image,
                                      serverEvaluationStrategyProvider,
-                                     dockerInstanceStopDetector);
+                                     dockerInstanceStopDetector,
+                                     progressMonitor);
         } catch (RuntimeException | IOException | InfrastructureException e) {
             cleanUpContainer(container);
             if (e instanceof InfrastructureException) {
