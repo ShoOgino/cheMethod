@@ -3,7 +3,14 @@
         for (RuntimeInfrastructure infra : infraByRecipe.values()) {
             try {
                 for (RuntimeIdentity id : infra.getIdentities()) {
-                    runtimes.put(id.getWorkspaceId(), validate(infra.getRuntime(id)));
+                    // TODO how to identify correct state of runtime
+                    if (runtimes.putIfAbsent(id.getWorkspaceId(),
+                                             new RuntimeState(
+                                                     validate(infra.getRuntime(id)), RUNNING)) != null) {
+                        // should not happen, violation of SPI contract
+                        LOG.error("More than 1 runtime of workspace found. " +
+                                  "Runtime identity of duplicate is '{}'. Skipping duplicate.", id);
+                    }
                 }
             } catch (UnsupportedOperationException x) {
                 LOG.warn("Not recoverable infrastructure: '{}'", infra.getName());

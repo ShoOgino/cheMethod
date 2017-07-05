@@ -14,22 +14,16 @@
         workspaceDao.update(workspace);
         final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
 
-        states.put(workspace.getId(), WorkspaceStatus.STARTING);
         return runtimes.startAsync(workspace, env, firstNonNull(options, Collections.emptyMap()))
-                       .thenRun(() -> {
-                           states.put(workspace.getId(), WorkspaceStatus.RUNNING);
-
-                           LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
-                                    workspace.getNamespace(),
-                                    workspace.getConfig().getName(),
-                                    workspace.getId(),
-                                    sessionUserNameOr("undefined"));
-                       })
+                       .thenRun(() -> LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
+                                           workspace.getNamespace(),
+                                           workspace.getConfig().getName(),
+                                           workspace.getId(),
+                                           sessionUserNameOr("undefined")))
                        .exceptionally(ex -> {
                            if (workspace.isTemporary()) {
                                removeWorkspaceQuietly(workspace);
                            }
-                           states.remove(workspace.getId());
                            for (Throwable cause : getCausalChain(ex)) {
                                if (cause instanceof InfrastructureException &&
                                    !(cause instanceof InternalInfrastructureException)) {

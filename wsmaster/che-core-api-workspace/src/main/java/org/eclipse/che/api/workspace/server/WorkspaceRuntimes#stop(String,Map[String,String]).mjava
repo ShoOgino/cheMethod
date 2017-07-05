@@ -18,24 +18,43 @@
     public void stop(String workspaceId, Map<String, String> options) throws NotFoundException,
                                                                              InfrastructureException,
                                                                              ConflictException {
-
+        RuntimeState state = runtimes.get(workspaceId);
+        if (state == null) {
+            throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
+        }
+        if (!state.status.equals(RUNNING)) {
+            throw new ConflictException(
+                    format("Could not stop workspace '%s' because its state is '%s'", workspaceId, state.status));
+        }
+        if (!runtimes.replace(workspaceId, state, new RuntimeState(state.runtime, STOPPING))) {
+            RuntimeState newState = runtimes.get(workspaceId);
+            WorkspaceStatus status = newState != null ? newState.status : STOPPED;
+            throw new ConflictException(
+                    format("Could not stop workspace '%s' because its state is '%s'", workspaceId, status));
+        }
         eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
                                        .withWorkspaceId(workspaceId)
                                        .withPrevStatus(WorkspaceStatus.RUNNING)
                                        .withStatus(WorkspaceStatus.STOPPING));
 
-        InternalRuntime runtime = runtimes.get(workspaceId);
-        if (runtime == null) {
-            throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
+        try {
+            state.runtime.stop(options);
+
+            // remove before firing an event to have consistency between state and the event
+            runtimes.remove(workspaceId);
+            eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                           .withWorkspaceId(workspaceId)
+                                           .withPrevStatus(WorkspaceStatus.STOPPING)
+                                           .withStatus(STOPPED));
+        } catch (InfrastructureException e) {
+            // remove before firing an event to have consistency between state and the event
+            runtimes.remove(workspaceId);
+            eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
+                                           .withWorkspaceId(workspaceId)
+                                           .withPrevStatus(WorkspaceStatus.STOPPING)
+                                           .withStatus(STOPPED)
+                                           .withError("Error occurs on workspace runtime stop. Error: " +
+                                                      e.getMessage()));
         }
-
-        runtime.stop(options);
-
-        runtimes.remove(workspaceId);
-
-        eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                       .withWorkspaceId(workspaceId)
-                                       .withPrevStatus(WorkspaceStatus.STOPPING)
-                                       .withStatus(WorkspaceStatus.STOPPED));
     }
 

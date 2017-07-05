@@ -42,9 +42,11 @@
                                         " for workspace: " + workspaceId);
         }
 
-        if (runtimes.containsKey(workspaceId)) {
-            throw new ConflictException("Could not start workspace '" + workspaceId +
-                                        "' because its status is 'RUNNING'");
+        RuntimeState existingState = runtimes.get(workspaceId);
+        if (existingState != null) {
+            throw new ConflictException(
+                    format("Could not start workspace '%s' because its state is '%s'",
+                           workspaceId, existingState.status));
         }
 
         Subject subject = EnvironmentContext.getCurrent().getSubject();
@@ -58,28 +60,30 @@
                         "SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
                         + RuntimeInfrastructure.class);
             }
-            runtimes.put(workspaceId, runtime);
+            RuntimeState state = new RuntimeState(runtime, STARTING);
+            if (runtimes.putIfAbsent(workspaceId, state) != null) {
+                throw new ConflictException("Could not start workspace '" + workspaceId +
+                                            "' because it is not in 'STOPPED' state");
+            }
             eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
                                            .withWorkspaceId(workspaceId)
-                                           .withStatus(WorkspaceStatus.STARTING)
-                                           .withPrevStatus(WorkspaceStatus.STOPPED));
+                                           .withStatus(STARTING)
+                                           .withPrevStatus(STOPPED));
             return CompletableFuture.runAsync(ThreadLocalPropagateContext.wrap(() -> {
                 try {
                     runtime.start(options);
+                    runtimes.replace(workspaceId, new RuntimeState(runtime, RUNNING));
                     eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
                                                    .withWorkspaceId(workspaceId)
                                                    .withStatus(WorkspaceStatus.RUNNING)
-                                                   .withPrevStatus(WorkspaceStatus.STARTING));
+                                                   .withPrevStatus(STARTING));
                 } catch (InfrastructureException e) {
                     runtimes.remove(workspaceId);
                     eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
                                                    .withWorkspaceId(workspaceId)
-                                                   .withStatus(WorkspaceStatus.STOPPED)
-                                                   .withPrevStatus(WorkspaceStatus.STARTING)
+                                                   .withStatus(STOPPED)
+                                                   .withPrevStatus(STARTING)
                                                    .withError(e.getMessage()));
-                    if (e instanceof InternalInfrastructureException) {
-                        LOG.error(format("Error occurs on workspace '%s' start. Error: %s", workspaceId, e));
-                    }
                     throw new RuntimeException(e);
                 }
             }), sharedPool.getExecutor());
