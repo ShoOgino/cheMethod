@@ -3,12 +3,10 @@
                           MavenProgressNotifier notifier,
                           MavenExecutorService executorService,
                           Provider<ProjectRegistry> projectRegistryProvider,
-                          MavenCommunication communication,
                           ClasspathManager classpathManager,
                           EventService eventService,
                           EclipseWorkspaceProvider workspaceProvider) {
         this.projectRegistryProvider = projectRegistryProvider;
-        this.communication = communication;
         this.classpathManager = classpathManager;
         this.manager = manager;
         resolveExecutor = new MavenTaskExecutor(executorService, notifier);
@@ -37,9 +35,20 @@
                 List<MavenProject> needResolve = manager.findDependentProjects(allChangedProjects);
                 needResolve.addAll(updated.keySet());
 
+                List<String> updatedPaths = updated.keySet().stream()
+                                                   .map(MavenProject::getProject)
+                                                   .map(IResource::getFullPath)
+                                                   .map(IPath::toOSString)
+                                                   .collect(toList());
+                List<String> removedPaths = removed.stream()
+                                                   .map(MavenProject::getProject)
+                                                   .map(IResource::getFullPath)
+                                                   .map(IPath::toOSString)
+                                                   .collect(toList());
+
                 addResolveProjects(needResolve);
 
-                communication.sendUpdateMassage(updated.keySet(), removed);
+                eventService.publish(new MavenUpdateEventImpl(updatedPaths, removedPaths, MavenOutputEvent.TYPE.UPDATE));
             }
         });
     }
