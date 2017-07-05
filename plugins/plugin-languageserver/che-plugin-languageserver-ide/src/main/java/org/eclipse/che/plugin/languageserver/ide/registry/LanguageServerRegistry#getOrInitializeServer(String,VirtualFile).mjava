@@ -1,0 +1,31 @@
+    public Promise<ExtendedInitializeResult> getOrInitializeServer(String projectPath, VirtualFile file) {
+        LanguageDescription languageDescription = getLanguageDescription(file);
+        final ProjectLangugageKey key = createProjectKey(projectPath, languageDescription.getLanguageId());
+        if (projectToInitResult.containsKey(key)) {
+            return promiseProvider.resolve(projectToInitResult.get(key));
+        } else {
+            //call initialize service
+            final MessageLoader loader = loaderFactory.newLoader("Initializing Language Server for " + file.getName());
+            loader.show();
+
+            jsonRpcClient.initializeServer(file.getLocation().toString())
+                         .onSuccess(loader::hide)
+                         .onFailure((error) -> {
+                             notificationManager
+                                     .notify("Failed to initialize language server for " + file.getLocation().toString() + " : ", error.getMessage(), FAIL,
+                                             EMERGE_MODE);
+                             loader.hide();
+                         })
+                         .onTimeout(() -> {
+                             notificationManager
+                                     .notify("Possible problem starting a language server", "The server either hangs or starts long",
+                                             WARNING,
+                                             EMERGE_MODE);
+                             loader.hide();
+                         });
+
+            //wait for response
+            return CallbackPromiseHelper.createFromCallback(callback -> callbackMap.put(key, callback));
+        }
+    }
+

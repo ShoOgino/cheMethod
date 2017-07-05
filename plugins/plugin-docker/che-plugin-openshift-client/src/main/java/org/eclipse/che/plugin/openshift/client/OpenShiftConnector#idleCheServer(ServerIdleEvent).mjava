@@ -1,0 +1,48 @@
+    private void idleCheServer(ServerIdleEvent event) {
+        try (DefaultOpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+            DeployableScalableResource<DeploymentConfig, DoneableDeploymentConfig> deploymentConfigResource = openShiftClient.deploymentConfigs()
+                                                                                                                             .inNamespace(openShiftCheProjectName)
+                                                                                                                             .withName(OPENSHIFT_CHE_SERVER_DEPLOYMENT_NAME);
+            DeploymentConfig deploymentConfig = deploymentConfigResource.get();
+            if (deploymentConfig == null) {
+                LOG.warn(String.format("Deployment config %s not found", OPENSHIFT_CHE_SERVER_DEPLOYMENT_NAME));
+                return;
+            }
+            Integer replicas = deploymentConfig.getSpec().getReplicas();
+            if (replicas != null && replicas > 0) {
+                Resource<Endpoints, DoneableEndpoints> endpointResource = openShiftClient.endpoints()
+                                                                                         .inNamespace(openShiftCheProjectName)
+                                                                                         .withName(OPENSHIFT_CHE_SERVER_SERVICE_NAME);
+                Endpoints endpoint = endpointResource.get();
+                if (endpoint == null) {
+                    LOG.warn(String.format("Endpoint %s not found", OPENSHIFT_CHE_SERVER_SERVICE_NAME));
+                    return;
+                }
+                Map<String, String> annotations = deploymentConfig.getMetadata().getAnnotations();
+                if (annotations == null) {
+                    annotations = new HashMap<>();
+                    deploymentConfig.getMetadata().setAnnotations(annotations);
+                }
+                TimeZone tz = TimeZone.getTimeZone("UTC");
+                DateFormat df = new SimpleDateFormat(ISO_8601_DATE_FORMAT);
+                df.setTimeZone(tz);
+                String idle = df.format(new Date());
+                annotations.put(IDLING_ALPHA_OPENSHIFT_IO_IDLED_AT, idle);
+                annotations.put(IDLING_ALPHA_OPENSHIFT_IO_PREVIOUS_SCALE, "1");
+                deploymentConfig.getSpec().setReplicas(0);
+                deploymentConfigResource.patch(deploymentConfig);
+                Map<String, String> endpointAnnotations = endpoint.getMetadata().getAnnotations();
+                if (endpointAnnotations == null) {
+                    endpointAnnotations = new HashMap<>();
+                    endpoint.getMetadata().setAnnotations(endpointAnnotations);
+                }
+                endpointAnnotations.put(IDLING_ALPHA_OPENSHIFT_IO_IDLED_AT, idle);
+                endpointAnnotations.put(IDLING_ALPHA_OPENSHIFT_IO_UNIDLE_TARGETS,
+                            "[{\"kind\":\"DeploymentConfig\",\"name\":\"" + OPENSHIFT_CHE_SERVER_DEPLOYMENT_NAME
+                            + "\",\"replicas\":1}]");
+                endpointResource.patch(endpoint);
+                LOG.info("Che server has been idled");
+            }
+        }
+    }
+
