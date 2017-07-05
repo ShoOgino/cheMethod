@@ -6,29 +6,25 @@
         final StatusNotification notification =
                 notificationManager.notify(constant.pullProcess(), PROGRESS, FLOAT_MODE);
 
-        service.pull(project.getLocation(), getRefs(), view.getRepositoryName()).then(new Operation<PullResponse>() {
-            @Override
-            public void apply(PullResponse response) throws OperationException {
-                GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
-                console.print(response.getCommandOutput(), GREEN_COLOR);
-                consolesPanelPresenter.addCommandOutput(console);
-                notification.setStatus(SUCCESS);
-                if (response.getCommandOutput().contains("Already up-to-date")) {
-                    notification.setTitle(constant.pullUpToDate());
-                } else {
-                    project.synchronize();
-                    notification.setTitle(constant.pullSuccess(view.getRepositoryUrl()));
-                }
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError error) throws OperationException {
-                notification.setStatus(FAIL);
-                if (getErrorCode(error.getCause()) == ErrorCodes.MERGE_CONFLICT) {
-                    project.synchronize();
-                }
-                handleError(error.getCause(), PULL_COMMAND_NAME);
-            }
-        });
+        service.pull(project.getLocation(), getRefs(), view.getRepositoryName())
+               .then(response -> {
+                   GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
+                   console.print(response.getCommandOutput(), GREEN_COLOR);
+                   consolesPanelPresenter.addCommandOutput(console);
+                   notification.setStatus(SUCCESS);
+                   if (response.getCommandOutput().contains("Already up-to-date")) {
+                       notification.setTitle(constant.pullUpToDate());
+                   } else {
+                       project.synchronize();
+                       notification.setTitle(constant.pullSuccess(view.getRepositoryUrl()));
+                   }
+               })
+               .catchError(error -> {
+                   notification.setStatus(FAIL);
+                   if (getErrorCode(error.getCause()) == ErrorCodes.MERGE_CONFLICT) {
+                       project.synchronize();
+                   }
+                   handleError(error.getCause(), PULL_COMMAND_NAME);
+               });
     }
 

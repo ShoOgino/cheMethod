@@ -1,10 +1,14 @@
     @Override
     public Network inspectNetwork(InspectNetworkParams params) throws IOException {
         String netId = params.getNetworkId();
+        ServiceList services;
 
-        ServiceList services = openShiftClient.services()
-                                              .inNamespace(this.openShiftCheProjectName)
-                                              .list();
+        try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+            services = openShiftClient.services()
+                                      .inNamespace(this.openShiftCheProjectName)
+                                      .list();
+        }
+
         Map<String, ContainerInNetwork> containers = new HashMap<>();
         for (Service svc : services.getItems()) {
             String selector = svc.getSpec().getSelector().get(OPENSHIFT_DEPLOYMENT_LABEL);
@@ -12,10 +16,13 @@
                 continue;
             }
 
-            PodList pods = openShiftClient.pods()
-                                          .inNamespace(openShiftCheProjectName)
-                                          .withLabel(OPENSHIFT_DEPLOYMENT_LABEL, selector)
-                                          .list();
+            PodList pods;
+            try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+                pods = openShiftClient.pods()
+                                      .inNamespace(openShiftCheProjectName)
+                                      .withLabel(OPENSHIFT_DEPLOYMENT_LABEL, selector)
+                                      .list();
+            }
 
             for (Pod pod : pods.getItems()) {
                 String podName = pod.getMetadata()

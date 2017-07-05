@@ -1,0 +1,26 @@
+        /**
+         * Compute port mapping with server ref name
+         */
+        protected void initPortMapping() {
+            // ok, so now we have a map of labels and a map of exposed ports
+            // need to extract the name of the ref (if defined in a label) or then pickup default name "Server-<port>-<protocol>"
+            Pattern pattern = Pattern.compile(LABEL_CHE_SERVER_REF_KEY);
+            Map<String, String> portsToKnownRefName = labels.entrySet().stream()
+                                                            .filter(map -> pattern.matcher(map.getKey()).matches())
+                                                            .collect(Collectors.toMap(p -> {
+                                                                Matcher matcher = pattern.matcher(p.getKey());
+                                                                matcher.matches();
+                                                                String val = matcher.group(1);
+                                                                return val.contains("/") ? val : val.concat("/tcp");
+                                                            }, p -> p.getValue()));
+
+            // add to this map only port without a known ref name
+            Map<String, String> portsToUnkownRefName =
+                    exposedPorts.stream().filter((port) -> !portsToKnownRefName.containsKey(port))
+                                .collect(Collectors.toMap(p -> p, p -> "server-" + p.replace('/', '-')));
+
+            // list of all ports with refName (known/unknown)
+            this.portsToRefName = new HashMap(portsToKnownRefName);
+            portsToRefName.putAll(portsToUnkownRefName);
+        }
+

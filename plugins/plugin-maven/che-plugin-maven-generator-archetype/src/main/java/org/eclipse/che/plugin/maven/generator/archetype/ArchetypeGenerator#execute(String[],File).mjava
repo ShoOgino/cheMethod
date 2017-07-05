@@ -13,12 +13,13 @@
      */
     private void execute(String[] commandLine, File workDir) throws TimeoutException, IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(commandLine).redirectErrorStream(true).directory(workDir);
-        WebsocketMessageConsumer<ArchetypeOutput> websocketMessageConsumer = new WebsocketMessageConsumer(MAVEN_ARCHETYPE_CHANEL_NAME);
-        websocketMessageConsumer.consume(new ArchetypeOutputImpl("Start Project generation", ArchetypeOutput.State.START));
+
+        eventService.publish(new ArchetypeOutputImpl("Start Project generation", ArchetypeOutput.State.START));
+
         LineConsumer lineConsumer = new AbstractLineConsumer() {
             @Override
             public void writeLine(String line) throws IOException {
-                websocketMessageConsumer.consume(new ArchetypeOutputImpl(line, ArchetypeOutput.State.IN_PROGRESS));
+                eventService.publish(new ArchetypeOutputImpl(line, ArchetypeOutput.State.IN_PROGRESS));
             }
         };
 
@@ -35,14 +36,14 @@
             // consume logs until process ends
             ProcessUtil.process(process, lineConsumer);
             process.waitFor();
-            websocketMessageConsumer.consume(new ArchetypeOutputImpl("Done", ArchetypeOutput.State.DONE));
+            eventService.publish(new ArchetypeOutputImpl("Done", DONE));
             if (isTimeoutExceeded.get()) {
                 LOG.error("Generation project time expired : command-line " + Arrays.toString(commandLine));
-                websocketMessageConsumer.consume(new ArchetypeOutputImpl("Generation project time expired", ArchetypeOutput.State.ERROR));
+                eventService.publish(new ArchetypeOutputImpl("Generation project time expired", ERROR));
                 throw new TimeoutException();
             } else if (process.exitValue() != 0) {
                 LOG.error("Generation project fail : command-line " + Arrays.toString(commandLine));
-                websocketMessageConsumer.consume(new ArchetypeOutputImpl("Generation project occurs error", ArchetypeOutput.State.ERROR));
+                eventService.publish(new ArchetypeOutputImpl("Generation project occurs error", ERROR));
                 throw new IOException("Process failed. Exit code " + process.exitValue() + " command-line : " + Arrays.toString(commandLine));
             }
         } finally {

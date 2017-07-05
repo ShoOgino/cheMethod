@@ -2,7 +2,6 @@
                                       @NotNull final SourceStorage sourceStorage) {
         final String projectName = pathToProject.lastSegment();
         final StatusNotification notification = notificationManager.notify(locale.cloningSource(projectName), null, PROGRESS, FLOAT_MODE);
-        final ProjectNotificationSubscriber subscriber = subscriberFactory.createSubscriber();
         subscriber.subscribe(projectName, notification);
         String location = sourceStorage.getLocation();
         // it's needed for extract repository name from repository url e.g https://github.com/codenvy/che-core.git
@@ -11,37 +10,8 @@
         final Map<String, String> parameters = firstNonNull(sourceStorage.getParameters(), Collections.<String, String>emptyMap());
         final String branch = parameters.get("branch");
         final String startPoint = parameters.get("startPoint");
-        final MessageBus messageBus = messageBusProvider.getMachineMessageBus();
-        final String channel = CHANNEL + appContext.getWorkspaceId() + ':' + projectName;
-        final SubscriptionHandler<GitCheckoutEvent> successImportHandler = new SubscriptionHandler<GitCheckoutEvent>(
-                dtoUnmarshallerFactory.newWSUnmarshaller(GitCheckoutEvent.class)) {
-            @Override
-            protected void onMessageReceived(GitCheckoutEvent result) {
-                if (result.isCheckoutOnly()) {
-                    notificationManager.notify(locale.clonedSource(projectName),
-                                               locale.clonedSourceWithCheckout(projectName, repository, result.getBranchRef(), branch),
-                                               SUCCESS,
-                                               FLOAT_MODE);
-                } else {
-                    notificationManager.notify(locale.clonedSource(projectName),
-                                               locale.clonedWithCheckoutOnStartPoint(projectName, repository, startPoint, branch),
-                                               SUCCESS,
-                                               FLOAT_MODE);
-                }
-            }
 
-            @Override
-            protected void onErrorReceived(Throwable e) {
-                try {
-                    messageBus.unsubscribe(channel, this);
-                } catch (WebSocketException ignore) {
-                }
-            }
-        };
-        try {
-            messageBus.subscribe(channel, successImportHandler);
-        } catch (WebSocketException ignore) {
-        }
+        subscribe(projectName, repository, branch, startPoint);
 
         MutableProjectConfig importConfig = new MutableProjectConfig();
         importConfig.setPath(pathToProject.toString());
@@ -55,6 +25,8 @@
                              @Override
                              public Project apply(Project project) throws FunctionException {
                                  subscriber.onSuccess();
+                                 unsubscribe(projectName);
+
                                  notification.setContent(locale.clonedSource(projectName));
                                  notification.setStatus(SUCCESS);
 
@@ -65,9 +37,11 @@
                              @Override
                              public Promise<Project> apply(PromiseError err) throws FunctionException {
                                  final int errorCode = ExceptionUtils.getErrorCode(err.getCause());
+                                 unsubscribe(projectName);
                                  switch (errorCode) {
                                      case UNAUTHORIZED_GIT_OPERATION:
                                          subscriber.onFailure(err.getMessage());
+
                                          final Map<String, String> attributes = ExceptionUtils.getAttributes(err.getCause());
                                          final String providerName = attributes.get(PROVIDER_NAME);
                                          final String authenticateUrl = attributes.get(AUTHENTICATE_URL);

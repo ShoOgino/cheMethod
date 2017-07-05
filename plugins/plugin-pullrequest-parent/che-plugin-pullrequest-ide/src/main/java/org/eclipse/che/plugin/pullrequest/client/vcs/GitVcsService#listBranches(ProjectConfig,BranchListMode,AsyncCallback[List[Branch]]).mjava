@@ -9,23 +9,13 @@
      *         callback when the operation is done.
      */
     private void listBranches(final ProjectConfig project, final BranchListMode listMode, final AsyncCallback<List<Branch>> callback) {
-        final Unmarshallable<List<Branch>> unMarshaller =
-                dtoUnmarshallerFactory.newListUnmarshaller(Branch.class);
-        service.branchList(project, listMode,
-                           new AsyncRequestCallback<List<Branch>>(unMarshaller) {
-                               @Override
-                               protected void onSuccess(final List<Branch> branches) {
-                                   final List<Branch> result = new ArrayList<>();
-                                   for (final Branch branch : branches) {
-                                       result.add(fromGitBranch(branch));
-                                   }
-                                   callback.onSuccess(result);
-                               }
-
-                               @Override
-                               protected void onFailure(final Throwable exception) {
-                                   callback.onFailure(exception);
-                               }
-                           });
+        service.branchList(Path.valueOf(project.getPath()), listMode)
+               .then(branches -> {
+                   final List<Branch> result = branches.stream().map(this::fromGitBranch).collect(Collectors.toList());
+                   callback.onSuccess(result);
+               })
+               .catchError(error -> {
+                   callback.onFailure(error.getCause());
+               });
     }
 

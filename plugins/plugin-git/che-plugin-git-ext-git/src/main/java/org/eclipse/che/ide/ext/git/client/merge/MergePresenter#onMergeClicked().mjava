@@ -1,4 +1,3 @@
-    /** {@inheritDoc} */
     @Override
     public void onMergeClicked() {
         view.close();
@@ -6,33 +5,25 @@
         final GitOutputConsole console = gitOutputConsoleFactory.create(MERGE_COMMAND_NAME);
 
         service.merge(project.getLocation(), selectedReference.getDisplayName())
-               .then(new Operation<MergeResult>() {
-                   @Override
-                   public void apply(MergeResult result) throws OperationException {
-                       console.print(formMergeMessage(result));
-                       consolesPanelPresenter.addCommandOutput(console);
-                       notificationManager.notify(formMergeMessage(result));
+               .then(result -> {
+                   console.print(formMergeMessage(result));
+                   consolesPanelPresenter.addCommandOutput(console);
+                   notificationManager.notify(formMergeMessage(result));
 
-                       project.synchronize();
+                   project.synchronize();
+               })
+               .catchError(error -> {
+                   if (error.getCause() instanceof ServerException &&
+                       ((ServerException)error.getCause()).getErrorCode() == ErrorCodes.NO_COMMITTER_NAME_OR_EMAIL_DEFINED) {
+                       dialogFactory.createMessageDialog(constant.mergeTitle(), constant.committerIdentityInfoEmpty(),
+                                                         () -> {
+                                                             //do nothing
+                                                         }).show();
+                       return;
                    }
-               }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError error) throws OperationException {
-                if (error.getCause() instanceof ServerException &&
-                    ((ServerException)error.getCause()).getErrorCode() == ErrorCodes.NO_COMMITTER_NAME_OR_EMAIL_DEFINED) {
-                    dialogFactory.createMessageDialog(constant.mergeTitle(), constant.committerIdentityInfoEmpty(),
-                                                      new ConfirmCallback() {
-                                                          @Override
-                                                          public void accepted() {
-                                                              //do nothing
-                                                          }
-                                                      }).show();
-                    return;
-                }
-                console.printError(error.getMessage());
-                consolesPanelPresenter.addCommandOutput(console);
-                notificationManager.notify(constant.mergeFailed(), FAIL, FLOAT_MODE);
-            }
-        });
+                   console.printError(error.getMessage());
+                   consolesPanelPresenter.addCommandOutput(console);
+                   notificationManager.notify(constant.mergeFailed(), FAIL, FLOAT_MODE);
+               });
     }
 
