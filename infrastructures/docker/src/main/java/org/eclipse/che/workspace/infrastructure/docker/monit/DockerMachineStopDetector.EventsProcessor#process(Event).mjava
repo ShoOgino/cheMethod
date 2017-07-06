@@ -12,29 +12,19 @@
                     LOG.debug("OOM of process in container {} has been detected", message.getId());
                     break;
                 case "die":
-                    String stopType;
+                    String stopReason;
                     if (containersOomTimestamps.getIfPresent(message.getId()) != null) {
                         containersOomTimestamps.invalidate(message.getId());
-                        LOG.debug("OOM of container '{}' has been detected", message.getId());
-                        stopType = "oom";
+                        stopReason = "OOM of main process of container was detected.";
                     } else {
-                        stopType = "die";
-                    }
-                    Pair<String, String> instanceIds = instances.get(message.getId());
-                    if (instanceIds != null) {
-                        try {
-                            DockerRuntimeContext context = contextsStorage.get(instanceIds.second);
-                            try {
-                                context.getRuntime().stop(Collections.emptyMap());
-                            } catch (InternalInfrastructureException e) {
-                                LOG.error(e.getLocalizedMessage(), e);
-                            } catch (InfrastructureException ignored) {
-                            } finally {
-                                // TODO spi send event environment abnormally stopped to master #5125
-                            }
-                        } catch (NotFoundException ignore) {}
+                        stopReason = "Please, check that container is designed to run in non-interactive terminal.";
                     }
                     lastProcessedEventDate = message.getTime();
+                    ContainerDeathHandlerHolder holder = handlers.get(message.getId());
+                    if (holder != null) {
+                        holder.handler.handle(format("Container of machine '%s' unexpectedly stopped. %s",
+                                                     holder.machineName, stopReason));
+                    }
                     break;
                 default:
                     // we don't care about other event types
