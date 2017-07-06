@@ -1,0 +1,32 @@
+    protected ICompilationUnit findCompilationUnitByPath(IJavaProject javaProject, String filePath) {
+        try {
+            IClasspathEntry[] resolvedClasspath = javaProject.getResolvedClasspath(false);
+            IPath packageRootPath = null;
+            for (IClasspathEntry classpathEntry : resolvedClasspath) {
+                if (filePath.startsWith(classpathEntry.getPath().toOSString())) {
+                    packageRootPath = classpathEntry.getPath();
+                    break;
+                }
+            }
+
+            if (packageRootPath == null) {
+                throw getRuntimeException(filePath);
+            }
+
+            String packagePath = packageRootPath.toOSString();
+            if (!packagePath.endsWith("/")) {
+                packagePath += "/";
+            }
+
+            String pathToClass = filePath.substring(packagePath.length());
+            IJavaElement element = javaProject.findElement(new Path(pathToClass));
+            if (element != null && element.getElementType() == IJavaElement.COMPILATION_UNIT) {
+                return (ICompilationUnit)element;
+            } else {
+                throw getRuntimeException(filePath);
+            }
+        } catch (JavaModelException e) {
+            throw new RuntimeException("Can't find Compilation Unit.", e);
+        }
+    }
+
