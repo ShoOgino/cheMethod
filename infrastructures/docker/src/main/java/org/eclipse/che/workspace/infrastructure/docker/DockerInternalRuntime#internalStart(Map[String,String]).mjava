@@ -8,27 +8,17 @@
 
             String machineName = startQueue.peek();
             while (machineName != null) {
-                DockerContainerConfig service = dockerEnvironment.getServices().get(machineName);
-                eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
-                                               .withIdentity(DtoConverter.asDto(identity))
-                                               .withEventType(MachineStatus.STARTING)
-                                               .withMachineName(machineName));
+                DockerContainerConfig container = dockerEnvironment.getContainers().get(machineName);
+                sendStartingEvent(machineName);
                 try {
                     if (restore) {
-                        restoreMachine(machineName, service);
+                        restoreMachine(machineName, container);
                     } else {
-                        startMachine(machineName, service);
+                        startMachine(machineName, container);
                     }
-                    eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
-                                                   .withIdentity(DtoConverter.asDto(identity))
-                                                   .withEventType(MachineStatus.RUNNING)
-                                                   .withMachineName(machineName));
+                    sendRunningEvent(machineName);
                 } catch (InfrastructureException e) {
-                    eventService.publish(DtoFactory.newDto(MachineStatusEvent.class)
-                                                   .withIdentity(DtoConverter.asDto(identity))
-                                                   .withEventType(MachineStatus.FAILED)
-                                                   .withMachineName(machineName)
-                                                   .withError(e.getMessage()));
+                    sendFailedEvent(machineName, e.getMessage());
                     throw e;
                 }
                 startQueue.poll();
