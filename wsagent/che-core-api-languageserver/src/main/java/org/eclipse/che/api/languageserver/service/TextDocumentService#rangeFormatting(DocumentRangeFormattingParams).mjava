@@ -1,13 +1,13 @@
     private List<TextEditDto> rangeFormatting(DocumentRangeFormattingParams documentRangeFormattingParams) {
         try {
-            documentRangeFormattingParams.getTextDocument().setUri(prefixURI(documentRangeFormattingParams.getTextDocument().getUri()));
-            LanguageServer server = getServer(documentRangeFormattingParams.getTextDocument().getUri());
+            String uri = prefixURI(documentRangeFormattingParams.getTextDocument().getUri());
+            documentRangeFormattingParams.getTextDocument().setUri(uri);
+            InitializedLanguageServer server = languageServerRegistry.getApplicableLanguageServers(uri).stream().flatMap(Collection::stream)
+                            .filter(s -> truish(s.getInitializeResult().getCapabilities().getDocumentRangeFormattingProvider())).findFirst()
+                            .get();
             return server == null ? Collections.emptyList()
-                                  : server.getTextDocumentService()
-                                          .rangeFormatting(documentRangeFormattingParams)
-                                          .get().stream()
-                                          .map(TextEditDto::new)
-                                          .collect(Collectors.toList());
+                            : server.getServer().getTextDocumentService().rangeFormatting(documentRangeFormattingParams).get().stream()
+                                            .map(TextEditDto::new).collect(Collectors.toList());
         } catch (InterruptedException | ExecutionException | LanguageServerException e) {
             throw new JsonRpcException(-27000, e.getMessage());
         }
