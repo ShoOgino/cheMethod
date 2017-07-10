@@ -16,24 +16,24 @@
         }
         final Document document = editor.getDocument();
         final TextDocumentPositionParams paramsDTO = helper.createTDPP(document, context.getStart());
-        // FIXME: the result should be a Promise<List<DocumentHighlightDTO>> but the typefox API returns a single DocumentHighlightDTO
-        Promise<DocumentHighlight> promise = client.documentHighlight(paramsDTO);
-        Promise<OrionOccurrenceOverlay[]> then = promise.then(new Function<DocumentHighlight, OrionOccurrenceOverlay[]>() {
+        Promise<List<DocumentHighlight>> promise = client.documentHighlight(paramsDTO);
+        Promise<OrionOccurrenceOverlay[]> then = promise.then(new Function<List<DocumentHighlight>, OrionOccurrenceOverlay[]>() {
             @Override
-            public OrionOccurrenceOverlay[] apply(DocumentHighlight highlight) throws FunctionException {
-                if (highlight == null) {
-                    return new OrionOccurrenceOverlay[0];
+            public OrionOccurrenceOverlay[] apply(List<DocumentHighlight> highlights) throws FunctionException {
+                final OrionOccurrenceOverlay[] occurrences = new OrionOccurrenceOverlay[highlights.size()];
+                for (int i = 0; i < occurrences.length; i++) {
+                    DocumentHighlight highlight = highlights.get(i);
+                    final OrionOccurrenceOverlay occurrence = OrionOccurrenceOverlay.create();
+                    Position start = highlight.getRange().getStart();
+                    Position end = highlight.getRange().getEnd();
+                    int startIndex = document.getIndexFromPosition(new TextPosition(start.getLine(), start.getCharacter()));
+                    int endIndex = document.getIndexFromPosition(new TextPosition(end.getLine(), end.getCharacter()));
+                   
+                    occurrence.setStart(startIndex);
+                    occurrence.setEnd(endIndex+1);
+                    occurrences[i]= occurrence;
+                    
                 }
-                final OrionOccurrenceOverlay[] occurrences = new OrionOccurrenceOverlay[1];
-                final OrionOccurrenceOverlay occurrence = OrionOccurrenceOverlay.create();
-                // FIXME: this assumes that the language server will
-                // compute a range based on 'line 1', ie, the whole
-                // file content is on line 1 and the location to
-                // highlight is given by the 'character' position
-                // only.
-                occurrence.setStart(highlight.getRange().getStart().getCharacter());
-                occurrence.setEnd(highlight.getRange().getEnd().getCharacter() + 1);
-                occurrences[0] = occurrence;
                 return occurrences;
             }
         });
