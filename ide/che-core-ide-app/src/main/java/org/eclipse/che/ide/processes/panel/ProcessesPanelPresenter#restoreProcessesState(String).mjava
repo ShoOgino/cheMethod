@@ -1,5 +1,5 @@
-    private void restoreState(final MachineImpl machine) {
-        execAgentCommandManager.getProcesses(machine.getName(), false)
+    private void restoreProcessesState(String machineName) {
+        execAgentCommandManager.getProcesses(machineName, false)
                                .onSuccess(new BiConsumer<String, List<GetProcessesResponseDto>>() {
                                    @Override
                                    public void accept(String endpointId, List<GetProcessesResponseDto> processes) {
@@ -25,12 +25,12 @@
                                                if (commandByName == null) {
                                                    final String commandLine = process.getCommandLine();
                                                    final CommandImpl command = new CommandImpl(processName, commandLine, type);
-                                                   final CommandOutputConsole console = commandConsoleFactory.create(command, machine);
+                                                   final CommandOutputConsole console = commandConsoleFactory.create(command, machineName);
 
                                                    getAndPrintProcessLogs(console, pid);
                                                    subscribeToProcess(console, pid);
 
-                                                   addCommandOutput(machine.getName(), console);
+                                                   addCommandOutput(machineName, console);
                                                } else {
                                                    macroProcessorProvider.get().expandMacros(commandByName.getCommandLine())
                                                                          .then(new Operation<String>() {
@@ -44,12 +44,12 @@
                                                                                                          commandByName.getAttributes());
 
                                                                                  final CommandOutputConsole console =
-                                                                                         commandConsoleFactory.create(command, machine);
+                                                                                         commandConsoleFactory.create(command, machineName);
 
                                                                                  getAndPrintProcessLogs(console, pid);
                                                                                  subscribeToProcess(console, pid);
 
-                                                                                 addCommandOutput(machine.getName(), console);
+                                                                                 addCommandOutput(machineName, console);
                                                                              }
                                                                          });
                                                }
@@ -62,7 +62,7 @@
                                        String till = null;
                                        int limit = 50;
                                        int skip = 0;
-                                       execAgentCommandManager.getProcessLogs(machine.getName(), pid, from, till, limit, skip)
+                                       execAgentCommandManager.getProcessLogs(machineName, pid, from, till, limit, skip)
                                                               .onSuccess(logs -> {
                                                                   for (GetProcessLogsResponseDto log : logs) {
                                                                       String text = log.getText();
@@ -81,7 +81,7 @@
                                        String processStatus = "process_status";
                                        String after = null;
                                        execAgentCommandManager
-                                               .subscribe(machine.getName(), pid, asList(stderr, stdout, processStatus), after)
+                                               .subscribe(machineName, pid, asList(stderr, stdout, processStatus), after)
                                                .thenIfProcessStartedEvent(console.getProcessStartedConsumer())
                                                .thenIfProcessDiedEvent(console.getProcessDiedConsumer())
                                                .thenIfProcessStdOutEvent(console.getStdOutConsumer())
@@ -89,6 +89,6 @@
                                                .then(console.getProcessSubscribeConsumer());
                                    }
                                }).onFailure(
-                (endpointId, error) -> notificationManager.notify(localizationConstant.failedToGetProcesses(machine.getName())));
+                (endpointId, error) -> notificationManager.notify(localizationConstant.failedToGetProcesses(machineName)));
     }
 
