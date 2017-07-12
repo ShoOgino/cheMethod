@@ -1,0 +1,25 @@
+    @ScheduleRate(periodParameterName = "che.workspace.activity_check_scheduler_period_s")
+    private void invalidate() {
+        final long currentTime = System.currentTimeMillis();
+        for (Map.Entry<String, Long> workspaceExpireEntry : activeWorkspaces.entrySet()) {
+            if (workspaceExpireEntry.getValue() <= currentTime) {
+                try {
+                    String workspaceId = workspaceExpireEntry.getKey();
+                    Workspace workspace = workspaceManager.getWorkspace(workspaceId);
+                    workspace.getAttributes().put(WORKSPACE_STOPPED_BY, ACTIVITY_CHECKER);
+                    workspaceManager.updateWorkspace(workspaceId, workspace);
+                    workspaceManager.stopWorkspace(workspaceId);
+                } catch (NotFoundException ignored) {
+                    // workspace no longer exists, no need to do anything
+                } catch (ConflictException e) {
+                    LOG.warn(e.getLocalizedMessage());
+                } catch (Exception ex) {
+                    LOG.error(ex.getLocalizedMessage());
+                    LOG.debug(ex.getLocalizedMessage(), ex);
+                } finally {
+                    activeWorkspaces.remove(workspaceExpireEntry.getKey());
+                }
+            }
+        }
+    }
+
