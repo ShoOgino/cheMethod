@@ -1,28 +1,22 @@
     @Override
     public void onFileNameChanged(String fileName) {
         if (fileName.isEmpty()) {
-            view.showItems(new ArrayList<ItemReference>());
+            view.showItems(emptyList());
             return;
         }
 
-        // add '*' to allow search files by first letters
-        final String url = SEARCH_URL + "/?name=" + URL.encodePathSegment(fileName + "*");
-        final Message message = new MessageBuilder(GET, url).header(ACCEPT, APPLICATION_JSON).build();
-        final Unmarshallable<List<ItemReference>> unmarshaller = dtoUnmarshallerFactory.newWSListUnmarshaller(ItemReference.class);
-        try {
-            wsMessageBus.send(message, new RequestCallback<List<ItemReference>>(unmarshaller) {
-                @Override
-                protected void onSuccess(List<ItemReference> result) {
-                    view.showItems(result);
-                }
+        ProjectSearchRequestDto requestParams = dtoFactory.createDto(ProjectSearchRequestDto.class)
+                                                          .withPath("")
+                                                          .withName(URL.encodePathSegment(fileName + "*"));
 
-                @Override
-                protected void onFailure(Throwable exception) {
-                    Log.error(getClass(), exception);
-                }
-            });
-        } catch (WebSocketException e) {
-            Log.error(getClass(), e);
-        }
+        requestTransmitter.newRequest()
+                          .endpointId("ws-agent")
+                          .methodName("project/search")
+                          .paramsAsDto(requestParams)
+                          .sendAndReceiveResultAsDto(ProjectSearchResponseDto.class, 20_000)
+                          .onSuccess(response -> view.showItems(response.getItemReferences()))
+                          .onFailure(error -> Log.error(getClass(), error.getMessage()))
+                          .onTimeout(() -> Log.error(getClass(), "Project search request failed due timeout"));
+
     }
 

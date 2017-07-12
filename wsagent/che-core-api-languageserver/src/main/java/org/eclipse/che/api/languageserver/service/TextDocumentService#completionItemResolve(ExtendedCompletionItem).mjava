@@ -1,10 +1,15 @@
-    private CompletionItemDto completionItemResolve(ExtendedCompletionItem unresolved) {
+    private ExtendedCompletionItemDto completionItemResolve(ExtendedCompletionItem unresolved) {
         try {
-            LanguageServer server = getServer(prefixURI(unresolved.getTextDocumentIdentifier().getUri()));
+            InitializedLanguageServer server = languageServerRegistry.getServer(unresolved.getLanguageServerId());
 
-            return server != null ? new CompletionItemDto(server.getTextDocumentService().resolveCompletionItem(unresolved).get())
-                                  : new CompletionItemDto(unresolved);
-        } catch (InterruptedException | ExecutionException | LanguageServerException e) {
+            if (server != null) { 
+                ExtendedCompletionItem res = new ExtendedCompletionItem();
+                res.setItem(server.getServer().getTextDocumentService().resolveCompletionItem(unresolved.getItem()).get());
+                res.setLanguageServerId(unresolved.getLanguageServerId());
+                return new ExtendedCompletionItemDto(res);
+            }
+            return new ExtendedCompletionItemDto(unresolved);
+        } catch (InterruptedException | ExecutionException e) {
             throw new JsonRpcException(-27000, e.getMessage());
         }
     }

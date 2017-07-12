@@ -1,0 +1,33 @@
+    @POST
+    @Path("symbol")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<? extends SymbolInformationDto> symbol(ExtendedWorkspaceSymbolParams workspaceSymbolParams)
+                    throws ExecutionException, InterruptedException, LanguageServerException {
+        List<SymbolInformationDto> result = new ArrayList<>();
+        List<InitializedLanguageServer> servers = registry.getApplicableLanguageServers(workspaceSymbolParams.getFileUri()).stream()
+                        .flatMap(Collection::stream).collect(Collectors.toList());
+        OperationUtil.doInParallel(servers, new LSOperation<InitializedLanguageServer, List<? extends SymbolInformation>>() {
+
+            @Override
+            public boolean canDo(InitializedLanguageServer element) {
+                return truish(element.getInitializeResult().getCapabilities().getWorkspaceSymbolProvider());
+            }
+
+            @Override
+            public CompletableFuture<List<? extends SymbolInformation>> start(InitializedLanguageServer element) {
+                return element.getServer().getWorkspaceService().symbol(workspaceSymbolParams);
+            }
+
+            @Override
+            public boolean handleResult(InitializedLanguageServer element, List<? extends SymbolInformation> locations) {
+                locations.forEach(o -> {
+                    o.getLocation().setUri(removePrefixUri(o.getLocation().getUri()));
+                    result.add(new SymbolInformationDto(o));
+                });
+                return true;
+            }
+        }, 10000);
+        return result;
+    }
+

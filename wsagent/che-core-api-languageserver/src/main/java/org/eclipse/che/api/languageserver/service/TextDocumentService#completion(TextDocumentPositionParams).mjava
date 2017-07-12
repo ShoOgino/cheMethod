@@ -1,13 +1,63 @@
-    private CompletionListDto completion(TextDocumentPositionParams textDocumentPositionParams) {
+    private ExtendedCompletionListDto completion(TextDocumentPositionParams textDocumentPositionParams) {
         try {
             TextDocumentIdentifier textDocument = textDocumentPositionParams.getTextDocument();
-            textDocument.setUri(prefixURI(textDocument.getUri()));
+            String uri = prefixURI(textDocument.getUri());
+            textDocument.setUri(uri);
             textDocumentPositionParams.setUri(prefixURI(textDocumentPositionParams.getUri()));
-            LanguageServer server = getServer(textDocument.getUri());
-            return server != null ? new CompletionListDto(server.getTextDocumentService().completion(textDocumentPositionParams).get())
-                                  : null;
+            ExtendedCompletionListDto[] result = new ExtendedCompletionListDto[1];
 
-        } catch (LanguageServerException | InterruptedException | ExecutionException e) {
+            LSOperation<Collection<InitializedLanguageServer>, ExtendedCompletionListDto> op = new LSOperation<Collection<InitializedLanguageServer>, ExtendedCompletionListDto>() {
+
+                @Override
+                public boolean canDo(Collection<InitializedLanguageServer> servers) {
+                    return true;
+                }
+
+                @Override
+                public CompletableFuture<ExtendedCompletionListDto> start(Collection<InitializedLanguageServer> element) {
+                    return CompletableFuture.supplyAsync(() -> {
+                        ExtendedCompletionListDto res = new ExtendedCompletionListDto();
+                        List<ExtendedCompletionItem> items = new ArrayList<ExtendedCompletionItem>();
+                        res.setItems(items);
+                        LSOperation<InitializedLanguageServer, CompletionList> op2 = new LSOperation<InitializedLanguageServer, CompletionList>() {
+
+                            @Override
+                            public boolean canDo(InitializedLanguageServer element) {
+                                return element.getInitializeResult().getCapabilities().getCompletionProvider() != null;
+                            }
+
+                            @Override
+                            public CompletableFuture<CompletionList> start(InitializedLanguageServer element) {
+                                return element.getServer().getTextDocumentService().completion(textDocumentPositionParams);
+                            }
+
+                            @Override
+                            public boolean handleResult(InitializedLanguageServer element, CompletionList result) {
+                                res.setInComplete(res.isInComplete() && result.isIncomplete());
+                                for (CompletionItem item : result.getItems()) {
+                                    ExtendedCompletionItemDto exItem = new ExtendedCompletionItemDto();
+                                    exItem.setItem(new CompletionItemDto(item));
+                                    exItem.setLanguageServerId(element.getId());
+                                    items.add(exItem);
+                                }
+                                return false;
+                            }
+                        };
+                        OperationUtil.doInParallel(element, op2, 30000);
+
+                        return res;
+                    });
+                }
+
+                @Override
+                public boolean handleResult(Collection<InitializedLanguageServer> element, ExtendedCompletionListDto list) {
+                    result[0] = list;
+                    return !list.getItems().isEmpty();
+                }
+            };
+            OperationUtil.doInSequence(languageServerRegistry.getApplicableLanguageServers(uri), op, 10000);
+            return result[0];
+        } catch (LanguageServerException e) {
             throw new JsonRpcException(-27000, e.getMessage());
         }
     }

@@ -1,11 +1,12 @@
     private void didChange(DidChangeTextDocumentParams didChangeTextDocumentParams) {
         try {
-            didChangeTextDocumentParams.getTextDocument().setUri(prefixURI(didChangeTextDocumentParams.getTextDocument().getUri()));
+            String uri = prefixURI(didChangeTextDocumentParams.getTextDocument().getUri());
+            didChangeTextDocumentParams.getTextDocument().setUri(uri);
             didChangeTextDocumentParams.setUri(prefixURI(didChangeTextDocumentParams.getUri()));
-            LanguageServer server = getServer(didChangeTextDocumentParams.getTextDocument().getUri());
-            if (server != null) {
-                server.getTextDocumentService().didChange(didChangeTextDocumentParams);
-            }
+            languageServerRegistry.getApplicableLanguageServers(uri).stream().flatMap(Collection::stream)
+                            .map(InitializedLanguageServer::getServer).forEach(server -> {
+                                server.getTextDocumentService().didChange(didChangeTextDocumentParams);
+                            });
         } catch (LanguageServerException e) {
             LOG.error("Error trying to process textDocument/didChange", e);
         }
