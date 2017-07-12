@@ -1,10 +1,13 @@
     @BeforeMethod
     public void setUp() throws Exception {
-        when(completableFuture.get()).thenReturn(initializeResult);
-        when(initializeResult.getCapabilities()).thenReturn(serverCapabilities);
+        this.serverCapabilities= new ServerCapabilities();
+        serverDescription = new LanguageServerDescription("foo", Collections.singletonList("id"), Collections.emptyList());
+        initializeResult = new InitializeResult(serverCapabilities);
 
-        when(languageServerLauncher.getLanguageId()).thenReturn("id");
+        completableFuture = CompletableFuture.completedFuture(initializeResult);
+
         when(languageServerLauncher.isAbleToLaunch()).thenReturn(true);
+        when(languageServerLauncher.getDescription()).thenReturn(serverDescription);
         when(languageDescription.getLanguageId()).thenReturn("id");
         when(languageDescription.getFileExtensions()).thenReturn(Collections.singletonList("txt"));
         when(languageDescription.getMimeType()).thenReturn("plain/text");
@@ -12,16 +15,20 @@
         when(languageServer.getTextDocumentService()).thenReturn(mock(TextDocumentService.class));
         when(languageServer.initialize(any(InitializeParams.class))).thenReturn(completableFuture);
 
+        when(pmp.get()).thenReturn(pm);
+        when(projectsRoot.getPath()).thenReturn(Path.of(PROJECTS_ROOT));
+        when(pm.getProjectsRoot()).thenReturn(projectsRoot);
+
         registry = spy(new LanguageServerRegistryImpl(Collections.singleton(languageServerLauncher),
-                        Collections.singleton(languageDescription), null, initializer));
+                        Collections.singleton(languageDescription), pmp, initializer, null) {
+            @Override
+            protected String extractProjectPath(String filePath) throws LanguageServerException {
+                return PROJECT_PATH;
+            }
+        });
 
-        when(initializer.initialize(any(LanguageDescription.class), any(LanguageServerLauncher.class), anyString()))
-                        .thenAnswer(invocation -> {
-                            Object[] arguments = invocation.getArguments();
-                            registry.onServerInitialized(languageServer, serverCapabilities, languageDescription, (String) arguments[2]);
-                            return languageServer;
-                        });
-
-        doReturn(PROJECT_PATH).when(registry).extractProjectPath(FILE_PATH);
+        when(initializer.initialize(any(LanguageServerLauncher.class), any(LanguageClient.class), anyString())).thenAnswer(invocation -> {
+            return CompletableFuture.completedFuture(Pair.of(languageServer, initializeResult));
+        });
     }
 

@@ -1,16 +1,35 @@
     private HoverDto hover(TextDocumentPositionParams positionParams) {
+        String uri = prefixURI(positionParams.getTextDocument().getUri());
+        positionParams.getTextDocument().setUri(uri);
+        positionParams.setUri(prefixURI(positionParams.getUri()));
+        HoverDto result = new HoverDto();
+        result.setContents(new ArrayList<>());
         try {
-            positionParams.getTextDocument().setUri(prefixURI(positionParams.getTextDocument().getUri()));
-            positionParams.setUri(prefixURI(positionParams.getUri()));
-            LanguageServer server = getServer(positionParams.getTextDocument().getUri());
-            if(server != null) {
-                Hover hover = server.getTextDocumentService().hover(positionParams).get();
-                if (hover != null) {
-                    return new HoverDto(hover);
+
+            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
+                            .flatMap(Collection::stream).collect(Collectors.toList());
+            OperationUtil.doInParallel(servers, new LSOperation<InitializedLanguageServer, Hover>() {
+
+                @Override
+                public boolean canDo(InitializedLanguageServer element) {
+                    return truish(element.getInitializeResult().getCapabilities().getHoverProvider());
                 }
-            }
-            return null;
-        } catch (InterruptedException | ExecutionException | LanguageServerException e) {
+
+                @Override
+                public CompletableFuture<Hover> start(InitializedLanguageServer element) {
+                    return element.getServer().getTextDocumentService().hover(positionParams);
+                }
+
+                @Override
+                public boolean handleResult(InitializedLanguageServer element, Hover hover) {
+                    if (hover != null) {
+                        result.getContents().addAll(hover.getContents());
+                    }
+                    return true;
+                }
+            }, 10000);
+            return result;
+        } catch (LanguageServerException e) {
             throw new JsonRpcException(-27000, e.getMessage());
         }
     }

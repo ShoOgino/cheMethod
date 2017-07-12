@@ -1,8 +1,22 @@
-    public JsonRpcPromise<Boolean> initializeServer(String path) {
-        return requestTransmitter.newRequest()
-                                 .endpointId(WORKSAPCE_AGENT_ENDPOINT_ID)
-                                 .methodName("languageServer/initialize")
-                                 .paramsAsString(path)
-                                 .sendAndReceiveResultAsBoolean(30_000);
+    public Promise<ServerCapabilities> initializeServer(String path) {
+        return Promises.create((resolve, reject) -> requestTransmitter.newRequest().endpointId(WORKSAPCE_AGENT_ENDPOINT_ID)
+                        .methodName("languageServer/initialize").paramsAsString(path)
+                        .sendAndReceiveResultAsDto(ServerCapabilities.class, 30000).onSuccess(resolve::apply)
+                        .onFailure(error -> reject.apply(getPromiseError(error)))
+                        .onTimeout(() -> {
+                            final TimeoutException e = new TimeoutException();
+                            reject.apply(new PromiseError() {
+
+                                @Override
+                                public String getMessage() {
+                                    return "Timeout initializing error";
+                                }
+
+                                @Override
+                                public Throwable getCause() {
+                                    return e;
+                                }
+                            });
+                        }));
     }
 

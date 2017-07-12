@@ -1,0 +1,31 @@
+    @Override
+    public CompletableFuture<Pair<LanguageServer, InitializeResult>> initialize(LanguageServerLauncher launcher, LanguageClient client, String projectPath)
+                    throws LanguageServerException {
+        InitializeParams initializeParams = prepareInitializeParams(projectPath);
+        String launcherId = launcher.getDescription().getId();
+        CompletableFuture<Pair<LanguageServer, InitializeResult>> result= new CompletableFuture<Pair<LanguageServer,InitializeResult>>();
+
+        LanguageServer server;
+        try {
+            server = launcher.launch(projectPath, client);
+        } catch (LanguageServerException e) {
+            result.completeExceptionally(new LanguageServerException(
+                            "Can't initialize Language Server " + launcherId + " on " + projectPath + ". " + e.getMessage(), e));
+            return result;
+        }
+        registerCallbacks(server, launcher);
+
+        CompletableFuture<InitializeResult> completableFuture = server.initialize(initializeParams);
+        completableFuture.thenAccept((InitializeResult res) -> {
+            onServerInitialized(launcher, server, res.getCapabilities(), projectPath);
+            result.complete(Pair.of(server, res));
+            LOG.info("Initialized Language Server {} on project {}", launcherId, projectPath);
+        }).exceptionally((Throwable e) -> {
+            server.shutdown();
+            server.exit();
+            result.completeExceptionally(e);
+            return null;
+        });
+        return result;
+    }
+

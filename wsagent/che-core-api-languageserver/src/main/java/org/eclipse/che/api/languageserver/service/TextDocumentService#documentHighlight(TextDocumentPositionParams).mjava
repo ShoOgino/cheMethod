@@ -1,12 +1,57 @@
-    private DocumentHighlight documentHighlight(TextDocumentPositionParams textDocumentPositionParams) {
+    private DocumentHighlightDto documentHighlight(TextDocumentPositionParams textDocumentPositionParams) {
         try {
-            textDocumentPositionParams.getTextDocument().setUri(prefixURI(textDocumentPositionParams.getTextDocument().getUri()));
-            LanguageServer server = getServer(textDocumentPositionParams.getTextDocument().getUri());
-            if (server != null) {
-                return server.getTextDocumentService().documentHighlight(textDocumentPositionParams).get().get(0);
+            String uri = prefixURI(textDocumentPositionParams.getTextDocument().getUri());
+            textDocumentPositionParams.getTextDocument().setUri(uri);
+            @SuppressWarnings("unchecked")
+            List<DocumentHighlightDto>[] result = new List[1];
+            LSOperation<Collection<InitializedLanguageServer>, List<DocumentHighlightDto>> op = new LSOperation<Collection<InitializedLanguageServer>, List<DocumentHighlightDto>>() {
+
+                @Override
+                public boolean canDo(Collection<InitializedLanguageServer> servers) {
+                    return true;
+                }
+
+                @Override
+                public CompletableFuture<List<DocumentHighlightDto>> start(Collection<InitializedLanguageServer> element) {
+                    return CompletableFuture.supplyAsync(() -> {
+                        List<DocumentHighlightDto> res = new ArrayList<>();
+                        LSOperation<InitializedLanguageServer, List<? extends DocumentHighlight>> op2 = new LSOperation<InitializedLanguageServer, List<? extends DocumentHighlight>>() {
+
+                            @Override
+                            public boolean canDo(InitializedLanguageServer element) {
+                                return truish(element.getInitializeResult().getCapabilities().getDocumentHighlightProvider());
+                            }
+
+                            @Override
+                            public CompletableFuture<List<? extends DocumentHighlight>> start(InitializedLanguageServer element) {
+                                return element.getServer().getTextDocumentService().documentHighlight(textDocumentPositionParams);
+                            }
+
+                            @Override
+                            public boolean handleResult(InitializedLanguageServer element, List<? extends DocumentHighlight> result) {
+
+                                return false;
+                            }
+                        };
+                        OperationUtil.doInParallel(element, op2, 10000);
+
+                        return res;
+                    });
+                }
+
+                @Override
+                public boolean handleResult(Collection<InitializedLanguageServer> element, List<DocumentHighlightDto> list) {
+                    result[0] = list;
+                    return !list.isEmpty();
+                }
+            };
+            OperationUtil.doInSequence(languageServerRegistry.getApplicableLanguageServers(uri), op, 10000);
+
+            if (!result[0].isEmpty()) {
+                return result[0].get(0);
             }
             return null;
-        } catch (LanguageServerException | InterruptedException | ExecutionException e) {
+        } catch (LanguageServerException e) {
             throw new JsonRpcException(-27000, e.getMessage());
 
         }

@@ -1,10 +1,35 @@
     private SignatureHelpDto signatureHelp(TextDocumentPositionParams positionParams) {
+        String uri = prefixURI(positionParams.getTextDocument().getUri());
+        positionParams.getTextDocument().setUri(uri);
+        positionParams.setUri(prefixURI(positionParams.getUri()));
+        SignatureHelpDto[] result = new SignatureHelpDto[1];
         try {
-            positionParams.getTextDocument().setUri(prefixURI(positionParams.getTextDocument().getUri()));
-            positionParams.setUri(prefixURI(positionParams.getUri()));
-            LanguageServer server = getServer(positionParams.getTextDocument().getUri());
-            return server != null ? new SignatureHelpDto(server.getTextDocumentService().signatureHelp(positionParams).get()) : null;
-        } catch (InterruptedException | ExecutionException | LanguageServerException e) {
+            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
+                            .flatMap(Collection::stream).collect(Collectors.toList());
+            LSOperation<InitializedLanguageServer, SignatureHelp> op = new LSOperation<InitializedLanguageServer, SignatureHelp>() {
+
+                @Override
+                public boolean canDo(InitializedLanguageServer element) {
+                    return element.getInitializeResult().getCapabilities().getSignatureHelpProvider() != null;
+                }
+
+                @Override
+                public CompletableFuture<SignatureHelp> start(InitializedLanguageServer element) {
+                    return element.getServer().getTextDocumentService().signatureHelp(positionParams);
+                }
+
+                @Override
+                public boolean handleResult(InitializedLanguageServer element, SignatureHelp res) {
+                    if (res != null && !res.getSignatures().isEmpty()) {
+                        result[0] = new SignatureHelpDto(res);
+                        return true;
+                    }
+                    return false;
+                }
+            };
+            OperationUtil.doInSequence(servers, op, 10000);
+            return result[0];
+        } catch (LanguageServerException e) {
             throw new JsonRpcException(-27000, e.getMessage());
         }
     }

@@ -1,0 +1,47 @@
+    @Override
+    public void onTestStarted(TestStartedEvent event) {
+        String name = event.getName();
+        String location = event.getLocation();
+        boolean config = event.isConfig();
+
+        if (testNameToTestState.containsKey(name)) {
+            Log.error(getClass(), "Test already running: " + name);
+        }
+
+        TestState currentSuite = getCurrentSuite();
+        TestState testState;
+        if (location != null) {
+            testState = findChildByLocation(currentSuite, location, false);
+        } else {
+            testState = findChildByName(currentSuite, name, false);
+        }
+
+        if (testState == null) {
+            testState = new TestState(name, false, location);
+            testState.setConfig(config);
+            if (treeBuildBeforeStart) {
+                testState.setTreeBuildBeforeStart();
+            }
+
+            if (testLocator != null) {
+                testState.setTestLocator(testLocator);
+            }
+
+            currentSuite.addChild(testState);
+            if (treeBuildBeforeStart && gettingChildren) {
+                for (TestState state : currentSuite.getChildren()) {
+                    if (!state.isFinal()) {
+                        currentChildren.add(state);
+                    }
+                }
+                gettingChildren = false;
+            }
+        }
+
+        testNameToTestState.put(name, testState);
+
+        testState.setStarted();
+
+        callTestStarted(testState);
+    }
+
