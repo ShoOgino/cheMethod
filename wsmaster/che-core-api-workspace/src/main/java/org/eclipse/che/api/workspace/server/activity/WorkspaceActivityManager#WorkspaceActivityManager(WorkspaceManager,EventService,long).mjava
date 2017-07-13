@@ -1,0 +1,33 @@
+    @Inject
+    public WorkspaceActivityManager(WorkspaceManager workspaceManager,
+                                    EventService eventService,
+                                    @Named("che.workspace.agent.dev.inactive_stop_timeout_ms") long timeout) {
+        this.timeout = timeout;
+        this.workspaceManager = workspaceManager;
+        this.eventService = eventService;
+        this.activeWorkspaces = new ConcurrentHashMap<>();
+        this.workspaceEventsSubscriber = new EventSubscriber<WorkspaceStatusEvent>() {
+            @Override
+            public void onEvent(WorkspaceStatusEvent event) {
+                switch (event.getStatus()) {
+                    case RUNNING:
+                        try {
+                            Workspace workspace = workspaceManager.getWorkspace(event.getWorkspaceId());
+                            if (workspace.getAttributes().remove(WORKSPACE_STOPPED_BY) != null) {
+                                workspaceManager.updateWorkspace(event.getWorkspaceId(), workspace);
+                            }
+                        } catch (Exception ex) {
+                            LOG.warn("Failed to remove stopped information attribute for workspace " + event.getWorkspaceId());
+                        }
+                        update(event.getWorkspaceId(), System.currentTimeMillis());
+                        break;
+                    case STOPPED:
+                        activeWorkspaces.remove(event.getWorkspaceId());
+                        break;
+                    default:
+                        //do nothing
+                }
+            }
+        };
+    }
+
