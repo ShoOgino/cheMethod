@@ -17,9 +17,10 @@
                 public CompletableFuture<ExtendedCompletionListDto> start(Collection<InitializedLanguageServer> element) {
                     return CompletableFuture.supplyAsync(() -> {
                         ExtendedCompletionListDto res = new ExtendedCompletionListDto();
-                        List<ExtendedCompletionItem> items = new ArrayList<ExtendedCompletionItem>();
+                        List<ExtendedCompletionItem> items = new ArrayList<>();
                         res.setItems(items);
-                        LSOperation<InitializedLanguageServer, CompletionList> op2 = new LSOperation<InitializedLanguageServer, CompletionList>() {
+                        LSOperation<InitializedLanguageServer, Either<List<CompletionItem>, CompletionList>> op2 =
+                                new LSOperation<InitializedLanguageServer, Either<List<CompletionItem>, CompletionList>> () {
 
                             @Override
                             public boolean canDo(InitializedLanguageServer element) {
@@ -27,14 +28,21 @@
                             }
 
                             @Override
-                            public CompletableFuture<CompletionList> start(InitializedLanguageServer element) {
+                            public CompletableFuture<Either<List<CompletionItem>, CompletionList>> start(InitializedLanguageServer element) {
                                 return element.getServer().getTextDocumentService().completion(textDocumentPositionParams);
                             }
 
                             @Override
-                            public boolean handleResult(InitializedLanguageServer element, CompletionList result) {
-                                res.setInComplete(res.isInComplete() && result.isIncomplete());
-                                for (CompletionItem item : result.getItems()) {
+                            public boolean handleResult(InitializedLanguageServer element, Either<List<CompletionItem>, CompletionList> result) {
+                                List<CompletionItem> itemList;
+                                if(result.isRight()) {
+                                    res.setInComplete(res.isInComplete() && result.getRight().isIncomplete());
+                                    itemList = result.getRight().getItems();
+                                } else {
+                                    itemList = result.getLeft();
+                                }
+
+                                for (CompletionItem item : itemList) {
                                     ExtendedCompletionItemDto exItem = new ExtendedCompletionItemDto();
                                     exItem.setItem(new CompletionItemDto(item));
                                     exItem.setLanguageServerId(element.getId());
