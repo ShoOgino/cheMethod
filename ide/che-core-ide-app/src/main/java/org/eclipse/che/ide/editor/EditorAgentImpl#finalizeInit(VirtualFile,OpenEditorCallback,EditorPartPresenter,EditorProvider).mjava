@@ -1,25 +1,28 @@
-    private void finalizeInit(final VirtualFile file, final OpenEditorCallback callback, final EditorPartPresenter editor,
-                              EditorProvider editorProvider) {
-        openedEditors.add(editor);
-        openedEditorsToProviders.put(editor, editorProvider.getId());
+    private Promise<Void> finalizeInit(final VirtualFile file,
+                                       final OpenEditorCallback openEditorCallback,
+                                       final EditorPartPresenter editor,
+                                       EditorProvider editorProvider) {
+        return AsyncPromiseHelper.createFromAsyncRequest(promiseCallback -> {
+            openedEditors.add(editor);
+            openedEditorsToProviders.put(editor, editorProvider.getId());
 
-        workspaceAgent.setActivePart(editor);
-        editor.addPropertyListener(new PropertyListener() {
-            @Override
-            public void propertyChanged(PartPresenter source, int propId) {
+            workspaceAgent.setActivePart(editor);
+            editor.addPropertyListener((source, propId) -> {
                 if (propId == EditorPartPresenter.PROP_INPUT) {
+                    promiseCallback.onSuccess(null);
+
                     if (editor instanceof HasReadOnlyProperty) {
                         ((HasReadOnlyProperty)editor).setReadOnly(file.isReadOnly());
                     }
 
                     if (editor instanceof TextEditor) {
-                        editorContentSynchronizerProvider.get().trackEditor(editor);
+                        editorContentSynchronizer.trackEditor(editor);
                     }
-                    callback.onEditorOpened(editor);
+                    openEditorCallback.onEditorOpened(editor);
                     eventBus.fireEvent(FileEvent.createFileOpenedEvent(file));
                     eventBus.fireEvent(new EditorOpenedEvent(file, editor));
                 }
-            }
+            });
         });
     }
 
