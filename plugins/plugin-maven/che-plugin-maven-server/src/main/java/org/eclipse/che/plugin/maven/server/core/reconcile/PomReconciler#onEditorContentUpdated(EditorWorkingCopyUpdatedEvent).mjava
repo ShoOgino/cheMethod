@@ -1,38 +1,7 @@
     private void onEditorContentUpdated(EditorWorkingCopyUpdatedEvent event) {
         EditorChangesDto editorChanges = event.getChanges();
-        String endpointId = event.getEndpointId();
         String fileLocation = editorChanges.getFileLocation();
-        String fileName = new Path(fileLocation).lastSegment();
-        if (!POM_FILE_NAME.equals(fileName)) {
-            return;
-        }
-
-        try {
-            EditorWorkingCopy workingCopy = editorWorkingCopyManager.getWorkingCopy(fileLocation);
-            if (workingCopy == null) {
-                return;
-            }
-
-            String newPomContent = workingCopy.getContentAsString();
-            if (isNullOrEmpty(newPomContent)) {
-                return;
-            }
-
-            String projectPath = editorChanges.getProjectPath();
-            List<Problem> problemList = reconcile(fileLocation, projectPath, newPomContent);
-            DtoFactory dtoFactory = DtoFactory.getInstance();
-            ReconcileResult reconcileResult = dtoFactory.createDto(ReconcileResult.class)
-                                                        .withFileLocation(fileLocation)
-                                                        .withProblems(problemList);
-            transmitter.newRequest()
-                       .endpointId(endpointId)
-                       .methodName(RECONCILE_STATE_CHANGED_METHOD)
-                       .paramsAsDto(reconcileResult)
-                       .sendAndSkipResult();
-        } catch (Exception e) {
-            String error = e.getLocalizedMessage();
-            LOG.error(error, e);
-            transmitError(500, error, endpointId);
-        }
+        String projectPath = editorChanges.getProjectPath();
+        reconcilePath(fileLocation, projectPath);
     }
 
