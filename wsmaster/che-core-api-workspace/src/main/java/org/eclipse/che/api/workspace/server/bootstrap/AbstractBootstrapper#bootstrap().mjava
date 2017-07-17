@@ -12,23 +12,16 @@
         if (finishEventFuture != null) {
             throw new IllegalStateException("Bootstrap method must be called only once.");
         }
-        this.finishEventFuture = new CompletableFuture<>();
+        finishEventFuture = new CompletableFuture<>();
 
-        injectBootstrapper();
-
-        this.eventService.subscribe(bootstrapperStatusListener, BootstrapperStatusEvent.class);
+        eventService.subscribe(bootstrapperStatusListener, BootstrapperStatusEvent.class);
         try {
-            dockerMachine.exec(BOOTSTRAPPER_DIR + BOOTSTRAPPER_FILE +
-                               " -machine-name " + machineName +
-                               " -runtime-id " + String.format("%s:%s:%s", runtimeIdentity.getWorkspaceId(),
-                                                               runtimeIdentity.getEnvName(),
-                                                               runtimeIdentity.getOwner()) +
-                               " -push-endpoint " + installerEndpoint + ENDPOINT_IDS.getAndIncrement() +
-                               " -push-logs-endpoint " + outputEndpoint + ENDPOINT_IDS.getAndIncrement() +
-                               " -server-check-period " + serverCheckPeriodSeconds +
-                               " -installer-timeout " + installerTimeoutSeconds +
-                               " -file " + BOOTSTRAPPER_DIR + CONFIG_FILE,
-                               null);
+            LOG.info("Launching bootstrapper");
+
+            doBootstrapAsync(installerEndpoint + ENDPOINT_IDS.getAndIncrement(),
+                             outputEndpoint + ENDPOINT_IDS.getAndIncrement());
+
+            LOG.info("Launched bootstrapper. Waiting for Done event");
 
             //waiting for DONE or FAILED bootstrapper status event
             BootstrapperStatusEvent resultEvent = finishEventFuture.get(bootstrappingTimeoutMinutes, TimeUnit.MINUTES);
@@ -43,7 +36,7 @@
             Thread.currentThread().interrupt();
             throw new InfrastructureException("Bootstrapping of machine " + machineName + " was interrupted");
         } finally {
-            this.eventService.unsubscribe(bootstrapperStatusListener, BootstrapperStatusEvent.class);
+            eventService.unsubscribe(bootstrapperStatusListener, BootstrapperStatusEvent.class);
         }
     }
 
