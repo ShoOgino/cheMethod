@@ -2,19 +2,11 @@
             throws InfrastructureException, InterruptedException {
         InternalMachineConfig machineCfg = getContext().getMachineConfigs().get(name);
 
-        Map<String, String> labels = new HashMap<>(containerConfig.getLabels());
-        labels.putAll(Labels.newSerializer()
-                            .machineName(name)
-                            .runtimeId(identity)
-                            .servers(machineCfg.getServers())
-                            .labels());
-        containerConfig.setLabels(labels);
-
-        DockerMachine machine = containerStarter.startContainer(dockerEnvironment.getNetwork(),
+        DockerMachine machine = containerStarter.startContainer(getContext().getDockerEnvironment().getNetwork(),
                                                                 name,
                                                                 containerConfig,
-                                                                identity,
-                                                                devMachineName.equals(name),
+                                                                getContext().getIdentity(),
+                                                                getContext().getDevMachineName().equals(name),
                                                                 new AbnormalMachineStopHandlerImpl());
         try {
             startSynchronizer.addMachine(name, machine);
@@ -24,13 +16,12 @@
             destroyMachineQuietly(name, machine);
             throw e;
         }
-        bootstrapperFactory.create(name, identity, machineCfg.getInstallers(), machine).bootstrap();
+        bootstrapperFactory.create(name, getContext().getIdentity(), machineCfg.getInstallers(), machine).bootstrap();
 
         ServersReadinessChecker readinessChecker = new ServersReadinessChecker(name,
                                                                                machine.getServers(),
-                                                                               new ServerReadinessHandler(name),
                                                                                serverCheckerFactory);
-        readinessChecker.startAsync();
+        readinessChecker.startAsync(new ServerReadinessHandler(name));
         readinessChecker.await();
     }
 

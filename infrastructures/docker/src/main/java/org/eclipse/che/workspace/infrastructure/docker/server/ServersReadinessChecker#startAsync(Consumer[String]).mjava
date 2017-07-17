@@ -1,0 +1,36 @@
+    /**
+     * Asynchronously starts checking readiness of servers of a machine.
+     *
+     * @param serverReadinessHandler
+     *         consumer which will be called with server reference as the argument when server become available
+     * @throws InternalInfrastructureException
+     *         if check of a server failed due to an unexpected error
+     * @throws InfrastructureException
+     *         if check of a server failed due to an error
+     */
+    public void startAsync(Consumer<String> serverReadinessHandler) throws InfrastructureException {
+        timer = new Timer("ServerReadinessChecker", true);
+        List<ServerChecker> serverCheckers = getServerCheckers();
+        // should be completed with an exception if a server considered unavailable
+        CompletableFuture<Void> firstNonAvailable = new CompletableFuture<>();
+        CompletableFuture[] checkTasks = serverCheckers
+                .stream()
+                .map(ServerChecker::getReportCompFuture)
+                .map(compFut -> compFut.thenAccept(serverReadinessHandler)
+                                       .exceptionally(e -> {
+                                           // cleanup checkers tasks
+                                           timer.cancel();
+                                           firstNonAvailable.completeExceptionally(e);
+                                           return null;
+                                       }))
+                .toArray(CompletableFuture[]::new);
+        resultTimeoutSeconds = checkTasks.length * 180;
+        // should complete when all servers checks reported availability
+        CompletableFuture<Void> allAvailable = CompletableFuture.allOf(checkTasks);
+        // should complete when all servers are available or any server is unavailable
+        result = CompletableFuture.anyOf(allAvailable, firstNonAvailable);
+        for (ServerChecker serverChecker : serverCheckers) {
+            serverChecker.start();
+        }
+    }
+

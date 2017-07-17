@@ -1,0 +1,44 @@
+    @VisibleForTesting
+    void recoverOne(RuntimeInfrastructure infra, RuntimeIdentity identity) throws ServerException {
+        Workspace workspace;
+        try {
+            workspace = workspaceDao.get(identity.getWorkspaceId());
+        } catch (NotFoundException x) {
+            LOG.error("Workspace configuration is missing for the runtime '{}:{}'. Runtime won't be recovered",
+                      identity.getWorkspaceId(),
+                      identity.getEnvName());
+            return;
+        }
+
+        Environment environment = workspace.getConfig().getEnvironments().get(identity.getEnvName());
+        if (environment == null) {
+            LOG.error("Environment configuration is missing for the runtime '{}:{}'. Runtime won't be recovered",
+                      identity.getWorkspaceId(),
+                      identity.getEnvName());
+            return;
+        }
+
+        InternalRuntime runtime;
+        try {
+            runtime = infra.prepare(identity, environment).getRuntime();
+        } catch (InfrastructureException | ValidationException x) {
+            LOG.error("Couldn't recover runtime '{}:{}'. Error: {}",
+                      identity.getWorkspaceId(),
+                      identity.getEnvName(),
+                      x.getMessage());
+            return;
+        }
+
+        RuntimeState prev = runtimes.putIfAbsent(identity.getWorkspaceId(), new RuntimeState(runtime, RUNNING));
+        if (prev == null) {
+            LOG.info("Successfully recovered workspace runtime '{}'", identity.getWorkspaceId(), identity.getEnvName());
+        } else {
+            LOG.error("More than 1 runtime with id '{}:{}' found. " +
+                      "Duplicate provided by infrastructure '{}' will be skipped",
+                      identity.getWorkspaceId(),
+                      identity.getEnvName(),
+                      prev.runtime.getContext().getInfrastructure().getName(),
+                      infra.getName());
+        }
+    }
+
