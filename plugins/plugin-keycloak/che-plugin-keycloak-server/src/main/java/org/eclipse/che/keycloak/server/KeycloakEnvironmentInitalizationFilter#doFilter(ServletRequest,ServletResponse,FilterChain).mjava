@@ -1,0 +1,48 @@
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
+            throws IOException, ServletException {
+
+        final HttpServletRequest httpRequest = (HttpServletRequest)request;
+        // TODO: use KeycloakOIDCFilter skip setting
+        if (httpRequest.getRequestURI().endsWith("/ws") || httpRequest.getRequestURI().endsWith("/eventbus")
+            || request.getScheme().equals("ws") || httpRequest.getScheme().equals("wss") || httpRequest.getRequestURI().contains("/websocket/")) {
+            filterChain.doFilter(request, response);
+        }
+
+        KeycloakSecurityContext  context = (KeycloakSecurityContext)httpRequest.getAttribute(KeycloakSecurityContext.class.getName());
+        // In case of bearer token login, there is another object in session
+        if (context == null) {
+            OidcKeycloakAccount keycloakAccount = (OidcKeycloakAccount)httpRequest.getAttribute(KeycloakAccount.class.getName());
+            if (keycloakAccount != null) {
+                context = keycloakAccount.getKeycloakSecurityContext();
+            }
+        }
+        String tokenString;
+        User user;
+        if (context == null) {
+            try {
+                tokenString =  httpRequest.getHeader("Authorization");
+                String userId = machineTokenRegistry.getUserId(tokenString);
+                user = userManager.getById(userId);
+            } catch (NotFoundException | ServerException e) {
+                throw new ServletException("Cannot detect or instantiate user");
+            }
+        } else {
+            final IDToken token = context.getIdToken() != null ? context.getIdToken() : context.getToken();
+            tokenString = context.getTokenString();
+            user = getOrCreateUser(token.getSubject(), token.getEmail(), token.getPreferredUsername());
+            getOrCreateAccount(token.getPreferredUsername(), token.getPreferredUsername());
+        }
+
+        final Subject subject =
+                new SubjectImpl(user.getName(), user.getId(), tokenString, false);
+        httpRequest.getSession().setAttribute("codenvy_user", subject);
+
+        try {
+            EnvironmentContext.getCurrent().setSubject(subject);
+            filterChain.doFilter(addUserInRequest(httpRequest, subject), response);
+        } finally {
+            EnvironmentContext.reset();
+        }
+    }
+
