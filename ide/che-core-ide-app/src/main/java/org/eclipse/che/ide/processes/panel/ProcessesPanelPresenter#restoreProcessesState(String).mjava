@@ -18,30 +18,28 @@
                     /*
                      * Hide the processes which are launched by command of unknown type
                      */
-                                           if (commandTypeRegistry.getCommandTypeById(type).isPresent()) {
-                                               final String processName = process.getName();
-                                               final CommandImpl commandByName = getWorkspaceCommandByName(processName);
+                    if (commandTypeRegistry.getCommandTypeById(type).isPresent()) {
+                        final String processName = process.getName();
+                        final Optional<CommandImpl> commandOptional = commandManager.getCommand(processName);
 
-                                               if (commandByName == null) {
-                                                   final String commandLine = process.getCommandLine();
-                                                   final CommandImpl command = new CommandImpl(processName, commandLine, type);
-                                                   final CommandOutputConsole console = commandConsoleFactory.create(command, machineName);
+                        if (!commandOptional.isPresent()) {
+                            final String commandLine = process.getCommandLine();
+                            final CommandImpl command = new CommandImpl(processName, commandLine, type);
+                            final CommandOutputConsole console = commandConsoleFactory.create(command, machineName);
 
                                                    getAndPrintProcessLogs(console, pid);
                                                    subscribeToProcess(console, pid);
 
-                                                   addCommandOutput(machineName, console);
-                                               } else {
-                                                   macroProcessorProvider.get().expandMacros(commandByName.getCommandLine())
-                                                                         .then(new Operation<String>() {
-                                                                             @Override
-                                                                             public void apply(String expandedCommandLine)
-                                                                                     throws OperationException {
-                                                                                 final CommandImpl command =
-                                                                                         new CommandImpl(commandByName.getName(),
-                                                                                                         expandedCommandLine,
-                                                                                                         commandByName.getType(),
-                                                                                                         commandByName.getAttributes());
+                            addCommandOutput(machineName, console);
+                        } else {
+                            final CommandImpl commandByName = commandOptional.get();
+                            macroProcessorProvider.get().expandMacros(commandByName.getCommandLine()).then(new Operation<String>() {
+                                @Override
+                                public void apply(String expandedCommandLine) throws OperationException {
+                                    final CommandImpl command = new CommandImpl(commandByName.getName(),
+                                                                                expandedCommandLine,
+                                                                                commandByName.getType(),
+                                                                                commandByName.getAttributes());
 
                                                                                  final CommandOutputConsole console =
                                                                                          commandConsoleFactory.create(command, machineName);
