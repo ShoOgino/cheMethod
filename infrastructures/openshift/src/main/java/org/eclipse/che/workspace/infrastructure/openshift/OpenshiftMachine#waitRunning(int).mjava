@@ -1,0 +1,59 @@
+    public void waitRunning(int timeoutMin) throws InfrastructureException {
+        LOG.info("Waiting machine {}", getName());
+
+        CompletableFuture<Pod> future = new CompletableFuture<>();
+        Watch watch;
+        try (OpenShiftClient client = clientFactory.create()) {
+            Pod actualPod = client.pods()
+                                  .inNamespace(pod.getMetadata().getNamespace())
+                                  .withName(pod.getMetadata().getName())
+                                  .get();
+
+            if (actualPod == null) {
+                throw new InternalInfrastructureException("Can't find created pod " + pod.getMetadata().getName());
+            }
+            String status = actualPod.getStatus().getPhase();
+            LOG.info("Machine {} is {}", getName(), status);
+            if (OPENSHIFT_POD_STATUS_RUNNING.equals(status)) {
+                future.complete(actualPod);
+                return;
+            } else {
+                watch = client.pods()
+                              .inNamespace(pod.getMetadata().getNamespace())
+                              .withName(pod.getMetadata().getName())
+                              .watch(new Watcher<Pod>() {
+                                         @Override
+                                         public void eventReceived(Action action, Pod pod) {
+                                             //TODO Replace with checking container status
+                                             String phase = pod.getStatus().getPhase();
+                                             LOG.info("Machine {} is {}", getName(), status);
+                                             if (OPENSHIFT_POD_STATUS_RUNNING.equals(phase)) {
+                                                 future.complete(pod);
+                                             }
+                                         }
+
+                                         @Override
+                                         public void onClose(KubernetesClientException cause) {
+                                             if (!future.isDone()) {
+                                                 future.completeExceptionally(
+                                                         new InfrastructureException("Machine watching is interrupted"));
+                                             }
+                                         }
+                                     }
+                              );
+            }
+        }
+
+        try {
+            this.pod = future.get(timeoutMin, TimeUnit.MINUTES);
+            watch.close();
+        } catch (ExecutionException e) {
+            throw new InfrastructureException(e.getCause().getMessage(), e);
+        } catch (TimeoutException e) {
+            throw new InfrastructureException("Starting of machine " + getName() + " reached timeout");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InfrastructureException("Starting of machine " + getName() + " was interrupted");
+        }
+    }
+

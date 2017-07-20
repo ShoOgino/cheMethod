@@ -1,0 +1,49 @@
+    public OpenshiftEnvironment parse(Environment environment) throws ValidationException,
+                                                                      InfrastructureException {
+
+        checkNotNull(environment, "Environment should not be null");
+        Recipe recipe = environment.getRecipe();
+        checkNotNull(environment.getRecipe(), "Environment recipe should not be null");
+
+        String content = getContentOfRecipe(recipe);
+        String contentType = recipe.getContentType();
+
+        checkNotNull(contentType, "Recipe content type should not be null");
+        checkNotNull(content, "Recipe content should not be null");
+
+        switch (contentType) {
+            case "application/x-yaml":
+            case "text/yaml":
+            case "text/x-yaml":
+                break;
+            default:
+                throw new ValidationException("Provided environment recipe content type '" + contentType +
+                                              "' is unsupported. Supported values are: " +
+                                              "application/x-yaml, text/yaml, text/x-yaml");
+        }
+
+        //TODO Implement own validation for openshift recipes, because it is OK for openshift client to load  list with services only, but in our case there should be at least one pod with containers
+        KubernetesList list;
+        try (OpenShiftClient client = clientFactory.create()) {
+            list = client.lists().load(new ByteArrayInputStream(content.getBytes())).get();
+        }
+
+        OpenshiftEnvironment openshiftEnvironment = new OpenshiftEnvironment();
+        for (HasMetadata object : list.getItems()) {
+            if (object instanceof DeploymentConfig) {
+//                environment.addDeploymentConfig((DeploymentConfig)object);
+                throw new ValidationException("Supporting of deployment configs is not implemented yet.");
+            } else if (object instanceof Pod) {
+                openshiftEnvironment.addPod((Pod)object);
+            } else if (object instanceof Service) {
+                openshiftEnvironment.addService((Service)object);
+            } else if (object instanceof Route) {
+                openshiftEnvironment.addRoute((Route)object);
+            } else {
+                throw new ValidationException(String.format("Found unknown object type '%s'", object.getMetadata()));
+            }
+        }
+
+        return openshiftEnvironment;
+    }
+

@@ -1,0 +1,36 @@
+    private void prepareOpenshiftProject() throws InfrastructureException {
+        try (OpenShiftClient client = clientFactory.create()) {
+            String namespace = identity.getWorkspaceId();
+            LOG.info("Trying to resolve project for workspace {}", identity.getWorkspaceId());
+            try {
+                Project project = client.projects().withName(namespace).get();
+
+                //TODO clean up project instead it recreation
+                cleanUpOpenshiftProject();
+                //Projects creation immediately after its removing doesn't work TODO Fix it
+                client.projectrequests()
+                      .createNew()
+                      .withNewMetadata()
+                      .withName(namespace)
+                      .endMetadata()
+                      .done();
+            } catch (KubernetesClientException e) {
+                if (e.getCode() == 403) {
+                    // project is foreign or doesn't exist
+
+                    //try to create project
+                    client.projectrequests()
+                          .createNew()
+                          .withNewMetadata()
+                          .withName(namespace)
+                          .endMetadata()
+                          .done();
+                } else {
+                    throw new InfrastructureException(e.getMessage(), e);
+                }
+            }
+
+            LOG.info("Created new project for workspace {}", identity.getWorkspaceId());
+        }
+    }
+
