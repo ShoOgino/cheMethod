@@ -1,0 +1,34 @@
+    private void initialize() {
+        subscribeToDebuggerEvents();
+
+        if (!isConnected()) {
+            return;
+        }
+        Promise<DebugSessionDto> promise = service.getSessionInfo(debugSessionDto.getId());
+        promise.then(debugSessionDto -> {
+            debuggerManager.setActiveDebugger(AbstractDebugger.this);
+            setDebugSession(debugSessionDto);
+
+            DebuggerInfo debuggerInfo = debugSessionDto.getDebuggerInfo();
+            String info = debuggerInfo.getName() + " " + debuggerInfo.getVersion();
+            String address = debuggerInfo.getHost() + ":" + debuggerInfo.getPort();
+            DebuggerDescriptor debuggerDescriptor = new DebuggerDescriptor(info, address);
+
+            for (DebuggerObserver observer : observers) {
+                observer.onDebuggerAttached(debuggerDescriptor, Promises.resolve(null));
+            }
+
+            for (BreakpointDto breakpoint : debugSessionDto.getBreakpoints()) {
+                onBreakpointActivated(breakpoint.getLocation());
+            }
+
+            if (currentLocation != null) {
+                openCurrentFile();
+            }
+
+            startCheckingEvents();
+        }).catchError(error -> {
+            disconnect();
+        });
+    }
+
