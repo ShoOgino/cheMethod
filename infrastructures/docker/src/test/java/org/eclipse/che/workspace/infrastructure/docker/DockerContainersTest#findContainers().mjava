@@ -1,22 +1,23 @@
     @Test
     public void findContainers() throws Exception {
-        RuntimeIdentity id1 = new RuntimeIdentityImpl("workspace123", "default", "test");
-        ContainerListEntry entry1 = mockContainer(id1, "container1");
-        ContainerListEntry entry2 = mockContainer(id1, "container2");
+        RuntimeIdentity id = new RuntimeIdentityImpl("workspace123", "default", "test");
+        ContainerListEntry entry1 = mockContainer(id, "container1");
+        ContainerListEntry entry2 = mockContainer(id, "container2");
 
-        RuntimeIdentity id2 = new RuntimeIdentityImpl("workspace234", "default", "test");
-        ContainerListEntry entry3 = mockContainer(id2, "container3");
+        when(docker.listContainers(anyObject())).thenReturn(Arrays.asList(entry1, entry2));
 
-        List<ContainerListEntry> entries = asList(entry1, entry2, entry3);
-        when(docker.listContainers(ListContainersParams.create().withAll(false))).thenReturn(entries);
+        assertEquals(containers.find(id), Arrays.asList(entry1, entry2));
 
-        assertEquals(containers.find(id1)
-                               .stream()
-                               .map(ContainerListEntry::getId)
-                               .collect(Collectors.toSet()), newHashSet(entry1.getId(), entry2.getId()));
-        assertEquals(containers.find(id2)
-                               .stream()
-                               .map(ContainerListEntry::getId)
-                               .collect(Collectors.toSet()), newHashSet(entry3.getId()));
+        ArgumentCaptor<ListContainersParams> paramsCaptor = ArgumentCaptor.forClass(ListContainersParams.class);
+        verify(docker).listContainers(paramsCaptor.capture());
+        ListContainersParams params = paramsCaptor.getValue();
+        assertEquals(params.getFilters().getFilter("label"),
+                     Labels.newSerializer()
+                           .runtimeId(id)
+                           .labels()
+                           .entrySet()
+                           .stream()
+                           .map(entry -> entry.getKey() + '=' + entry.getValue())
+                           .collect(Collectors.toList()));
     }
 
