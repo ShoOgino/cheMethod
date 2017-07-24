@@ -3,7 +3,8 @@
                                    boolean isDev,
                                    String image,
                                    String networkName,
-                                   DockerContainerConfig containerConfig) throws IOException {
+                                   DockerContainerConfig containerConfig)
+            throws IOException, InternalInfrastructureException {
 
         long machineMemorySwap = memorySwapMultiplier == -1 ?
                                  -1 :
@@ -23,27 +24,25 @@
                   .withMemory(containerConfig.getMemLimit())
                   .withNetworkMode(networkName)
                   .withLinks(toArrayIfNotNull(containerConfig.getLinks()))
-                  .withPortBindings(containerConfig.getPorts()
-                                           .stream()
-                                           .collect(toMap(Function.identity(), value -> new PortBinding[0])))
+                  .withPortBindings(convertPortBindings(containerConfig.getPorts(), machineName))
                   .withVolumesFrom(toArrayIfNotNull(containerConfig.getVolumesFrom()));
 
         ContainerConfig config = new ContainerConfig();
         config.withImage(image)
               .withExposedPorts(containerConfig.getExpose()
-                                       .stream()
-                                       .distinct()
-                                       .collect(toMap(Function.identity(), value -> emptyMap())))
+                                               .stream()
+                                               .distinct()
+                                               .collect(toMap(Function.identity(), value -> emptyMap())))
               .withHostConfig(hostConfig)
               .withCmd(toArrayIfNotNull(containerConfig.getCommand()))
               .withEntrypoint(toArrayIfNotNull(containerConfig.getEntrypoint()))
               .withLabels(containerConfig.getLabels())
               .withNetworkingConfig(networkingConfig)
               .withEnv(containerConfig.getEnvironment()
-                              .entrySet()
-                              .stream()
-                              .map(entry -> entry.getKey() + "=" + entry.getValue())
-                              .toArray(String[]::new));
+                                      .entrySet()
+                                      .stream()
+                                      .map(entry -> entry.getKey() + "=" + entry.getValue())
+                                      .toArray(String[]::new));
 
         List<String> bindMountVolumes = new ArrayList<>();
         Map<String, Volume> nonBindMountVolumes = new HashMap<>();
