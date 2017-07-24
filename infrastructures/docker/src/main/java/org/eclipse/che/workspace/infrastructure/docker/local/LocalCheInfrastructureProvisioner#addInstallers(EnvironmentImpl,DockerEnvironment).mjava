@@ -1,0 +1,32 @@
+    private void addInstallers(EnvironmentImpl envConfig, DockerEnvironment internalEnv)
+            throws InfrastructureException {
+
+        for (Map.Entry<String, MachineConfigImpl> machineConfigEntry : envConfig.getMachines().entrySet()) {
+            String machineName = machineConfigEntry.getKey();
+            MachineConfigImpl machineConfig = machineConfigEntry.getValue();
+            DockerContainerConfig containerConfig = internalEnv.getContainers().get(machineName);
+
+            List<String> installers = machineConfig.getInstallers();
+            if (installers.contains("org.eclipse.che.terminal")) {
+                containerConfig.getVolumes().add(terminalVolumeProvider.get());
+            }
+            if (installers.contains("org.eclipse.che.exec")) {
+                containerConfig.getVolumes().add(execVolumeProvider.get());
+            }
+            if (installers.contains("org.eclipse.che.ws-agent")) {
+                containerConfig.getVolumes().add(wsAgentVolumeProvider.get());
+                String extConfVolume = dockerExtConfBindingProvider.get();
+                if (extConfVolume != null) {
+                    containerConfig.getVolumes().add(extConfVolume);
+                }
+                containerConfig.getEnvironment().put(CheBootstrap.CHE_LOCAL_CONF_DIR,
+                                                     DockerExtConfBindingProvider.EXT_CHE_LOCAL_CONF_DIR);
+            }
+        }
+        try {
+            installerConfigApplier.apply(envConfig, internalEnv);
+        } catch (InstallerException e) {
+            throw new InfrastructureException(e.getLocalizedMessage(), e);
+        }
+    }
+
