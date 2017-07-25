@@ -1,10 +1,25 @@
-    private Promise<Void> restoreInitEditor(final VirtualFile file, final OpenEditorCallback callback, FileType fileType,
+    private Promise<Void> restoreInitEditor(final VirtualFile file, final OpenEditorCallback openEditorCallback, FileType fileType,
                                             final EditorPartPresenter editor, EditorProvider editorProvider,
                                             EditorPartStack editorPartStack) {
-        editor.init(new EditorInputImpl(fileType, file), callback);
-        editor.addCloseHandler(this);
+        return AsyncPromiseHelper.createFromAsyncRequest((AsyncCallback<Void> promiseCallback) -> {
+            OpenEditorCallback initializeCallback = new OpenEditorCallbackImpl() {
+                @Override
+                public void onEditorOpened(EditorPartPresenter editor) {
+                    editorPartStack.addPart(editor);
 
-        editorPartStack.addPart(editor);
-        return finalizeInit(file, callback, editor, editorProvider);
+                    promiseCallback.onSuccess(null);
+                    openEditorCallback.onEditorOpened(editor);
+                }
+
+                @Override
+                public void onInitializationFailed() {
+                    promiseCallback.onFailure(new Exception("Can not initialize editor for " + file.getLocation()));
+                    openEditorCallback.onInitializationFailed();
+                }
+            };
+
+            editor.init(new EditorInputImpl(fileType, file), initializeCallback);
+            finalizeInit(file, editor, editorProvider);
+        });
     }
 
