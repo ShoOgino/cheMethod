@@ -1,54 +1,5 @@
     @Override
     public Map<String, ? extends Machine> getInternalMachines() {
-        //TODO will be reworked during https://github.com/eclipse/che/issues/5688
-        Map<String, MachineImpl> machines = this.machines.entrySet()
-                                                         .stream()
-                                                         .collect(toMap(Map.Entry::getKey,
-                                                                        e -> new MachineImpl(e.getValue())));
-
-        String workspaceId = identity.getWorkspaceId();
-        try (OpenShiftClient client = clientFactory.create()) {
-            List<Route> routes = client.routes().inNamespace(workspaceId).list().getItems();
-            List<Service> services = client.services().inNamespace(workspaceId).list().getItems();
-
-            for (Route route : routes) {
-                String serviceName = route.getSpec().getTo().getName();
-
-                //TODO Implement fetching protocol from it
-                Service service = services.stream()
-                                          .filter(s -> s.getMetadata().getName().equals(serviceName))
-                                          .findAny()
-                                          .get();
-
-                List<Pod> servicesPods = client.pods()
-                                               .inNamespace(workspaceId)
-                                               .withLabels(service.getSpec().getSelector())
-                                               .list()
-                                               .getItems();
-
-                for (Pod servicesPod : servicesPods) {
-                    for (Container container : servicesPod.getSpec().getContainers()) {
-                        for (ContainerPort containerPort : container.getPorts()) {
-                            for (ServicePort servicePort : service.getSpec().getPorts()) {
-                                if (containerPort.getContainerPort().equals(servicePort.getPort())) {
-                                    String portName = route.getSpec().getPort().getTargetPort().getStrVal();
-
-                                    machines.get(servicesPod.getMetadata().getName() + "/" + container.getName())
-                                            .getServers()
-                                            .put(portName,
-                                                 new ServerImpl("http://" + route.getSpec().getHost(),
-                                                                ServerStatus.UNKNOWN));
-                                }
-                            }
-
-                        }
-                    }
-                }
-            }
-        } catch (RuntimeException e) {
-            LOG.error("Error occurs while resolving machines in workspace " + identity.getWorkspaceId(), e);
-            return emptyMap();
-        }
-        return machines;
+        return ImmutableMap.copyOf(machines);
     }
 

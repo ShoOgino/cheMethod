@@ -1,26 +1,26 @@
     public void waitRunning(int timeoutMin) throws InfrastructureException {
         LOG.info("Waiting machine {}", getName());
 
-        CompletableFuture<Pod> future = new CompletableFuture<>();
+        CompletableFuture<Void> future = new CompletableFuture<>();
         Watch watch;
         try (OpenShiftClient client = clientFactory.create()) {
             Pod actualPod = client.pods()
-                                  .inNamespace(pod.getMetadata().getNamespace())
-                                  .withName(pod.getMetadata().getName())
+                                  .inNamespace(projectName)
+                                  .withName(podName)
                                   .get();
 
             if (actualPod == null) {
-                throw new InternalInfrastructureException("Can't find created pod " + pod.getMetadata().getName());
+                throw new InternalInfrastructureException("Can't find created pod " + podName);
             }
             String status = actualPod.getStatus().getPhase();
             LOG.info("Machine {} is {}", getName(), status);
             if (OPENSHIFT_POD_STATUS_RUNNING.equals(status)) {
-                future.complete(actualPod);
+                future.complete(null);
                 return;
             } else {
                 watch = client.pods()
-                              .inNamespace(pod.getMetadata().getNamespace())
-                              .withName(pod.getMetadata().getName())
+                              .inNamespace(projectName)
+                              .withName(podName)
                               .watch(new Watcher<Pod>() {
                                          @Override
                                          public void eventReceived(Action action, Pod pod) {
@@ -28,7 +28,7 @@
                                              String phase = pod.getStatus().getPhase();
                                              LOG.info("Machine {} is {}", getName(), status);
                                              if (OPENSHIFT_POD_STATUS_RUNNING.equals(phase)) {
-                                                 future.complete(pod);
+                                                 future.complete(null);
                                              }
                                          }
 
@@ -45,7 +45,7 @@
         }
 
         try {
-            this.pod = future.get(timeoutMin, TimeUnit.MINUTES);
+            future.get(timeoutMin, TimeUnit.MINUTES);
             watch.close();
         } catch (ExecutionException e) {
             throw new InfrastructureException(e.getCause().getMessage(), e);

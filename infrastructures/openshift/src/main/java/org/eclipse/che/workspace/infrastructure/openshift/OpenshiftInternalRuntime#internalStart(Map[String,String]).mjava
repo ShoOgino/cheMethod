@@ -1,35 +1,39 @@
     @Override
     protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
-        prepareOpenshiftProject();
+        String projectName = getContext().getIdentity().getWorkspaceId();
+
+        prepareOpenshiftProject(projectName);
 
         // TODO Add Persistent Volumes claims for projects
         try (OpenShiftClient client = clientFactory.create()) {
             LOG.info("Creating pods from environment");
-            for (Pod toCreate : kubernetesEnvironment.getPods().values()) {
+            for (Pod toCreate : getContext().getOpenshiftEnvironment().getPods().values()) {
                 Pod createdPod = client.pods()
-                                       .inNamespace(identity.getWorkspaceId())
+                                       .inNamespace(projectName)
                                        .create(toCreate);
-                kubernetesEnvironment.addPod(createdPod);
 
                 for (Container container : createdPod.getSpec().getContainers()) {
-                    OpenshiftMachine machine = new OpenshiftMachine(clientFactory, createdPod, container.getName());
+                    OpenshiftMachine machine = new OpenshiftMachine(clientFactory,
+                                                                    projectName,
+                                                                    createdPod.getMetadata().getName(),
+                                                                    container.getName());
                     machines.put(machine.getName(), machine);
                     sendStartingEvent(machine.getName());
                 }
             }
 
             LOG.info("Creating services from environment");
-            for (Service service : kubernetesEnvironment.getServices().values()) {
-                kubernetesEnvironment.addService(client.services()
-                                                       .inNamespace(identity.getWorkspaceId())
-                                                       .create(service));
+            for (Service service : getContext().getOpenshiftEnvironment().getServices().values()) {
+                client.services()
+                      .inNamespace(projectName)
+                      .create(service);
             }
 
             LOG.info("Creating routes from environment");
-            for (Route route : kubernetesEnvironment.getRoutes().values()) {
-                kubernetesEnvironment.addRoute(client.routes()
-                                                     .inNamespace(identity.getWorkspaceId())
-                                                     .create(route));
+            for (Route route : getContext().getOpenshiftEnvironment().getRoutes().values()) {
+                client.routes()
+                      .inNamespace(projectName)
+                      .create(route);
             }
 
             LOG.info("Waiting until pods created by deployment configs become available and bootstrapping them");
@@ -37,21 +41,10 @@
             for (OpenshiftMachine machine : machines.values()) {
                 machine.waitRunning(machineStartTimeoutMin);
 
-                //TODO Installers should be already known https://github.com/eclipse/che/issues/5687
-                List<InstallerImpl> installers;
-                try {
-                    installers = installerRegistry.getOrderedInstallers(asList("org.eclipse.che.ws-agent",
-                                                                               "org.eclipse.che.terminal"))
-                                                  .stream()
-                                                  .map(InstallerImpl::new)
-                                                  .collect(toList());
-                } catch (InstallerException e) {
-                    throw new InfrastructureException(e.getMessage(), e);
-                }
-
                 openshiftBootstrapperFactory.create(machine.getName(),
-                                                    identity,
-                                                    installers,
+                                                    getContext().getIdentity(),
+                                                    getContext().getMachineConfigs().get(machine.getName())
+                                                                .getInstallers(),
                                                     machine)
                                             .bootstrap();
 
@@ -62,6 +55,6 @@
             throw new InfrastructureException(e.getMessage(), e);
         }
 
-        LOG.info("Openshift Runtime for workspace {} started", identity.getWorkspaceId());
+        LOG.info("Openshift Runtime for workspace {} started", getContext().getIdentity().getWorkspaceId());
     }
 
