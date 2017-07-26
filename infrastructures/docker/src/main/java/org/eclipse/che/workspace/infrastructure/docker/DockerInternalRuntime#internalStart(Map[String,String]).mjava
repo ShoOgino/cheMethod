@@ -1,49 +1,50 @@
     @Override
     protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
         startSynchronizer.setStartThread();
-
-        DockerEnvironment dockerEnvironment = getContext().getDockerEnvironment();
-        Queue<String> startQueue = new ArrayDeque<>(getContext().getOrderedContainers());
+        Map<String, DockerContainerConfig> machineName2config = getContext().getDockerEnvironment().getContainers();
         try {
             networks.createNetwork(getContext().getDockerEnvironment().getNetwork());
 
-            boolean restore = isRestoreEnabled(startOptions);
-
-            String machineName = startQueue.peek();
-            while (machineName != null) {
-                DockerContainerConfig container = dockerEnvironment.getContainers().get(machineName);
+            final boolean restore = isRestoreEnabled(startOptions);
+            for (String machineName : getContext().getOrderedContainers()) {
+                checkInterruption();
+                final DockerContainerConfig config = machineName2config.get(machineName);
                 sendStartingEvent(machineName);
                 try {
                     if (restore) {
-                        restoreMachine(machineName, container);
+                        restoreMachine(machineName, config);
                     } else {
-                        startMachine(machineName, container);
+                        startMachine(machineName, config);
                     }
                     sendRunningEvent(machineName);
                 } catch (InfrastructureException e) {
                     sendFailedEvent(machineName, e.getMessage());
                     throw e;
                 }
-                startQueue.poll();
-                machineName = startQueue.peek();
             }
+            startSynchronizer.complete();
         } catch (InfrastructureException | InterruptedException | RuntimeException e) {
-            boolean interrupted = e instanceof InterruptedException || Thread.interrupted();
-            boolean runtimeDestroyingNeeded = !startSynchronizer.isStopCalled();
-            if (runtimeDestroyingNeeded) {
-                try {
-                    destroyRuntime(null);
-                } catch (Exception destExc) {
-                    LOG.error(destExc.getLocalizedMessage(), destExc);
-                }
+            boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+            try {
+                destroyRuntime(emptyMap());
+            } catch (InternalInfrastructureException destExc) {
+                LOG.error(destExc.getMessage(), destExc);
+            } catch (InfrastructureException ignore) {
             }
+
             if (interrupted) {
-                throw new InfrastructureException("Docker runtime start was interrupted");
+                final RuntimeStartInterruptedException ex =
+                        new RuntimeStartInterruptedException(getContext().getIdentity());
+                startSynchronizer.completeExceptionally(ex);
+                throw ex;
             }
-            if (e instanceof InfrastructureException) {
-                throw (InfrastructureException)e;
-            } else {
-                throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
+            startSynchronizer.completeExceptionally(e);
+            try {
+                throw e;
+            } catch (InfrastructureException rethrow) {
+                throw rethrow;
+            } catch (Exception wrap) {
+                throw new InternalInfrastructureException(e.getMessage(), wrap);
             }
         }
     }
