@@ -62,20 +62,31 @@
             if (remoteBranchRef == null) {
                 throw new GitException(format(ERROR_PULL_REF_MISSING, remoteBranch));
             }
-            org.eclipse.jgit.api.MergeResult mergeResult = getGit().merge().include(remoteBranchRef).call();
-            if (mergeResult.getMergeStatus().equals(org.eclipse.jgit.api.MergeResult.MergeStatus.ALREADY_UP_TO_DATE)) {
-                return newDto(PullResponse.class).withCommandOutput("Already up-to-date");
-            }
-
-            if (mergeResult.getConflicts() != null) {
-                StringBuilder message = new StringBuilder(ERROR_PULL_MERGE_CONFLICT_IN_FILES);
-                message.append(lineSeparator());
-                Map<String, int[][]> allConflicts = mergeResult.getConflicts();
-                for (String path : allConflicts.keySet()) {
-                    message.append(path).append(lineSeparator());
+            if (params.getRebase()) {
+                RebaseResult.Status status = getGit().rebase().setUpstream(remoteName + "/" + branch).call().getStatus();
+                if (status == UP_TO_DATE) {
+                    return newDto(PullResponse.class).withCommandOutput("Already up-to-date");
+                } else if (status == UNCOMMITTED_CHANGES) {
+                    throw new GitException(ERROR_PULL_UNCOMMITED_CHANGES);
+                } else if (status == STOPPED) {
+                    rebase(REBASE_OPERATION_ABORT, null);
+                    throw new GitException(ERROR_PULL_AUTO_REBASE_FAILED);
                 }
-                message.append(ERROR_PULL_AUTO_MERGE_FAILED);
-                throw new GitException(message.toString());
+            } else {
+                org.eclipse.jgit.api.MergeResult mergeResult = getGit().merge().include(remoteBranchRef).call();
+                if (mergeResult.getMergeStatus().equals(org.eclipse.jgit.api.MergeResult.MergeStatus.ALREADY_UP_TO_DATE)) {
+                    return newDto(PullResponse.class).withCommandOutput("Already up-to-date");
+                }
+                if (mergeResult.getConflicts() != null) {
+                    StringBuilder message = new StringBuilder(ERROR_PULL_MERGE_CONFLICT_IN_FILES);
+                    message.append(lineSeparator());
+                    Map<String, int[][]> allConflicts = mergeResult.getConflicts();
+                    for (String path : allConflicts.keySet()) {
+                        message.append(path).append(lineSeparator());
+                    }
+                    message.append(ERROR_PULL_AUTO_MERGE_FAILED);
+                    throw new GitException(message.toString());
+                }
             }
         } catch (CheckoutConflictException exception) {
             StringBuilder message = new StringBuilder(ERROR_CHECKOUT_CONFLICT);
