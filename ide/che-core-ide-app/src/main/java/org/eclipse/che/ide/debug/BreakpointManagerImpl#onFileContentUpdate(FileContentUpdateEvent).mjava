@@ -1,0 +1,39 @@
+    /**
+     * When source is downloaded then {@link FileContentUpdateEvent} will be generated.
+     * After that we have to wait {@link DocumentChangedEvent} to know when {@link TextEditor} will be updated.
+     */
+    private void onFileContentUpdate(FileContentUpdateEvent event) {
+        String filePath = event.getFilePath();
+        if (currentBreakpoint != null && currentBreakpoint.getPath().equals(filePath)) {
+
+            EditorPartPresenter editor = getEditorForFile(filePath);
+            if (editor instanceof TextEditor) {
+
+                final TextEditor textEditor = (TextEditor)editor;
+                textEditor.getDocument()
+                          .getDocumentHandle()
+                          .getDocEventBus()
+                          .addHandler(DocumentChangedEvent.TYPE, docChangedEvent -> {
+
+                              String changedFilePath = docChangedEvent.getDocument().getDocument().getFile().getLocation().toString();
+                              if (currentBreakpoint == null || !currentBreakpoint.getPath().equals(changedFilePath)) {
+                                  return;
+                              }
+
+                              BreakpointRenderer breakpointRenderer = getBreakpointRendererForEditor(editor);
+                              if (breakpointRenderer != null) {
+                                  breakpointRenderer.setLineActive(currentBreakpoint.getLineNumber(), false);
+                                  breakpointRenderer.setLineActive(currentBreakpoint.getLineNumber(), true);
+
+                                  new Timer() {
+                                      @Override
+                                      public void run() {
+                                          textEditor.setCursorPosition(new TextPosition(currentBreakpoint.getLineNumber() + 1, 0));
+                                      }
+                                  }.schedule(300);
+                              }
+                          });
+            }
+        }
+    }
+
