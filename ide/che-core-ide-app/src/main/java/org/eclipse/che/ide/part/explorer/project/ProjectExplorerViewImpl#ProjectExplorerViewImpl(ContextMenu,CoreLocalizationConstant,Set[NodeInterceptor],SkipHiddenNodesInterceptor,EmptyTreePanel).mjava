@@ -1,0 +1,43 @@
+    @Inject
+    public ProjectExplorerViewImpl(final ContextMenu contextMenu,
+                                   final CoreLocalizationConstant coreLocalizationConstant,
+                                   final Set<NodeInterceptor> nodeInterceptorSet,
+                                   final SkipHiddenNodesInterceptor skipHiddenNodesInterceptor,
+                                   final EmptyTreePanel emptyTreePanel) {
+        this.skipHiddenNodesInterceptor = skipHiddenNodesInterceptor;
+
+        setTitle(coreLocalizationConstant.projectExplorerTitleBarText());
+
+        NodeStorage nodeStorage = new NodeStorage();
+
+        NodeLoader nodeLoader = new NodeLoader(nodeInterceptorSet);
+        nodeLoader.getNodeInterceptors().add(skipHiddenNodesInterceptor);
+
+        tree = new Tree(nodeStorage, nodeLoader, new StatusWidget<Tree>(emptyTreePanel));
+        tree.setContextMenuInvocationHandler(new Tree.ContextMenuInvocationHandler() {
+            @Override
+            public void onInvokeContextMenu(int x, int y) {
+                contextMenu.show(x, y);
+            }
+        });
+
+        tree.getNodeStorage().addSortInfo(new StoreSortInfo(new NodeTypeComparator(), SortDir.ASC));
+        tree.getNodeStorage().addSortInfo(new StoreSortInfo(new Comparator<Node>() {
+            @Override
+            public int compare(Node o1, Node o2) {
+                if (o1 instanceof ResourceNode && o2 instanceof ResourceNode) {
+                    return ((ResourceNode)o1).compareTo((ResourceNode)o2);
+                }
+
+                return 0;
+            }
+        }, SortDir.ASC));
+
+        tree.setPresentationRenderer(new ProjectExplorerRenderer(tree.getTreeStyles()));
+        tree.ensureDebugId(PROJECT_TREE_WIDGET_ID);
+        tree.setAutoSelect(true);
+        tree.getNodeLoader().setUseCaching(false);
+
+        setContentWidget(tree);
+    }
+
