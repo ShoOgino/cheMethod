@@ -1,0 +1,50 @@
+    @Test
+    public void getMachinesResultShouldNotBeAffectedByFollowingModificationOfResultOfGetInternalMachines()
+            throws Exception {
+
+        // given
+        setRunningRuntime(new URLRewriter.NoOpURLRewriter());
+        String originMachineName = "exp_m";
+        String originServerName = "exp_s";
+        ServerStatus originServerStatus = ServerStatus.UNKNOWN;
+        String originServerUrl = "https://expected.url:1000";
+        Map<String, String> originProps = ImmutableMap.of("origProp1", "value1");
+        int initialPropsSize = originProps.size();
+        HashMap<String, MachineImpl> originInternalMachines = createMachines(originMachineName,
+                                                                             originProps,
+                                                                             originServerName,
+                                                                             originServerUrl,
+                                                                             originServerStatus);
+        int initialMachinesAmount = originInternalMachines.size();
+        int initialServersAmountInOriginMachine = originInternalMachines.get(originMachineName).getServers().size();
+
+        doReturn(originInternalMachines).when(internalRuntime).getInternalMachines();
+
+        // when
+        Map<String, ? extends Machine> actualMachines = internalRuntime.getMachines();
+        // verify that retrieved state is equal to the origin one
+        assertValues(actualMachines,
+                     initialMachinesAmount,
+                     originMachineName,
+                     initialPropsSize,
+                     initialServersAmountInOriginMachine,
+                     originServerName,
+                     originServerUrl,
+                     originServerStatus);
+
+        // modify origin machines
+        modifyMachines(originInternalMachines, originMachineName, originServerName);
+
+        // then
+        // ensure actual values retrieved from runtime
+        // are not changed automatically after changes in origin internal runtime
+        assertValues(actualMachines,
+                     initialMachinesAmount,
+                     originMachineName,
+                     initialPropsSize,
+                     initialServersAmountInOriginMachine,
+                     originServerName,
+                     originServerUrl,
+                     originServerStatus);
+    }
+

@@ -1,0 +1,35 @@
+    @Test
+    public void shouldAddAWarningInsteadOfAServerIfURLRewritingFailed() throws Exception {
+        // given
+        URLRewriter urlRewriter = spy(new URLRewriter.NoOpURLRewriter());
+        setRunningRuntime(urlRewriter);
+        Map<String, MachineImpl> expectedMachines = new HashMap<>();
+        Map<String, MachineImpl> internalMachines = new HashMap<>();
+        MachineImpl machine1 = createMachine();
+        MachineImpl machine2 = createMachine();
+        HashMap<String, ServerImpl> expectedServers = new HashMap<>(machine1.getServers());
+        String badServerName = "badServer";
+        String badServerURL = "ws://failing-rewriting:8000";
+        String badServerRewritingExcMessage = "test exc";
+        ServerImpl failingRewritingServer = createServer(badServerURL);
+        machine1.getServers().put(badServerName, failingRewritingServer);
+        internalMachines.put("m1", machine1);
+        internalMachines.put("m2", machine2);
+        expectedMachines.put("m1", new MachineImpl(machine1.getProperties(), expectedServers));
+        expectedMachines.put("m2", machine2);
+        List<WarningImpl> expectedWarnings = new ArrayList<>();
+        expectedWarnings.add(
+                new WarningImpl(101, "Malformed URL for " + badServerName + " : " + badServerRewritingExcMessage));
+        doReturn(internalMachines).when(internalRuntime).getInternalMachines();
+        doThrow(new InfrastructureException(badServerRewritingExcMessage))
+                .when(urlRewriter).rewriteURL(any(RuntimeIdentity.class), anyString(), eq(badServerURL));
+
+        // when
+        Map<String, ? extends Machine> actualMachines = internalRuntime.getMachines();
+        List<? extends Warning> actualWarnings = internalRuntime.getWarnings();
+
+        // then
+        assertEquals(actualMachines, expectedMachines);
+        assertEquals(actualWarnings, expectedWarnings);
+    }
+
