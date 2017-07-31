@@ -3,36 +3,13 @@
         final int libId = location.getExternalResourceId();
         final Path projectPath = new Path(location.getResourceProjectPath());
 
-        service.getEntry(projectPath, libId, className)
-               .then(new Operation<JarEntry>() {
-                   @Override
-                   public void apply(final JarEntry jarEntry) throws OperationException {
-                       final JarFileNode file = nodeFactory.newJarFileNode(jarEntry, libId, projectPath, null);
-                       AsyncCallback<VirtualFile> downloadSourceCallback = new AsyncCallback<VirtualFile>() {
-                           @Override
-                           public void onSuccess(final VirtualFile result) {
-                               if (file.isContentGenerated()) {
-                                   handleContentGeneratedResource(file, location, callback);
-                               } else {
-                                   handleActivatedFile(file, callback, location.getLineNumber());
-                               }
-                           }
-
-                           @Override
-                           public void onFailure(Throwable caught) {
-                               callback.onFailure(caught);
-                           }
-                       };
-
-                       handleActivatedFile(file, downloadSourceCallback, location.getLineNumber());
-                       editorAgent.openEditor(file);
-                   }
-               })
-               .catchError(new Operation<PromiseError>() {
-                   @Override
-                   public void apply(PromiseError arg) throws OperationException {
-                       callback.onFailure(arg.getCause());
-                   }
-               });
+        javaNavigationService.getEntry(projectPath, libId, className)
+                             .then(jarEntry -> {
+                                 final JarFileNode file = nodeFactory.newJarFileNode(jarEntry, libId, projectPath, null);
+                                 openFileAndScrollToLine(file, location.getLineNumber(), callback);
+                             })
+                             .catchError(error -> {
+                                 callback.onFailure(error.getCause());
+                             });
     }
 
