@@ -1,0 +1,27 @@
+    protected void searchSource(final Location location, final AsyncCallback<VirtualFile> callback) {
+        appContext.getWorkspaceRoot().search(getPath(location), "").then(new Operation<Resource[]>() {
+            @Override
+            public void apply(Resource[] resources) throws OperationException {
+                if (resources.length == 0) {
+                    callback.onFailure(new IllegalArgumentException(location + " not found."));
+                    return;
+                }
+
+                appContext.getWorkspaceRoot().getFile(resources[0].getLocation()).then(new Operation<Optional<File>>() {
+                    @Override
+                    public void apply(Optional<File> file) throws OperationException {
+                        if (file.isPresent()) {
+                            openFileAndScrollToLine(file.get(), location.getLineNumber(), callback);
+                        } else {
+                            callback.onFailure(new IllegalArgumentException(location + " not found."));
+                        }
+                    }
+                }).catchError(error -> {
+                    callback.onFailure(new IllegalArgumentException(location + " not found."));
+                });
+            }
+        }).catchError(error -> {
+            callback.onFailure(new IllegalArgumentException(location + " not found."));
+        });
+    }
+
