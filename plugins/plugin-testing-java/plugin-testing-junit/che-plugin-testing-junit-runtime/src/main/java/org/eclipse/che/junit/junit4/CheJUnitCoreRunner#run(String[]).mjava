@@ -7,21 +7,30 @@
      *         (for example full.qualified.ClassName#methodName)
      */
     public void run(String[] suites) {
-        Request request = TestRunnerUtil.buildRequest(suites);
-        if (request == null) {
+        createListener();
+
+        List<JUnit4TestReference> newSuites = TestRunnerUtil.createTestReferences(suites);
+
+        if (newSuites.isEmpty()) {
             TestingMessageHelper.reporterAttached(System.out);
-            System.err.print("No test found to run.");
-        } else {
-            Runner runner = request.getRunner();
-            Description description = runner.getDescription();
-
-            if (cheJUnitTestListener != null) {
-                cheJUnitTestListener.suiteTreeStarted(description);
-                cheJUnitTestListener.suiteSendTree(description);
-                cheJUnitTestListener.suiteTreeEnded(description);
-            }
-
-            super.run(request);
+            return;
         }
+
+        RunNotifier runNotifier = new RunNotifier();
+        runNotifier.addListener(new JUnitExecutionListener(cheJUnitTestListener));
+        cheJUnitTestListener.testRunStarted();
+
+        for (JUnit4TestReference jUnit4TestReference : newSuites) {
+            jUnit4TestReference.sendTree(cheJUnitTestListener);
+        }
+
+        Result result = new Result();
+        final RunListener listener = result.createListener();
+        runNotifier.addListener(listener);
+
+        for (JUnit4TestReference testReference : newSuites) {
+            testReference.run(runNotifier);
+        }
+        runNotifier.fireTestRunFinished(result);
     }
 
