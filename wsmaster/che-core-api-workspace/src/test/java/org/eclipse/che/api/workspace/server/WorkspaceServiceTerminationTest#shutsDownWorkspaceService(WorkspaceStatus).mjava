@@ -1,0 +1,20 @@
+    @Test(dataProvider = "workspaceStoppedOnTerminationStatuses", timeOut = 1000L)
+    public void shutsDownWorkspaceService(WorkspaceStatus status) throws Exception {
+        String workspaceId = "workspace123";
+
+        AtomicBoolean isAnyRunning = new AtomicBoolean(true);
+        when(workspaceRuntimes.isAnyRunning()).thenAnswer(inv -> isAnyRunning.get());
+
+        // one workspace is running
+        when(workspaceRuntimes.getRuntimesIds()).thenReturn(Collections.singleton(workspaceId));
+        when(workspaceRuntimes.getStatus(workspaceId)).thenReturn(status);
+
+        // once stopped change the flag
+        doAnswer(inv -> { isAnyRunning.set(false); return null; })
+                .when(workspaceManager)
+                .stopWorkspace("workspace123", Collections.emptyMap());
+
+        // do the actual termination
+        termination.terminate();
+    }
+
