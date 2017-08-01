@@ -8,28 +8,17 @@
         }
 
         if (!connected) {
-            terminalHolder.getInitializerPromise().then(new Operation<Void>() {
-                @Override
-                public void apply(Void arg) throws OperationException {
-                    final Optional<ServerImpl> terminalServer = machine.getServerByName(TERMINAL_REFERENCE);
-
-                    if (terminalServer.isPresent()) {
-                        final String terminalServerURL = terminalServer.get().getUrl();
-                        // TODO (spi ide): remove path when it comes with URL
-                        connectToTerminalWebSocket(terminalServerURL.replaceFirst("http", "ws") + "/pty");
-                    } else {
-                        throw new OperationException("Machine " + machine.getName() + " doesn't provide terminal server.");
-                    }
-                }
-            }).catchError(new Operation<PromiseError>() {
-                @Override
-                public void apply(PromiseError arg) throws OperationException {
-                    notificationManager.notify(locale.failedToConnectTheTerminal(),
-                                               locale.terminalCanNotLoadScript(),
-                                               FAIL,
-                                               NOT_EMERGE_MODE);
-                    reconnect();
-                }
+            terminalHolder.getInitializerPromise().then(aVoid -> {
+                ServerImpl terminalServer = machine.getServerByName(SERVER_TERMINAL_REFERENCE)
+                                                   .orElseThrow(() -> new OperationException("Machine " + machine.getName() +
+                                                                                             " doesn't provide terminal server."));
+                connectToTerminal(terminalServer.getUrl());
+            }).catchError(arg -> {
+                notificationManager.notify(locale.failedToConnectTheTerminal(),
+                                           locale.terminalCanNotLoadScript(),
+                                           FAIL,
+                                           NOT_EMERGE_MODE);
+                reconnect();
             });
         }
     }
