@@ -1,17 +1,25 @@
     @Override
     public void onPreviewSsh(String machineId) {
         ProcessTreeNode machineTreeNode = findTreeNodeById(machineId);
-        if (machineTreeNode == null) {
+        if (machineTreeNode == null || machineTreeNode.getType() != MACHINE_NODE) {
             return;
         }
 
-        MachineImpl machine = (MachineImpl)machineTreeNode.getData();
+        String machineName = (String)machineTreeNode.getData();
+        RuntimeImpl runtime = appContext.getWorkspace().getRuntime();
+        if (runtime == null) {
+            return;
+        }
+
+        Optional<MachineImpl> machine = runtime.getMachineByName(machineName);
+        if (!machine.isPresent()) {
+            return;
+        }
 
         final OutputConsole defaultConsole = commandConsoleFactory.create("SSH");
         addCommandOutput(machineId, defaultConsole);
 
-        final String machineName = machine.getName();
-        String sshServiceAddress = getSshServerAddress(machine);
+        String sshServiceAddress = getSshServerAddress(machine.get());
         final String machineHost;
         final String sshPort;
         if (sshServiceAddress != null) {
@@ -25,7 +33,7 @@
 
         // user
         final String userName;
-        String user = machine.getProperties().get("config.user");
+        String user = machine.get().getProperties().get("config.user");
         if (isNullOrEmpty(user)) {
             userName = "root";
         } else {
