@@ -1,0 +1,22 @@
+    private List<Service> getMatchedServices() {
+        Pod pod = getPod();
+        Container container = pod.getSpec()
+                                 .getContainers()
+                                 .stream()
+                                 .filter(c -> containerName.equals(c.getName()))
+                                 .findAny()
+                                 .orElseThrow(
+                                         () -> new IllegalStateException("Corresponding pod for OpenShift machine doesn't exist."));
+
+        try (OpenShiftClient client = clientFactory.create()) {
+            return client.services()
+                         .inNamespace(projectName)
+                         .list()
+                         .getItems()
+                         .stream()
+                         .filter(service -> isExposedByService(pod, service))
+                         .filter(service -> isExposedByService(container, service))
+                         .collect(Collectors.toList());
+        }
+    }
+

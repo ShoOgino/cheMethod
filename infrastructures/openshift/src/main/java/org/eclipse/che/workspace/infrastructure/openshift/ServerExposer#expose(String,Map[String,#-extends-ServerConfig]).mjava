@@ -1,0 +1,33 @@
+    /**
+     * Exposes specified servers.
+     *
+     * @param namePrefix
+     *         name prefix that will be used for generated objects
+     * @param servers
+     *         servers to expose
+     */
+    public void expose(String namePrefix, Map<String, ? extends ServerConfig> servers) {
+        Map<String, ServicePort> portToServicePort = exposePort(servers.values());
+
+        Service service = new ServiceBuilder().withName(namePrefix + machineName)
+                                              .withSelectorEntry(CHE_POD_NAME_LABEL, machineName.split("/")[0])
+                                              .withPorts(new ArrayList<>(portToServicePort.values()))
+                                              .build();
+
+        openShiftEnvironment.getServices().put(service.getMetadata().getName(), service);
+
+        for (Map.Entry<String, ? extends ServerConfig> serverEntry : servers.entrySet()) {
+            String serverName = serverEntry.getKey();
+            ServerConfig serverConfig = serverEntry.getValue();
+            ServicePort servicePort = portToServicePort.get(serverConfig.getPort());
+
+            //TODO 1 route for 1 service port could be enough. Implement it in scope of //TODO https://github.com/eclipse/che/issues/5688
+            Route route = new RouteBuilder().withName(namePrefix + "-" + machineName + "-" + serverName)
+                                            .withTargetPort(servicePort.getName())
+                                            .withServer(serverName, serverConfig)
+                                            .withTo(service.getMetadata().getName())
+                                            .build();
+            openShiftEnvironment.getRoutes().put(route.getMetadata().getName(), route);
+        }
+    }
+

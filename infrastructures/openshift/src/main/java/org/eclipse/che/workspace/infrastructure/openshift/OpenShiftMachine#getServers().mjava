@@ -2,65 +2,29 @@
     public Map<String, ? extends Server> getServers() {
         //TODO https://github.com/eclipse/che/issues/5688
         try (OpenShiftClient client = clientFactory.create()) {
-            //TODO Explore maybe it is possible to request required service by field selector
-            List<Service> matchedServices = client.services()
-                                                  .inNamespace(projectName)
-                                                  .list()
-                                                  .getItems()
-                                                  .stream()
-                                                  .filter(this::isMachineExposedByService)
-                                                  .collect(Collectors.toList());
-
-
-            //check matching by container
-            Container cointaner = getContainer();
-            ArrayListMultimap<String, ServicePort> matchedServicesPorts = ArrayListMultimap.create();
-            for (ContainerPort containerPort : cointaner.getPorts()) {
-                Integer port = containerPort.getContainerPort();
-
-                for (Service service : matchedServices) {
-                    for (ServicePort servicePort : service.getSpec().getPorts()) {
-                        if (port.equals(servicePort.getPort())) {
-                            // container is accessible via this service
-                            matchedServicesPorts.put(service.getMetadata().getName(), servicePort);
-                        }
-                    }
-                }
-            }
+            Set<String> matchedServices = getMatchedServices().stream()
+                                                              .map(s -> s.getMetadata().getName())
+                                                              .collect(Collectors.toSet());
 
             List<Route> routes = client.routes()
                                        .inNamespace(projectName)
                                        .list()
                                        .getItems();
+
             Map<String, ServerImpl> servers = new HashMap<>();
             for (Route route : routes) {
-                String serviceName = route.getSpec().getTo().getName();
-                List<ServicePort> servicePorts = matchedServicesPorts.get(serviceName);
-                if (servicePorts != null) {
-                    RoutePort routePort = route.getSpec().getPort();
-                    for (ServicePort servicePort : servicePorts) {
-                        String portReference = routePort.getTargetPort().getStrVal();
-                        if (portReference != null) {
-                            if (portReference.equals(servicePort.getName())) {
-                                servers.put(portReference, new ServerImpl("http://" + route.getSpec().getHost(),
-                                                                          ServerStatus.UNKNOWN));
-                            }
-                            continue;
-                        }
-
-                        Integer portNumber = routePort.getTargetPort().getIntVal();
-                        if (portNumber != null) {
-                            if (portNumber.equals(servicePort.getPort())) {
-                                servers.put(Integer.toString(portNumber),
-                                            new ServerImpl("http://" + route.getSpec().getHost(),
-                                                           ServerStatus.UNKNOWN));
-                            }
-                            continue;
-                        }
+                if (matchedServices.contains(route.getSpec().getTo().getName())) {
+                    Map<String, String> annotations = route.getMetadata().getAnnotations();
+                    String serverName = annotations.get(CHE_SERVER_NAME_ANNOTATION);
+                    String serverPath = annotations.get(CHE_SERVER_PATH_ANNOTATION);
+                    String serverProtocol = annotations.get(CHE_SERVER_PROTOCOL_ANNOTATION);
+                    if (serverName != null) {
+                        servers.put(serverName,
+                                    //TODO Fix server status https://github.com/eclipse/che/issues/5689
+                                    new ServerImpl(serverProtocol + "://" + route.getSpec().getHost() + serverPath, ServerStatus.RUNNING));
                     }
                 }
             }
-
             return servers;
         }
     }
