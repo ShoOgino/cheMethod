@@ -1,32 +1,28 @@
     void parse() {
-        if (getFile() instanceof Resource) {
-            final Optional<Project> project = ((Resource)getFile()).getRelatedProject();
+        VirtualFile file = getFile();
+        Project project = getProject(file);
+        if (project == null) {
+            return;
+        }
 
-            if (!project.isPresent()) {
+        String fqn = resolveFQN(file);
+        String projectPath = project.getPath();
+
+        client.reconcile(fqn, projectPath).onSuccess(reconcileResult -> {
+            if (isProjectResolving()) {
+                disableReconciler(localizationConstant.codeAssistErrorMessageResolvingProject());
+                return;
+            } else {
+                codeAssistProcessor.enableCodeAssistant();
+            }
+
+            if (reconcileResult == null) {
                 return;
             }
 
-            String fqn = JavaUtil.resolveFQN(getFile());
-            String projectPath = project.get().getLocation().toString();
-
-            client.reconcile(fqn, projectPath).onSuccess(reconcileResult -> {
-                if (isProjectResolving()) {
-                    disableReconciler(localizationConstant.codeAssistErrorMessageResolvingProject());
-                    return;
-                } else {
-                    codeAssistProcessor.enableCodeAssistant();
-                }
-
-                if (reconcileResult == null) {
-                    return;
-                }
-
-                doReconcile(reconcileResult.getProblems());
-                highlighter.reconcile(reconcileResult.getHighlightedPositions());
-                eventBus.fireEvent(new JavaReconsilerEvent(editor));
-            }).onFailure(jsonRpcError -> {
-                Log.info(getClass(), jsonRpcError.getMessage());
-            });
-        }
+            doReconcile(reconcileResult.getProblems());
+            highlighter.reconcile(reconcileResult.getHighlightedPositions());
+            eventBus.fireEvent(new JavaReconsilerEvent(editor));
+        }).onFailure(jsonRpcError -> Log.info(getClass(), jsonRpcError.getMessage()));
     }
 
