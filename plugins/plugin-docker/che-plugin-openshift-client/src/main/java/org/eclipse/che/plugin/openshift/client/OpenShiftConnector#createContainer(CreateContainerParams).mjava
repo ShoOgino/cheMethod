@@ -43,10 +43,12 @@
                                                           openShiftCheProjectName,
                                                           imageStreamTagPullSpec);
 
-        Set<String> containerExposedPorts = createContainerParams.getContainerConfig().getExposedPorts().keySet();
-        Set<String> imageExposedPorts = inspectImage(InspectImageParams.create(imageForDocker))
-                                                    .getConfig().getExposedPorts().keySet();
-        Set<String> exposedPorts = getExposedPorts(containerExposedPorts, imageExposedPorts);
+        ContainerConfig containerConfig = createContainerParams.getContainerConfig();
+        ImageConfig imageConfig = inspectImage(InspectImageParams.create(imageForDocker)).getConfig();
+
+        final Set<String> exposedPorts = getExposedPorts(containerConfig, imageConfig);
+        final Map<String, String> labels = getLabels(containerConfig, imageConfig);
+        Map<String, String> portsToRefName = getPortsToRefName(labels, exposedPorts);
 
         String[] envVariables = createContainerParams.getContainerConfig().getEnv();
         String[] volumes = createContainerParams.getContainerConfig().getHostConfig().getBinds();
@@ -90,11 +92,12 @@
         String containerID;
         OpenShiftClient openShiftClient = new DefaultOpenShiftClient();
         try {            
-            createOpenShiftService(deploymentName, serviceName, exposedPorts, additionalLabels, endpointAliases);
+            createOpenShiftService(deploymentName, serviceName, exposedPorts, portsToRefName, additionalLabels, endpointAliases);
             createOpenShiftDeployment(deploymentName,
                                                 dockerPullSpec,
                                                 containerName,
                                                 exposedPorts,
+                                                portsToRefName,
                                                 envVariables,
                                                 volumes,
                                                 resourceLimits,
