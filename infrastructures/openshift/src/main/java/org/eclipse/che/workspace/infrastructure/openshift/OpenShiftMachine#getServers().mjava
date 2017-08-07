@@ -1,0 +1,31 @@
+    @Override
+    public Map<String, ? extends Server> getServers() {
+        //TODO https://github.com/eclipse/che/issues/5688
+        try (OpenShiftClient client = clientFactory.create()) {
+            Set<String> matchedServices = getMatchedServices().stream()
+                                                              .map(s -> s.getMetadata().getName())
+                                                              .collect(Collectors.toSet());
+
+            List<Route> routes = client.routes()
+                                       .inNamespace(projectName)
+                                       .list()
+                                       .getItems();
+
+            Map<String, ServerImpl> servers = new HashMap<>();
+            for (Route route : routes) {
+                if (matchedServices.contains(route.getSpec().getTo().getName())) {
+                    Map<String, String> annotations = route.getMetadata().getAnnotations();
+                    String serverName = annotations.get(CHE_SERVER_NAME_ANNOTATION);
+                    String serverPath = annotations.get(CHE_SERVER_PATH_ANNOTATION);
+                    String serverProtocol = annotations.get(CHE_SERVER_PROTOCOL_ANNOTATION);
+                    if (serverName != null) {
+                        servers.put(serverName,
+                                    //TODO Fix server status https://github.com/eclipse/che/issues/5689
+                                    new ServerImpl(serverProtocol + "://" + route.getSpec().getHost() + serverPath, ServerStatus.RUNNING));
+                    }
+                }
+            }
+            return servers;
+        }
+    }
+
