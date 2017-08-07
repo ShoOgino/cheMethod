@@ -40,22 +40,27 @@
 
             for (OpenShiftMachine machine : machines.values()) {
                 machine.waitRunning(machineStartTimeoutMin);
-
-                bootstrapperFactory.create(machine.getName(),
-                                           getContext().getIdentity(),
-                                           getContext().getMachineConfigs().get(machine.getName())
-                                                                .getInstallers(),
+                final String machineName = machine.getName();
+                bootstrapperFactory.create(getContext().getIdentity(),
+                                           getContext().getMachineConfigs()
+                                                       .get(machineName)
+                                                       .getInstallers(),
                                            machine)
                                    .bootstrap();
 
+                ServersReadinessChecker check = new ServersReadinessChecker(machineName,
+                                                                            machine.getServers(),
+                                                                            serverCheckerFactory);
+                check.startAsync(new ServerReadinessHandler(machineName));
+                check.await();
                 sendRunningEvent(machine.getName());
             }
         } catch (RuntimeException | InterruptedException e) {
-            //TODO Openshift client throws runtime exception investigate what should be mapped to InternalInfrastructureException
+            //TODO OpenShift client throws runtime exception investigate what should be mapped to InternalInfrastructureException
             LOG.error("Failed to start of openshift runtime. " + e.getMessage(), e);
             throw new InfrastructureException(e.getMessage(), e);
         }
 
-        LOG.info("Openshift Runtime for workspace {} started", getContext().getIdentity().getWorkspaceId());
+        LOG.info("OpenShift Runtime for workspace {} started", getContext().getIdentity().getWorkspaceId());
     }
 
