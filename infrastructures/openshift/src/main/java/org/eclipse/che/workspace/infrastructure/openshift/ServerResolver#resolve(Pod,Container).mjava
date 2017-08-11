@@ -1,0 +1,27 @@
+    /**
+     * Resolves servers by the specified container in the pod.
+     *
+     * @param pod
+     *         pod that should be matched by services
+     * @param container
+     *         container that expose ports for services
+     * @return resolved servers
+     */
+    public Map<String, ServerImpl> resolve(Pod pod, Container container) {
+        Set<String> matchedServices = getMatchedServices(pod, container).stream()
+                                                                        .map(s -> s.getMetadata().getName())
+                                                                        .collect(Collectors.toSet());
+        Map<String, ServerImpl> servers = new HashMap<>();
+        for (Route route : routes) {
+            if (matchedServices.contains(route.getSpec().getTo().getName())) {
+                RoutesAnnotations.newDeserializer(route.getMetadata().getAnnotations())
+                                 .servers()
+                                 .forEach((name, config) -> servers.put(name,
+                                                                        new ServerImpl(config.getProtocol() + "://"
+                                                                                       + route.getSpec().getHost() + config.getPath(),
+                                                                                       ServerStatus.UNKNOWN)));
+            }
+        }
+        return servers;
+    }
+

@@ -9,7 +9,7 @@
     public void expose(String namePrefix, Map<String, ? extends ServerConfig> servers) {
         Map<String, ServicePort> portToServicePort = exposePort(servers.values());
 
-        Service service = new ServiceBuilder().withName(namePrefix + machineName)
+        Service service = new ServiceBuilder().withName(namePrefix + '-' + machineName)
                                               .withSelectorEntry(CHE_POD_NAME_LABEL, machineName.split("/")[0])
                                               .withPorts(new ArrayList<>(portToServicePort.values()))
                                               .build();
@@ -18,15 +18,13 @@
 
 
         for (ServicePort servicePort : portToServicePort.values()) {
-            Map<String, ? extends ServerConfig> routesServers = servers.entrySet()
-                                                                       .stream()
-                                                                       .filter(e -> {
-                                                                           String port = e.getValue().getPort();
-                                                                           return Integer.parseInt(port.split("/")[0]) == servicePort.getTargetPort().getIntVal();
-                                                                       })
-                                                                       .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            int port = servicePort.getTargetPort().getIntVal();
+            Map<String, ServerConfig> routesServers = servers.entrySet()
+                                                             .stream()
+                                                             .filter(e -> parseInt(e.getValue().getPort().split("/")[0]) == port)
+                                                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-            Route route = new RouteBuilder().withName(namePrefix + "-" + machineName + "-" + servicePort.getName())
+            Route route = new RouteBuilder().withName(namePrefix + '-' + machineName + '-' + servicePort.getName())
                                             .withTargetPort(servicePort.getName())
                                             .withServers(routesServers)
                                             .withTo(service.getMetadata().getName())

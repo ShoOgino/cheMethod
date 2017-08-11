@@ -1,76 +1,35 @@
     @Override
     protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
-        String projectName = getContext().getIdentity().getWorkspaceId();
+        try {
+            project.cleanUp();
 
-        try (OpenShiftClient client = clientFactory.create()) {
-            prepareOpenShiftProject(projectName);
-            prepareOpenShiftPVCs(getContext().getOpenShiftEnvironment(), projectName);
+            prepareOpenShiftPVCs(getContext().getOpenShiftEnvironment().getPersistentVolumeClaims());
 
-            LOG.info("Creating services from environment");
+            List<Service> createdServices = new ArrayList<>();
             for (Service service : getContext().getOpenShiftEnvironment().getServices().values()) {
-                client.services()
-                      .inNamespace(projectName)
-                      .create(service);
+                createdServices.add(project.services().create(service));
             }
 
-            LOG.info("Creating routes from environment");
+            List<Route> createdRoutes = new ArrayList<>();
             for (Route route : getContext().getOpenShiftEnvironment().getRoutes().values()) {
-                client.routes()
-                      .inNamespace(projectName)
-                      .create(route);
+                createdRoutes.add(project.routes().create(route));
             }
 
-            List<Service> services = client.services()
-                                           .inNamespace(projectName)
-                                           .list()
-                                           .getItems();
+            ServerResolver serverResolver = ServerResolver.of(createdServices, createdRoutes);
 
-            List<Route> routes = client.routes()
-                                       .inNamespace(projectName)
-                                       .list()
-                                       .getItems();
-
-            LOG.info("Creating pods from environment");
             for (Pod toCreate : getContext().getOpenShiftEnvironment().getPods().values()) {
-                Pod createdPod = client.pods()
-                                       .inNamespace(projectName)
-                                       .create(toCreate);
-
+                Pod createdPod = project.pods().create(toCreate);
                 for (Container container : createdPod.getSpec().getContainers()) {
-                    Map<String, ServerImpl> servers = new HashMap<>();
-                    Set<String> matchedServices = ServiceMatcher.from(services)
-                                                                .match(createdPod, container)
-                                                                .stream()
-                                                                .map(s -> s.getMetadata().getName())
-                                                                .collect(Collectors.toSet());
-                    for (Route route : routes) {
-                        if (matchedServices.contains(route.getSpec().getTo().getName())) {
-                            RoutesAnnotations.newDeserializer(route.getMetadata().getAnnotations())
-                                             .servers()
-                                             .entrySet()
-                                             .forEach(e -> {
-                                                 String name = e.getKey();
-                                                 ServerConfig config = e.getValue();
-                                                 servers.put(name, new ServerImpl(
-                                                         config.getProtocol() + "://" + route.getSpec().getHost() + config.getPath(),
-                                                         ServerStatus.UNKNOWN));
-                                             });
-                        }
-                    }
-
-                    OpenShiftMachine machine = new OpenShiftMachine(clientFactory,
-                                                                    projectName,
-                                                                    createdPod.getMetadata().getName(),
+                    OpenShiftMachine machine = new OpenShiftMachine(createdPod.getMetadata().getName(),
                                                                     container.getName(),
-                                                                    servers);
-
+                                                                    serverResolver.resolve(createdPod, container),
+                                                                    project);
                     machines.put(machine.getName(), machine);
                     sendStartingEvent(machine.getName());
                 }
             }
 
-            LOG.info("Waiting until pods created by deployment configs become available and bootstrapping them");
-
+            //TODO Rework it to parallel waiting
             for (OpenShiftMachine machine : machines.values()) {
                 machine.waitRunning(machineStartTimeoutMin);
                 final String machineName = machine.getName();
@@ -89,11 +48,9 @@
                 sendRunningEvent(machine.getName());
             }
         } catch (RuntimeException | InterruptedException e) {
-            //TODO OpenShift client throws runtime exception investigate what should be mapped to InternalInfrastructureException
-            LOG.error("Failed to start of openshift runtime. " + e.getMessage(), e);
+            LOG.error("Failed to start of OpenShift runtime. " + e.getMessage(), e);
+            project.cleanUp();
             throw new InfrastructureException(e.getMessage(), e);
         }
-
-        LOG.info("OpenShift Runtime for workspace {} started", getContext().getIdentity().getWorkspaceId());
     }
 
