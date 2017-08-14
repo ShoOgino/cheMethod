@@ -1,22 +1,21 @@
-    public void apply(RuntimeIdentity identity,
-                      Environment envConfig,
-                      OpenShiftEnvironment environment) throws InfrastructureException {
-        for (Pod pod : environment.getPods().values()) {
+    @Override
+    public void provision(EnvironmentImpl environment,
+                          OpenShiftEnvironment osEnv,
+                          RuntimeIdentity identity) throws InfrastructureException {
+        for (Pod pod : osEnv.getPods().values()) {
             String podName = pod.getMetadata().getName();
             for (Container container : pod.getSpec().getContainers()) {
                 String containerName = container.getName();
                 String machineName = podName + "/" + containerName;
-                MachineConfig machineConf = envConfig.getMachines().get(machineName);
+                MachineConfig machineConf = environment.getMachines().get(machineName);
 
                 List<String> installers = machineConf.getInstallers();
                 Map<String, ServerConfig> name2Server = new HashMap<>();
-                for (String installerId : installers) {
-                    Installer installer = getInstaller(installerId);
+                for (Installer installer : getInstallers(installers)) {
                     provisionEnv(container, installer.getProperties());
                     name2Server.putAll(installer.getServers());
                 }
-
-                ServerExposer serverExposer = new ServerExposer(machineName, container, environment);
+                ServerExposer serverExposer = new ServerExposer(machineName, container, osEnv);
                 serverExposer.expose("agents", name2Server);
 
                 // CHE_API is used by installers for agent binary downloading
@@ -24,7 +23,7 @@
                 container.getEnv().add(new EnvVar("CHE_API", cheServerEndpoint, null));
 
                 // WORKSPACE_ID is required only by workspace agent
-                if (installers.contains("org.eclipse.che.ws-agent")) {
+                if (Utils.isDev(machineConf)) {
                     container.getEnv().removeIf(env -> "CHE_WORKSPACE_ID".equals(env.getName()));
                     container.getEnv().add(new EnvVar("CHE_WORKSPACE_ID", identity.getWorkspaceId(), null));
                 }
