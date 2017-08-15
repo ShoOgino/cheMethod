@@ -1,23 +1,41 @@
     @Override
     public ProfileImpl getById(String userId) throws NotFoundException, ServerException {
         requireNonNull(userId, "Required non-null id");
-        try {
-            URL url = new URL(authServerUrl + "/realms/" + realm + "/protocol/openid-connect/userinfo");
-            HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "bearer " + EnvironmentContext.getCurrent().getSubject().getToken());
-            try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-                ObjectMapper mapper = new ObjectMapper();
-                //noinspection unchecked
-                Map<String, String> profileAttributes =  mapper.readValue(in, Map.class);
-                if (!userId.equals(profileAttributes.get("sub"))) {
-                    throw new ServerException("Requested user id does not match with actual.");
+        if (userId.equals(EnvironmentContext.getCurrent().getSubject().getUserId())) {
+            // Retrieving own profile
+            try {
+                URL url = new URL(authServerUrl + "/realms/" + realm + "/protocol/openid-connect/userinfo");
+                HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Authorization", "bearer " + EnvironmentContext.getCurrent().getSubject().getToken());
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    //noinspection unchecked
+                    Map<String, String> profileAttributes = mapper.readValue(in, Map.class);
+                    return new ProfileImpl(userId, profileAttributes);
                 }
-                return new ProfileImpl(userId, profileAttributes);
+            } catch (IOException e) {
+                LOG.error("Exception during retrieval of the Keycloak user profile", e);
+                throw new ServerException("Exception during retrieval of the Keycloak user profile", e);
             }
-        } catch (IOException e) {
-            LOG.error("Exception during retrieval of the Keycloak user profile", e);
-            throw new ServerException("Exception during retrieval of the Keycloak user profile", e);
+        } else {
+            // Admin service
+            // http://172.17.0.1:5050/auth/admin/realms/che/users/4959eda6-4286-4f39-92e2-42ffdfb4849d
+            try {
+                URL url = new URL(authServerUrl + "/admin/realms/" + realm + "/users/" + userId);
+                HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Authorization", "bearer " + EnvironmentContext.getCurrent().getSubject().getToken());
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    //noinspection unchecked
+                    UserRepresentation user = mapper.readValue(in, UserRepresentation.class);
+                    return new ProfileImpl(userId, toAttributes(user));
+                }
+            } catch (IOException e) {
+                LOG.error("Exception during retrieval of the Keycloak user profile", e);
+                throw new ServerException("Exception during retrieval of the Keycloak user profile", e);
+            }
         }
     }
 
