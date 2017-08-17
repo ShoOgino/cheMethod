@@ -1,0 +1,72 @@
+    private void createOpenShiftDeployment(String deploymentName,
+                                             String imageName,
+                                             String sanitizedContainerName,
+                                             Set<String> exposedPorts,
+                                             Map<String, String> portsToRefName,
+                                             String[] envVariables,
+                                             String[] volumes,
+                                             Map<String, Quantity> resourceLimits,
+                                             Map<String, Quantity> resourceRequests) throws OpenShiftException {
+
+        LOG.info("Creating OpenShift deployment {}", deploymentName);
+
+        Map<String, String> selector = Collections.singletonMap(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
+
+        LOG.info("Adding container {} to OpenShift deployment {}", sanitizedContainerName, deploymentName);
+
+        if (createWorkspaceDirs) {
+            createWorkspaceDir(volumes);
+        }
+
+        Container container = new ContainerBuilder()
+                                    .withName(sanitizedContainerName)
+                                    .withImage(imageName)
+                                    .withEnv(KubernetesEnvVar.getEnvFrom(envVariables))
+                                    .withPorts(KubernetesContainer.getContainerPortsFrom(exposedPorts, portsToRefName))
+                                    .withImagePullPolicy(OPENSHIFT_IMAGE_PULL_POLICY_IFNOTPRESENT)
+                                    .withNewSecurityContext()
+                                        .withPrivileged(false)
+                                    .endSecurityContext()
+                                    .withLivenessProbe(getLivenessProbeFrom(exposedPorts))
+                                    .withVolumeMounts(getVolumeMountsFrom(volumes))
+                                    .withNewResources()
+                                        .withLimits(resourceLimits)
+                                        .withRequests(resourceRequests)
+                                    .endResources()
+                                    .build();
+
+        PodSpec podSpec = new PodSpecBuilder()
+                                 .withContainers(container)
+                                 .withVolumes(getVolumesFrom(volumes))
+                                 .withTerminationGracePeriodSeconds(OPENSHIFT_POD_TERMINATION_GRACE_PERIOD)
+                                 .build();
+
+        Deployment deployment = new DeploymentBuilder()
+                .withNewMetadata()
+                    .withName(deploymentName)
+                    .withNamespace(this.openShiftCheProjectName)
+                .endMetadata()
+                .withNewSpec()
+                    .withReplicas(1)
+                    .withNewSelector()
+                        .withMatchLabels(selector)
+                    .endSelector()
+                    .withNewTemplate()
+                        .withNewMetadata()
+                            .withLabels(selector)
+                        .endMetadata()
+                        .withSpec(podSpec)
+                    .endTemplate()
+                .endSpec()
+                .build();
+
+        try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+            deployment = openShiftClient.extensions()
+                                        .deployments()
+                                        .inNamespace(this.openShiftCheProjectName)
+                                        .create(deployment);
+        }
+
+        LOG.info("OpenShift deployment {} created", deploymentName);
+    }
+

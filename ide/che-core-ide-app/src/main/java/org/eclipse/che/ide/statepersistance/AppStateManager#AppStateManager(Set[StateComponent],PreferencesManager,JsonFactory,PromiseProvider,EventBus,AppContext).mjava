@@ -1,0 +1,33 @@
+    @Inject
+    public AppStateManager(Set<StateComponent> persistenceComponents,
+                           PreferencesManager preferencesManager,
+                           JsonFactory jsonFactory,
+                           PromiseProvider promises,
+                           EventBus eventBus,
+                           AppContext appContext) {
+        this.persistenceComponents = persistenceComponents.stream()
+                                                          .sorted(comparingInt(StateComponent::getPriority).reversed())
+                                                          .collect(toList());
+        this.preferencesManager = preferencesManager;
+        this.jsonFactory = jsonFactory;
+        this.promises = promises;
+        this.appContext = appContext;
+
+        // delay is required because we need to wait some time while different components initialized
+        eventBus.addHandler(WorkspaceReadyEvent.getType(), e -> restoreWorkspaceStateWithDelay());
+
+        eventBus.addHandler(WindowActionEvent.TYPE, new WindowActionHandler() {
+            @Override
+            public void onWindowClosing(WindowActionEvent event) {
+                final Workspace workspace = appContext.getWorkspace();
+                if (workspace != null) {
+                    persistWorkspaceState();
+                }
+            }
+
+            @Override
+            public void onWindowClosed(WindowActionEvent event) {
+            }
+        });
+    }
+

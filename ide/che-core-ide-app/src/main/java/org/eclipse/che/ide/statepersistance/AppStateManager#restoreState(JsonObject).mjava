@@ -2,10 +2,15 @@
         try {
             if (settings.hasKey(WORKSPACE)) {
                 JsonObject workspace = settings.getObject(WORKSPACE);
+                Promise<Void> sequentialRestore = promises.resolve(null);
                 for (String key : workspace.keys()) {
-                    if (persistenceComponents.containsKey(key)) {
-                        StateComponent component = persistenceComponents.get(key).get();
-                        component.loadState(workspace.getObject(key));
+                    Optional<StateComponent> stateComponent = persistenceComponents.stream()
+                                                                                   .filter(component -> component.getId().equals(key))
+                                                                                   .findAny();
+                    if (stateComponent.isPresent()) {
+                        StateComponent component = stateComponent.get();
+                        Log.debug(getClass(), "Restore state for the component ID: " + component.getId());
+                        sequentialRestore = sequentialRestore.thenPromise(ignored -> component.loadState(workspace.getObject(key)));
                     }
                 }
             }
