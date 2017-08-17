@@ -15,43 +15,39 @@
         createdRoutes.add(project.routes().create(route));
       }
 
-      ServerResolver serverResolver = ServerResolver.of(createdServices, createdRoutes);
+      registerAbnormalStopHandler();
 
-      for (Pod toCreate : getContext().getOpenShiftEnvironment().getPods().values()) {
-        Pod createdPod = project.pods().create(toCreate);
-        for (Container container : createdPod.getSpec().getContainers()) {
-          OpenShiftMachine machine =
-              new OpenShiftMachine(
-                  createdPod.getMetadata().getName(),
-                  container.getName(),
-                  serverResolver.resolve(createdPod, container),
-                  project);
-          machines.put(machine.getName(), machine);
-          sendStartingEvent(machine.getName());
+      createPods(createdServices, createdRoutes);
+
+      // TODO Rework it to parallel waiting
+      for (OpenShiftMachine machine : machines.values()) {
+        try {
+          machine.waitRunning(machineStartTimeoutMin);
+          bootstrapMachine(machine);
+          checkMachineServers(machine);
+          sendRunningEvent(machine.getName());
+        } catch (InfrastructureException rethrow) {
+          sendFailedEvent(machine.getName(), rethrow.getMessage());
+          throw rethrow;
         }
       }
-
-      //TODO Rework it to parallel waiting
-      for (OpenShiftMachine machine : machines.values()) {
-        machine.waitRunning(machineStartTimeoutMin);
-        final String machineName = machine.getName();
-        bootstrapperFactory
-            .create(
-                getContext().getIdentity(),
-                getContext().getEnvironment().getMachines().get(machineName).getInstallers(),
-                machine)
-            .bootstrap();
-
-        ServersReadinessChecker check =
-            new ServersReadinessChecker(machineName, machine.getServers(), serverCheckerFactory);
-        check.startAsync(new ServerReadinessHandler(machineName));
-        check.await();
-        sendRunningEvent(machine.getName());
+    } catch (InfrastructureException | RuntimeException | InterruptedException e) {
+      LOG.error("Failed to start of OpenShift runtime. " + e.getMessage());
+      boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+      try {
+        project.cleanUp();
+      } catch (InfrastructureException ignored) {
       }
-    } catch (RuntimeException | InterruptedException e) {
-      LOG.error("Failed to start of OpenShift runtime. " + e.getMessage(), e);
-      project.cleanUp();
-      throw new InfrastructureException(e.getMessage(), e);
+      if (interrupted) {
+        throw new InfrastructureException("OpenShift environment start was interrupted");
+      }
+      try {
+        throw e;
+      } catch (InfrastructureException rethrow) {
+        throw rethrow;
+      } catch (Exception wrap) {
+        throw new InternalInfrastructureException(e.getMessage(), wrap);
+      }
     }
   }
 

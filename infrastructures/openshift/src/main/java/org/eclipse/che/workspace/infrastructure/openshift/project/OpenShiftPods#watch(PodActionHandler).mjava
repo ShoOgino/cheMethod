@@ -1,0 +1,29 @@
+  /**
+   * Starts watching the pods inside OpenShift namespace and registers a specified handler for such
+   * events. Note that watcher can be started only once so two times invocation of this method will
+   * not produce new watcher and just register the event handlers.
+   *
+   * @param handler pod action events handler
+   * @throws InfrastructureException if any error occurs while watcher starting
+   */
+  public void watch(PodActionHandler handler) throws InfrastructureException {
+    if (watch == null) {
+      final Watcher<Pod> watcher =
+          new Watcher<Pod>() {
+            @Override
+            public void eventReceived(Action action, Pod pod) {
+              handlers.forEach(h -> h.handle(action, pod));
+            }
+
+            @Override
+            public void onClose(KubernetesClientException ignored) {}
+          };
+      try (OpenShiftClient client = clientFactory.create()) {
+        watch = client.pods().inNamespace(namespace).watch(watcher);
+      } catch (KubernetesClientException ex) {
+        throw new InfrastructureException(ex.getMessage());
+      }
+    }
+    handlers.add(handler);
+  }
+

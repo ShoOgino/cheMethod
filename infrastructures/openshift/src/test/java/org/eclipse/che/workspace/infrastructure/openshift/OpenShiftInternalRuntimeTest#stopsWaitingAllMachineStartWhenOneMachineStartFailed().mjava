@@ -1,0 +1,26 @@
+  @Test(expectedExceptions = InfrastructureException.class)
+  public void stopsWaitingAllMachineStartWhenOneMachineStartFailed() throws Exception {
+    final Container c1 = mockContainer(CONTAINER_NAME_1, EXPOSED_PORT_1);
+    final Container c2 = mockContainer(CONTAINER_NAME_2, EXPOSED_PORT_2, NOT_EXPOSED_PORT_1);
+    doReturn(ImmutableMap.of(SERVICE_NAME, mockService())).when(osEnv).getServices();
+    doReturn(ImmutableMap.of(SERVICE_NAME, mockRoute())).when(osEnv).getRoutes();
+    when(services.create(any())).thenAnswer(a -> a.getArguments()[0]);
+    when(routes.create(any())).thenAnswer(a -> a.getArguments()[0]);
+    doReturn(ImmutableMap.of(POD_NAME, mockPod(ImmutableList.of(c1, c2)))).when(osEnv).getPods();
+    when(pods.create(any())).thenAnswer(a -> a.getArguments()[0]);
+    doThrow(InfrastructureException.class).when(bootstrapper).bootstrap();
+
+    try {
+      internalRuntime.internalStart(emptyMap());
+    } catch (Exception rethrow) {
+      verify(pods, times(1)).create(any());
+      verify(routes, times(1)).create(any());
+      verify(services, times(1)).create(any());
+      verify(bootstrapper, times(1)).bootstrap();
+      verify(eventService, times(3)).publish(any());
+      verifyEventsOrder(
+          newEvent(M1_NAME, STARTING), newEvent(M2_NAME, STARTING), newEvent(M1_NAME, FAILED));
+      throw rethrow;
+    }
+  }
+

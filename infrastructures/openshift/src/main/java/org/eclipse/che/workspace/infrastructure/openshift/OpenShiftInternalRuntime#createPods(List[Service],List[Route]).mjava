@@ -1,0 +1,25 @@
+  /**
+   * Creates OpenShift pods and resolves machine servers based on routes and services.
+   *
+   * @param services created OpenShift services
+   * @param routes created OpenShift routes
+   * @throws InfrastructureException when any error occurs while creating OpenShift pods
+   */
+  private void createPods(List<Service> services, List<Route> routes)
+      throws InfrastructureException {
+    final ServerResolver serverResolver = ServerResolver.of(services, routes);
+    for (Pod toCreate : getContext().getOpenShiftEnvironment().getPods().values()) {
+      Pod createdPod = project.pods().create(toCreate);
+      for (Container container : createdPod.getSpec().getContainers()) {
+        OpenShiftMachine machine =
+            new OpenShiftMachine(
+                createdPod.getMetadata().getName(),
+                container.getName(),
+                serverResolver.resolve(createdPod, container),
+                project);
+        machines.put(machine.getName(), machine);
+        sendStartingEvent(machine.getName());
+      }
+    }
+  }
+
