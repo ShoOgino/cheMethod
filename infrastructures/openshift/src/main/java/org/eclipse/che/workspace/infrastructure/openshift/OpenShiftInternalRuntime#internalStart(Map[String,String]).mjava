@@ -1,43 +1,35 @@
     @Override
     protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
-        String projectName = getContext().getIdentity().getWorkspaceId();
+        try {
+            project.cleanUp();
 
-        try (OpenShiftClient client = clientFactory.create()) {
-            prepareOpenShiftProject(projectName);
-            prepareOpenShiftPVCs(getContext().getOpenShiftEnvironment(), projectName);
+            prepareOpenShiftPVCs(getContext().getOpenShiftEnvironment().getPersistentVolumeClaims());
 
-            LOG.info("Creating pods from environment");
+            List<Service> createdServices = new ArrayList<>();
+            for (Service service : getContext().getOpenShiftEnvironment().getServices().values()) {
+                createdServices.add(project.services().create(service));
+            }
+
+            List<Route> createdRoutes = new ArrayList<>();
+            for (Route route : getContext().getOpenShiftEnvironment().getRoutes().values()) {
+                createdRoutes.add(project.routes().create(route));
+            }
+
+            ServerResolver serverResolver = ServerResolver.of(createdServices, createdRoutes);
+
             for (Pod toCreate : getContext().getOpenShiftEnvironment().getPods().values()) {
-                Pod createdPod = client.pods()
-                                       .inNamespace(projectName)
-                                       .create(toCreate);
-
+                Pod createdPod = project.pods().create(toCreate);
                 for (Container container : createdPod.getSpec().getContainers()) {
-                    OpenShiftMachine machine = new OpenShiftMachine(clientFactory,
-                                                                    projectName,
-                                                                    createdPod.getMetadata().getName(),
-                                                                    container.getName());
+                    OpenShiftMachine machine = new OpenShiftMachine(createdPod.getMetadata().getName(),
+                                                                    container.getName(),
+                                                                    serverResolver.resolve(createdPod, container),
+                                                                    project);
                     machines.put(machine.getName(), machine);
                     sendStartingEvent(machine.getName());
                 }
             }
 
-            LOG.info("Creating services from environment");
-            for (Service service : getContext().getOpenShiftEnvironment().getServices().values()) {
-                client.services()
-                      .inNamespace(projectName)
-                      .create(service);
-            }
-
-            LOG.info("Creating routes from environment");
-            for (Route route : getContext().getOpenShiftEnvironment().getRoutes().values()) {
-                client.routes()
-                      .inNamespace(projectName)
-                      .create(route);
-            }
-
-            LOG.info("Waiting until pods created by deployment configs become available and bootstrapping them");
-
+            //TODO Rework it to parallel waiting
             for (OpenShiftMachine machine : machines.values()) {
                 machine.waitRunning(machineStartTimeoutMin);
                 final String machineName = machine.getName();
@@ -56,11 +48,9 @@
                 sendRunningEvent(machine.getName());
             }
         } catch (RuntimeException | InterruptedException e) {
-            //TODO OpenShift client throws runtime exception investigate what should be mapped to InternalInfrastructureException
-            LOG.error("Failed to start of openshift runtime. " + e.getMessage(), e);
+            LOG.error("Failed to start of OpenShift runtime. " + e.getMessage(), e);
+            project.cleanUp();
             throw new InfrastructureException(e.getMessage(), e);
         }
-
-        LOG.info("OpenShift Runtime for workspace {} started", getContext().getIdentity().getWorkspaceId());
     }
 
