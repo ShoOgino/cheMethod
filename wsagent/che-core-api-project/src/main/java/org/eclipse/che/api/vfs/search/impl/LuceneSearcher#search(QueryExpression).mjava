@@ -19,10 +19,71 @@
             final int totalHitsNum = topDocs.totalHits;
 
             List<SearchResultEntry> results = newArrayList();
+            List<OffsetData> offsetData = Collections.emptyList();
             for (int i = 0; i < topDocs.scoreDocs.length; i++) {
                 ScoreDoc scoreDoc = topDocs.scoreDocs[i];
-                String filePath = luceneSearcher.doc(scoreDoc.doc).getField(PATH_FIELD).stringValue();
-                results.add(new SearchResultEntry(filePath));
+                int docId = scoreDoc.doc;
+                Document doc = luceneSearcher.doc(docId);
+                if (query.isIncludePositions()) {
+                    offsetData = new ArrayList<>();
+                    String txt = doc.get(TEXT_FIELD);
+                    if (txt != null) {
+                        IndexReader reader = luceneSearcher.getIndexReader();
+
+                        TokenStream tokenStream = TokenSources.getTokenStream(TEXT_FIELD,
+                                                                              reader.getTermVectors(docId),
+                                                                              txt,
+                                                                              luceneIndexWriter.getAnalyzer(),
+                                                                              -1);
+
+                        CharTermAttribute termAtt = tokenStream.addAttribute(CharTermAttribute.class);
+                        OffsetAttribute offsetAtt = tokenStream.addAttribute(OffsetAttribute.class);
+
+                        QueryScorer queryScorer = new QueryScorer(luceneQuery);
+                        //TODO think about this constant
+                        queryScorer.setMaxDocCharsToAnalyze(1_000_000);
+                        TokenStream newStream = queryScorer.init(tokenStream);
+                        if (newStream != null) {
+                            tokenStream = newStream;
+                        }
+                        queryScorer.startFragment(null);
+
+                        tokenStream.reset();
+
+                        int startOffset, endOffset;
+                        //TODO think about this constant
+                        for (boolean next = tokenStream.incrementToken(); next && (offsetAtt.startOffset() < 1_000_000);
+                             next = tokenStream.incrementToken()) {
+                            startOffset = offsetAtt.startOffset();
+                            endOffset = offsetAtt.endOffset();
+
+                            if ((endOffset > txt.length()) || (startOffset > txt.length())) {
+                                throw new ServerException(
+                                        "Token " + termAtt.toString() + " exceeds length of provided text size " + txt.length());
+                            }
+
+                            float res = queryScorer.getTokenScore();
+                            if (res > 0.0F && startOffset <= endOffset) {
+                                String tokenText = txt.substring(startOffset, endOffset);
+                                Scanner sc = new Scanner(txt);
+                                int lineNum = 0;
+                                long len = 0;
+                                String foundLine = "";
+                                while (sc.hasNextLine()) {
+                                    foundLine = sc.nextLine();
+                                    lineNum++;
+                                    len += foundLine.length();
+                                    if (len > startOffset) {
+                                        break;
+                                    }
+                                }
+                                offsetData.add(new OffsetData(tokenText, startOffset, endOffset, docId, res, lineNum, foundLine));
+                            }
+                        }
+                    }
+                }
+                String filePath = doc.getField(PATH_FIELD).stringValue();
+                results.add(new SearchResultEntry(filePath, offsetData));
             }
 
             final long elapsedTimeMillis = System.currentTimeMillis() - startTime;
