@@ -1,154 +1,158 @@
-	/**
-	 * Creates and initializes the refactoring processors for similarly named elements
-	 * @param progressMonitor progress monitor
-	 * @param context context
-	 * @return status
-	 * @throws CoreException should not happen
-	 */
-	private RefactoringStatus initializeSimilarElementsRenameProcessors(IProgressMonitor progressMonitor, CheckConditionsContext context) throws CoreException {
+  /**
+   * Creates and initializes the refactoring processors for similarly named elements
+   *
+   * @param progressMonitor progress monitor
+   * @param context context
+   * @return status
+   * @throws CoreException should not happen
+   */
+  private RefactoringStatus initializeSimilarElementsRenameProcessors(
+      IProgressMonitor progressMonitor, CheckConditionsContext context) throws CoreException {
 
-		Assert.isNotNull(fPreloadedElementToName);
-		Assert.isNotNull(fPreloadedElementToSelection);
+    Assert.isNotNull(fPreloadedElementToName);
+    Assert.isNotNull(fPreloadedElementToSelection);
 
-		final RefactoringStatus status= new RefactoringStatus();
-		final Set<IMethod> handledTopLevelMethods= new HashSet<IMethod>();
-		final Set<Warning> warnings= new HashSet<Warning>();
-		final List<RefactoringProcessor> processors= new ArrayList<RefactoringProcessor>();
-		fFinalSimilarElementToName= new HashMap<IJavaElement, String>();
+    final RefactoringStatus status = new RefactoringStatus();
+    final Set<IMethod> handledTopLevelMethods = new HashSet<IMethod>();
+    final Set<Warning> warnings = new HashSet<Warning>();
+    final List<RefactoringProcessor> processors = new ArrayList<RefactoringProcessor>();
+    fFinalSimilarElementToName = new HashMap<IJavaElement, String>();
 
-		CompilationUnit currentResolvedCU= null;
-		ICompilationUnit currentCU= null;
+    CompilationUnit currentResolvedCU = null;
+    ICompilationUnit currentCU = null;
 
-		int current= 0;
-		final int max= fPreloadedElementToName.size();
+    int current = 0;
+    final int max = fPreloadedElementToName.size();
 
-		progressMonitor.beginTask("", max * 3); //$NON-NLS-1$
-		progressMonitor.setTaskName(RefactoringCoreMessages.RenameTypeProcessor_checking_similarly_named_declarations_refactoring_conditions);
+    progressMonitor.beginTask("", max * 3); //$NON-NLS-1$
+    progressMonitor.setTaskName(
+        RefactoringCoreMessages
+            .RenameTypeProcessor_checking_similarly_named_declarations_refactoring_conditions);
 
-		for (Iterator<IJavaElement> iter= fPreloadedElementToName.keySet().iterator(); iter.hasNext();) {
+    for (Iterator<IJavaElement> iter = fPreloadedElementToName.keySet().iterator();
+        iter.hasNext();
+        ) {
 
-			final IJavaElement element= iter.next();
+      final IJavaElement element = iter.next();
 
-			current++;
-			progressMonitor.worked(3);
+      current++;
+      progressMonitor.worked(3);
 
-			// not selected? -> skip
-			if (! (fPreloadedElementToSelection.get(element)).booleanValue())
-				continue;
+      // not selected? -> skip
+      if (!(fPreloadedElementToSelection.get(element)).booleanValue()) continue;
 
-			// already registered? (may happen with overridden methods) -> skip
-			if (fFinalSimilarElementToName.containsKey(element))
-				continue;
+      // already registered? (may happen with overridden methods) -> skip
+      if (fFinalSimilarElementToName.containsKey(element)) continue;
 
-			// CompilationUnit changed? (note: fPreloadedElementToName is sorted by CompilationUnit)
-			ICompilationUnit newCU= (ICompilationUnit) element.getAncestor(IJavaElement.COMPILATION_UNIT);
+      // CompilationUnit changed? (note: fPreloadedElementToName is sorted by CompilationUnit)
+      ICompilationUnit newCU =
+          (ICompilationUnit) element.getAncestor(IJavaElement.COMPILATION_UNIT);
 
-			if (!newCU.equals(currentCU)) {
+      if (!newCU.equals(currentCU)) {
 
-				checkCUCompleteConditions(status, currentResolvedCU, currentCU, processors);
+        checkCUCompleteConditions(status, currentResolvedCU, currentCU, processors);
 
-				if (status.hasFatalError())
-					return status;
+        if (status.hasFatalError()) return status;
 
-				// reset values
-				currentResolvedCU= null;
-				currentCU= newCU;
-				processors.clear();
-			}
+        // reset values
+        currentResolvedCU = null;
+        currentCU = newCU;
+        processors.clear();
+      }
 
-			final String newName= fPreloadedElementToName.get(element);
-			RefactoringProcessor processor= null;
+      final String newName = fPreloadedElementToName.get(element);
+      RefactoringProcessor processor = null;
 
-			if (element instanceof ILocalVariable) {
-				final ILocalVariable currentLocal= (ILocalVariable) element;
+      if (element instanceof ILocalVariable) {
+        final ILocalVariable currentLocal = (ILocalVariable) element;
 
-				if (currentResolvedCU == null)
-					currentResolvedCU= new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(currentCU, true);
+        if (currentResolvedCU == null)
+          currentResolvedCU =
+              new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(currentCU, true);
 
-				processor= createLocalRenameProcessor(currentLocal, newName, currentResolvedCU);
+        processor = createLocalRenameProcessor(currentLocal, newName, currentResolvedCU);
 
-				// don't check for conflicting rename => is done by #checkCUCompleteConditions().
+        // don't check for conflicting rename => is done by #checkCUCompleteConditions().
 
-				if (status.hasFatalError())
-					return status;
-				fFinalSimilarElementToName.put(currentLocal, newName);
-			}
-			if (element instanceof IField) {
-				final IField currentField= (IField) element;
-				processor= createFieldRenameProcessor(currentField, newName);
+        if (status.hasFatalError()) return status;
+        fFinalSimilarElementToName.put(currentLocal, newName);
+      }
+      if (element instanceof IField) {
+        final IField currentField = (IField) element;
+        processor = createFieldRenameProcessor(currentField, newName);
 
-				status.merge(checkForConflictingRename(currentField, newName));
-				if (status.hasFatalError())
-					return status;
-				fFinalSimilarElementToName.put(currentField, newName);
-			}
-			if (element instanceof IMethod) {
-				IMethod currentMethod= (IMethod) element;
-				if (MethodChecks.isVirtual(currentMethod)) {
+        status.merge(checkForConflictingRename(currentField, newName));
+        if (status.hasFatalError()) return status;
+        fFinalSimilarElementToName.put(currentField, newName);
+      }
+      if (element instanceof IMethod) {
+        IMethod currentMethod = (IMethod) element;
+        if (MethodChecks.isVirtual(currentMethod)) {
 
-					final IType declaringType= currentMethod.getDeclaringType();
-					ITypeHierarchy hierarchy= null;
-					if (!declaringType.isInterface())
-						hierarchy= declaringType.newTypeHierarchy(new NullProgressMonitor());
+          final IType declaringType = currentMethod.getDeclaringType();
+          ITypeHierarchy hierarchy = null;
+          if (!declaringType.isInterface())
+            hierarchy = declaringType.newTypeHierarchy(new NullProgressMonitor());
 
-					final IMethod topmost= MethodChecks.getTopmostMethod(currentMethod, hierarchy, new NullProgressMonitor());
-					if (topmost != null)
-						currentMethod= topmost;
-					if (handledTopLevelMethods.contains(currentMethod))
-						continue;
-					handledTopLevelMethods.add(currentMethod);
-					final IMethod[] ripples= RippleMethodFinder2.getRelatedMethods(currentMethod, new NullProgressMonitor(), null);
+          final IMethod topmost =
+              MethodChecks.getTopmostMethod(currentMethod, hierarchy, new NullProgressMonitor());
+          if (topmost != null) currentMethod = topmost;
+          if (handledTopLevelMethods.contains(currentMethod)) continue;
+          handledTopLevelMethods.add(currentMethod);
+          final IMethod[] ripples =
+              RippleMethodFinder2.getRelatedMethods(currentMethod, new NullProgressMonitor(), null);
 
-					if (checkForWarnings(warnings, newName, ripples))
-						continue;
+          if (checkForWarnings(warnings, newName, ripples)) continue;
 
-					status.merge(checkForConflictingRename(ripples, newName));
-					if (status.hasFatalError())
-						return status;
+          status.merge(checkForConflictingRename(ripples, newName));
+          if (status.hasFatalError()) return status;
 
-					processor= createVirtualMethodRenameProcessor(currentMethod, newName, ripples, hierarchy);
-					fFinalSimilarElementToName.put(currentMethod, newName);
-					for (int i= 0; i < ripples.length; i++) {
-						fFinalSimilarElementToName.put(ripples[i], newName);
-					}
-				} else {
+          processor =
+              createVirtualMethodRenameProcessor(currentMethod, newName, ripples, hierarchy);
+          fFinalSimilarElementToName.put(currentMethod, newName);
+          for (int i = 0; i < ripples.length; i++) {
+            fFinalSimilarElementToName.put(ripples[i], newName);
+          }
+        } else {
 
-					status.merge(checkForConflictingRename(new IMethod[] { currentMethod }, newName));
-					if (status.hasFatalError())
-						break;
+          status.merge(checkForConflictingRename(new IMethod[] {currentMethod}, newName));
+          if (status.hasFatalError()) break;
 
-					fFinalSimilarElementToName.put(currentMethod, newName);
+          fFinalSimilarElementToName.put(currentMethod, newName);
 
-					processor= createNonVirtualMethodRenameProcessor(currentMethod, newName);
-				}
-			}
+          processor = createNonVirtualMethodRenameProcessor(currentMethod, newName);
+        }
+      }
 
-			progressMonitor.subTask(Messages.format(RefactoringCoreMessages.RenameTypeProcessor_progress_current_total, new Object[] { String.valueOf(current), String.valueOf(max)}));
+      progressMonitor.subTask(
+          Messages.format(
+              RefactoringCoreMessages.RenameTypeProcessor_progress_current_total,
+              new Object[] {String.valueOf(current), String.valueOf(max)}));
 
-			status.merge(processor.checkInitialConditions(new NoOverrideProgressMonitor(progressMonitor, 1)));
+      status.merge(
+          processor.checkInitialConditions(new NoOverrideProgressMonitor(progressMonitor, 1)));
 
-			if (status.hasFatalError())
-				return status;
+      if (status.hasFatalError()) return status;
 
-			status.merge(processor.checkFinalConditions(new NoOverrideProgressMonitor(progressMonitor, 1), context));
+      status.merge(
+          processor.checkFinalConditions(
+              new NoOverrideProgressMonitor(progressMonitor, 1), context));
 
-			if (status.hasFatalError())
-				return status;
+      if (status.hasFatalError()) return status;
 
-			processors.add(processor);
+      processors.add(processor);
 
-			progressMonitor.worked(1);
+      progressMonitor.worked(1);
 
-			if (progressMonitor.isCanceled())
-				throw new OperationCanceledException();
-		}
+      if (progressMonitor.isCanceled()) throw new OperationCanceledException();
+    }
 
-		// check last CU
-		checkCUCompleteConditions(status, currentResolvedCU, currentCU, processors);
+    // check last CU
+    checkCUCompleteConditions(status, currentResolvedCU, currentCU, processors);
 
-		status.merge(addWarnings(warnings));
+    status.merge(addWarnings(warnings));
 
-		progressMonitor.done();
-		return status;
-	}
+    progressMonitor.done();
+    return status;
+  }
 

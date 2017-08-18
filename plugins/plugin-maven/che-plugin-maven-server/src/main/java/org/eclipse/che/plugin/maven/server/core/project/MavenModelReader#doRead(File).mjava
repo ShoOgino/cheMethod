@@ -1,100 +1,108 @@
-    private ModelReadingResult doRead(File pom) {
-        List<MavenProjectProblem> problems = new ArrayList<>();
-        Set<String> enabledProfiles = new HashSet<>();
-        MavenModel result = new MavenModel();
+  private ModelReadingResult doRead(File pom) {
+    List<MavenProjectProblem> problems = new ArrayList<>();
+    Set<String> enabledProfiles = new HashSet<>();
+    MavenModel result = new MavenModel();
 
-        fillModelByDefaults(result);
+    fillModelByDefaults(result);
 
-        Model model = null;
-        try {
-            model = Model.readFrom(pom);
-        } catch (IOException e) {
-            problems.add(MavenProjectProblem.newProblem(pom.getPath(), e.getMessage(), MavenProblemType.SYNTAX));
-        } catch (XMLTreeException xmlExc) {
-            problems.add(MavenProjectProblem.newProblem(pom.getPath(), xmlExc.getMessage(), MavenProblemType.STRUCTURE));
-        } catch (Exception exc) {
-            problems.add(MavenProjectProblem.newProblem(pom.getPath(), exc.getMessage(), MavenProblemType.STRUCTURE));
-        }
-
-        if (model == null) {
-            return new ModelReadingResult(result, problems, enabledProfiles);
-        }
-
-        final MavenKey parentKey;
-
-        if (model.getParent() == null) {
-            parentKey = result.getParent().getMavenKey();
-        } else {
-            Parent modelParent = model.getParent();
-            parentKey = new MavenKey(modelParent.getGroupId(), modelParent.getArtifactId(), modelParent.getVersion());
-            MavenParent parent = new MavenParent(parentKey, modelParent.getRelativePath());
-            result.setParent(parent);
-        }
-
-        final MavenKey mavenKey = new MavenKey(getNotNull(model.getGroupId(), parentKey.getGroupId()),
-                                               model.getArtifactId(),
-                                               getNotNull(model.getVersion(), parentKey.getVersion()));
-        result.setMavenKey(mavenKey);
-
-        if (model.getPackaging() != null) {
-            result.setPackaging(model.getPackaging());
-        }
-        result.setName(model.getName());
-
-        final List<String> modules = model.getModules();
-        if (modules != null) {
-            result.setModules(new ArrayList<>(model.getModules()));
-        }
-
-        Map<String, String> properties = model.getProperties();
-        Properties prop = new Properties();
-        if (properties != null) {
-            prop.putAll(properties);
-        }
-        result.setProperties(prop);
-
-        final Build build = model.getBuild();
-        if (build != null) {
-            final String sourceDirectory = build.getSourceDirectory();
-            if (sourceDirectory != null) {
-                result.getBuild().setSources(singletonList(sourceDirectory));
-            }
-            final String testSourceDirectory = build.getTestSourceDirectory();
-            if (testSourceDirectory != null) {
-                result.getBuild().setTestSources(singletonList(testSourceDirectory));
-            }
-            result.getBuild().setResources(convertResources(build.getResources()));
-            String testOutputDirectory = build.getTestOutputDirectory();
-            if(testOutputDirectory != null) {
-                result.getBuild().setTestOutputDirectory(testOutputDirectory);
-            }
-
-            String outputDirectory = build.getOutputDirectory();
-            if (outputDirectory != null) {
-                result.getBuild().setOutputDirectory(outputDirectory);
-            }
-
-        }
-
-        List<Profile> profiles = model.getProfiles();
-        if (profiles != null && !profiles.isEmpty()) {
-            List<MavenProfile> resultProfiles = new ArrayList<>(profiles.size());
-            for (Profile profile : profiles) {
-                enabledProfiles.add(profile.getId());
-
-                MavenProfile resultProfile = new MavenProfile(profile.getId(), Profile.SOURCE_POM);
-
-                setProfileActivation(resultProfile, profile);
-                setProfileProperties(resultProfile, profile);
-                setProfileModules(resultProfile, profile);
-                setProfileBuild(resultProfile, profile);
-                setProfileDependencies(resultProfile, profile);
-
-                resultProfiles.add(resultProfile);
-            }
-            result.setProfiles(resultProfiles);
-        }
-
-        return new ModelReadingResult(result, problems, enabledProfiles);
+    Model model = null;
+    try {
+      model = Model.readFrom(pom);
+    } catch (IOException e) {
+      problems.add(
+          MavenProjectProblem.newProblem(pom.getPath(), e.getMessage(), MavenProblemType.SYNTAX));
+    } catch (XMLTreeException xmlExc) {
+      problems.add(
+          MavenProjectProblem.newProblem(
+              pom.getPath(), xmlExc.getMessage(), MavenProblemType.STRUCTURE));
+    } catch (Exception exc) {
+      problems.add(
+          MavenProjectProblem.newProblem(
+              pom.getPath(), exc.getMessage(), MavenProblemType.STRUCTURE));
     }
+
+    if (model == null) {
+      return new ModelReadingResult(result, problems, enabledProfiles);
+    }
+
+    final MavenKey parentKey;
+
+    if (model.getParent() == null) {
+      parentKey = result.getParent().getMavenKey();
+    } else {
+      Parent modelParent = model.getParent();
+      parentKey =
+          new MavenKey(
+              modelParent.getGroupId(), modelParent.getArtifactId(), modelParent.getVersion());
+      MavenParent parent = new MavenParent(parentKey, modelParent.getRelativePath());
+      result.setParent(parent);
+    }
+
+    final MavenKey mavenKey =
+        new MavenKey(
+            getNotNull(model.getGroupId(), parentKey.getGroupId()),
+            model.getArtifactId(),
+            getNotNull(model.getVersion(), parentKey.getVersion()));
+    result.setMavenKey(mavenKey);
+
+    if (model.getPackaging() != null) {
+      result.setPackaging(model.getPackaging());
+    }
+    result.setName(model.getName());
+
+    final List<String> modules = model.getModules();
+    if (modules != null) {
+      result.setModules(new ArrayList<>(model.getModules()));
+    }
+
+    Map<String, String> properties = model.getProperties();
+    Properties prop = new Properties();
+    if (properties != null) {
+      prop.putAll(properties);
+    }
+    result.setProperties(prop);
+
+    final Build build = model.getBuild();
+    if (build != null) {
+      final String sourceDirectory = build.getSourceDirectory();
+      if (sourceDirectory != null) {
+        result.getBuild().setSources(singletonList(sourceDirectory));
+      }
+      final String testSourceDirectory = build.getTestSourceDirectory();
+      if (testSourceDirectory != null) {
+        result.getBuild().setTestSources(singletonList(testSourceDirectory));
+      }
+      result.getBuild().setResources(convertResources(build.getResources()));
+      String testOutputDirectory = build.getTestOutputDirectory();
+      if (testOutputDirectory != null) {
+        result.getBuild().setTestOutputDirectory(testOutputDirectory);
+      }
+
+      String outputDirectory = build.getOutputDirectory();
+      if (outputDirectory != null) {
+        result.getBuild().setOutputDirectory(outputDirectory);
+      }
+    }
+
+    List<Profile> profiles = model.getProfiles();
+    if (profiles != null && !profiles.isEmpty()) {
+      List<MavenProfile> resultProfiles = new ArrayList<>(profiles.size());
+      for (Profile profile : profiles) {
+        enabledProfiles.add(profile.getId());
+
+        MavenProfile resultProfile = new MavenProfile(profile.getId(), Profile.SOURCE_POM);
+
+        setProfileActivation(resultProfile, profile);
+        setProfileProperties(resultProfile, profile);
+        setProfileModules(resultProfile, profile);
+        setProfileBuild(resultProfile, profile);
+        setProfileDependencies(resultProfile, profile);
+
+        resultProfiles.add(resultProfile);
+      }
+      result.setProfiles(resultProfiles);
+    }
+
+    return new ModelReadingResult(result, problems, enabledProfiles);
+  }
 

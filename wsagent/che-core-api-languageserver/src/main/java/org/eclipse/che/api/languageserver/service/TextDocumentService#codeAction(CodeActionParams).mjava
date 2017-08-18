@@ -1,34 +1,41 @@
-    private List<CommandDto> codeAction(CodeActionParams params) {
-        TextDocumentIdentifier textDocument = params.getTextDocument();
-        String uri = prefixURI(textDocument.getUri());
-        textDocument.setUri(uri);
-        List<CommandDto> result = new ArrayList<>();
-        try {
-            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
-                            .flatMap(Collection::stream).collect(Collectors.toList());
-            LSOperation<InitializedLanguageServer, List<? extends Command>> op = new LSOperation<InitializedLanguageServer, List<? extends Command>>() {
+  private List<CommandDto> codeAction(CodeActionParams params) {
+    TextDocumentIdentifier textDocument = params.getTextDocument();
+    String uri = prefixURI(textDocument.getUri());
+    textDocument.setUri(uri);
+    List<CommandDto> result = new ArrayList<>();
+    try {
+      List<InitializedLanguageServer> servers =
+          languageServerRegistry
+              .getApplicableLanguageServers(uri)
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      LSOperation<InitializedLanguageServer, List<? extends Command>> op =
+          new LSOperation<InitializedLanguageServer, List<? extends Command>>() {
 
-                @Override
-                public boolean canDo(InitializedLanguageServer server) {
-                    return truish(server.getInitializeResult().getCapabilities().getCodeActionProvider());
-                }
+            @Override
+            public boolean canDo(InitializedLanguageServer server) {
+              return truish(server.getInitializeResult().getCapabilities().getCodeActionProvider());
+            }
 
-                public CompletableFuture<List<? extends Command>> start(InitializedLanguageServer element) {
-                    return element.getServer().getTextDocumentService().codeAction(params);
-                };
-
-                @Override
-                public boolean handleResult(InitializedLanguageServer element, List<? extends Command> res) {
-                    for (Command cmd : res) {
-                        result.add(new CommandDto(cmd));
-                    }
-                    return false;
-                };
+            public CompletableFuture<List<? extends Command>> start(
+                InitializedLanguageServer element) {
+              return element.getServer().getTextDocumentService().codeAction(params);
             };
-            OperationUtil.doInParallel(servers, op, 10000);
-            return result;
-        } catch (LanguageServerException e) {
-            throw new JsonRpcException(-27000, e.getMessage());
-        }
+
+            @Override
+            public boolean handleResult(
+                InitializedLanguageServer element, List<? extends Command> res) {
+              for (Command cmd : res) {
+                result.add(new CommandDto(cmd));
+              }
+              return false;
+            };
+          };
+      OperationUtil.doInParallel(servers, op, 10000);
+      return result;
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
     }
+  }
 

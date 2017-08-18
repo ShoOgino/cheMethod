@@ -1,147 +1,164 @@
-	private static boolean getInverseLocalVariableProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
-		final AST ast= covering.getAST();
-		// cursor should be placed on variable name
-		if (!(covering instanceof SimpleName)) {
-			return false;
-		}
-		SimpleName coveringName= (SimpleName) covering;
-		if (!coveringName.isDeclaration()) {
-			return false;
-		}
-		// prepare bindings
-		final IBinding variableBinding= coveringName.resolveBinding();
-		if (!(variableBinding instanceof IVariableBinding)) {
-			return false;
-		}
-		IVariableBinding binding= (IVariableBinding) variableBinding;
-		if (binding.isField()) {
-			return false;
-		}
-		// we operate only on boolean variable
-		if (!isBoolean(coveringName)) {
-			return false;
-		}
-		//  we could produce quick assist
-		if (resultingCollections == null) {
-			return true;
-		}
-		// find linked nodes
-		final MethodDeclaration method= ASTResolving.findParentMethodDeclaration(covering);
-		SimpleName[] linkedNodes= LinkedNodeFinder.findByBinding(method, variableBinding);
-		//
-		final ASTRewrite rewrite= ASTRewrite.create(ast);
-		// create proposal
-		String label= CorrectionMessages.AdvancedQuickAssistProcessor_inverseBooleanVariable;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-		final String KEY_NAME= "name"; //$NON-NLS-1$
-		final LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVERSE_BOOLEAN_VARIABLE, image);
-		// prepare new variable identifier
-		final String oldIdentifier= coveringName.getIdentifier();
-		final String notString= Messages.format(CorrectionMessages.AdvancedQuickAssistProcessor_negatedVariableName, ""); //$NON-NLS-1$
-		final String newIdentifier;
-		if (oldIdentifier.startsWith(notString)) {
-			int notLength= notString.length();
-			if (oldIdentifier.length() > notLength) {
-				newIdentifier= Character.toLowerCase(oldIdentifier.charAt(notLength)) + oldIdentifier.substring(notLength + 1);
-			} else {
-				newIdentifier= oldIdentifier;
-			}
-		} else {
-			newIdentifier= Messages.format(CorrectionMessages.AdvancedQuickAssistProcessor_negatedVariableName,
-										   Character.toUpperCase(oldIdentifier.charAt(0)) + oldIdentifier.substring(1));
-		}
-		//
-		proposal.addLinkedPositionProposal(KEY_NAME, newIdentifier, null);
-		proposal.addLinkedPositionProposal(KEY_NAME, oldIdentifier, null);
-		// iterate over linked nodes and replace variable references with negated reference
-		final HashSet<SimpleName> renamedNames= new HashSet<SimpleName>();
-		for (int i= 0; i < linkedNodes.length; i++) {
-			SimpleName name= linkedNodes[i];
-			if (renamedNames.contains(name)) {
-				continue;
-			}
-			// prepare new name with new identifier
-			SimpleName newName= ast.newSimpleName(newIdentifier);
-			proposal.addLinkedPosition(rewrite.track(newName), name == coveringName, KEY_NAME);
-			//
-			StructuralPropertyDescriptor location= name.getLocationInParent();
-			if (location == SingleVariableDeclaration.NAME_PROPERTY) {
-				// set new name
-				rewrite.replace(name, newName, null);
-			} else if (location == Assignment.LEFT_HAND_SIDE_PROPERTY) {
-				Assignment assignment= (Assignment) name.getParent();
-				Expression expression= assignment.getRightHandSide();
-				int exStart= expression.getStartPosition();
-				int exEnd= exStart + expression.getLength();
-				// collect all names that are used in assignments
-				HashSet<SimpleName> overlapNames= new HashSet<SimpleName>();
-				for (int j= 0; j < linkedNodes.length; j++) {
-					SimpleName name2= linkedNodes[j];
-					if (name2 == null) {
-						continue;
-					}
-					int name2Start= name2.getStartPosition();
-					if (exStart <= name2Start && name2Start < exEnd) {
-						overlapNames.add(name2);
-					}
-				}
-				// prepare inverted expression
-				SimpleNameRenameProvider provider= new SimpleNameRenameProvider() {
-					public SimpleName getRenamed(SimpleName simpleName) {
-						if (simpleName.resolveBinding() == variableBinding) {
-							renamedNames.add(simpleName);
-							return ast.newSimpleName(newIdentifier);
-						}
-						return null;
-					}
-				};
-				Expression inversedExpression= getInversedExpression(rewrite, expression, provider);
-				// if any name was not renamed during expression inverting, we can not already rename it, so fail to create assist
-				for (Iterator<SimpleName> iter= overlapNames.iterator(); iter.hasNext();) {
-					Object o= iter.next();
-					if (!renamedNames.contains(o)) {
-						return false;
-					}
-				}
-				// check operator and replace if needed
-				Assignment.Operator operator= assignment.getOperator();
-				if (operator == Assignment.Operator.BIT_AND_ASSIGN) {
-					Assignment newAssignment= ast.newAssignment();
-					newAssignment.setLeftHandSide(newName);
-					newAssignment.setRightHandSide(inversedExpression);
-					newAssignment.setOperator(Assignment.Operator.BIT_OR_ASSIGN);
-					rewrite.replace(assignment, newAssignment, null);
-				} else if (operator == Assignment.Operator.BIT_OR_ASSIGN) {
-					Assignment newAssignment= ast.newAssignment();
-					newAssignment.setLeftHandSide(newName);
-					newAssignment.setRightHandSide(inversedExpression);
-					newAssignment.setOperator(Assignment.Operator.BIT_AND_ASSIGN);
-					rewrite.replace(assignment, newAssignment, null);
-				} else {
-					rewrite.replace(expression, inversedExpression, null);
-					// set new name
-					rewrite.replace(name, newName, null);
-				}
-			} else if (location == VariableDeclarationFragment.NAME_PROPERTY) {
-				// replace initializer for variable
-				VariableDeclarationFragment vdf= (VariableDeclarationFragment) name.getParent();
-				Expression expression= vdf.getInitializer();
-				if (expression != null) {
-					rewrite.replace(expression, getInversedExpression(rewrite, expression), null);
-				}
-				// set new name
-				rewrite.replace(name, newName, null);
-			} else if (name.getParent() instanceof PrefixExpression && ((PrefixExpression) name.getParent()).getOperator() == PrefixExpression.Operator.NOT) {
-				rewrite.replace(name.getParent(), newName, null);
-			} else {
-				PrefixExpression expression= ast.newPrefixExpression();
-				expression.setOperator(PrefixExpression.Operator.NOT);
-				expression.setOperand(newName);
-				rewrite.replace(name, expression, null);
-			}
-		}
-		// add correction proposal
-		resultingCollections.add(proposal);
-		return true;
-	}
+  private static boolean getInverseLocalVariableProposals(
+      IInvocationContext context,
+      ASTNode covering,
+      Collection<ICommandAccess> resultingCollections) {
+    final AST ast = covering.getAST();
+    // cursor should be placed on variable name
+    if (!(covering instanceof SimpleName)) {
+      return false;
+    }
+    SimpleName coveringName = (SimpleName) covering;
+    if (!coveringName.isDeclaration()) {
+      return false;
+    }
+    // prepare bindings
+    final IBinding variableBinding = coveringName.resolveBinding();
+    if (!(variableBinding instanceof IVariableBinding)) {
+      return false;
+    }
+    IVariableBinding binding = (IVariableBinding) variableBinding;
+    if (binding.isField()) {
+      return false;
+    }
+    // we operate only on boolean variable
+    if (!isBoolean(coveringName)) {
+      return false;
+    }
+    //  we could produce quick assist
+    if (resultingCollections == null) {
+      return true;
+    }
+    // find linked nodes
+    final MethodDeclaration method = ASTResolving.findParentMethodDeclaration(covering);
+    SimpleName[] linkedNodes = LinkedNodeFinder.findByBinding(method, variableBinding);
+    //
+    final ASTRewrite rewrite = ASTRewrite.create(ast);
+    // create proposal
+    String label = CorrectionMessages.AdvancedQuickAssistProcessor_inverseBooleanVariable;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    final String KEY_NAME = "name"; //$NON-NLS-1$
+    final LinkedCorrectionProposal proposal =
+        new LinkedCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.INVERSE_BOOLEAN_VARIABLE,
+            image);
+    // prepare new variable identifier
+    final String oldIdentifier = coveringName.getIdentifier();
+    final String notString =
+        Messages.format(
+            CorrectionMessages.AdvancedQuickAssistProcessor_negatedVariableName, ""); //$NON-NLS-1$
+    final String newIdentifier;
+    if (oldIdentifier.startsWith(notString)) {
+      int notLength = notString.length();
+      if (oldIdentifier.length() > notLength) {
+        newIdentifier =
+            Character.toLowerCase(oldIdentifier.charAt(notLength))
+                + oldIdentifier.substring(notLength + 1);
+      } else {
+        newIdentifier = oldIdentifier;
+      }
+    } else {
+      newIdentifier =
+          Messages.format(
+              CorrectionMessages.AdvancedQuickAssistProcessor_negatedVariableName,
+              Character.toUpperCase(oldIdentifier.charAt(0)) + oldIdentifier.substring(1));
+    }
+    //
+    proposal.addLinkedPositionProposal(KEY_NAME, newIdentifier, null);
+    proposal.addLinkedPositionProposal(KEY_NAME, oldIdentifier, null);
+    // iterate over linked nodes and replace variable references with negated reference
+    final HashSet<SimpleName> renamedNames = new HashSet<SimpleName>();
+    for (int i = 0; i < linkedNodes.length; i++) {
+      SimpleName name = linkedNodes[i];
+      if (renamedNames.contains(name)) {
+        continue;
+      }
+      // prepare new name with new identifier
+      SimpleName newName = ast.newSimpleName(newIdentifier);
+      proposal.addLinkedPosition(rewrite.track(newName), name == coveringName, KEY_NAME);
+      //
+      StructuralPropertyDescriptor location = name.getLocationInParent();
+      if (location == SingleVariableDeclaration.NAME_PROPERTY) {
+        // set new name
+        rewrite.replace(name, newName, null);
+      } else if (location == Assignment.LEFT_HAND_SIDE_PROPERTY) {
+        Assignment assignment = (Assignment) name.getParent();
+        Expression expression = assignment.getRightHandSide();
+        int exStart = expression.getStartPosition();
+        int exEnd = exStart + expression.getLength();
+        // collect all names that are used in assignments
+        HashSet<SimpleName> overlapNames = new HashSet<SimpleName>();
+        for (int j = 0; j < linkedNodes.length; j++) {
+          SimpleName name2 = linkedNodes[j];
+          if (name2 == null) {
+            continue;
+          }
+          int name2Start = name2.getStartPosition();
+          if (exStart <= name2Start && name2Start < exEnd) {
+            overlapNames.add(name2);
+          }
+        }
+        // prepare inverted expression
+        SimpleNameRenameProvider provider =
+            new SimpleNameRenameProvider() {
+              public SimpleName getRenamed(SimpleName simpleName) {
+                if (simpleName.resolveBinding() == variableBinding) {
+                  renamedNames.add(simpleName);
+                  return ast.newSimpleName(newIdentifier);
+                }
+                return null;
+              }
+            };
+        Expression inversedExpression = getInversedExpression(rewrite, expression, provider);
+        // if any name was not renamed during expression inverting, we can not already rename it, so fail to create assist
+        for (Iterator<SimpleName> iter = overlapNames.iterator(); iter.hasNext(); ) {
+          Object o = iter.next();
+          if (!renamedNames.contains(o)) {
+            return false;
+          }
+        }
+        // check operator and replace if needed
+        Assignment.Operator operator = assignment.getOperator();
+        if (operator == Assignment.Operator.BIT_AND_ASSIGN) {
+          Assignment newAssignment = ast.newAssignment();
+          newAssignment.setLeftHandSide(newName);
+          newAssignment.setRightHandSide(inversedExpression);
+          newAssignment.setOperator(Assignment.Operator.BIT_OR_ASSIGN);
+          rewrite.replace(assignment, newAssignment, null);
+        } else if (operator == Assignment.Operator.BIT_OR_ASSIGN) {
+          Assignment newAssignment = ast.newAssignment();
+          newAssignment.setLeftHandSide(newName);
+          newAssignment.setRightHandSide(inversedExpression);
+          newAssignment.setOperator(Assignment.Operator.BIT_AND_ASSIGN);
+          rewrite.replace(assignment, newAssignment, null);
+        } else {
+          rewrite.replace(expression, inversedExpression, null);
+          // set new name
+          rewrite.replace(name, newName, null);
+        }
+      } else if (location == VariableDeclarationFragment.NAME_PROPERTY) {
+        // replace initializer for variable
+        VariableDeclarationFragment vdf = (VariableDeclarationFragment) name.getParent();
+        Expression expression = vdf.getInitializer();
+        if (expression != null) {
+          rewrite.replace(expression, getInversedExpression(rewrite, expression), null);
+        }
+        // set new name
+        rewrite.replace(name, newName, null);
+      } else if (name.getParent() instanceof PrefixExpression
+          && ((PrefixExpression) name.getParent()).getOperator() == PrefixExpression.Operator.NOT) {
+        rewrite.replace(name.getParent(), newName, null);
+      } else {
+        PrefixExpression expression = ast.newPrefixExpression();
+        expression.setOperator(PrefixExpression.Operator.NOT);
+        expression.setOperand(newName);
+        rewrite.replace(name, expression, null);
+      }
+    }
+    // add correction proposal
+    resultingCollections.add(proposal);
+    return true;
+  }
 

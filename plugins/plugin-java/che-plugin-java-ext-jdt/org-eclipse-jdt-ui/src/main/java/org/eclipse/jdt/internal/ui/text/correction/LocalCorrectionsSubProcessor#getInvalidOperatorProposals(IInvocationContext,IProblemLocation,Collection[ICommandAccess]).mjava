@@ -1,77 +1,92 @@
-	public static void getInvalidOperatorProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
-		CompilationUnit root= context.getASTRoot();
-		AST ast= root.getAST();
+  public static void getInvalidOperatorProposals(
+      IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+    CompilationUnit root = context.getASTRoot();
+    AST ast = root.getAST();
 
-		ASTNode selectedNode= problem.getCoveringNode(root);
+    ASTNode selectedNode = problem.getCoveringNode(root);
 
-		while (selectedNode instanceof ParenthesizedExpression) {
-			selectedNode= ((ParenthesizedExpression) selectedNode).getExpression();
-		}
+    while (selectedNode instanceof ParenthesizedExpression) {
+      selectedNode = ((ParenthesizedExpression) selectedNode).getExpression();
+    }
 
-		if (selectedNode instanceof PrefixExpression) {
-			// !x instanceof X -> !(x instanceof X)
+    if (selectedNode instanceof PrefixExpression) {
+      // !x instanceof X -> !(x instanceof X)
 
-			PrefixExpression expression= (PrefixExpression) selectedNode;
-			if (expression.getOperator() == PrefixExpression.Operator.NOT) {
-				ASTNode parent= expression.getParent();
+      PrefixExpression expression = (PrefixExpression) selectedNode;
+      if (expression.getOperator() == PrefixExpression.Operator.NOT) {
+        ASTNode parent = expression.getParent();
 
-				String label= null;
-				switch (parent.getNodeType()) {
-					case ASTNode.INSTANCEOF_EXPRESSION:
-						label= CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_instanceof_description;
-						break;
-					case ASTNode.INFIX_EXPRESSION:
-						InfixExpression infixExpression= (InfixExpression)parent;
-						label= Messages.format(CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_description,
-											   infixExpression.getOperator().toString());
-						break;
-				}
+        String label = null;
+        switch (parent.getNodeType()) {
+          case ASTNode.INSTANCEOF_EXPRESSION:
+            label =
+                CorrectionMessages
+                    .LocalCorrectionsSubProcessor_setparenteses_instanceof_description;
+            break;
+          case ASTNode.INFIX_EXPRESSION:
+            InfixExpression infixExpression = (InfixExpression) parent;
+            label =
+                Messages.format(
+                    CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_description,
+                    infixExpression.getOperator().toString());
+            break;
+        }
 
-				if (label != null) {
-					ASTRewrite rewrite= ASTRewrite.create(ast);
-					rewrite.replace(selectedNode, rewrite.createMoveTarget(expression.getOperand()), null);
+        if (label != null) {
+          ASTRewrite rewrite = ASTRewrite.create(ast);
+          rewrite.replace(selectedNode, rewrite.createMoveTarget(expression.getOperand()), null);
 
-					ParenthesizedExpression newParentExpr= ast.newParenthesizedExpression();
-					newParentExpr.setExpression((Expression) rewrite.createMoveTarget(parent));
-					PrefixExpression newPrefixExpr= ast.newPrefixExpression();
-					newPrefixExpr.setOperand(newParentExpr);
-					newPrefixExpr.setOperator(PrefixExpression.Operator.NOT);
+          ParenthesizedExpression newParentExpr = ast.newParenthesizedExpression();
+          newParentExpr.setExpression((Expression) rewrite.createMoveTarget(parent));
+          PrefixExpression newPrefixExpr = ast.newPrefixExpression();
+          newPrefixExpr.setOperand(newParentExpr);
+          newPrefixExpr.setOperator(PrefixExpression.Operator.NOT);
 
-					rewrite.replace(parent, newPrefixExpr, null);
+          rewrite.replace(parent, newPrefixExpr, null);
 
-					Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
-					ASTRewriteCorrectionProposal
-							proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVALID_OPERATOR, image);
-					proposals.add(proposal);
-				}
-			}
-		} else if (selectedNode instanceof InfixExpression && isBitOperation((((InfixExpression) selectedNode).getOperator()))) {
-			// a & b == c -> (a & b) == c
-			final CompareInBitWiseOpFinder opFinder= new CompareInBitWiseOpFinder(selectedNode);
-			if (opFinder.getCompareExpression() != null) { // compare operation inside bit operations: set parents
-				String label= CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_bitop_description;
-				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
-				CUCorrectionProposal
-						proposal= new CUCorrectionProposal(label, context.getCompilationUnit(), IProposalRelevance.INVALID_OPERATOR, image) {
-					@Override
-					protected void addEdits(IDocument document, TextEdit edit) throws CoreException {
-						InfixExpression compareExpression= opFinder.getCompareExpression();
-						InfixExpression expression= opFinder.getParentInfixExpression();
-						ASTNode left= compareExpression.getLeftOperand();
-						if (expression.getStartPosition() < left.getStartPosition()) {
-							edit.addChild(new InsertEdit(expression.getStartPosition(), String.valueOf('(')));
-							edit.addChild(new InsertEdit(ASTNodes.getExclusiveEnd(left), String.valueOf(')')));
-						}
-						ASTNode rigth= compareExpression.getRightOperand();
-						int selEnd= ASTNodes.getExclusiveEnd(expression);
-						if (selEnd > ASTNodes.getExclusiveEnd(rigth)) {
-							edit.addChild(new InsertEdit(rigth.getStartPosition(), String.valueOf('(')));
-							edit.addChild(new InsertEdit(selEnd, String.valueOf(')')));
-						}
-					}
-				};
-				proposals.add(proposal);
-			}
-		}
-	}
+          Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
+          ASTRewriteCorrectionProposal proposal =
+              new ASTRewriteCorrectionProposal(
+                  label,
+                  context.getCompilationUnit(),
+                  rewrite,
+                  IProposalRelevance.INVALID_OPERATOR,
+                  image);
+          proposals.add(proposal);
+        }
+      }
+    } else if (selectedNode instanceof InfixExpression
+        && isBitOperation((((InfixExpression) selectedNode).getOperator()))) {
+      // a & b == c -> (a & b) == c
+      final CompareInBitWiseOpFinder opFinder = new CompareInBitWiseOpFinder(selectedNode);
+      if (opFinder.getCompareExpression()
+          != null) { // compare operation inside bit operations: set parents
+        String label =
+            CorrectionMessages.LocalCorrectionsSubProcessor_setparenteses_bitop_description;
+        Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
+        CUCorrectionProposal proposal =
+            new CUCorrectionProposal(
+                label, context.getCompilationUnit(), IProposalRelevance.INVALID_OPERATOR, image) {
+              @Override
+              protected void addEdits(IDocument document, TextEdit edit) throws CoreException {
+                InfixExpression compareExpression = opFinder.getCompareExpression();
+                InfixExpression expression = opFinder.getParentInfixExpression();
+                ASTNode left = compareExpression.getLeftOperand();
+                if (expression.getStartPosition() < left.getStartPosition()) {
+                  edit.addChild(new InsertEdit(expression.getStartPosition(), String.valueOf('(')));
+                  edit.addChild(
+                      new InsertEdit(ASTNodes.getExclusiveEnd(left), String.valueOf(')')));
+                }
+                ASTNode rigth = compareExpression.getRightOperand();
+                int selEnd = ASTNodes.getExclusiveEnd(expression);
+                if (selEnd > ASTNodes.getExclusiveEnd(rigth)) {
+                  edit.addChild(new InsertEdit(rigth.getStartPosition(), String.valueOf('(')));
+                  edit.addChild(new InsertEdit(selEnd, String.valueOf(')')));
+                }
+              }
+            };
+        proposals.add(proposal);
+      }
+    }
+  }
 

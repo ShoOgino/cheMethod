@@ -1,67 +1,75 @@
-    public TextEdit createTextEdit(IProgressMonitor monitor) throws CoreException, OperationCanceledException {
-        if (monitor == null) {
-            monitor = new NullProgressMonitor();
-        }
-        try {
-            fNumberOfImportsAdded = 0;
-            fNumberOfImportsRemoved = 0;
-
-            monitor.beginTask(Messages.format(CodeGenerationMessages.OrganizeImportsOperation_description,
-                                              BasicElementLabels.getFileName(fCompilationUnit)), 9);
-
-            CompilationUnit astRoot = fASTRoot;
-            if (astRoot == null) {
-                astRoot = SharedASTProvider.getAST(fCompilationUnit, SharedASTProvider.WAIT_YES, new SubProgressMonitor(monitor, 2));
-                if (monitor.isCanceled())
-                    throw new OperationCanceledException();
-            } else {
-                monitor.worked(2);
-            }
-
-            ImportRewrite importsRewrite = StubUtility.createImportRewrite(astRoot, false);
-
-            Set<String> oldSingleImports = new HashSet<>();
-            Set<String> oldDemandImports = new HashSet<>();
-            List<SimpleName> typeReferences = new ArrayList<>();
-            List<SimpleName> staticReferences = new ArrayList<>();
-
-            if (!collectReferences(astRoot, typeReferences, staticReferences, oldSingleImports, oldDemandImports))
-                return null;
-
-            monitor.worked(1);
-
-            processor = new TypeReferenceProcessor(oldSingleImports, oldDemandImports, astRoot, importsRewrite, fIgnoreLowerCaseNames);
-
-            Iterator<SimpleName> refIterator = typeReferences.iterator();
-            while (refIterator.hasNext()) {
-                SimpleName typeRef = refIterator.next();
-                processor.add(typeRef);
-            }
-
-            hasOpenChoices = processor.process(new SubProgressMonitor(monitor, 3));
-            addStaticImports(staticReferences, importsRewrite);
-
-            if (hasOpenChoices) {
-                choices = processor.getChoices();
-                ISourceRange[] ranges = processor.getChoicesSourceRanges();
-                if (fChooseImportQuery != null) {
-                    TypeNameMatch[] chosen = fChooseImportQuery.chooseImports(choices, ranges);
-                    for (int i = 0; i < chosen.length; i++) {
-                        TypeNameMatch typeInfo = chosen[i];
-                        importsRewrite.addImport(typeInfo.getFullyQualifiedName());
-                    }
-                } else if (chosenFQN != null) {
-                    chosenFQN.forEach(importsRewrite::addImport);
-                }
-            }
-
-            TextEdit result = importsRewrite.rewriteImports(new SubProgressMonitor(monitor, 3));
-
-            determineImportDifferences(importsRewrite, oldSingleImports, oldDemandImports);
-
-            return result;
-        } finally {
-            monitor.done();
-        }
+  public TextEdit createTextEdit(IProgressMonitor monitor)
+      throws CoreException, OperationCanceledException {
+    if (monitor == null) {
+      monitor = new NullProgressMonitor();
     }
+    try {
+      fNumberOfImportsAdded = 0;
+      fNumberOfImportsRemoved = 0;
+
+      monitor.beginTask(
+          Messages.format(
+              CodeGenerationMessages.OrganizeImportsOperation_description,
+              BasicElementLabels.getFileName(fCompilationUnit)),
+          9);
+
+      CompilationUnit astRoot = fASTRoot;
+      if (astRoot == null) {
+        astRoot =
+            SharedASTProvider.getAST(
+                fCompilationUnit, SharedASTProvider.WAIT_YES, new SubProgressMonitor(monitor, 2));
+        if (monitor.isCanceled()) throw new OperationCanceledException();
+      } else {
+        monitor.worked(2);
+      }
+
+      ImportRewrite importsRewrite = StubUtility.createImportRewrite(astRoot, false);
+
+      Set<String> oldSingleImports = new HashSet<>();
+      Set<String> oldDemandImports = new HashSet<>();
+      List<SimpleName> typeReferences = new ArrayList<>();
+      List<SimpleName> staticReferences = new ArrayList<>();
+
+      if (!collectReferences(
+          astRoot, typeReferences, staticReferences, oldSingleImports, oldDemandImports))
+        return null;
+
+      monitor.worked(1);
+
+      processor =
+          new TypeReferenceProcessor(
+              oldSingleImports, oldDemandImports, astRoot, importsRewrite, fIgnoreLowerCaseNames);
+
+      Iterator<SimpleName> refIterator = typeReferences.iterator();
+      while (refIterator.hasNext()) {
+        SimpleName typeRef = refIterator.next();
+        processor.add(typeRef);
+      }
+
+      hasOpenChoices = processor.process(new SubProgressMonitor(monitor, 3));
+      addStaticImports(staticReferences, importsRewrite);
+
+      if (hasOpenChoices) {
+        choices = processor.getChoices();
+        ISourceRange[] ranges = processor.getChoicesSourceRanges();
+        if (fChooseImportQuery != null) {
+          TypeNameMatch[] chosen = fChooseImportQuery.chooseImports(choices, ranges);
+          for (int i = 0; i < chosen.length; i++) {
+            TypeNameMatch typeInfo = chosen[i];
+            importsRewrite.addImport(typeInfo.getFullyQualifiedName());
+          }
+        } else if (chosenFQN != null) {
+          chosenFQN.forEach(importsRewrite::addImport);
+        }
+      }
+
+      TextEdit result = importsRewrite.rewriteImports(new SubProgressMonitor(monitor, 3));
+
+      determineImportDifferences(importsRewrite, oldSingleImports, oldDemandImports);
+
+      return result;
+    } finally {
+      monitor.done();
+    }
+  }
 

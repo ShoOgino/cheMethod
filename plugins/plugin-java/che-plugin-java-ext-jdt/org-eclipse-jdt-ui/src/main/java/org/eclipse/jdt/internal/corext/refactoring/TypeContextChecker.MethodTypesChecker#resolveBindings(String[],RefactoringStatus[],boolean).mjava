@@ -1,56 +1,66 @@
-		private ITypeBinding[] resolveBindings(String[] types, RefactoringStatus[] results, boolean firstPass) throws CoreException {
-			//TODO: split types into parameterTypes and returnType
-			int parameterCount = types.length - 1;
-			ITypeBinding[] typeBindings = new ITypeBinding[types.length];
+    private ITypeBinding[] resolveBindings(
+        String[] types, RefactoringStatus[] results, boolean firstPass) throws CoreException {
+      //TODO: split types into parameterTypes and returnType
+      int parameterCount = types.length - 1;
+      ITypeBinding[] typeBindings = new ITypeBinding[types.length];
 
-			StringBuffer cuString = new StringBuffer();
-			cuString.append(fStubTypeContext.getBeforeString());
-			int offsetBeforeMethodName = appendMethodDeclaration(cuString, types, parameterCount);
-			cuString.append(fStubTypeContext.getAfterString());
+      StringBuffer cuString = new StringBuffer();
+      cuString.append(fStubTypeContext.getBeforeString());
+      int offsetBeforeMethodName = appendMethodDeclaration(cuString, types, parameterCount);
+      cuString.append(fStubTypeContext.getAfterString());
 
-			// need a working copy to tell the parser where to resolve (package visible) types
-			ICompilationUnit wc = fMethod.getCompilationUnit().getWorkingCopy(new WorkingCopyOwner() {/*subclass*/
-			}, new NullProgressMonitor());
-			try {
-				wc.getBuffer().setContents(cuString.toString());
-				CompilationUnit compilationUnit = new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(wc, true);
-				ASTNode method = NodeFinder.perform(compilationUnit, offsetBeforeMethodName, METHOD_NAME.length()).getParent();
-				Type[] typeNodes = new Type[types.length];
-				if (method instanceof MethodDeclaration) {
-					MethodDeclaration methodDeclaration = (MethodDeclaration)method;
-					typeNodes[parameterCount] = methodDeclaration.getReturnType2();
-					List<SingleVariableDeclaration> parameters = methodDeclaration.parameters();
-					for (int i = 0; i < parameterCount; i++)
-						typeNodes[i] = parameters.get(i).getType();
+      // need a working copy to tell the parser where to resolve (package visible) types
+      ICompilationUnit wc =
+          fMethod
+              .getCompilationUnit()
+              .getWorkingCopy(
+                  new WorkingCopyOwner() {
+                    /*subclass*/
+                  },
+                  new NullProgressMonitor());
+      try {
+        wc.getBuffer().setContents(cuString.toString());
+        CompilationUnit compilationUnit =
+            new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(wc, true);
+        ASTNode method =
+            NodeFinder.perform(compilationUnit, offsetBeforeMethodName, METHOD_NAME.length())
+                .getParent();
+        Type[] typeNodes = new Type[types.length];
+        if (method instanceof MethodDeclaration) {
+          MethodDeclaration methodDeclaration = (MethodDeclaration) method;
+          typeNodes[parameterCount] = methodDeclaration.getReturnType2();
+          List<SingleVariableDeclaration> parameters = methodDeclaration.parameters();
+          for (int i = 0; i < parameterCount; i++) typeNodes[i] = parameters.get(i).getType();
 
-				} else if (method instanceof AnnotationTypeMemberDeclaration) {
-					typeNodes[0] = ((AnnotationTypeMemberDeclaration)method).getType();
-				}
+        } else if (method instanceof AnnotationTypeMemberDeclaration) {
+          typeNodes[0] = ((AnnotationTypeMemberDeclaration) method).getType();
+        }
 
-				for (int i = 0; i < types.length; i++) {
-					Type type = typeNodes[i];
-					if (type == null) {
-						String msg = Messages.format(RefactoringCoreMessages.TypeContextChecker_couldNotResolveType,
-													 BasicElementLabels.getJavaElementName(types[i]));
-						results[i]= RefactoringStatus.createErrorStatus(msg);
-						continue;
-					}
-					results[i]= new RefactoringStatus();
-					IProblem[] problems= ASTNodes.getProblems(type, ASTNodes.NODE_ONLY, ASTNodes.PROBLEMS);
-					if (problems.length > 0) {
-						for (int p= 0; p < problems.length; p++)
-							if (isError(problems[p], type))
-								results[i].addError(problems[p].getMessage());
-					}
-					ITypeBinding binding= handleBug84585(type.resolveBinding());
-					if (firstPass && (binding == null || binding.isRecovered())) {
-						types[i]= qualifyTypes(type, results[i]);
-					}
-					typeBindings[i]= binding;
-				}
-				return typeBindings;
-			} finally {
-				wc.discardWorkingCopy();
-			}
-		}
+        for (int i = 0; i < types.length; i++) {
+          Type type = typeNodes[i];
+          if (type == null) {
+            String msg =
+                Messages.format(
+                    RefactoringCoreMessages.TypeContextChecker_couldNotResolveType,
+                    BasicElementLabels.getJavaElementName(types[i]));
+            results[i] = RefactoringStatus.createErrorStatus(msg);
+            continue;
+          }
+          results[i] = new RefactoringStatus();
+          IProblem[] problems = ASTNodes.getProblems(type, ASTNodes.NODE_ONLY, ASTNodes.PROBLEMS);
+          if (problems.length > 0) {
+            for (int p = 0; p < problems.length; p++)
+              if (isError(problems[p], type)) results[i].addError(problems[p].getMessage());
+          }
+          ITypeBinding binding = handleBug84585(type.resolveBinding());
+          if (firstPass && (binding == null || binding.isRecovered())) {
+            types[i] = qualifyTypes(type, results[i]);
+          }
+          typeBindings[i] = binding;
+        }
+        return typeBindings;
+      } finally {
+        wc.discardWorkingCopy();
+      }
+    }
 

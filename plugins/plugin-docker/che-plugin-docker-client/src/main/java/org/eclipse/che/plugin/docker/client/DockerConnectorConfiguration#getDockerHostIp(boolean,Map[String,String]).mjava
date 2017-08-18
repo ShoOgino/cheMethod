@@ -1,46 +1,52 @@
-    /**
-     * Provides the IP address that is accessible from the docker container to reach the docker host
-     *
-     * @param isLinux
-     *         if System is running on Linux
-     * @param env
-     *         should contain System environment
-     * @return docker Ip address host to be used from docker container
-     */
-    protected String getDockerHostIp(final boolean isLinux, @NotNull final Map<String, String> env) {
-        if (isLinux) {
-            // search "docker0" bridge
-            Optional<InetAddress> dockerBridgeInetAddress = networkFinder.getIPAddress(BRIDGE_LINUX_INTERFACE_NAME);
-            if (dockerBridgeInetAddress.isPresent()) {
-                return dockerBridgeInetAddress.get().getHostAddress();
-            }
-            // Che server is probably running in a Docker container: get its internal IP
-            Optional<InetAddress> cheServerInetAddress = networkFinder.getIPAddress(DEFAULT_LINUX_INTERFACE_NAME);
-            if (cheServerInetAddress.isPresent()) {
-                return cheServerInetAddress.get().getHostAddress();
-            }
-            // return default Docker host ip address
-            return DEFAULT_LINUX_DOCKER_HOST_IP;
-        }
-
-        // on other env, Windows/Mac, search the docker machine ip and then find the bridge used
-        String host = env.get(DOCKER_HOST_PROPERTY);
-        if (host != null) {
-            Matcher matcher = HOST_REGEXP_PATTERN.matcher(host);
-            if (matcher.matches()) {
-                String dockerIpAddress = matcher.group(1);
-                Matcher ipv4Matcher = IPV4_ADDRESS_PATTERN.matcher(dockerIpAddress);
-                if (ipv4Matcher.matches()) {
-                    String subnet = ipv4Matcher.group(1).concat(".").concat(ipv4Matcher.group(2)).concat(".").concat(ipv4Matcher.group(3));
-                    // now try to find a network interface matching this
-                    Optional<InetAddress> matchingIpAddress = networkFinder.getMatchingInetAddress(subnet);
-                    // return the bridge that is matching the host
-                    if (matchingIpAddress.isPresent()) {
-                        return matchingIpAddress.get().getHostAddress();
-                    }
-                }
-            }
-        }
-        return DEFAULT_DOCKER_MACHINE_DOCKER_HOST_IP;
+  /**
+   * Provides the IP address that is accessible from the docker container to reach the docker host
+   *
+   * @param isLinux if System is running on Linux
+   * @param env should contain System environment
+   * @return docker Ip address host to be used from docker container
+   */
+  protected String getDockerHostIp(final boolean isLinux, @NotNull final Map<String, String> env) {
+    if (isLinux) {
+      // search "docker0" bridge
+      Optional<InetAddress> dockerBridgeInetAddress =
+          networkFinder.getIPAddress(BRIDGE_LINUX_INTERFACE_NAME);
+      if (dockerBridgeInetAddress.isPresent()) {
+        return dockerBridgeInetAddress.get().getHostAddress();
+      }
+      // Che server is probably running in a Docker container: get its internal IP
+      Optional<InetAddress> cheServerInetAddress =
+          networkFinder.getIPAddress(DEFAULT_LINUX_INTERFACE_NAME);
+      if (cheServerInetAddress.isPresent()) {
+        return cheServerInetAddress.get().getHostAddress();
+      }
+      // return default Docker host ip address
+      return DEFAULT_LINUX_DOCKER_HOST_IP;
     }
+
+    // on other env, Windows/Mac, search the docker machine ip and then find the bridge used
+    String host = env.get(DOCKER_HOST_PROPERTY);
+    if (host != null) {
+      Matcher matcher = HOST_REGEXP_PATTERN.matcher(host);
+      if (matcher.matches()) {
+        String dockerIpAddress = matcher.group(1);
+        Matcher ipv4Matcher = IPV4_ADDRESS_PATTERN.matcher(dockerIpAddress);
+        if (ipv4Matcher.matches()) {
+          String subnet =
+              ipv4Matcher
+                  .group(1)
+                  .concat(".")
+                  .concat(ipv4Matcher.group(2))
+                  .concat(".")
+                  .concat(ipv4Matcher.group(3));
+          // now try to find a network interface matching this
+          Optional<InetAddress> matchingIpAddress = networkFinder.getMatchingInetAddress(subnet);
+          // return the bridge that is matching the host
+          if (matchingIpAddress.isPresent()) {
+            return matchingIpAddress.get().getHostAddress();
+          }
+        }
+      }
+    }
+    return DEFAULT_DOCKER_MACHINE_DOCKER_HOST_IP;
+  }
 

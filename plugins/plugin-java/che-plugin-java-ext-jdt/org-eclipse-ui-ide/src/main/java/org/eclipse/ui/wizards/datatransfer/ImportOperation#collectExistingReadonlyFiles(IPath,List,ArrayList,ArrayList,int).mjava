@@ -1,73 +1,71 @@
-    /**
-     * Prompts if existing resources should be overwritten. Recursively collects
-     * existing read-only files to overwrite and resources that should not be
-     * overwritten.
-     *
-     * @param sourceStart destination path to check for existing files
-     * @param sources file system objects that may exist in the destination
-     * @param noOverwrite files that were selected to be skipped (don't overwrite).
-     * 	object type IPath
-     * @param overwriteReadonly the collected existing read-only files to overwrite.
-     * 	object type IPath
-     * @param policy on of the POLICY constants defined in the
-     * class.
-     */
-    void collectExistingReadonlyFiles(IPath sourceStart, List sources,
-                                      ArrayList noOverwrite, ArrayList overwriteReadonly, int policy) {
-        IWorkspaceRoot workspaceRoot = ResourcesPlugin.getWorkspace().getRoot();
-        Iterator sourceIter = sources.iterator();
-        IPath sourceRootPath = null;
+  /**
+   * Prompts if existing resources should be overwritten. Recursively collects existing read-only
+   * files to overwrite and resources that should not be overwritten.
+   *
+   * @param sourceStart destination path to check for existing files
+   * @param sources file system objects that may exist in the destination
+   * @param noOverwrite files that were selected to be skipped (don't overwrite). object type IPath
+   * @param overwriteReadonly the collected existing read-only files to overwrite. object type IPath
+   * @param policy on of the POLICY constants defined in the class.
+   */
+  void collectExistingReadonlyFiles(
+      IPath sourceStart,
+      List sources,
+      ArrayList noOverwrite,
+      ArrayList overwriteReadonly,
+      int policy) {
+    IWorkspaceRoot workspaceRoot = ResourcesPlugin.getWorkspace().getRoot();
+    Iterator sourceIter = sources.iterator();
+    IPath sourceRootPath = null;
 
-        if (this.source != null) {
-            sourceRootPath = new Path(provider.getFullPath(this.source));
-        }
-        while (sourceIter.hasNext()) {
-            Object nextSource = sourceIter.next();
-            IPath sourcePath = new Path(provider.getFullPath(nextSource));
-            IPath newDestinationPath;
-            IResource newDestination;
-
-            if (sourceRootPath == null) {
-                newDestinationPath = sourceStart.append(provider
-                                                                .getLabel(nextSource));
-            } else {
-                int prefixLength = sourcePath
-                        .matchingFirstSegments(sourceRootPath);
-                IPath relativeSourcePath = sourcePath
-                        .removeFirstSegments(prefixLength);
-                newDestinationPath = this.destinationPath
-                        .append(relativeSourcePath);
-            }
-            newDestination = workspaceRoot.findMember(newDestinationPath);
-            if (newDestination == null) {
-                continue;
-            }
-
-            IFolder folder = getFolder(newDestination);
-            if (folder != null) {
-                if (policy != POLICY_FORCE_OVERWRITE) {
-                    if (this.overwriteState == OVERWRITE_NONE
-                        || !queryOverwrite(newDestinationPath)) {
-                        noOverwrite.add(folder);
-                        continue;
-                    }
-                }
-                if (provider.isFolder(nextSource)) {
-                    collectExistingReadonlyFiles(newDestinationPath, provider
-                                                         .getChildren(nextSource), noOverwrite,
-                                                 overwriteReadonly, POLICY_FORCE_OVERWRITE);
-                }
-            } else {
-                IFile file = getFile(newDestination);
-
-                if (file != null) {
-                    if (!queryOverwriteFile(file, policy)) {
-                        noOverwrite.add(file.getFullPath());
-                    } else if (file.isReadOnly()) {
-                        overwriteReadonly.add(file);
-                    }
-                }
-            }
-        }
+    if (this.source != null) {
+      sourceRootPath = new Path(provider.getFullPath(this.source));
     }
+    while (sourceIter.hasNext()) {
+      Object nextSource = sourceIter.next();
+      IPath sourcePath = new Path(provider.getFullPath(nextSource));
+      IPath newDestinationPath;
+      IResource newDestination;
+
+      if (sourceRootPath == null) {
+        newDestinationPath = sourceStart.append(provider.getLabel(nextSource));
+      } else {
+        int prefixLength = sourcePath.matchingFirstSegments(sourceRootPath);
+        IPath relativeSourcePath = sourcePath.removeFirstSegments(prefixLength);
+        newDestinationPath = this.destinationPath.append(relativeSourcePath);
+      }
+      newDestination = workspaceRoot.findMember(newDestinationPath);
+      if (newDestination == null) {
+        continue;
+      }
+
+      IFolder folder = getFolder(newDestination);
+      if (folder != null) {
+        if (policy != POLICY_FORCE_OVERWRITE) {
+          if (this.overwriteState == OVERWRITE_NONE || !queryOverwrite(newDestinationPath)) {
+            noOverwrite.add(folder);
+            continue;
+          }
+        }
+        if (provider.isFolder(nextSource)) {
+          collectExistingReadonlyFiles(
+              newDestinationPath,
+              provider.getChildren(nextSource),
+              noOverwrite,
+              overwriteReadonly,
+              POLICY_FORCE_OVERWRITE);
+        }
+      } else {
+        IFile file = getFile(newDestination);
+
+        if (file != null) {
+          if (!queryOverwriteFile(file, policy)) {
+            noOverwrite.add(file.getFullPath());
+          } else if (file.isReadOnly()) {
+            overwriteReadonly.add(file);
+          }
+        }
+      }
+    }
+  }
 

@@ -1,69 +1,76 @@
-    private AbstractTypeDeclaration createNewNestedClass(CompilationUnitRewrite rewrite, ITypeBinding[] typeParameters) throws
-																														CoreException {
-		final AST ast= fAnonymousInnerClassNode.getAST();
+  private AbstractTypeDeclaration createNewNestedClass(
+      CompilationUnitRewrite rewrite, ITypeBinding[] typeParameters) throws CoreException {
+    final AST ast = fAnonymousInnerClassNode.getAST();
 
-		final TypeDeclaration newDeclaration= ast.newTypeDeclaration();
-		newDeclaration.setInterface(false);
-		newDeclaration.setJavadoc(null);
-		newDeclaration.modifiers().addAll(ASTNodeFactory.newModifiers(ast, createModifiersForNestedClass()));
-		newDeclaration.setName(ast.newSimpleName(fClassName));
+    final TypeDeclaration newDeclaration = ast.newTypeDeclaration();
+    newDeclaration.setInterface(false);
+    newDeclaration.setJavadoc(null);
+    newDeclaration
+        .modifiers()
+        .addAll(ASTNodeFactory.newModifiers(ast, createModifiersForNestedClass()));
+    newDeclaration.setName(ast.newSimpleName(fClassName));
 
-		TypeParameter parameter= null;
-		for (int index= 0; index < typeParameters.length; index++) {
-			parameter= ast.newTypeParameter();
-			parameter.setName(ast.newSimpleName(typeParameters[index].getName()));
-			newDeclaration.typeParameters().add(parameter);
-		}
-		setSuperType(newDeclaration);
+    TypeParameter parameter = null;
+    for (int index = 0; index < typeParameters.length; index++) {
+      parameter = ast.newTypeParameter();
+      parameter.setName(ast.newSimpleName(typeParameters[index].getName()));
+      newDeclaration.typeParameters().add(parameter);
+    }
+    setSuperType(newDeclaration);
 
-		IJavaProject project= fCu.getJavaProject();
+    IJavaProject project = fCu.getJavaProject();
 
-		IVariableBinding[] bindings= getUsedLocalVariables();
-		ArrayList<String> fieldNames= new ArrayList<String>();
-		for (int i= 0; i < bindings.length; i++) {
-			String name= StubUtility.getBaseName(bindings[i], project);
-			String[] fieldNameProposals= StubUtility
-					.getVariableNameSuggestions(NamingConventions.VK_INSTANCE_FIELD, project, name, 0, fieldNames, true);
-			fieldNames.add(fieldNameProposals[0]);
+    IVariableBinding[] bindings = getUsedLocalVariables();
+    ArrayList<String> fieldNames = new ArrayList<String>();
+    for (int i = 0; i < bindings.length; i++) {
+      String name = StubUtility.getBaseName(bindings[i], project);
+      String[] fieldNameProposals =
+          StubUtility.getVariableNameSuggestions(
+              NamingConventions.VK_INSTANCE_FIELD, project, name, 0, fieldNames, true);
+      fieldNames.add(fieldNameProposals[0]);
 
+      if (fLinkedProposalModel != null) {
+        LinkedProposalPositionGroup positionGroup =
+            fLinkedProposalModel.getPositionGroup(KEY_FIELD_NAME_EXT + i, true);
+        for (int k = 0; k < fieldNameProposals.length; k++) {
+          positionGroup.addProposal(fieldNameProposals[k], null, fieldNameProposals.length - k);
+        }
+      }
+    }
+    String[] allFieldNames = fieldNames.toArray(new String[fieldNames.size()]);
 
-			if (fLinkedProposalModel != null) {
-				LinkedProposalPositionGroup positionGroup= fLinkedProposalModel.getPositionGroup(KEY_FIELD_NAME_EXT + i, true);
-				for (int k= 0; k < fieldNameProposals.length; k++) {
-					positionGroup.addProposal(fieldNameProposals[k], null, fieldNameProposals.length - k);
-				}
-			}
-		}
-		String[] allFieldNames= fieldNames.toArray(new String[fieldNames.size()]);
+    List<BodyDeclaration> newBodyDeclarations = newDeclaration.bodyDeclarations();
 
-		List<BodyDeclaration> newBodyDeclarations= newDeclaration.bodyDeclarations();
+    createFieldsForAccessedLocals(rewrite, bindings, allFieldNames, newBodyDeclarations);
 
-		createFieldsForAccessedLocals(rewrite, bindings, allFieldNames, newBodyDeclarations);
+    MethodDeclaration newConstructorDecl = createNewConstructor(rewrite, bindings, allFieldNames);
+    if (newConstructorDecl != null) {
+      newBodyDeclarations.add(newConstructorDecl);
+    }
 
-		MethodDeclaration newConstructorDecl= createNewConstructor(rewrite, bindings, allFieldNames);
-		if (newConstructorDecl != null) {
-			newBodyDeclarations.add(newConstructorDecl);
-		}
+    updateAndMoveBodyDeclarations(
+        rewrite, bindings, allFieldNames, newBodyDeclarations, newConstructorDecl);
 
-		updateAndMoveBodyDeclarations(rewrite, bindings, allFieldNames, newBodyDeclarations, newConstructorDecl);
+    if (doAddComments()) {
+      String[] parameterNames = new String[typeParameters.length];
+      for (int index = 0; index < parameterNames.length; index++) {
+        parameterNames[index] = typeParameters[index].getName();
+      }
+      String string =
+          CodeGeneration.getTypeComment(
+              rewrite.getCu(), fClassName, parameterNames, StubUtility.getLineDelimiterUsed(fCu));
+      if (string != null) {
+        Javadoc javadoc =
+            (Javadoc) rewrite.getASTRewrite().createStringPlaceholder(string, ASTNode.JAVADOC);
+        newDeclaration.setJavadoc(javadoc);
+      }
+    }
+    if (fLinkedProposalModel != null) {
+      addLinkedPosition(KEY_TYPE_NAME, newDeclaration.getName(), rewrite.getASTRewrite(), false);
+      ModifierCorrectionSubProcessor.installLinkedVisibilityProposals(
+          fLinkedProposalModel, rewrite.getASTRewrite(), newDeclaration.modifiers(), false);
+    }
 
-		if (doAddComments()) {
-			String[] parameterNames= new String[typeParameters.length];
-			for (int index= 0; index < parameterNames.length; index++) {
-				parameterNames[index]= typeParameters[index].getName();
-			}
-			String string= CodeGeneration.getTypeComment(rewrite.getCu(), fClassName, parameterNames, StubUtility.getLineDelimiterUsed(fCu));
-			if (string != null) {
-				Javadoc javadoc= (Javadoc) rewrite.getASTRewrite().createStringPlaceholder(string, ASTNode.JAVADOC);
-				newDeclaration.setJavadoc(javadoc);
-			}
-		}
-		if (fLinkedProposalModel != null) {
-			addLinkedPosition(KEY_TYPE_NAME, newDeclaration.getName(), rewrite.getASTRewrite(), false);
-			ModifierCorrectionSubProcessor
-					.installLinkedVisibilityProposals(fLinkedProposalModel, rewrite.getASTRewrite(), newDeclaration.modifiers(), false);
-		}
-
-		return newDeclaration;
-	}
+    return newDeclaration;
+  }
 

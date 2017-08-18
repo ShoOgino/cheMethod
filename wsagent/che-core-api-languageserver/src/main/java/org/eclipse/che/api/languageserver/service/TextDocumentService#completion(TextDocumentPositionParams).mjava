@@ -1,72 +1,94 @@
-    private ExtendedCompletionListDto completion(TextDocumentPositionParams textDocumentPositionParams) {
-        try {
-            TextDocumentIdentifier textDocument = textDocumentPositionParams.getTextDocument();
-            String uri = prefixURI(textDocument.getUri());
-            textDocument.setUri(uri);
-            textDocumentPositionParams.setUri(prefixURI(textDocumentPositionParams.getUri()));
-            ExtendedCompletionListDto[] result = new ExtendedCompletionListDto[1];
+  private ExtendedCompletionListDto completion(
+      TextDocumentPositionParams textDocumentPositionParams) {
+    try {
+      TextDocumentIdentifier textDocument = textDocumentPositionParams.getTextDocument();
+      String uri = prefixURI(textDocument.getUri());
+      textDocument.setUri(uri);
+      textDocumentPositionParams.setUri(prefixURI(textDocumentPositionParams.getUri()));
+      ExtendedCompletionListDto[] result = new ExtendedCompletionListDto[1];
 
-            LSOperation<Collection<InitializedLanguageServer>, ExtendedCompletionListDto> op = new LSOperation<Collection<InitializedLanguageServer>, ExtendedCompletionListDto>() {
+      LSOperation<Collection<InitializedLanguageServer>, ExtendedCompletionListDto> op =
+          new LSOperation<Collection<InitializedLanguageServer>, ExtendedCompletionListDto>() {
 
-                @Override
-                public boolean canDo(Collection<InitializedLanguageServer> servers) {
-                    return true;
-                }
+            @Override
+            public boolean canDo(Collection<InitializedLanguageServer> servers) {
+              return true;
+            }
 
-                @Override
-                public CompletableFuture<ExtendedCompletionListDto> start(Collection<InitializedLanguageServer> element) {
-                    return CompletableFuture.supplyAsync(() -> {
-                        ExtendedCompletionListDto res = new ExtendedCompletionListDto();
-                        List<ExtendedCompletionItem> items = new ArrayList<>();
-                        res.setItems(items);
-                        LSOperation<InitializedLanguageServer, Either<List<CompletionItem>, CompletionList>> op2 =
-                                new LSOperation<InitializedLanguageServer, Either<List<CompletionItem>, CompletionList>> () {
+            @Override
+            public CompletableFuture<ExtendedCompletionListDto> start(
+                Collection<InitializedLanguageServer> element) {
+              return CompletableFuture.supplyAsync(
+                  () -> {
+                    ExtendedCompletionListDto res = new ExtendedCompletionListDto();
+                    List<ExtendedCompletionItem> items = new ArrayList<>();
+                    res.setItems(items);
+                    LSOperation<
+                            InitializedLanguageServer, Either<List<CompletionItem>, CompletionList>>
+                        op2 =
+                            new LSOperation<
+                                InitializedLanguageServer,
+                                Either<List<CompletionItem>, CompletionList>>() {
 
-                            @Override
-                            public boolean canDo(InitializedLanguageServer element) {
-                                return element.getInitializeResult().getCapabilities().getCompletionProvider() != null;
-                            }
+                              @Override
+                              public boolean canDo(InitializedLanguageServer element) {
+                                return element
+                                        .getInitializeResult()
+                                        .getCapabilities()
+                                        .getCompletionProvider()
+                                    != null;
+                              }
 
-                            @Override
-                            public CompletableFuture<Either<List<CompletionItem>, CompletionList>> start(InitializedLanguageServer element) {
-                                return element.getServer().getTextDocumentService().completion(textDocumentPositionParams);
-                            }
+                              @Override
+                              public CompletableFuture<Either<List<CompletionItem>, CompletionList>>
+                                  start(InitializedLanguageServer element) {
+                                return element
+                                    .getServer()
+                                    .getTextDocumentService()
+                                    .completion(textDocumentPositionParams);
+                              }
 
-                            @Override
-                            public boolean handleResult(InitializedLanguageServer element, Either<List<CompletionItem>, CompletionList> result) {
+                              @Override
+                              public boolean handleResult(
+                                  InitializedLanguageServer element,
+                                  Either<List<CompletionItem>, CompletionList> result) {
                                 List<CompletionItem> itemList;
-                                if(result.isRight()) {
-                                    res.setInComplete(res.isInComplete() && result.getRight().isIncomplete());
-                                    itemList = result.getRight().getItems();
+                                if (result.isRight()) {
+                                  res.setInComplete(
+                                      res.isInComplete() && result.getRight().isIncomplete());
+                                  itemList = result.getRight().getItems();
                                 } else {
-                                    itemList = result.getLeft();
+                                  itemList = result.getLeft();
                                 }
 
                                 for (CompletionItem item : itemList) {
-                                    ExtendedCompletionItemDto exItem = new ExtendedCompletionItemDto();
-                                    exItem.setItem(new CompletionItemDto(item));
-                                    exItem.setLanguageServerId(element.getId());
-                                    items.add(exItem);
+                                  ExtendedCompletionItemDto exItem =
+                                      new ExtendedCompletionItemDto();
+                                  exItem.setItem(new CompletionItemDto(item));
+                                  exItem.setLanguageServerId(element.getId());
+                                  items.add(exItem);
                                 }
                                 return false;
-                            }
-                        };
-                        OperationUtil.doInParallel(element, op2, 30000);
+                              }
+                            };
+                    OperationUtil.doInParallel(element, op2, 30000);
 
-                        return res;
-                    });
-                }
+                    return res;
+                  });
+            }
 
-                @Override
-                public boolean handleResult(Collection<InitializedLanguageServer> element, ExtendedCompletionListDto list) {
-                    result[0] = list;
-                    return !list.getItems().isEmpty();
-                }
-            };
-            OperationUtil.doInSequence(languageServerRegistry.getApplicableLanguageServers(uri), op, 10000);
-            return result[0];
-        } catch (LanguageServerException e) {
-            throw new JsonRpcException(-27000, e.getMessage());
-        }
+            @Override
+            public boolean handleResult(
+                Collection<InitializedLanguageServer> element, ExtendedCompletionListDto list) {
+              result[0] = list;
+              return !list.getItems().isEmpty();
+            }
+          };
+      OperationUtil.doInSequence(
+          languageServerRegistry.getApplicableLanguageServers(uri), op, 10000);
+      return result[0];
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
     }
+  }
 

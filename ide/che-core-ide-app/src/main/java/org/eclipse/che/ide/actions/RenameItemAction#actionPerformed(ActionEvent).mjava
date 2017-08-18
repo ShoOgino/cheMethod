@@ -1,54 +1,64 @@
-    /** {@inheritDoc} */
-    @Override
-    public void actionPerformed(ActionEvent e) {
+  /** {@inheritDoc} */
+  @Override
+  public void actionPerformed(ActionEvent e) {
 
+    final Resource resource = appContext.getResource();
 
-        final Resource resource = appContext.getResource();
+    checkState(resource != null, "Null resource occurred");
 
-        checkState(resource != null, "Null resource occurred");
+    final String resourceName = resource.getName();
+    final int selectionLength =
+        resourceName.indexOf('.') >= 0 ? resourceName.lastIndexOf('.') : resourceName.length();
+    final InputValidator validator;
+    final String dialogTitle;
 
-        final String resourceName = resource.getName();
-        final int selectionLength = resourceName.indexOf('.') >= 0 ? resourceName.lastIndexOf('.') : resourceName.length();
-        final InputValidator validator;
-        final String dialogTitle;
+    if (resource.getResourceType() == FILE) {
+      validator = new FileNameValidator(resourceName);
+      dialogTitle = localization.renameFileDialogTitle(resourceName);
+    } else if (resource.getResourceType() == FOLDER) {
+      validator = new FolderNameValidator(resourceName);
+      dialogTitle = localization.renameFolderDialogTitle(resourceName);
+    } else if (resource.getResourceType() == PROJECT) {
+      validator = new ProjectNameValidator(resourceName);
+      dialogTitle = localization.renameProjectDialogTitle(resourceName);
+    } else {
+      throw new IllegalStateException("Not a resource");
+    }
 
-        if (resource.getResourceType() == FILE) {
-            validator = new FileNameValidator(resourceName);
-            dialogTitle = localization.renameFileDialogTitle(resourceName);
-        } else if (resource.getResourceType() == FOLDER) {
-            validator = new FolderNameValidator(resourceName);
-            dialogTitle = localization.renameFolderDialogTitle(resourceName);
-        } else if (resource.getResourceType() == PROJECT) {
-            validator = new ProjectNameValidator(resourceName);
-            dialogTitle = localization.renameProjectDialogTitle(resourceName);
-        } else {
-            throw new IllegalStateException("Not a resource");
-        }
+    final InputCallback inputCallback =
+        new InputCallback() {
+          @Override
+          public void accepted(final String value) {
+            //we shouldn't perform renaming file with the same name
+            if (!value.trim().equals(resourceName)) {
 
-        final InputCallback inputCallback = new InputCallback() {
-            @Override
-            public void accepted(final String value) {
-                //we shouldn't perform renaming file with the same name
-                if (!value.trim().equals(resourceName)) {
+              closeRelatedEditors(resource);
 
-                    closeRelatedEditors(resource);
+              final Path destination = resource.getLocation().parent().append(value);
 
-                    final Path destination = resource.getLocation().parent().append(value);
-
-                    resource.move(destination).catchError(new Operation<PromiseError>() {
+              resource
+                  .move(destination)
+                  .catchError(
+                      new Operation<PromiseError>() {
                         @Override
                         public void apply(PromiseError arg) throws OperationException {
-                            notificationManager.notify("", arg.getMessage(), FAIL, EMERGE_MODE);
+                          notificationManager.notify("", arg.getMessage(), FAIL, EMERGE_MODE);
                         }
-                    });
-                }
+                      });
             }
+          }
         };
 
-        InputDialog inputDialog = dialogFactory.createInputDialog(dialogTitle,
-                                                                  localization.renameDialogNewNameLabel(),
-                                                                  resource.getName(), 0, selectionLength, inputCallback, null);
-        inputDialog.withValidator(validator);
-        inputDialog.show();
-    }
+    InputDialog inputDialog =
+        dialogFactory.createInputDialog(
+            dialogTitle,
+            localization.renameDialogNewNameLabel(),
+            resource.getName(),
+            0,
+            selectionLength,
+            inputCallback,
+            null);
+    inputDialog.withValidator(validator);
+    inputDialog.show();
+  }
 

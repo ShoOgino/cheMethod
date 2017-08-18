@@ -1,63 +1,67 @@
-    private void addLocalDeclarationSplit(ASTRewrite rewrite) {
-    	VariableDeclarationStatement tempDeclarationStatement= getTempDeclarationStatement();
-    	ASTNode parentStatement= tempDeclarationStatement.getParent();
+  private void addLocalDeclarationSplit(ASTRewrite rewrite) {
+    VariableDeclarationStatement tempDeclarationStatement = getTempDeclarationStatement();
+    ASTNode parentStatement = tempDeclarationStatement.getParent();
 
-    	ListRewrite listRewrite;
-		if (parentStatement instanceof SwitchStatement) {
-			listRewrite= rewrite.getListRewrite(parentStatement, SwitchStatement.STATEMENTS_PROPERTY);
-		} else if (parentStatement instanceof Block) {
-			listRewrite= rewrite.getListRewrite(parentStatement, Block.STATEMENTS_PROPERTY);
-		} else {
-			// should not happen. VariableDeclaration's can not be in a control statement body
-			listRewrite= null;
-			Assert.isTrue(false);
-		}
-    	int statementIndex= listRewrite.getOriginalList().indexOf(tempDeclarationStatement);
-   	   	Assert.isTrue(statementIndex != -1);
-
-		Statement newStatement= createNewAssignmentStatement(rewrite);
-
-    	List<VariableDeclarationFragment> fragments= tempDeclarationStatement.fragments();
-
-		int fragmentIndex= fragments.indexOf(fTempDeclarationNode);
-		Assert.isTrue(fragmentIndex != -1);
-
-		if (fragments.size() == 1) {
-			rewrite.replace(tempDeclarationStatement, newStatement, null);
-			return;
-		}
-
-        for (int i1= fragmentIndex, n = fragments.size(); i1 < n; i1++) {
-        	VariableDeclarationFragment fragment= fragments.get(i1);
-        	rewrite.remove(fragment, null);
-        }
-        if (fragmentIndex == 0)
-           	rewrite.remove(tempDeclarationStatement, null);
-
-        Assert.isTrue(tempHasInitializer());
-
-        listRewrite.insertAt(newStatement, statementIndex + 1, null);
-
-        if (fragmentIndex + 1 < fragments.size()){
-            VariableDeclarationFragment firstFragmentAfter= fragments.get(fragmentIndex + 1);
-            VariableDeclarationFragment copyfirstFragmentAfter= (VariableDeclarationFragment)rewrite.createCopyTarget(firstFragmentAfter);
-        	VariableDeclarationStatement statement= getAST().newVariableDeclarationStatement(copyfirstFragmentAfter);
-         	Type type= (Type)rewrite.createCopyTarget(tempDeclarationStatement.getType());
-        	statement.setType(type);
-        	List<IExtendedModifier> modifiers= tempDeclarationStatement.modifiers();
-        	if (modifiers.size() > 0) {
-        		ListRewrite modifiersRewrite= rewrite.getListRewrite(tempDeclarationStatement, VariableDeclarationStatement.MODIFIERS2_PROPERTY);
-        		ASTNode firstModifier= (ASTNode) modifiers.get(0);
-				ASTNode lastModifier= (ASTNode) modifiers.get(modifiers.size() - 1);
-				ASTNode modifiersCopy= modifiersRewrite.createCopyTarget(firstModifier, lastModifier);
-	        	statement.modifiers().add(modifiersCopy);
-        	}
-        	for (int i= fragmentIndex + 2; i < fragments.size(); i++) {
-        		VariableDeclarationFragment fragment= fragments.get(i);
-                VariableDeclarationFragment fragmentCopy= (VariableDeclarationFragment)rewrite.createCopyTarget(fragment);
-                statement.fragments().add(fragmentCopy);
-            }
-            listRewrite.insertAt(statement, statementIndex + 2, null);
-        }
+    ListRewrite listRewrite;
+    if (parentStatement instanceof SwitchStatement) {
+      listRewrite = rewrite.getListRewrite(parentStatement, SwitchStatement.STATEMENTS_PROPERTY);
+    } else if (parentStatement instanceof Block) {
+      listRewrite = rewrite.getListRewrite(parentStatement, Block.STATEMENTS_PROPERTY);
+    } else {
+      // should not happen. VariableDeclaration's can not be in a control statement body
+      listRewrite = null;
+      Assert.isTrue(false);
     }
+    int statementIndex = listRewrite.getOriginalList().indexOf(tempDeclarationStatement);
+    Assert.isTrue(statementIndex != -1);
+
+    Statement newStatement = createNewAssignmentStatement(rewrite);
+
+    List<VariableDeclarationFragment> fragments = tempDeclarationStatement.fragments();
+
+    int fragmentIndex = fragments.indexOf(fTempDeclarationNode);
+    Assert.isTrue(fragmentIndex != -1);
+
+    if (fragments.size() == 1) {
+      rewrite.replace(tempDeclarationStatement, newStatement, null);
+      return;
+    }
+
+    for (int i1 = fragmentIndex, n = fragments.size(); i1 < n; i1++) {
+      VariableDeclarationFragment fragment = fragments.get(i1);
+      rewrite.remove(fragment, null);
+    }
+    if (fragmentIndex == 0) rewrite.remove(tempDeclarationStatement, null);
+
+    Assert.isTrue(tempHasInitializer());
+
+    listRewrite.insertAt(newStatement, statementIndex + 1, null);
+
+    if (fragmentIndex + 1 < fragments.size()) {
+      VariableDeclarationFragment firstFragmentAfter = fragments.get(fragmentIndex + 1);
+      VariableDeclarationFragment copyfirstFragmentAfter =
+          (VariableDeclarationFragment) rewrite.createCopyTarget(firstFragmentAfter);
+      VariableDeclarationStatement statement =
+          getAST().newVariableDeclarationStatement(copyfirstFragmentAfter);
+      Type type = (Type) rewrite.createCopyTarget(tempDeclarationStatement.getType());
+      statement.setType(type);
+      List<IExtendedModifier> modifiers = tempDeclarationStatement.modifiers();
+      if (modifiers.size() > 0) {
+        ListRewrite modifiersRewrite =
+            rewrite.getListRewrite(
+                tempDeclarationStatement, VariableDeclarationStatement.MODIFIERS2_PROPERTY);
+        ASTNode firstModifier = (ASTNode) modifiers.get(0);
+        ASTNode lastModifier = (ASTNode) modifiers.get(modifiers.size() - 1);
+        ASTNode modifiersCopy = modifiersRewrite.createCopyTarget(firstModifier, lastModifier);
+        statement.modifiers().add(modifiersCopy);
+      }
+      for (int i = fragmentIndex + 2; i < fragments.size(); i++) {
+        VariableDeclarationFragment fragment = fragments.get(i);
+        VariableDeclarationFragment fragmentCopy =
+            (VariableDeclarationFragment) rewrite.createCopyTarget(fragment);
+        statement.fragments().add(fragmentCopy);
+      }
+      listRewrite.insertAt(statement, statementIndex + 2, null);
+    }
+  }
 

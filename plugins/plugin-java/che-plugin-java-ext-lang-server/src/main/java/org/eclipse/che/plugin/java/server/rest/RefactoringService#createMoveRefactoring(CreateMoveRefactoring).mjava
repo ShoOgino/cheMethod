@@ -1,55 +1,53 @@
-    /**
-     * Create move refactoring session.
-     *
-     * @param cmr
-     *         move settings, contains resource paths to move.
-     * @return refactoring session id.
-     * @throws JavaModelException
-     *         when JavaModel has a failure
-     * @throws RefactoringException
-     *         when impossible to create move refactoring session
-     */
-    @POST
-    @Path("move/create")
-    @Consumes("application/json")
-    @Produces("text/plain")
-    public String createMoveRefactoring(CreateMoveRefactoring cmr) throws JavaModelException, RefactoringException {
-        IJavaProject javaProject = model.getJavaProject(cmr.getProjectPath());
-        IJavaElement[] javaElements;
-        try {
-            Function<ElementToMove, IJavaElement> map = javaElement -> {
-                try {
-                    if (javaElement.isPack()) {
-                        return javaProject.findPackageFragment(new org.eclipse.core.runtime.Path(javaElement.getPath()));
-                    } else {
+  /**
+   * Create move refactoring session.
+   *
+   * @param cmr move settings, contains resource paths to move.
+   * @return refactoring session id.
+   * @throws JavaModelException when JavaModel has a failure
+   * @throws RefactoringException when impossible to create move refactoring session
+   */
+  @POST
+  @Path("move/create")
+  @Consumes("application/json")
+  @Produces("text/plain")
+  public String createMoveRefactoring(CreateMoveRefactoring cmr)
+      throws JavaModelException, RefactoringException {
+    IJavaProject javaProject = model.getJavaProject(cmr.getProjectPath());
+    IJavaElement[] javaElements;
+    try {
+      Function<ElementToMove, IJavaElement> map =
+          javaElement -> {
+            try {
+              if (javaElement.isPack()) {
+                return javaProject.findPackageFragment(
+                    new org.eclipse.core.runtime.Path(javaElement.getPath()));
+              } else {
 
-                        IType type = javaProject.findType(javaElement.getPath());
+                IType type = javaProject.findType(javaElement.getPath());
 
-                        //in some cases client may send FQN that doesn't exist
-                        if (type == null) {
-                            throw new IllegalArgumentException("Can't find type: " + javaElement.getPath());
-                        }
-                        return type.getCompilationUnit();
-
-                    }
-                } catch (JavaModelException e) {
-                    throw new IllegalArgumentException(e);
+                //in some cases client may send FQN that doesn't exist
+                if (type == null) {
+                  throw new IllegalArgumentException("Can't find type: " + javaElement.getPath());
                 }
-
-            };
-            javaElements = cmr.getElements().stream().map(map).toArray(IJavaElement[]::new);
-
-        } catch (IllegalArgumentException e) {
-            if (e.getCause() instanceof JavaModelException) {
-                throw (JavaModelException)e.getCause();
-            } else {
-                throw e;
+                return type.getCompilationUnit();
+              }
+            } catch (JavaModelException e) {
+              throw new IllegalArgumentException(e);
             }
-        }
-        if (RefactoringAvailabilityTester.isMoveAvailable(new IResource[0], javaElements)) {
-            return manager.createMoveRefactoringSession(javaElements);
-        }
+          };
+      javaElements = cmr.getElements().stream().map(map).toArray(IJavaElement[]::new);
 
-        throw new RefactoringException("Can't create move refactoring.");
+    } catch (IllegalArgumentException e) {
+      if (e.getCause() instanceof JavaModelException) {
+        throw (JavaModelException) e.getCause();
+      } else {
+        throw e;
+      }
     }
+    if (RefactoringAvailabilityTester.isMoveAvailable(new IResource[0], javaElements)) {
+      return manager.createMoveRefactoringSession(javaElements);
+    }
+
+    throw new RefactoringException("Can't create move refactoring.");
+  }
 

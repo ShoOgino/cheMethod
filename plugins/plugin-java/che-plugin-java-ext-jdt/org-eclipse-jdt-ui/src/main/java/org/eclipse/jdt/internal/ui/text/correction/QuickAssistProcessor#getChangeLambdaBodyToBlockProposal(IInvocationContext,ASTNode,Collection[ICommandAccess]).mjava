@@ -1,44 +1,51 @@
-	private static boolean getChangeLambdaBodyToBlockProposal(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
-		LambdaExpression lambda;
-		if (covering instanceof LambdaExpression) {
-			lambda= (LambdaExpression) covering;
-		} else if (covering.getLocationInParent() == LambdaExpression.BODY_PROPERTY) {
-			lambda= (LambdaExpression) covering.getParent();
-		} else {
-			return false;
-		}
+  private static boolean getChangeLambdaBodyToBlockProposal(
+      IInvocationContext context,
+      ASTNode covering,
+      Collection<ICommandAccess> resultingCollections) {
+    LambdaExpression lambda;
+    if (covering instanceof LambdaExpression) {
+      lambda = (LambdaExpression) covering;
+    } else if (covering.getLocationInParent() == LambdaExpression.BODY_PROPERTY) {
+      lambda = (LambdaExpression) covering.getParent();
+    } else {
+      return false;
+    }
 
-		if (!(lambda.getBody() instanceof Expression))
-			return false;
-		if (lambda.resolveMethodBinding() == null)
-			return false;
+    if (!(lambda.getBody() instanceof Expression)) return false;
+    if (lambda.resolveMethodBinding() == null) return false;
 
-		if (resultingCollections == null)
-			return true;
+    if (resultingCollections == null) return true;
 
-		AST ast= lambda.getAST();
-		ASTRewrite rewrite= ASTRewrite.create(ast);
+    AST ast = lambda.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
 
-		Statement statementInBlockBody;
-		Expression bodyExpr= (Expression) rewrite.createMoveTarget(lambda.getBody());
-		if (ast.resolveWellKnownType("void").isEqualTo(lambda.resolveMethodBinding().getReturnType())) { //$NON-NLS-1$
-			ExpressionStatement expressionStatement= ast.newExpressionStatement(bodyExpr);
-			statementInBlockBody= expressionStatement;
-		} else {
-			ReturnStatement returnStatement= ast.newReturnStatement();
-			returnStatement.setExpression(bodyExpr);
-			statementInBlockBody= returnStatement;
-		}
-		Block blockBody= ast.newBlock();
-		blockBody.statements().add(statementInBlockBody);
+    Statement statementInBlockBody;
+    Expression bodyExpr = (Expression) rewrite.createMoveTarget(lambda.getBody());
+    if (ast.resolveWellKnownType("void")
+        .isEqualTo(lambda.resolveMethodBinding().getReturnType())) { //$NON-NLS-1$
+      ExpressionStatement expressionStatement = ast.newExpressionStatement(bodyExpr);
+      statementInBlockBody = expressionStatement;
+    } else {
+      ReturnStatement returnStatement = ast.newReturnStatement();
+      returnStatement.setExpression(bodyExpr);
+      statementInBlockBody = returnStatement;
+    }
+    Block blockBody = ast.newBlock();
+    blockBody.statements().add(statementInBlockBody);
 
-		rewrite.set(lambda, LambdaExpression.BODY_PROPERTY, blockBody, null);
+    rewrite.set(lambda, LambdaExpression.BODY_PROPERTY, blockBody, null);
 
-		// add proposal
-		String label= CorrectionMessages.QuickAssistProcessor_change_lambda_body_to_block;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.CHANGE_LAMBDA_BODY_TO_BLOCK, image);
-		resultingCollections.add(proposal);
-		return true;
-	}
+    // add proposal
+    String label = CorrectionMessages.QuickAssistProcessor_change_lambda_body_to_block;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    ASTRewriteCorrectionProposal proposal =
+        new ASTRewriteCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.CHANGE_LAMBDA_BODY_TO_BLOCK,
+            image);
+    resultingCollections.add(proposal);
+    return true;
+  }
 

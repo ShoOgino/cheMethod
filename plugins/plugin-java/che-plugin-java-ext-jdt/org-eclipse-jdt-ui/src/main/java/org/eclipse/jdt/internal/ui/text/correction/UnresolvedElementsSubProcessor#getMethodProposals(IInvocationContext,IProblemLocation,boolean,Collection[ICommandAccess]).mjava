@@ -1,83 +1,107 @@
-	public static void getMethodProposals(IInvocationContext context, IProblemLocation problem, boolean isOnlyParameterMismatch, Collection<ICommandAccess> proposals) throws
-																																									   CoreException {
+  public static void getMethodProposals(
+      IInvocationContext context,
+      IProblemLocation problem,
+      boolean isOnlyParameterMismatch,
+      Collection<ICommandAccess> proposals)
+      throws CoreException {
 
-		ICompilationUnit cu= context.getCompilationUnit();
+    ICompilationUnit cu = context.getCompilationUnit();
 
-		CompilationUnit astRoot= context.getASTRoot();
-		ASTNode selectedNode= problem.getCoveringNode(astRoot);
+    CompilationUnit astRoot = context.getASTRoot();
+    ASTNode selectedNode = problem.getCoveringNode(astRoot);
 
-		if (!(selectedNode instanceof SimpleName)) {
-			return;
-		}
-		SimpleName nameNode= (SimpleName) selectedNode;
+    if (!(selectedNode instanceof SimpleName)) {
+      return;
+    }
+    SimpleName nameNode = (SimpleName) selectedNode;
 
-		List<Expression> arguments;
-		Expression sender;
-		boolean isSuperInvocation;
+    List<Expression> arguments;
+    Expression sender;
+    boolean isSuperInvocation;
 
-		ASTNode invocationNode= nameNode.getParent();
-		if (invocationNode instanceof MethodInvocation) {
-			MethodInvocation methodImpl= (MethodInvocation) invocationNode;
-			arguments= methodImpl.arguments();
-			sender= methodImpl.getExpression();
-			isSuperInvocation= false;
-		} else if (invocationNode instanceof SuperMethodInvocation) {
-			SuperMethodInvocation methodImpl= (SuperMethodInvocation) invocationNode;
-			arguments= methodImpl.arguments();
-			sender= methodImpl.getQualifier();
-			isSuperInvocation= true;
-		} else {
-			return;
-		}
+    ASTNode invocationNode = nameNode.getParent();
+    if (invocationNode instanceof MethodInvocation) {
+      MethodInvocation methodImpl = (MethodInvocation) invocationNode;
+      arguments = methodImpl.arguments();
+      sender = methodImpl.getExpression();
+      isSuperInvocation = false;
+    } else if (invocationNode instanceof SuperMethodInvocation) {
+      SuperMethodInvocation methodImpl = (SuperMethodInvocation) invocationNode;
+      arguments = methodImpl.arguments();
+      sender = methodImpl.getQualifier();
+      isSuperInvocation = true;
+    } else {
+      return;
+    }
 
-		String methodName= nameNode.getIdentifier();
-		int nArguments= arguments.size();
+    String methodName = nameNode.getIdentifier();
+    int nArguments = arguments.size();
 
-		// corrections
-		IBinding[] bindings= (new ScopeAnalyzer(astRoot)).getDeclarationsInScope(nameNode, ScopeAnalyzer.METHODS);
+    // corrections
+    IBinding[] bindings =
+        (new ScopeAnalyzer(astRoot)).getDeclarationsInScope(nameNode, ScopeAnalyzer.METHODS);
 
-		HashSet<String> suggestedRenames= new HashSet<String>();
-		for (int i= 0; i < bindings.length; i++) {
-			IMethodBinding binding= (IMethodBinding) bindings[i];
-			String curr= binding.getName();
-			if (!curr.equals(methodName) && binding.getParameterTypes().length == nArguments && NameMatcher.isSimilarName(methodName, curr) && suggestedRenames.add(curr)) {
-				String label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_changemethod_description,
-											  BasicElementLabels.getJavaElementName(curr));
-				proposals.add(new RenameNodeCorrectionProposal(label, context.getCompilationUnit(), problem.getOffset(), problem.getLength(), curr, IProposalRelevance.CHANGE_METHOD));
-			}
-		}
-		suggestedRenames= null;
+    HashSet<String> suggestedRenames = new HashSet<String>();
+    for (int i = 0; i < bindings.length; i++) {
+      IMethodBinding binding = (IMethodBinding) bindings[i];
+      String curr = binding.getName();
+      if (!curr.equals(methodName)
+          && binding.getParameterTypes().length == nArguments
+          && NameMatcher.isSimilarName(methodName, curr)
+          && suggestedRenames.add(curr)) {
+        String label =
+            Messages.format(
+                CorrectionMessages.UnresolvedElementsSubProcessor_changemethod_description,
+                BasicElementLabels.getJavaElementName(curr));
+        proposals.add(
+            new RenameNodeCorrectionProposal(
+                label,
+                context.getCompilationUnit(),
+                problem.getOffset(),
+                problem.getLength(),
+                curr,
+                IProposalRelevance.CHANGE_METHOD));
+      }
+    }
+    suggestedRenames = null;
 
-		if (isOnlyParameterMismatch) {
-			ArrayList<IMethodBinding> parameterMismatchs= new ArrayList<IMethodBinding>();
-			for (int i= 0; i < bindings.length; i++) {
-				IMethodBinding binding= (IMethodBinding) bindings[i];
-				if (binding.getName().equals(methodName)) {
-					parameterMismatchs.add(binding);
-				}
-			}
-			addParameterMissmatchProposals(context, problem, parameterMismatchs, invocationNode, arguments, proposals);
-		}
-		
-		if (sender == null) {
-			addStaticImportFavoriteProposals(context, nameNode, true, proposals);
-		}
+    if (isOnlyParameterMismatch) {
+      ArrayList<IMethodBinding> parameterMismatchs = new ArrayList<IMethodBinding>();
+      for (int i = 0; i < bindings.length; i++) {
+        IMethodBinding binding = (IMethodBinding) bindings[i];
+        if (binding.getName().equals(methodName)) {
+          parameterMismatchs.add(binding);
+        }
+      }
+      addParameterMissmatchProposals(
+          context, problem, parameterMismatchs, invocationNode, arguments, proposals);
+    }
 
-		// new method
-		addNewMethodProposals(cu, astRoot, sender, arguments, isSuperInvocation, invocationNode, methodName, proposals);
+    if (sender == null) {
+      addStaticImportFavoriteProposals(context, nameNode, true, proposals);
+    }
 
-		if (!isOnlyParameterMismatch && !isSuperInvocation && sender != null) {
-			addMissingCastParentsProposal(cu, (MethodInvocation) invocationNode, proposals);
-		}
+    // new method
+    addNewMethodProposals(
+        cu, astRoot, sender, arguments, isSuperInvocation, invocationNode, methodName, proposals);
 
-		if (!isSuperInvocation && sender == null && invocationNode.getParent() instanceof ThrowStatement) {
-			String str= "new ";   //$NON-NLS-1$ // do it the manual way, copting all the arguments is nasty
-			String label= CorrectionMessages.UnresolvedElementsSubProcessor_addnewkeyword_description;
-			int relevance= Character.isUpperCase(methodName.charAt(0)) ? IProposalRelevance.ADD_NEW_KEYWORD_UPPERCASE : IProposalRelevance.ADD_NEW_KEYWORD;
-			ReplaceCorrectionProposal
-					proposal= new ReplaceCorrectionProposal(label, cu, invocationNode.getStartPosition(), 0, str, relevance);
-			proposals.add(proposal);
-		}
+    if (!isOnlyParameterMismatch && !isSuperInvocation && sender != null) {
+      addMissingCastParentsProposal(cu, (MethodInvocation) invocationNode, proposals);
+    }
 
-	}
+    if (!isSuperInvocation
+        && sender == null
+        && invocationNode.getParent() instanceof ThrowStatement) {
+      String str = "new "; //$NON-NLS-1$ // do it the manual way, copting all the arguments is nasty
+      String label = CorrectionMessages.UnresolvedElementsSubProcessor_addnewkeyword_description;
+      int relevance =
+          Character.isUpperCase(methodName.charAt(0))
+              ? IProposalRelevance.ADD_NEW_KEYWORD_UPPERCASE
+              : IProposalRelevance.ADD_NEW_KEYWORD;
+      ReplaceCorrectionProposal proposal =
+          new ReplaceCorrectionProposal(
+              label, cu, invocationNode.getStartPosition(), 0, str, relevance);
+      proposals.add(proposal);
+    }
+  }
 

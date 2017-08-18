@@ -1,77 +1,102 @@
-	private void checkInvocationContext(RefactoringStatus result, int severity) {
-		if (fInvocation.getNodeType() == ASTNode.METHOD_INVOCATION) {
-			if (((MethodInvocation)fInvocation).resolveTypeBinding() == null) {
-				addEntry(result, RefactoringCoreMessages.CallInliner_receiver_type,
-						 RefactoringStatusCodes.INLINE_METHOD_NULL_BINDING, severity);
-				return;
-			}
-		}
-		int nodeType = fTargetNode.getNodeType();
-		if (nodeType == ASTNode.EXPRESSION_STATEMENT) {
-			if (fSourceProvider.isExecutionFlowInterrupted()) {
-				addEntry(result, RefactoringCoreMessages.CallInliner_execution_flow,
-						 RefactoringStatusCodes.INLINE_METHOD_EXECUTION_FLOW, severity);
-				return;
-			}
-		} else if (nodeType == ASTNode.METHOD_INVOCATION) {
-			ASTNode parent = fTargetNode.getParent();
-			if (isReturnStatement(parent)) {
-				//support inlining even if the execution flow is interrupted
-				return;
-			}
-			if (fSourceProvider.isExecutionFlowInterrupted()) {
-				addEntry(result, RefactoringCoreMessages.CallInliner_execution_flow,
-						 RefactoringStatusCodes.INLINE_METHOD_EXECUTION_FLOW, severity);
-				return;
-			}
-			if (isAssignment(parent) || isSingleDeclaration(parent)) {
-				// we support inlining expression in assigment and initializers as
-				// long as the execution flow isn't interrupted.
-				return;
-			} else {
-				boolean isFieldDeclaration = ASTNodes.getParent(fInvocation, FieldDeclaration.class) != null;
-				if (!fSourceProvider.isSimpleFunction()) {
-					if (isMultiDeclarationFragment(parent)) {
-						addEntry(result, RefactoringCoreMessages.CallInliner_multiDeclaration,
-								 RefactoringStatusCodes.INLINE_METHOD_INITIALIZER_IN_FRAGEMENT, severity);
-					} else if (isFieldDeclaration) {
-						addEntry(result,
-								 RefactoringCoreMessages.CallInliner_field_initializer_simple,
-								 RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER, severity);
-					} else {
-						addEntry(result, RefactoringCoreMessages.CallInliner_simple_functions,
-								 RefactoringStatusCodes.INLINE_METHOD_ONLY_SIMPLE_FUNCTIONS, severity);
-					}
-					return;
-				}
-				if (isFieldDeclaration) {
-					int argumentsCount = fContext.arguments.length;
-					for (int i = 0; i < argumentsCount; i++) {
-						ParameterData parameter = fSourceProvider.getParameterData(i);
-						if (parameter.isWrite()) {
-							addEntry(result,
-									 RefactoringCoreMessages.CallInliner_field_initialize_write_parameter,
-									 RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER, severity);
-							return;
-						}
-					}
-					if (fLocals.size() > 0) {
-						addEntry(result,
-								 RefactoringCoreMessages.CallInliner_field_initialize_new_local,
-								 RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER, severity);
-						return;
-					}
-					// verify that the field is not referenced by the initializer method
-					VariableDeclarationFragment variable =
-							(VariableDeclarationFragment)ASTNodes.getParent(fInvocation, ASTNode.VARIABLE_DECLARATION_FRAGMENT);
-					if (fSourceProvider.isVariableReferenced(variable.resolveBinding())) {
-						addEntry(result,
-								 RefactoringCoreMessages.CallInliner_field_initialize_self_reference,
-								 RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER, severity);
-						return;
-					}
-				}
-			}
-		}
-	}
+  private void checkInvocationContext(RefactoringStatus result, int severity) {
+    if (fInvocation.getNodeType() == ASTNode.METHOD_INVOCATION) {
+      if (((MethodInvocation) fInvocation).resolveTypeBinding() == null) {
+        addEntry(
+            result,
+            RefactoringCoreMessages.CallInliner_receiver_type,
+            RefactoringStatusCodes.INLINE_METHOD_NULL_BINDING,
+            severity);
+        return;
+      }
+    }
+    int nodeType = fTargetNode.getNodeType();
+    if (nodeType == ASTNode.EXPRESSION_STATEMENT) {
+      if (fSourceProvider.isExecutionFlowInterrupted()) {
+        addEntry(
+            result,
+            RefactoringCoreMessages.CallInliner_execution_flow,
+            RefactoringStatusCodes.INLINE_METHOD_EXECUTION_FLOW,
+            severity);
+        return;
+      }
+    } else if (nodeType == ASTNode.METHOD_INVOCATION) {
+      ASTNode parent = fTargetNode.getParent();
+      if (isReturnStatement(parent)) {
+        //support inlining even if the execution flow is interrupted
+        return;
+      }
+      if (fSourceProvider.isExecutionFlowInterrupted()) {
+        addEntry(
+            result,
+            RefactoringCoreMessages.CallInliner_execution_flow,
+            RefactoringStatusCodes.INLINE_METHOD_EXECUTION_FLOW,
+            severity);
+        return;
+      }
+      if (isAssignment(parent) || isSingleDeclaration(parent)) {
+        // we support inlining expression in assigment and initializers as
+        // long as the execution flow isn't interrupted.
+        return;
+      } else {
+        boolean isFieldDeclaration =
+            ASTNodes.getParent(fInvocation, FieldDeclaration.class) != null;
+        if (!fSourceProvider.isSimpleFunction()) {
+          if (isMultiDeclarationFragment(parent)) {
+            addEntry(
+                result,
+                RefactoringCoreMessages.CallInliner_multiDeclaration,
+                RefactoringStatusCodes.INLINE_METHOD_INITIALIZER_IN_FRAGEMENT,
+                severity);
+          } else if (isFieldDeclaration) {
+            addEntry(
+                result,
+                RefactoringCoreMessages.CallInliner_field_initializer_simple,
+                RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER,
+                severity);
+          } else {
+            addEntry(
+                result,
+                RefactoringCoreMessages.CallInliner_simple_functions,
+                RefactoringStatusCodes.INLINE_METHOD_ONLY_SIMPLE_FUNCTIONS,
+                severity);
+          }
+          return;
+        }
+        if (isFieldDeclaration) {
+          int argumentsCount = fContext.arguments.length;
+          for (int i = 0; i < argumentsCount; i++) {
+            ParameterData parameter = fSourceProvider.getParameterData(i);
+            if (parameter.isWrite()) {
+              addEntry(
+                  result,
+                  RefactoringCoreMessages.CallInliner_field_initialize_write_parameter,
+                  RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER,
+                  severity);
+              return;
+            }
+          }
+          if (fLocals.size() > 0) {
+            addEntry(
+                result,
+                RefactoringCoreMessages.CallInliner_field_initialize_new_local,
+                RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER,
+                severity);
+            return;
+          }
+          // verify that the field is not referenced by the initializer method
+          VariableDeclarationFragment variable =
+              (VariableDeclarationFragment)
+                  ASTNodes.getParent(fInvocation, ASTNode.VARIABLE_DECLARATION_FRAGMENT);
+          if (fSourceProvider.isVariableReferenced(variable.resolveBinding())) {
+            addEntry(
+                result,
+                RefactoringCoreMessages.CallInliner_field_initialize_self_reference,
+                RefactoringStatusCodes.INLINE_METHOD_FIELD_INITIALIZER,
+                severity);
+            return;
+          }
+        }
+      }
+    }
+  }
 

@@ -1,30 +1,38 @@
-    /**
-     * Prepares to merging and opens Merge dialog.
-     */
-    public void merge() {
-        view.enableMergeButton(false);
-        view.sourceCheckBox().setValue(false);
+  /** Prepares to merging and opens Merge dialog. */
+  public void merge() {
+    view.enableMergeButton(false);
+    view.sourceCheckBox().setValue(false);
 
-        final Project project = appContext.getRootProject();
+    final Project project = appContext.getRootProject();
 
-        checkState(project != null);
+    checkState(project != null);
 
-        final Resource[] resources = appContext.getResources();
+    final Resource[] resources = appContext.getResources();
 
-        checkState(resources != null && resources.length == 1);
+    checkState(resources != null && resources.length == 1);
 
-        performOperationWithCredentialsRequestIfNeeded(new RemoteSubversionOperation<InfoResponse>() {
-            @Override
-            public Promise<InfoResponse> perform(Credentials credentials) {
-                return service.info(project.getLocation(), toRelative(project, resources[0]).toString(), "HEAD", false, credentials);
-            }
-        }, null).then(new Operation<InfoResponse>() {
-            @Override
-            public void apply(InfoResponse response) throws OperationException {
+    performOperationWithCredentialsRequestIfNeeded(
+            new RemoteSubversionOperation<InfoResponse>() {
+              @Override
+              public Promise<InfoResponse> perform(Credentials credentials) {
+                return service.info(
+                    project.getLocation(),
+                    toRelative(project, resources[0]).toString(),
+                    "HEAD",
+                    false,
+                    credentials);
+              }
+            },
+            null)
+        .then(
+            new Operation<InfoResponse>() {
+              @Override
+              public void apply(InfoResponse response) throws OperationException {
                 if (response.getErrorOutput() != null && !response.getErrorOutput().isEmpty()) {
-                    printErrors(response.getErrorOutput(), constants.commandInfo());
-                    notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
-                    return;
+                  printErrors(response.getErrorOutput(), constants.commandInfo());
+                  notificationManager.notify(
+                      "Unable to execute subversion command", FAIL, FLOAT_MODE);
+                  return;
                 }
 
                 mergeTarget = response.getItems().get(0);
@@ -32,47 +40,54 @@
 
                 String repositoryRoot = mergeTarget.getRepositoryRoot();
 
-                service.info(project.getLocation(), repositoryRoot, "HEAD", true)
-                       .then(new Operation<InfoResponse>() {
-                           @Override
-                           public void apply(InfoResponse response) throws OperationException {
-                               if (!response.getErrorOutput().isEmpty()) {
-                                   printErrors(response.getErrorOutput(), constants.commandInfo());
-                                   notificationManager.notify("Unable to execute subversion command", FAIL, FLOAT_MODE);
-                                   return;
-                               }
+                service
+                    .info(project.getLocation(), repositoryRoot, "HEAD", true)
+                    .then(
+                        new Operation<InfoResponse>() {
+                          @Override
+                          public void apply(InfoResponse response) throws OperationException {
+                            if (!response.getErrorOutput().isEmpty()) {
+                              printErrors(response.getErrorOutput(), constants.commandInfo());
+                              notificationManager.notify(
+                                  "Unable to execute subversion command", FAIL, FLOAT_MODE);
+                              return;
+                            }
 
-                               sourceURL = response.getItems().get(0).getURL();
-                               SubversionItemNode subversionTreeNode = new SubversionItemNode(response.getItems().get(0));
+                            sourceURL = response.getItems().get(0).getURL();
+                            SubversionItemNode subversionTreeNode =
+                                new SubversionItemNode(response.getItems().get(0));
 
-                               List<Node> children = new ArrayList<>();
-                               if (response.getItems().size() > 1) {
-                                   for (int i = 1; i < response.getItems().size(); i++) {
-                                       SubversionItem item = response.getItems().get(i);
-                                       if (!"file".equals(item.getNodeKind())) {
-                                           children.add(new SubversionItemNode(item));
-                                       }
-                                   }
-                               }
+                            List<Node> children = new ArrayList<>();
+                            if (response.getItems().size() > 1) {
+                              for (int i = 1; i < response.getItems().size(); i++) {
+                                SubversionItem item = response.getItems().get(i);
+                                if (!"file".equals(item.getNodeKind())) {
+                                  children.add(new SubversionItemNode(item));
+                                }
+                              }
+                            }
 
-                               subversionTreeNode.setChildren(children);
-                               view.setRootNode(subversionTreeNode);
-                               view.show();
-                               validateSourceURL();
-                           }
-                       })
-                       .catchError(new Operation<PromiseError>() {
-                           @Override
-                           public void apply(PromiseError error) throws OperationException {
-                               notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
-                           }
-                       });
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError error) throws OperationException {
+                            subversionTreeNode.setChildren(children);
+                            view.setRootNode(subversionTreeNode);
+                            view.show();
+                            validateSourceURL();
+                          }
+                        })
+                    .catchError(
+                        new Operation<PromiseError>() {
+                          @Override
+                          public void apply(PromiseError error) throws OperationException {
+                            notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
+                          }
+                        });
+              }
+            })
+        .catchError(
+            new Operation<PromiseError>() {
+              @Override
+              public void apply(PromiseError error) throws OperationException {
                 notificationManager.notify(error.getMessage(), FAIL, FLOAT_MODE);
-            }
-        });
-    }
+              }
+            });
+  }
 

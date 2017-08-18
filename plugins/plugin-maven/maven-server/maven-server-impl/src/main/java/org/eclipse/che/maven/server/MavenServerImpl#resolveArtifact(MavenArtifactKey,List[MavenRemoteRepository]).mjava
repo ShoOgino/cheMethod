@@ -1,51 +1,66 @@
-    @Override
-    public MavenArtifact resolveArtifact(MavenArtifactKey artifactKey, List<MavenRemoteRepository> repositories) throws RemoteException {
-        Artifact artifact = getMavenComponent(ArtifactFactory.class)
-                .createArtifactWithClassifier(artifactKey.getGroupId(), artifactKey.getArtifactId(), artifactKey.getVersion(),
-                                              artifactKey.getPackaging(), artifactKey.getClassifier());
+  @Override
+  public MavenArtifact resolveArtifact(
+      MavenArtifactKey artifactKey, List<MavenRemoteRepository> repositories)
+      throws RemoteException {
+    Artifact artifact =
+        getMavenComponent(ArtifactFactory.class)
+            .createArtifactWithClassifier(
+                artifactKey.getGroupId(),
+                artifactKey.getArtifactId(),
+                artifactKey.getVersion(),
+                artifactKey.getPackaging(),
+                artifactKey.getClassifier());
 
-        List<ArtifactRepository> repos = new ArrayList<>();
-        ArtifactRepositoryFactory factory = getMavenComponent(ArtifactRepositoryFactory.class);
-        for (MavenRemoteRepository repository : repositories) {
-            try {
-                ArtifactRepository artifactRepository =
-                        ProjectUtils.buildArtifactRepository(MavenModelUtil.convertToMavenRepository(repository), factory, container);
-                repos.add(artifactRepository);
-            } catch (InvalidRepositoryException e) {
-                MavenServerContext.getLogger().error(e);
-            }
-
-        }
-
-        MavenExecutionRequest request = newMavenRequest(null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
-        repos.forEach(request::addRemoteRepository);
-
-        DefaultMaven maven = (DefaultMaven)getMavenComponent(Maven.class);
-        RepositorySystemSession repositorySystemSession = maven.newRepositorySession(request);
-
-        org.eclipse.aether.impl.ArtifactResolver artifactResolver = getMavenComponent(org.eclipse.aether.impl.ArtifactResolver.class);
-        InternalLoggerFactory loggerFactory = new InternalLoggerFactory();
-        if (artifactResolver instanceof DefaultArtifactResolver) {
-            ((DefaultArtifactResolver)artifactResolver).setLoggerFactory(loggerFactory);
-        }
-
-        org.eclipse.aether.RepositorySystem repositorySystem = getMavenComponent(org.eclipse.aether.RepositorySystem.class);
-        if (repositorySystem instanceof DefaultRepositorySystem) {
-            ((DefaultRepositorySystem)repositorySystem).setLoggerFactory(loggerFactory);
-        }
-
-        List<RemoteRepository> remoteRepositories = RepositoryUtils.toRepos(request.getRemoteRepositories());
-        remoteRepositories = repositorySystem.newResolutionRepositories(repositorySystemSession, remoteRepositories);
-
-        try {
-            ArtifactResult artifactResult = repositorySystem.resolveArtifact(repositorySystemSession,
-                                                                             new ArtifactRequest(RepositoryUtils.toArtifact(artifact),
-                                                                                                 remoteRepositories, null));
-            return MavenModelUtil.convertArtifact(RepositoryUtils.toArtifact(artifactResult.getArtifact()), localRepository);
-        } catch (ArtifactResolutionException ignored) {
-            //we need ignore exception, it's some times has class that client doesn't has
-            // .printStackTrace() may be solution, but it will spam wsagent logs
-        }
-        return MavenModelUtil.convertArtifact(artifact, localRepository);
+    List<ArtifactRepository> repos = new ArrayList<>();
+    ArtifactRepositoryFactory factory = getMavenComponent(ArtifactRepositoryFactory.class);
+    for (MavenRemoteRepository repository : repositories) {
+      try {
+        ArtifactRepository artifactRepository =
+            ProjectUtils.buildArtifactRepository(
+                MavenModelUtil.convertToMavenRepository(repository), factory, container);
+        repos.add(artifactRepository);
+      } catch (InvalidRepositoryException e) {
+        MavenServerContext.getLogger().error(e);
+      }
     }
+
+    MavenExecutionRequest request =
+        newMavenRequest(
+            null, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    repos.forEach(request::addRemoteRepository);
+
+    DefaultMaven maven = (DefaultMaven) getMavenComponent(Maven.class);
+    RepositorySystemSession repositorySystemSession = maven.newRepositorySession(request);
+
+    org.eclipse.aether.impl.ArtifactResolver artifactResolver =
+        getMavenComponent(org.eclipse.aether.impl.ArtifactResolver.class);
+    InternalLoggerFactory loggerFactory = new InternalLoggerFactory();
+    if (artifactResolver instanceof DefaultArtifactResolver) {
+      ((DefaultArtifactResolver) artifactResolver).setLoggerFactory(loggerFactory);
+    }
+
+    org.eclipse.aether.RepositorySystem repositorySystem =
+        getMavenComponent(org.eclipse.aether.RepositorySystem.class);
+    if (repositorySystem instanceof DefaultRepositorySystem) {
+      ((DefaultRepositorySystem) repositorySystem).setLoggerFactory(loggerFactory);
+    }
+
+    List<RemoteRepository> remoteRepositories =
+        RepositoryUtils.toRepos(request.getRemoteRepositories());
+    remoteRepositories =
+        repositorySystem.newResolutionRepositories(repositorySystemSession, remoteRepositories);
+
+    try {
+      ArtifactResult artifactResult =
+          repositorySystem.resolveArtifact(
+              repositorySystemSession,
+              new ArtifactRequest(RepositoryUtils.toArtifact(artifact), remoteRepositories, null));
+      return MavenModelUtil.convertArtifact(
+          RepositoryUtils.toArtifact(artifactResult.getArtifact()), localRepository);
+    } catch (ArtifactResolutionException ignored) {
+      //we need ignore exception, it's some times has class that client doesn't has
+      // .printStackTrace() may be solution, but it will spam wsagent logs
+    }
+    return MavenModelUtil.convertArtifact(artifact, localRepository);
+  }
 

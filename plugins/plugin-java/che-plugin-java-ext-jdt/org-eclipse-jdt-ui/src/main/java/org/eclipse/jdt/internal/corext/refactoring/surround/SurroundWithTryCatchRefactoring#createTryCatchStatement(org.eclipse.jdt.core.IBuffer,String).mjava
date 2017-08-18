@@ -1,147 +1,172 @@
-	private void createTryCatchStatement(org.eclipse.jdt.core.IBuffer buffer, String lineDelimiter) throws CoreException {
-		List<Statement> result= new ArrayList<Statement>(1);
-		TryStatement tryStatement= getAST().newTryStatement();
-		ITypeBinding[] exceptions= fAnalyzer.getExceptions();
-		ImportRewriteContext context= new ContextSensitiveImportRewriteContext(fAnalyzer.getEnclosingBodyDeclaration(), fImportRewrite);
+  private void createTryCatchStatement(org.eclipse.jdt.core.IBuffer buffer, String lineDelimiter)
+      throws CoreException {
+    List<Statement> result = new ArrayList<Statement>(1);
+    TryStatement tryStatement = getAST().newTryStatement();
+    ITypeBinding[] exceptions = fAnalyzer.getExceptions();
+    ImportRewriteContext context =
+        new ContextSensitiveImportRewriteContext(
+            fAnalyzer.getEnclosingBodyDeclaration(), fImportRewrite);
 
-		if (!fIsMultiCatch) {
-			for (int i= 0; i < exceptions.length; i++) {
-				ITypeBinding exception= exceptions[i];
-				CatchClause catchClause= getAST().newCatchClause();
-				tryStatement.catchClauses().add(catchClause);
-				SingleVariableDeclaration decl= getAST().newSingleVariableDeclaration();
-				String varName= StubUtility.getExceptionVariableName(fCUnit.getJavaProject());
+    if (!fIsMultiCatch) {
+      for (int i = 0; i < exceptions.length; i++) {
+        ITypeBinding exception = exceptions[i];
+        CatchClause catchClause = getAST().newCatchClause();
+        tryStatement.catchClauses().add(catchClause);
+        SingleVariableDeclaration decl = getAST().newSingleVariableDeclaration();
+        String varName = StubUtility.getExceptionVariableName(fCUnit.getJavaProject());
 
-				String name= fScope.createName(varName, false);
-				decl.setName(getAST().newSimpleName(name));
-				Type type= fImportRewrite.addImport(exception, getAST(), context);
-				decl.setType(type);
-				catchClause.setException(decl);
-				Statement st= getCatchBody(ASTNodes.getQualifiedTypeName(type), name, lineDelimiter);
-				if (st != null) {
-					catchClause.getBody().statements().add(st);
-				}
-				fLinkedProposalModel.getPositionGroup(GROUP_EXC_TYPE + i, true).addPosition(fRewriter.track(decl.getType()), i == 0);
-				fLinkedProposalModel.getPositionGroup(GROUP_EXC_NAME + i, true).addPosition(fRewriter.track(decl.getName()), false);
-			}
-		} else {
-			List<ITypeBinding> filteredExceptions= filterSubtypeExceptions(exceptions);
-			CatchClause catchClause= getAST().newCatchClause();
-			SingleVariableDeclaration decl= getAST().newSingleVariableDeclaration();
-			String varName= StubUtility.getExceptionVariableName(fCUnit.getJavaProject());
-			String name= fScope.createName(varName, false);
-			decl.setName(getAST().newSimpleName(name));
+        String name = fScope.createName(varName, false);
+        decl.setName(getAST().newSimpleName(name));
+        Type type = fImportRewrite.addImport(exception, getAST(), context);
+        decl.setType(type);
+        catchClause.setException(decl);
+        Statement st = getCatchBody(ASTNodes.getQualifiedTypeName(type), name, lineDelimiter);
+        if (st != null) {
+          catchClause.getBody().statements().add(st);
+        }
+        fLinkedProposalModel
+            .getPositionGroup(GROUP_EXC_TYPE + i, true)
+            .addPosition(fRewriter.track(decl.getType()), i == 0);
+        fLinkedProposalModel
+            .getPositionGroup(GROUP_EXC_NAME + i, true)
+            .addPosition(fRewriter.track(decl.getName()), false);
+      }
+    } else {
+      List<ITypeBinding> filteredExceptions = filterSubtypeExceptions(exceptions);
+      CatchClause catchClause = getAST().newCatchClause();
+      SingleVariableDeclaration decl = getAST().newSingleVariableDeclaration();
+      String varName = StubUtility.getExceptionVariableName(fCUnit.getJavaProject());
+      String name = fScope.createName(varName, false);
+      decl.setName(getAST().newSimpleName(name));
 
-			UnionType unionType= getAST().newUnionType();
-			List<Type> types= unionType.types();
-			int i=0;
-			for (ITypeBinding exception : filteredExceptions) {
-				Type type= fImportRewrite.addImport(exception, getAST(), context);
-				types.add(type);
-				fLinkedProposalModel.getPositionGroup(GROUP_EXC_TYPE + i, true).addPosition(fRewriter.track(type), i == 0);
-				i++;
-			}
+      UnionType unionType = getAST().newUnionType();
+      List<Type> types = unionType.types();
+      int i = 0;
+      for (ITypeBinding exception : filteredExceptions) {
+        Type type = fImportRewrite.addImport(exception, getAST(), context);
+        types.add(type);
+        fLinkedProposalModel
+            .getPositionGroup(GROUP_EXC_TYPE + i, true)
+            .addPosition(fRewriter.track(type), i == 0);
+        i++;
+      }
 
-			decl.setType(unionType);
-			catchClause.setException(decl);
-			fLinkedProposalModel.getPositionGroup(GROUP_EXC_NAME + 0, true).addPosition(fRewriter.track(decl.getName()), false);
-			Statement st= getCatchBody("Exception", name, lineDelimiter); //$NON-NLS-1$
-			if (st != null) {
-				catchClause.getBody().statements().add(st);
-			}
-			tryStatement.catchClauses().add(catchClause);
-		}
-		List<ASTNode> variableDeclarations= getSpecialVariableDeclarationStatements();
-		ListRewrite statements= fRewriter.getListRewrite(tryStatement.getBody(), Block.STATEMENTS_PROPERTY);
-		boolean selectedNodeRemoved= false;
-		ASTNode expressionStatement= null;
-		for (int i= 0; i < fSelectedNodes.length; i++) {
-			ASTNode node= fSelectedNodes[i];
-			if (node instanceof VariableDeclarationStatement && variableDeclarations.contains(node)) {
-				AST ast= getAST();
-				VariableDeclarationStatement statement= (VariableDeclarationStatement)node;
-				// Create a copy and remove the initializer
-				VariableDeclarationStatement copy= (VariableDeclarationStatement)ASTNode.copySubtree(ast, statement);
-				List<IExtendedModifier> modifiers= copy.modifiers();
-				for (Iterator<IExtendedModifier> iter= modifiers.iterator(); iter.hasNext();) {
-					IExtendedModifier modifier= iter.next();
-					if (modifier.isModifier() && Modifier.isFinal(((Modifier)modifier).getKeyword().toFlagValue())) {
-						iter.remove();
-					}
-				}
-				List<VariableDeclarationFragment> fragments= copy.fragments();
-				for (Iterator<VariableDeclarationFragment> iter= fragments.iterator(); iter.hasNext();) {
-					VariableDeclarationFragment fragment= iter.next();
-					fragment.setInitializer(null);
-				}
-				CompilationUnit root= (CompilationUnit)statement.getRoot();
-				int extendedStart= root.getExtendedStartPosition(statement);
-				// we have a leading comment and the comment is covered by the selection
-				if (extendedStart != statement.getStartPosition() && extendedStart >= fSelection.getOffset()) {
-					String commentToken= buffer.getText(extendedStart, statement.getStartPosition() - extendedStart);
-					commentToken= Strings.trimTrailingTabsAndSpaces(commentToken);
-					Type type= statement.getType();
-					String typeName= buffer.getText(type.getStartPosition(), type.getLength());
-					copy.setType((Type)fRewriter.createStringPlaceholder(commentToken + typeName, type.getNodeType()));
-				}
-				result.add(copy);
-				// convert the fragments into expression statements
-				fragments= statement.fragments();
-				if (!fragments.isEmpty()) {
-					List<ExpressionStatement> newExpressionStatements= new ArrayList<ExpressionStatement>();
-					for (Iterator<VariableDeclarationFragment> iter= fragments.iterator(); iter.hasNext();) {
-						VariableDeclarationFragment fragment= iter.next();
-						Expression initializer= fragment.getInitializer();
-						if (initializer != null) {
-							Assignment assignment= ast.newAssignment();
-							assignment.setLeftHandSide((Expression)fRewriter.createCopyTarget(fragment.getName()));
-							assignment.setRightHandSide((Expression)fRewriter.createCopyTarget(initializer));
-							newExpressionStatements.add(ast.newExpressionStatement(assignment));
-						}
-					}
-					if (!newExpressionStatements.isEmpty()) {
-						if (fSelectedNodes.length == 1) {
-							expressionStatement= fRewriter.createGroupNode(newExpressionStatements.toArray(new ASTNode[newExpressionStatements.size()]));
+      decl.setType(unionType);
+      catchClause.setException(decl);
+      fLinkedProposalModel
+          .getPositionGroup(GROUP_EXC_NAME + 0, true)
+          .addPosition(fRewriter.track(decl.getName()), false);
+      Statement st = getCatchBody("Exception", name, lineDelimiter); //$NON-NLS-1$
+      if (st != null) {
+        catchClause.getBody().statements().add(st);
+      }
+      tryStatement.catchClauses().add(catchClause);
+    }
+    List<ASTNode> variableDeclarations = getSpecialVariableDeclarationStatements();
+    ListRewrite statements =
+        fRewriter.getListRewrite(tryStatement.getBody(), Block.STATEMENTS_PROPERTY);
+    boolean selectedNodeRemoved = false;
+    ASTNode expressionStatement = null;
+    for (int i = 0; i < fSelectedNodes.length; i++) {
+      ASTNode node = fSelectedNodes[i];
+      if (node instanceof VariableDeclarationStatement && variableDeclarations.contains(node)) {
+        AST ast = getAST();
+        VariableDeclarationStatement statement = (VariableDeclarationStatement) node;
+        // Create a copy and remove the initializer
+        VariableDeclarationStatement copy =
+            (VariableDeclarationStatement) ASTNode.copySubtree(ast, statement);
+        List<IExtendedModifier> modifiers = copy.modifiers();
+        for (Iterator<IExtendedModifier> iter = modifiers.iterator(); iter.hasNext(); ) {
+          IExtendedModifier modifier = iter.next();
+          if (modifier.isModifier()
+              && Modifier.isFinal(((Modifier) modifier).getKeyword().toFlagValue())) {
+            iter.remove();
+          }
+        }
+        List<VariableDeclarationFragment> fragments = copy.fragments();
+        for (Iterator<VariableDeclarationFragment> iter = fragments.iterator(); iter.hasNext(); ) {
+          VariableDeclarationFragment fragment = iter.next();
+          fragment.setInitializer(null);
+        }
+        CompilationUnit root = (CompilationUnit) statement.getRoot();
+        int extendedStart = root.getExtendedStartPosition(statement);
+        // we have a leading comment and the comment is covered by the selection
+        if (extendedStart != statement.getStartPosition()
+            && extendedStart >= fSelection.getOffset()) {
+          String commentToken =
+              buffer.getText(extendedStart, statement.getStartPosition() - extendedStart);
+          commentToken = Strings.trimTrailingTabsAndSpaces(commentToken);
+          Type type = statement.getType();
+          String typeName = buffer.getText(type.getStartPosition(), type.getLength());
+          copy.setType(
+              (Type)
+                  fRewriter.createStringPlaceholder(commentToken + typeName, type.getNodeType()));
+        }
+        result.add(copy);
+        // convert the fragments into expression statements
+        fragments = statement.fragments();
+        if (!fragments.isEmpty()) {
+          List<ExpressionStatement> newExpressionStatements = new ArrayList<ExpressionStatement>();
+          for (Iterator<VariableDeclarationFragment> iter = fragments.iterator();
+              iter.hasNext();
+              ) {
+            VariableDeclarationFragment fragment = iter.next();
+            Expression initializer = fragment.getInitializer();
+            if (initializer != null) {
+              Assignment assignment = ast.newAssignment();
+              assignment.setLeftHandSide(
+                  (Expression) fRewriter.createCopyTarget(fragment.getName()));
+              assignment.setRightHandSide((Expression) fRewriter.createCopyTarget(initializer));
+              newExpressionStatements.add(ast.newExpressionStatement(assignment));
+            }
+          }
+          if (!newExpressionStatements.isEmpty()) {
+            if (fSelectedNodes.length == 1) {
+              expressionStatement =
+                  fRewriter.createGroupNode(
+                      newExpressionStatements.toArray(new ASTNode[newExpressionStatements.size()]));
 
-						} else {
-							fRewriter.replace(
-								statement,
-								fRewriter.createGroupNode(newExpressionStatements.toArray(new ASTNode[newExpressionStatements.size()])),
-								null);
-						}
-					} else {
-						fRewriter.remove(statement, null);
-						selectedNodeRemoved= true;
-					}
-				} else {
-					fRewriter.remove(statement, null);
-					selectedNodeRemoved= true;
-				}
-			}
-		}
-		result.add(tryStatement);
-		ASTNode replacementNode;
-		if (result.size() == 1) {
-			replacementNode= result.get(0);
-		} else {
-			replacementNode= fRewriter.createGroupNode(result.toArray(new ASTNode[result.size()]));
-		}
-		if (fSelectedNodes.length == 1) {
-			if (expressionStatement != null) {
-				statements.insertLast(expressionStatement, null);
-			} else {
-				if (!selectedNodeRemoved)
-					statements.insertLast(fRewriter.createMoveTarget(fSelectedNodes[0]), null);
-			}
-			fRewriter.replace(fSelectedNodes[0], replacementNode, null);
-		} else {
-			ListRewrite source= fRewriter.getListRewrite(
-				fSelectedNodes[0].getParent(),
-				(ChildListPropertyDescriptor)fSelectedNodes[0].getLocationInParent());
-			ASTNode toMove= source.createMoveTarget(
-				fSelectedNodes[0], fSelectedNodes[fSelectedNodes.length - 1],
-				replacementNode, null);
-			statements.insertLast(toMove, null);
-		}
-	}
+            } else {
+              fRewriter.replace(
+                  statement,
+                  fRewriter.createGroupNode(
+                      newExpressionStatements.toArray(new ASTNode[newExpressionStatements.size()])),
+                  null);
+            }
+          } else {
+            fRewriter.remove(statement, null);
+            selectedNodeRemoved = true;
+          }
+        } else {
+          fRewriter.remove(statement, null);
+          selectedNodeRemoved = true;
+        }
+      }
+    }
+    result.add(tryStatement);
+    ASTNode replacementNode;
+    if (result.size() == 1) {
+      replacementNode = result.get(0);
+    } else {
+      replacementNode = fRewriter.createGroupNode(result.toArray(new ASTNode[result.size()]));
+    }
+    if (fSelectedNodes.length == 1) {
+      if (expressionStatement != null) {
+        statements.insertLast(expressionStatement, null);
+      } else {
+        if (!selectedNodeRemoved)
+          statements.insertLast(fRewriter.createMoveTarget(fSelectedNodes[0]), null);
+      }
+      fRewriter.replace(fSelectedNodes[0], replacementNode, null);
+    } else {
+      ListRewrite source =
+          fRewriter.getListRewrite(
+              fSelectedNodes[0].getParent(),
+              (ChildListPropertyDescriptor) fSelectedNodes[0].getLocationInParent());
+      ASTNode toMove =
+          source.createMoveTarget(
+              fSelectedNodes[0], fSelectedNodes[fSelectedNodes.length - 1], replacementNode, null);
+      statements.insertLast(toMove, null);
+    }
+  }
 

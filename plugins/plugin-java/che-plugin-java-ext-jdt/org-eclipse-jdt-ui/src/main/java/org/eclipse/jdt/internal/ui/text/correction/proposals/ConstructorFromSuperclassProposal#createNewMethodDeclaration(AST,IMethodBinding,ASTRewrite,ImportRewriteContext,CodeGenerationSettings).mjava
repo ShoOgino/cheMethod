@@ -1,69 +1,87 @@
-	private MethodDeclaration createNewMethodDeclaration(AST ast, IMethodBinding binding, ASTRewrite rewrite, ImportRewriteContext importRewriteContext, CodeGenerationSettings commentSettings) throws
-																																																 CoreException {
-		String name= fTypeNode.getName().getIdentifier();
-		MethodDeclaration decl= ast.newMethodDeclaration();
-		decl.setConstructor(true);
-		decl.setName(ast.newSimpleName(name));
-		Block body= ast.newBlock();
-		decl.setBody(body);
+  private MethodDeclaration createNewMethodDeclaration(
+      AST ast,
+      IMethodBinding binding,
+      ASTRewrite rewrite,
+      ImportRewriteContext importRewriteContext,
+      CodeGenerationSettings commentSettings)
+      throws CoreException {
+    String name = fTypeNode.getName().getIdentifier();
+    MethodDeclaration decl = ast.newMethodDeclaration();
+    decl.setConstructor(true);
+    decl.setName(ast.newSimpleName(name));
+    Block body = ast.newBlock();
+    decl.setBody(body);
 
-		SuperConstructorInvocation invocation= null;
+    SuperConstructorInvocation invocation = null;
 
-		List<SingleVariableDeclaration> parameters= decl.parameters();
-		String[] paramNames= getArgumentNames(binding);
+    List<SingleVariableDeclaration> parameters = decl.parameters();
+    String[] paramNames = getArgumentNames(binding);
 
-		ITypeBinding enclosingInstance= getEnclosingInstance();
-		if (enclosingInstance != null) {
-			invocation= addEnclosingInstanceAccess(rewrite, importRewriteContext, parameters, paramNames, enclosingInstance);
-		}
+    ITypeBinding enclosingInstance = getEnclosingInstance();
+    if (enclosingInstance != null) {
+      invocation =
+          addEnclosingInstanceAccess(
+              rewrite, importRewriteContext, parameters, paramNames, enclosingInstance);
+    }
 
-		if (binding == null) {
-			decl.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.PUBLIC_KEYWORD));
-		} else {
-			decl.modifiers().addAll(ASTNodeFactory.newModifiers(ast, binding.getModifiers()));
+    if (binding == null) {
+      decl.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.PUBLIC_KEYWORD));
+    } else {
+      decl.modifiers().addAll(ASTNodeFactory.newModifiers(ast, binding.getModifiers()));
 
-			ITypeBinding[] params= binding.getParameterTypes();
-			for (int i= 0; i < params.length; i++) {
-				SingleVariableDeclaration var= ast.newSingleVariableDeclaration();
-				var.setType(getImportRewrite().addImport(params[i], ast, importRewriteContext));
-				var.setName(ast.newSimpleName(paramNames[i]));
-				parameters.add(var);
-			}
+      ITypeBinding[] params = binding.getParameterTypes();
+      for (int i = 0; i < params.length; i++) {
+        SingleVariableDeclaration var = ast.newSingleVariableDeclaration();
+        var.setType(getImportRewrite().addImport(params[i], ast, importRewriteContext));
+        var.setName(ast.newSimpleName(paramNames[i]));
+        parameters.add(var);
+      }
 
-			List<Type> thrownExceptions= decl.thrownExceptionTypes();
-			ITypeBinding[] excTypes= binding.getExceptionTypes();
-			for (int i= 0; i < excTypes.length; i++) {
-				Type excType= getImportRewrite().addImport(excTypes[i], ast, importRewriteContext);
-				thrownExceptions.add(excType);
-			}
+      List<Type> thrownExceptions = decl.thrownExceptionTypes();
+      ITypeBinding[] excTypes = binding.getExceptionTypes();
+      for (int i = 0; i < excTypes.length; i++) {
+        Type excType = getImportRewrite().addImport(excTypes[i], ast, importRewriteContext);
+        thrownExceptions.add(excType);
+      }
 
-			if (invocation == null) {
-				invocation= ast.newSuperConstructorInvocation();
-			}
+      if (invocation == null) {
+        invocation = ast.newSuperConstructorInvocation();
+      }
 
-			List<Expression> arguments= invocation.arguments();
-			for (int i= 0; i < paramNames.length; i++) {
-				Name argument= ast.newSimpleName(paramNames[i]);
-				arguments.add(argument);
-				addLinkedPosition(rewrite.track(argument), false, "arg_name_" + paramNames[i]); //$NON-NLS-1$
-			}
-		}
+      List<Expression> arguments = invocation.arguments();
+      for (int i = 0; i < paramNames.length; i++) {
+        Name argument = ast.newSimpleName(paramNames[i]);
+        arguments.add(argument);
+        addLinkedPosition(
+            rewrite.track(argument), false, "arg_name_" + paramNames[i]); //$NON-NLS-1$
+      }
+    }
 
-		String bodyStatement= (invocation == null) ? "" : ASTNodes
-				.asFormattedString(invocation, 0, String.valueOf('\n'), getCompilationUnit().getJavaProject().getOptions(true));
-				//$NON-NLS-1$
-		String placeHolder= CodeGeneration.getMethodBodyContent(getCompilationUnit(), name, name, true, bodyStatement, String.valueOf('\n'));
-		if (placeHolder != null) {
-			ASTNode todoNode= rewrite.createStringPlaceholder(placeHolder, ASTNode.RETURN_STATEMENT);
-			body.statements().add(todoNode);
-		}
-		if (commentSettings != null) {
-			String string= CodeGeneration.getMethodComment(getCompilationUnit(), name, decl, null, String.valueOf('\n'));
-			if (string != null) {
-				Javadoc javadoc= (Javadoc) rewrite.createStringPlaceholder(string, ASTNode.JAVADOC);
-				decl.setJavadoc(javadoc);
-			}
-		}
-		return decl;
-	}
+    String bodyStatement =
+        (invocation == null)
+            ? ""
+            : ASTNodes.asFormattedString(
+                invocation,
+                0,
+                String.valueOf('\n'),
+                getCompilationUnit().getJavaProject().getOptions(true));
+    //$NON-NLS-1$
+    String placeHolder =
+        CodeGeneration.getMethodBodyContent(
+            getCompilationUnit(), name, name, true, bodyStatement, String.valueOf('\n'));
+    if (placeHolder != null) {
+      ASTNode todoNode = rewrite.createStringPlaceholder(placeHolder, ASTNode.RETURN_STATEMENT);
+      body.statements().add(todoNode);
+    }
+    if (commentSettings != null) {
+      String string =
+          CodeGeneration.getMethodComment(
+              getCompilationUnit(), name, decl, null, String.valueOf('\n'));
+      if (string != null) {
+        Javadoc javadoc = (Javadoc) rewrite.createStringPlaceholder(string, ASTNode.JAVADOC);
+        decl.setJavadoc(javadoc);
+      }
+    }
+    return decl;
+  }
 

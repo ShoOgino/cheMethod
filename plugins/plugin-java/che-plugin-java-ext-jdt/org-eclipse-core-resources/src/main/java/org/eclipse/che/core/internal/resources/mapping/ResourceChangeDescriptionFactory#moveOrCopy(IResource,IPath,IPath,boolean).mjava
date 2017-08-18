@@ -1,67 +1,72 @@
-	/**
-	 * Builds the delta representing a single resource being moved or copied.
-	 * 
-	 * @param resource The resource being moved
-	 * @param sourcePrefix The root of the sub-tree being moved
-	 * @param destinationPrefix The root of the destination sub-tree
-	 * @param move <code>true</code> for a move, <code>false</code> for a copy
-	 * @return Whether to move or copy the child
-	 */
-	boolean moveOrCopy(IResource resource, final IPath sourcePrefix, final IPath destinationPrefix, final boolean move) {
-		ProposedResourceDelta sourceDelta = getDelta(resource);
-		if (sourceDelta.getKind() == IResourceDelta.REMOVED) {
-			// There is already a removed delta here so there
-			// is nothing to move/copy
-			return false;
-		}
-		IResource destinationResource = getDestinationResource(resource, sourcePrefix, destinationPrefix);
-		ProposedResourceDelta destinationDelta = getDelta(destinationResource);
-		if ((destinationDelta.getKind() & (IResourceDelta.ADDED | IResourceDelta.CHANGED)) > 0) {
-			// There is already a resource at the destination
-			// TODO: What do we do
-			return false;
-		}
-		// First, create the delta for the source
-		IPath fromPath = resource.getFullPath();
-		boolean wasAdded = false;
-		final int sourceFlags = sourceDelta.getFlags();
-		if (move) {
-			// We transfer the source flags to the destination
-			if (sourceDelta.getKind() == IResourceDelta.ADDED) {
-				if ((sourceFlags & IResourceDelta.MOVED_FROM) != 0) {
-					// The resource was moved from somewhere else so
-					// we need to transfer the path to the new location
-					fromPath = sourceDelta.getMovedFromPath();
-					sourceDelta.setMovedFromPath(null);
-				}
-				// The source was added and then moved so we'll
-				// make it an add at the destination
-				sourceDelta.setKind(0);
-				wasAdded = true;
-			} else {
-				// We reset the status to be a remove/move_to
-				sourceDelta.setKind(IResourceDelta.REMOVED);
-				sourceDelta.setFlags(IResourceDelta.MOVED_TO);
-				sourceDelta.setMovedToPath(destinationPrefix.append(fromPath.removeFirstSegments(sourcePrefix.segmentCount())));
-			}
-		}
-		// Next, create the delta for the destination
-		if (destinationDelta.getKind() == IResourceDelta.REMOVED) {
-			// The destination was removed and is being re-added
-			destinationDelta.setKind(IResourceDelta.CHANGED);
-			destinationDelta.addFlags(IResourceDelta.REPLACED);
-		} else {
-			destinationDelta.setKind(IResourceDelta.ADDED);
-		}
-		if (!wasAdded || !fromPath.equals(resource.getFullPath())) {
-			// The source wasn't added so it is a move/copy
-			destinationDelta.addFlags(move ? IResourceDelta.MOVED_FROM : IResourceDelta.COPIED_FROM);
-			destinationDelta.setMovedFromPath(fromPath);
-			// Apply the source flags
-			if (move)
-				destinationDelta.addFlags(sourceFlags);
-		}
+  /**
+   * Builds the delta representing a single resource being moved or copied.
+   *
+   * @param resource The resource being moved
+   * @param sourcePrefix The root of the sub-tree being moved
+   * @param destinationPrefix The root of the destination sub-tree
+   * @param move <code>true</code> for a move, <code>false</code> for a copy
+   * @return Whether to move or copy the child
+   */
+  boolean moveOrCopy(
+      IResource resource,
+      final IPath sourcePrefix,
+      final IPath destinationPrefix,
+      final boolean move) {
+    ProposedResourceDelta sourceDelta = getDelta(resource);
+    if (sourceDelta.getKind() == IResourceDelta.REMOVED) {
+      // There is already a removed delta here so there
+      // is nothing to move/copy
+      return false;
+    }
+    IResource destinationResource =
+        getDestinationResource(resource, sourcePrefix, destinationPrefix);
+    ProposedResourceDelta destinationDelta = getDelta(destinationResource);
+    if ((destinationDelta.getKind() & (IResourceDelta.ADDED | IResourceDelta.CHANGED)) > 0) {
+      // There is already a resource at the destination
+      // TODO: What do we do
+      return false;
+    }
+    // First, create the delta for the source
+    IPath fromPath = resource.getFullPath();
+    boolean wasAdded = false;
+    final int sourceFlags = sourceDelta.getFlags();
+    if (move) {
+      // We transfer the source flags to the destination
+      if (sourceDelta.getKind() == IResourceDelta.ADDED) {
+        if ((sourceFlags & IResourceDelta.MOVED_FROM) != 0) {
+          // The resource was moved from somewhere else so
+          // we need to transfer the path to the new location
+          fromPath = sourceDelta.getMovedFromPath();
+          sourceDelta.setMovedFromPath(null);
+        }
+        // The source was added and then moved so we'll
+        // make it an add at the destination
+        sourceDelta.setKind(0);
+        wasAdded = true;
+      } else {
+        // We reset the status to be a remove/move_to
+        sourceDelta.setKind(IResourceDelta.REMOVED);
+        sourceDelta.setFlags(IResourceDelta.MOVED_TO);
+        sourceDelta.setMovedToPath(
+            destinationPrefix.append(fromPath.removeFirstSegments(sourcePrefix.segmentCount())));
+      }
+    }
+    // Next, create the delta for the destination
+    if (destinationDelta.getKind() == IResourceDelta.REMOVED) {
+      // The destination was removed and is being re-added
+      destinationDelta.setKind(IResourceDelta.CHANGED);
+      destinationDelta.addFlags(IResourceDelta.REPLACED);
+    } else {
+      destinationDelta.setKind(IResourceDelta.ADDED);
+    }
+    if (!wasAdded || !fromPath.equals(resource.getFullPath())) {
+      // The source wasn't added so it is a move/copy
+      destinationDelta.addFlags(move ? IResourceDelta.MOVED_FROM : IResourceDelta.COPIED_FROM);
+      destinationDelta.setMovedFromPath(fromPath);
+      // Apply the source flags
+      if (move) destinationDelta.addFlags(sourceFlags);
+    }
 
-		return true;
-	}
+    return true;
+  }
 

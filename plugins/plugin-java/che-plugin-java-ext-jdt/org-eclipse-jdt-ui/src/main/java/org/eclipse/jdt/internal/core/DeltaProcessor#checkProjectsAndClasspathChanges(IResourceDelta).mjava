@@ -1,184 +1,184 @@
-    /*
-     * Process the given delta and look for projects being added, opened, closed or
-     * with a java nature being added or removed.
-     * Note that projects being deleted are checked in deleting(IProject).
-     * In all cases, add the project's dependents to the list of projects to update
-     * so that the classpath related markers can be updated.
-     */
-    private void checkProjectsAndClasspathChanges(IResourceDelta delta) {
-//		IResource resource = delta.getResource();
-//		IResourceDelta[] children = null;
-//
-//		switch (resource.getType()) {
-//			case IResource.ROOT:
-//				// workaround for bug 15168 circular errors not reported
-//				this.state.getOldJavaProjecNames(); // force list to be computed
-//				children = delta.getAffectedChildren();
-//				break;
-//			case IResource.PROJECT:
-//				// NB: No need to check project's nature as if the project is not a java project:
-//				//     - if the project is added or changed this is a noop for projectsBeingDeleted
-//				//     - if the project is closed, it has already lost its java nature
-//				IProject project = (IProject)resource;
-//				JavaProject javaProject = (JavaProject)JavaCore.create(project);
-//				switch (delta.getKind()) {
-//					case IResourceDelta.ADDED:
-//						this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
-//
-//						// remember that the project's cache must be reset
-//						this.projectCachesToReset.add(javaProject);
-//
-//						// workaround for bug 15168 circular errors not reported
-//						if (JavaProject.hasJavaNature(project)) {
-//							addToParentInfo(javaProject);
-//							readRawClasspath(javaProject);
-//							// ensure project references are updated (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=121569)
-//							checkProjectReferenceChange(project, javaProject);
-//							// and external folders as well
-//							checkExternalFolderChange(project, javaProject);
-//						}
-//
-//						this.state.rootsAreStale = true;
-//						break;
-//
-//					case IResourceDelta.CHANGED:
-//						if ((delta.getFlags() & IResourceDelta.OPEN) != 0) {
-//							this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
-//
-//							// remember that the project's cache must be reset
-//							this.projectCachesToReset.add(javaProject);
-//
-//							// workaround for bug 15168 circular errors not reported
-//							if (project.isOpen()) {
-//								if (JavaProject.hasJavaNature(project)) {
-//									addToParentInfo(javaProject);
-//									readRawClasspath(javaProject);
-//									// ensure project references are updated
-//									checkProjectReferenceChange(project, javaProject);
-//									// and external folders as well
-//									checkExternalFolderChange(project, javaProject);
-//								}
-//							} else {
-//								try {
-//									javaProject.close();
-//								} catch (JavaModelException e) {
-//									// java project doesn't exist: ignore
-//								}
-//								removeFromParentInfo(javaProject);
-//								this.manager.removePerProjectInfo(javaProject, false /* don't remove index files and timestamp info of
-//								external jar */);
-//								this.manager.containerRemove(javaProject);
-//							}
-//							this.state.rootsAreStale = true;
-//						} else if ((delta.getFlags() & IResourceDelta.DESCRIPTION) != 0) {
-//							boolean wasJavaProject = this.state.findJavaProject(project.getName()) != null;
-//							boolean isJavaProject = JavaProject.hasJavaNature(project);
-//							if (wasJavaProject != isJavaProject) {
-//								this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
-//
-//								// java nature added or removed: remember that the project's cache must be reset
-//								this.projectCachesToReset.add(javaProject);
-//
-//								// workaround for bug 15168 circular errors not reported
-//								if (isJavaProject) {
-//									addToParentInfo(javaProject);
-//									readRawClasspath(javaProject);
-//									// ensure project references are updated (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=172666)
-//									checkProjectReferenceChange(project, javaProject);
-//									// and external folders as well
-//									checkExternalFolderChange(project, javaProject);
-//								} else {
-//									// remove classpath cache so that initializeRoots() will not consider the project has a classpath
-//									this.manager
-//											.removePerProjectInfo(javaProject, true /* remove external jar files indexes and timestamps
-//											*/);
-//									// remove container cache for this project
-//									this.manager.containerRemove(javaProject);
-//									// close project
-//									try {
-//										javaProject.close();
-//									} catch (JavaModelException e) {
-//										// java project doesn't exist: ignore
-//									}
-//									removeFromParentInfo(javaProject);
-//								}
-//								this.state.rootsAreStale = true;
-//							} else {
-//								// in case the project was removed then added then changed (see bug 19799)
-//								if (isJavaProject) { // need nature check - 18698
-//									addToParentInfo(javaProject);
-//									children = delta.getAffectedChildren();
-//								}
-//							}
-//						} else {
-//							// workaround for bug 15168 circular errors not reported
-//							// in case the project was removed then added then changed
-//							if (JavaProject.hasJavaNature(project)) { // need nature check - 18698
-//								addToParentInfo(javaProject);
-//								children = delta.getAffectedChildren();
-//							}
-//						}
-//						break;
-//
-//					case IResourceDelta.REMOVED:
-//						this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
-//
-//						// remove classpath cache so that initializeRoots() will not consider the project has a classpath
-//						this.manager.removePerProjectInfo(javaProject, true /* remove external jar files indexes and timestamps*/);
-//						// remove container cache for this project
-//						this.manager.containerRemove(javaProject);
-//
-//						this.state.rootsAreStale = true;
-//						break;
-//				}
-//
-//				break;
-//			case IResource.FOLDER:
-//				if (delta.getKind() == IResourceDelta.CHANGED) { // look for .jar file change to update classpath
-//					children = delta.getAffectedChildren();
-//				}
-//				break;
-//			case IResource.FILE :
-//				IFile file = (IFile) resource;
-//				int kind = delta.getKind();
-//				RootInfo rootInfo;
-//				if (file.getName().equals(JavaProject.CLASSPATH_FILENAME)) {
-//					/* classpath file change */
-//					this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
-//					switch (kind) {
-//						case IResourceDelta.CHANGED :
-//							int flags = delta.getFlags();
-//							if ((flags & IResourceDelta.CONTENT) == 0  // only consider content change
-//								&& (flags & IResourceDelta.ENCODING) == 0 // and encoding change
-//								&& (flags & IResourceDelta.MOVED_FROM) == 0) {// and also move and overide scenario (see http://dev
-// .eclipse.org/bugs/show_bug.cgi?id=21420)
-//								break;
-//							}
-//						//$FALL-THROUGH$
-//						case IResourceDelta.ADDED :
-//						case IResourceDelta.REMOVED :
-//							javaProject = (JavaProject)JavaCore.create(file.getProject());
-//
-//							// force to (re)read the .classpath file
-//							// in case of removal (IResourceDelta.REMOVED) this will reset the classpath to its default and create the
-// right delta
-//							// (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=211290)
-//							readRawClasspath(javaProject);
-//							break;
-//					}
-//					this.state.rootsAreStale = true;
-//				} else if ((rootInfo = rootInfo(file.getFullPath(), kind)) != null && rootInfo.entryKind == IClasspathEntry.CPE_LIBRARY) {
-//					javaProject = (JavaProject)JavaCore.create(file.getProject());
-//					javaProject.resetResolvedClasspath();
-//					this.state.rootsAreStale = true;
-//				}
-//				break;
-//
-//		}
-//		if (children != null) {
-//			for (int i = 0; i < children.length; i++) {
-//				checkProjectsAndClasspathChanges(children[i]);
-//			}
-//		}
-    }
+  /*
+   * Process the given delta and look for projects being added, opened, closed or
+   * with a java nature being added or removed.
+   * Note that projects being deleted are checked in deleting(IProject).
+   * In all cases, add the project's dependents to the list of projects to update
+   * so that the classpath related markers can be updated.
+   */
+  private void checkProjectsAndClasspathChanges(IResourceDelta delta) {
+    //		IResource resource = delta.getResource();
+    //		IResourceDelta[] children = null;
+    //
+    //		switch (resource.getType()) {
+    //			case IResource.ROOT:
+    //				// workaround for bug 15168 circular errors not reported
+    //				this.state.getOldJavaProjecNames(); // force list to be computed
+    //				children = delta.getAffectedChildren();
+    //				break;
+    //			case IResource.PROJECT:
+    //				// NB: No need to check project's nature as if the project is not a java project:
+    //				//     - if the project is added or changed this is a noop for projectsBeingDeleted
+    //				//     - if the project is closed, it has already lost its java nature
+    //				IProject project = (IProject)resource;
+    //				JavaProject javaProject = (JavaProject)JavaCore.create(project);
+    //				switch (delta.getKind()) {
+    //					case IResourceDelta.ADDED:
+    //						this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
+    //
+    //						// remember that the project's cache must be reset
+    //						this.projectCachesToReset.add(javaProject);
+    //
+    //						// workaround for bug 15168 circular errors not reported
+    //						if (JavaProject.hasJavaNature(project)) {
+    //							addToParentInfo(javaProject);
+    //							readRawClasspath(javaProject);
+    //							// ensure project references are updated (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=121569)
+    //							checkProjectReferenceChange(project, javaProject);
+    //							// and external folders as well
+    //							checkExternalFolderChange(project, javaProject);
+    //						}
+    //
+    //						this.state.rootsAreStale = true;
+    //						break;
+    //
+    //					case IResourceDelta.CHANGED:
+    //						if ((delta.getFlags() & IResourceDelta.OPEN) != 0) {
+    //							this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
+    //
+    //							// remember that the project's cache must be reset
+    //							this.projectCachesToReset.add(javaProject);
+    //
+    //							// workaround for bug 15168 circular errors not reported
+    //							if (project.isOpen()) {
+    //								if (JavaProject.hasJavaNature(project)) {
+    //									addToParentInfo(javaProject);
+    //									readRawClasspath(javaProject);
+    //									// ensure project references are updated
+    //									checkProjectReferenceChange(project, javaProject);
+    //									// and external folders as well
+    //									checkExternalFolderChange(project, javaProject);
+    //								}
+    //							} else {
+    //								try {
+    //									javaProject.close();
+    //								} catch (JavaModelException e) {
+    //									// java project doesn't exist: ignore
+    //								}
+    //								removeFromParentInfo(javaProject);
+    //								this.manager.removePerProjectInfo(javaProject, false /* don't remove index files and timestamp info of
+    //								external jar */);
+    //								this.manager.containerRemove(javaProject);
+    //							}
+    //							this.state.rootsAreStale = true;
+    //						} else if ((delta.getFlags() & IResourceDelta.DESCRIPTION) != 0) {
+    //							boolean wasJavaProject = this.state.findJavaProject(project.getName()) != null;
+    //							boolean isJavaProject = JavaProject.hasJavaNature(project);
+    //							if (wasJavaProject != isJavaProject) {
+    //								this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
+    //
+    //								// java nature added or removed: remember that the project's cache must be reset
+    //								this.projectCachesToReset.add(javaProject);
+    //
+    //								// workaround for bug 15168 circular errors not reported
+    //								if (isJavaProject) {
+    //									addToParentInfo(javaProject);
+    //									readRawClasspath(javaProject);
+    //									// ensure project references are updated (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=172666)
+    //									checkProjectReferenceChange(project, javaProject);
+    //									// and external folders as well
+    //									checkExternalFolderChange(project, javaProject);
+    //								} else {
+    //									// remove classpath cache so that initializeRoots() will not consider the project has a classpath
+    //									this.manager
+    //											.removePerProjectInfo(javaProject, true /* remove external jar files indexes and timestamps
+    //											*/);
+    //									// remove container cache for this project
+    //									this.manager.containerRemove(javaProject);
+    //									// close project
+    //									try {
+    //										javaProject.close();
+    //									} catch (JavaModelException e) {
+    //										// java project doesn't exist: ignore
+    //									}
+    //									removeFromParentInfo(javaProject);
+    //								}
+    //								this.state.rootsAreStale = true;
+    //							} else {
+    //								// in case the project was removed then added then changed (see bug 19799)
+    //								if (isJavaProject) { // need nature check - 18698
+    //									addToParentInfo(javaProject);
+    //									children = delta.getAffectedChildren();
+    //								}
+    //							}
+    //						} else {
+    //							// workaround for bug 15168 circular errors not reported
+    //							// in case the project was removed then added then changed
+    //							if (JavaProject.hasJavaNature(project)) { // need nature check - 18698
+    //								addToParentInfo(javaProject);
+    //								children = delta.getAffectedChildren();
+    //							}
+    //						}
+    //						break;
+    //
+    //					case IResourceDelta.REMOVED:
+    //						this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
+    //
+    //						// remove classpath cache so that initializeRoots() will not consider the project has a classpath
+    //						this.manager.removePerProjectInfo(javaProject, true /* remove external jar files indexes and timestamps*/);
+    //						// remove container cache for this project
+    //						this.manager.containerRemove(javaProject);
+    //
+    //						this.state.rootsAreStale = true;
+    //						break;
+    //				}
+    //
+    //				break;
+    //			case IResource.FOLDER:
+    //				if (delta.getKind() == IResourceDelta.CHANGED) { // look for .jar file change to update classpath
+    //					children = delta.getAffectedChildren();
+    //				}
+    //				break;
+    //			case IResource.FILE :
+    //				IFile file = (IFile) resource;
+    //				int kind = delta.getKind();
+    //				RootInfo rootInfo;
+    //				if (file.getName().equals(JavaProject.CLASSPATH_FILENAME)) {
+    //					/* classpath file change */
+    //					this.manager.forceBatchInitializations(false/*not initAfterLoad*/);
+    //					switch (kind) {
+    //						case IResourceDelta.CHANGED :
+    //							int flags = delta.getFlags();
+    //							if ((flags & IResourceDelta.CONTENT) == 0  // only consider content change
+    //								&& (flags & IResourceDelta.ENCODING) == 0 // and encoding change
+    //								&& (flags & IResourceDelta.MOVED_FROM) == 0) {// and also move and overide scenario (see http://dev
+    // .eclipse.org/bugs/show_bug.cgi?id=21420)
+    //								break;
+    //							}
+    //						//$FALL-THROUGH$
+    //						case IResourceDelta.ADDED :
+    //						case IResourceDelta.REMOVED :
+    //							javaProject = (JavaProject)JavaCore.create(file.getProject());
+    //
+    //							// force to (re)read the .classpath file
+    //							// in case of removal (IResourceDelta.REMOVED) this will reset the classpath to its default and create the
+    // right delta
+    //							// (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=211290)
+    //							readRawClasspath(javaProject);
+    //							break;
+    //					}
+    //					this.state.rootsAreStale = true;
+    //				} else if ((rootInfo = rootInfo(file.getFullPath(), kind)) != null && rootInfo.entryKind == IClasspathEntry.CPE_LIBRARY) {
+    //					javaProject = (JavaProject)JavaCore.create(file.getProject());
+    //					javaProject.resetResolvedClasspath();
+    //					this.state.rootsAreStale = true;
+    //				}
+    //				break;
+    //
+    //		}
+    //		if (children != null) {
+    //			for (int i = 0; i < children.length; i++) {
+    //				checkProjectsAndClasspathChanges(children[i]);
+    //			}
+    //		}
+  }
 

@@ -1,42 +1,40 @@
-    /**
-     * Factory method.
-     */
-    public static GdbBacktrace parse(GdbOutput gdbOutput) throws GdbParseException {
-        Matcher matcher;
-        final String output = gdbOutput.getOutput();
-        final String[] framesInfo = output.split("#");
-        final Map<Integer, Location> frames = new HashMap<>(framesInfo.length);
+  /** Factory method. */
+  public static GdbBacktrace parse(GdbOutput gdbOutput) throws GdbParseException {
+    Matcher matcher;
+    final String output = gdbOutput.getOutput();
+    final String[] framesInfo = output.split("#");
+    final Map<Integer, Location> frames = new HashMap<>(framesInfo.length);
 
-        for (String frame : framesInfo) {
-            try {
-                matcher = GDB_FILE_LOCATION.matcher(frame);
-                if (matcher.find()) {
-                    final String fileLocation = matcher.group(2);
-                    final int lineNumber = Integer.parseInt(matcher.group(3));
-                    final int frameNumber = Integer.parseInt(matcher.group(1));
+    for (String frame : framesInfo) {
+      try {
+        matcher = GDB_FILE_LOCATION.matcher(frame);
+        if (matcher.find()) {
+          final String fileLocation = matcher.group(2);
+          final int lineNumber = Integer.parseInt(matcher.group(3));
+          final int frameNumber = Integer.parseInt(matcher.group(1));
 
-                    final Location location = new LocationImpl(fileLocation, lineNumber);
-                    frames.put(frameNumber, location);
-                    continue;
-                }
-
-                matcher = GDB_LIBRARY_LOCATION.matcher(frame);
-                if (matcher.find()) {
-                    final int frameNumber = Integer.parseInt(matcher.group(1));
-                    final String libraryLocation = matcher.group(2);
-                    final Location location = new LocationImpl(libraryLocation);
-                    frames.put(frameNumber, location);
-                }
-
-            } catch (NumberFormatException e) {
-                //we can't get info about current frame, but we are trying to get info about another frames
-            }
+          final Location location = new LocationImpl(fileLocation, lineNumber);
+          frames.put(frameNumber, location);
+          continue;
         }
 
-        if (!frames.isEmpty()) {
-             return new GdbBacktrace(frames);
+        matcher = GDB_LIBRARY_LOCATION.matcher(frame);
+        if (matcher.find()) {
+          final int frameNumber = Integer.parseInt(matcher.group(1));
+          final String libraryLocation = matcher.group(2);
+          final Location location = new LocationImpl(libraryLocation);
+          frames.put(frameNumber, location);
         }
 
-        throw new GdbParseException(GdbBacktrace.class, output);
+      } catch (NumberFormatException e) {
+        //we can't get info about current frame, but we are trying to get info about another frames
+      }
     }
+
+    if (!frames.isEmpty()) {
+      return new GdbBacktrace(frames);
+    }
+
+    throw new GdbParseException(GdbBacktrace.class, output);
+  }
 

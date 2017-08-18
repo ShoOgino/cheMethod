@@ -1,77 +1,77 @@
-    /**
-     * Constructs tree based on segments which are supplied by {@link XMLStreamReader}.
-     * Before this method is invoked {@link #document} should be initialized first.
-     * For START_ELEMENT, END_ELEMENT, CHARACTERS reader provides offset from
-     * start of source array bytes, so we can fetch position of elements and text.
-     * Each created element associated with related {@link Node} and vise-versa.
-     */
-    private void constructTree() throws XMLStreamException {
-        final XMLStreamReader reader = newXMLStreamReader();
-        final LinkedList<Element> stack = new LinkedList<>();
-        //before element open tag index
-        int beforeStart = rootStart(xml) - 1;
-        //used to associate each element with document node
-        Node node = document.getDocumentElement();
-        //used to hold previous reader event
-        int prevEvent = START_DOCUMENT;
-        while (reader.hasNext()) {
-            switch (reader.next()) {
-                case START_ELEMENT:
-                    final Element newElement = new Element(this);
-                    newElement.start = new Segment(beforeStart + 1, elementRight(beforeStart + 1, reader));
-                    //if new node is not xml root - set up relationships
-                    if (!stack.isEmpty()) {
-                        node = deepNext(node, true);
-                    }
-                    //connect node with element
-                    node.setUserData("element", newElement, null);
+  /**
+   * Constructs tree based on segments which are supplied by {@link XMLStreamReader}. Before this
+   * method is invoked {@link #document} should be initialized first. For START_ELEMENT,
+   * END_ELEMENT, CHARACTERS reader provides offset from start of source array bytes, so we can
+   * fetch position of elements and text. Each created element associated with related {@link Node}
+   * and vise-versa.
+   */
+  private void constructTree() throws XMLStreamException {
+    final XMLStreamReader reader = newXMLStreamReader();
+    final LinkedList<Element> stack = new LinkedList<>();
+    //before element open tag index
+    int beforeStart = rootStart(xml) - 1;
+    //used to associate each element with document node
+    Node node = document.getDocumentElement();
+    //used to hold previous reader event
+    int prevEvent = START_DOCUMENT;
+    while (reader.hasNext()) {
+      switch (reader.next()) {
+        case START_ELEMENT:
+          final Element newElement = new Element(this);
+          newElement.start = new Segment(beforeStart + 1, elementRight(beforeStart + 1, reader));
+          //if new node is not xml root - set up relationships
+          if (!stack.isEmpty()) {
+            node = deepNext(node, true);
+          }
+          //connect node with element
+          node.setUserData("element", newElement, null);
 
-                    newElement.delegate = safeCast(node);
-                    //let next event know about its start
-                    beforeStart = newElement.start.right;
-                    //if element has declared namespaces register it
-                    putNamespaces(reader);
-                    stack.push(newElement);
-                    break;
-                case END_ELEMENT:
-                    final Element element = stack.pop();
-                    element.end = new Segment(beforeStart + 1, elementRight(beforeStart + 1, reader));
-                    elements.add(element);
-                    beforeStart = element.end.right;
-                    break;
-                case CHARACTERS:
-                    //characters event may be invoked 2 or more times
-                    //on the element text, but related node is single text node
-                    //so the only segment should be created for it
-                    if (prevEvent == CHARACTERS) continue;
+          newElement.delegate = safeCast(node);
+          //let next event know about its start
+          beforeStart = newElement.start.right;
+          //if element has declared namespaces register it
+          putNamespaces(reader);
+          stack.push(newElement);
+          break;
+        case END_ELEMENT:
+          final Element element = stack.pop();
+          element.end = new Segment(beforeStart + 1, elementRight(beforeStart + 1, reader));
+          elements.add(element);
+          beforeStart = element.end.right;
+          break;
+        case CHARACTERS:
+          //characters event may be invoked 2 or more times
+          //on the element text, but related node is single text node
+          //so the only segment should be created for it
+          if (prevEvent == CHARACTERS) continue;
 
-                    final Element current = stack.peek();
-                    if (current.text == null) {
-                        //TODO replace with array list as we know current node 'text nodes' count
-                        current.text = new LinkedList<>();
-                    }
+          final Element current = stack.peek();
+          if (current.text == null) {
+            //TODO replace with array list as we know current node 'text nodes' count
+            current.text = new LinkedList<>();
+          }
 
-                    final Node nextNode = deepNext(node, true);
+          final Node nextNode = deepNext(node, true);
 
-                    final int left = beforeStart + 1;
-                    final int right = left + textLength(nextNode) - 1;
+          final int left = beforeStart + 1;
+          final int right = left + textLength(nextNode) - 1;
 
-                    current.text.add(new Segment(left, right));
-                    beforeStart = right;
-                    node = skipTextNodes(nextNode);
-                    break;
-                case COMMENT:
-                case SPACE:
-                case PROCESSING_INSTRUCTION:
-                    if (!stack.isEmpty()) {
-                        node = deepNext(node, true);
-                        beforeStart = lastIndexOf(xml, '>', reader.getLocation().getCharacterOffset());
-                    }
-                    break;
-                default:
-                    //DO NOTHING
-            }
-            prevEvent = reader.getEventType();
-        }
+          current.text.add(new Segment(left, right));
+          beforeStart = right;
+          node = skipTextNodes(nextNode);
+          break;
+        case COMMENT:
+        case SPACE:
+        case PROCESSING_INSTRUCTION:
+          if (!stack.isEmpty()) {
+            node = deepNext(node, true);
+            beforeStart = lastIndexOf(xml, '>', reader.getLocation().getCharacterOffset());
+          }
+          break;
+        default:
+          //DO NOTHING
+      }
+      prevEvent = reader.getEventType();
     }
+  }
 

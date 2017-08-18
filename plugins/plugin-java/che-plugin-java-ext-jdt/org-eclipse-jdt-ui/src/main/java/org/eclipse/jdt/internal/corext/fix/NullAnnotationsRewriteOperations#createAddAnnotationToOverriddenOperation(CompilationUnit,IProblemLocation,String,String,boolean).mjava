@@ -1,49 +1,61 @@
-	private static SignatureAnnotationRewriteOperation createAddAnnotationToOverriddenOperation(CompilationUnit compilationUnit,
-																								IProblemLocation problem,
-																								String annotationToAdd,
-																								String annotationToRemove,
-																								boolean allowRemove) {
-		ICompilationUnit cu = (ICompilationUnit)compilationUnit.getJavaElement();
-		if (!JavaModelUtil.is50OrHigher(cu.getJavaProject()))
-			return null;
+  private static SignatureAnnotationRewriteOperation createAddAnnotationToOverriddenOperation(
+      CompilationUnit compilationUnit,
+      IProblemLocation problem,
+      String annotationToAdd,
+      String annotationToRemove,
+      boolean allowRemove) {
+    ICompilationUnit cu = (ICompilationUnit) compilationUnit.getJavaElement();
+    if (!JavaModelUtil.is50OrHigher(cu.getJavaProject())) return null;
 
-		ASTNode selectedNode = problem.getCoveringNode(compilationUnit);
-		if (selectedNode == null)
-			return null;
+    ASTNode selectedNode = problem.getCoveringNode(compilationUnit);
+    if (selectedNode == null) return null;
 
-		ASTNode declaringNode = getDeclaringNode(selectedNode);
-		switch (problem.getProblemId()) {
-			case IProblem.IllegalDefinitionToNonNullParameter:
-			case IProblem.IllegalRedefinitionToNonNullParameter:
-				break;
-			case IProblem.IllegalReturnNullityRedefinition:
-				if (declaringNode == null)
-					declaringNode = selectedNode;
-				break;
-			default:
-				return null;
-		}
+    ASTNode declaringNode = getDeclaringNode(selectedNode);
+    switch (problem.getProblemId()) {
+      case IProblem.IllegalDefinitionToNonNullParameter:
+      case IProblem.IllegalRedefinitionToNonNullParameter:
+        break;
+      case IProblem.IllegalReturnNullityRedefinition:
+        if (declaringNode == null) declaringNode = selectedNode;
+        break;
+      default:
+        return null;
+    }
 
-		String annotationNameLabel = annotationToAdd;
-		int lastDot = annotationToAdd.lastIndexOf('.');
-		if (lastDot != -1)
-			annotationNameLabel = annotationToAdd.substring(lastDot + 1);
-		annotationNameLabel = BasicElementLabels.getJavaElementName(annotationNameLabel);
+    String annotationNameLabel = annotationToAdd;
+    int lastDot = annotationToAdd.lastIndexOf('.');
+    if (lastDot != -1) annotationNameLabel = annotationToAdd.substring(lastDot + 1);
+    annotationNameLabel = BasicElementLabels.getJavaElementName(annotationNameLabel);
 
-		if (declaringNode instanceof MethodDeclaration) {
-			// complaint is in signature of this method
-			MethodDeclaration declaration= (MethodDeclaration) declaringNode;
-			switch (problem.getProblemId()) {
-				case IProblem.IllegalDefinitionToNonNullParameter:
-				case IProblem.IllegalRedefinitionToNonNullParameter:
-					return createChangeOverriddenParameterOperation(compilationUnit, cu, declaration, selectedNode, allowRemove, annotationToAdd, annotationToRemove, annotationNameLabel);
-				case IProblem.IllegalReturnNullityRedefinition:
-					if (hasNullAnnotation(declaration)) { // don't adjust super if local has no explicit annotation (?)
-						return createChangeOverriddenReturnOperation(compilationUnit, cu, declaration, allowRemove, annotationToAdd,
-																	 annotationToRemove, annotationNameLabel);
-					}
-			}
-		}
-		return null;
-	}
+    if (declaringNode instanceof MethodDeclaration) {
+      // complaint is in signature of this method
+      MethodDeclaration declaration = (MethodDeclaration) declaringNode;
+      switch (problem.getProblemId()) {
+        case IProblem.IllegalDefinitionToNonNullParameter:
+        case IProblem.IllegalRedefinitionToNonNullParameter:
+          return createChangeOverriddenParameterOperation(
+              compilationUnit,
+              cu,
+              declaration,
+              selectedNode,
+              allowRemove,
+              annotationToAdd,
+              annotationToRemove,
+              annotationNameLabel);
+        case IProblem.IllegalReturnNullityRedefinition:
+          if (hasNullAnnotation(
+              declaration)) { // don't adjust super if local has no explicit annotation (?)
+            return createChangeOverriddenReturnOperation(
+                compilationUnit,
+                cu,
+                declaration,
+                allowRemove,
+                annotationToAdd,
+                annotationToRemove,
+                annotationNameLabel);
+          }
+      }
+    }
+    return null;
+  }
 

@@ -1,46 +1,44 @@
-    /**
-     * Show changes between specified revision and working tree.
-     *
-     * @param commitId
-     *            id of commit
-     * @param formatter
-     *            diff formatter
-     * @return list of diff entries
-     * @throws IOException
-     *             if any i/o errors occurs
-     */
-    private List<DiffEntry> commitToWorkingTree(String commitId, DiffFormatter formatter) throws IOException {
-        ObjectId commitA = repository.resolve(commitId);
-        if (commitA == null) {
-            File heads = new File(repository.getWorkTree().getPath() + "/.git/refs/heads");
-            if (heads.exists() && heads.list().length == 0) {
-                return Collections.emptyList();
-            }
-            throw new IllegalArgumentException("Invalid commit id " + commitId);
-        }
-        RevTree treeA;
-        try (RevWalk revWalkA = new RevWalk(repository)) {
-            treeA = revWalkA.parseTree(commitA);
-        }
-
-        List<DiffEntry> diff;
-        try (ObjectReader reader = repository.newObjectReader()) {
-            CanonicalTreeParser iterA = new CanonicalTreeParser();
-            iterA.reset(reader, treeA);
-            FileTreeIterator iterB = new FileTreeIterator(repository);
-            // Seems bug in DiffFormatter when work with working. Disable detect
-            // renames by formatter and do it later.
-            formatter.setDetectRenames(false);
-            diff = formatter.scan(iterA, iterB);
-            if (!params.isNoRenames()) {
-                // Detect renames.
-                RenameDetector renameDetector = createRenameDetector();
-                ContentSource.Pair sourcePairReader = new ContentSource.Pair(ContentSource.create(reader),
-                                                                             ContentSource.create(iterB));
-                renameDetector.addAll(diff);
-                diff = renameDetector.compute(sourcePairReader, NullProgressMonitor.INSTANCE);
-            }
-        }
-        return diff;
+  /**
+   * Show changes between specified revision and working tree.
+   *
+   * @param commitId id of commit
+   * @param formatter diff formatter
+   * @return list of diff entries
+   * @throws IOException if any i/o errors occurs
+   */
+  private List<DiffEntry> commitToWorkingTree(String commitId, DiffFormatter formatter)
+      throws IOException {
+    ObjectId commitA = repository.resolve(commitId);
+    if (commitA == null) {
+      File heads = new File(repository.getWorkTree().getPath() + "/.git/refs/heads");
+      if (heads.exists() && heads.list().length == 0) {
+        return Collections.emptyList();
+      }
+      throw new IllegalArgumentException("Invalid commit id " + commitId);
     }
+    RevTree treeA;
+    try (RevWalk revWalkA = new RevWalk(repository)) {
+      treeA = revWalkA.parseTree(commitA);
+    }
+
+    List<DiffEntry> diff;
+    try (ObjectReader reader = repository.newObjectReader()) {
+      CanonicalTreeParser iterA = new CanonicalTreeParser();
+      iterA.reset(reader, treeA);
+      FileTreeIterator iterB = new FileTreeIterator(repository);
+      // Seems bug in DiffFormatter when work with working. Disable detect
+      // renames by formatter and do it later.
+      formatter.setDetectRenames(false);
+      diff = formatter.scan(iterA, iterB);
+      if (!params.isNoRenames()) {
+        // Detect renames.
+        RenameDetector renameDetector = createRenameDetector();
+        ContentSource.Pair sourcePairReader =
+            new ContentSource.Pair(ContentSource.create(reader), ContentSource.create(iterB));
+        renameDetector.addAll(diff);
+        diff = renameDetector.compute(sourcePairReader, NullProgressMonitor.INSTANCE);
+      }
+    }
+    return diff;
+  }
 

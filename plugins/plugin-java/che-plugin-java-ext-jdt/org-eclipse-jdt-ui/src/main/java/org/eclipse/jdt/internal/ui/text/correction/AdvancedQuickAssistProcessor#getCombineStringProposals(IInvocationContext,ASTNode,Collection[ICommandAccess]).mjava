@@ -1,59 +1,64 @@
-	private static boolean getCombineStringProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
-		// we work with InfixExpressions
-		InfixExpression infixExpression;
-		if (node instanceof InfixExpression) {
-			infixExpression= (InfixExpression) node;
-		} else if (node.getParent() instanceof InfixExpression) {
-			infixExpression= (InfixExpression) node.getParent();
-		} else {
-			return false;
-		}
+  private static boolean getCombineStringProposals(
+      IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+    // we work with InfixExpressions
+    InfixExpression infixExpression;
+    if (node instanceof InfixExpression) {
+      infixExpression = (InfixExpression) node;
+    } else if (node.getParent() instanceof InfixExpression) {
+      infixExpression = (InfixExpression) node.getParent();
+    } else {
+      return false;
+    }
 
+    // only + is valid for combining strings
+    if (!(infixExpression.getOperator().equals(InfixExpression.Operator.PLUS))) {
+      return false;
+    }
 
-		// only + is valid for combining strings
-		if (!(infixExpression.getOperator().equals(InfixExpression.Operator.PLUS))) {
-			return false;
-		}
+    // all expressions must be strings
+    Expression leftOperand = infixExpression.getLeftOperand();
+    Expression rightOperand = infixExpression.getRightOperand();
+    if (!(leftOperand instanceof StringLiteral && rightOperand instanceof StringLiteral)) {
+      return false;
+    }
 
-		// all expressions must be strings
-		Expression leftOperand= infixExpression.getLeftOperand();
-		Expression rightOperand= infixExpression.getRightOperand();
-		if (!(leftOperand instanceof StringLiteral && rightOperand instanceof StringLiteral)) {
-			return false;
-		}
+    StringLiteral leftString = (StringLiteral) leftOperand;
+    StringLiteral rightString = (StringLiteral) rightOperand;
 
-		StringLiteral leftString= (StringLiteral) leftOperand;
-		StringLiteral rightString= (StringLiteral) rightOperand;
+    if (resultingCollections == null) {
+      return true;
+    }
 
-		if (resultingCollections == null) {
-			return true;
-		}
+    // begin building combined string
+    StringBuilder stringBuilder = new StringBuilder(leftString.getLiteralValue());
+    stringBuilder.append(rightString.getLiteralValue());
 
-		// begin building combined string
-		StringBuilder stringBuilder= new StringBuilder(leftString.getLiteralValue());
-		stringBuilder.append(rightString.getLiteralValue());
+    // append extended string literals
+    for (Object operand : infixExpression.extendedOperands()) {
+      if (!(operand instanceof StringLiteral)) return false;
+      StringLiteral stringLiteral = (StringLiteral) operand;
+      stringBuilder.append(stringLiteral.getLiteralValue());
+    }
 
-		// append extended string literals
-		for (Object operand : infixExpression.extendedOperands()) {
-			if (!(operand instanceof StringLiteral))
-				return false;
-			StringLiteral stringLiteral= (StringLiteral) operand;
-			stringBuilder.append(stringLiteral.getLiteralValue());
-		}
+    // prepare new string literal
+    AST ast = node.getAST();
+    StringLiteral combinedStringLiteral = ast.newStringLiteral();
+    combinedStringLiteral.setLiteralValue(stringBuilder.toString());
 
-		// prepare new string literal
-		AST ast= node.getAST();
-		StringLiteral combinedStringLiteral= ast.newStringLiteral();
-		combinedStringLiteral.setLiteralValue(stringBuilder.toString());
+    ASTRewrite rewrite = ASTRewrite.create(ast);
+    rewrite.replace(infixExpression, combinedStringLiteral, null);
 
-		ASTRewrite rewrite= ASTRewrite.create(ast);
-		rewrite.replace(infixExpression, combinedStringLiteral, null);
-
-		// add correction proposal
-		String label= CorrectionMessages.AdvancedQuickAssistProcessor_combineSelectedStrings;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-		LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.COMBINE_STRINGS, image);
-		resultingCollections.add(proposal);
-		return true;
-	}
+    // add correction proposal
+    String label = CorrectionMessages.AdvancedQuickAssistProcessor_combineSelectedStrings;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    LinkedCorrectionProposal proposal =
+        new LinkedCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.COMBINE_STRINGS,
+            image);
+    resultingCollections.add(proposal);
+    return true;
+  }
 

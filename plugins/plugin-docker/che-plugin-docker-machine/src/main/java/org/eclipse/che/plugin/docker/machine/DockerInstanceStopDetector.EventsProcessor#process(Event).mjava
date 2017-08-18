@@ -1,35 +1,35 @@
-        @Override
-        public void process(Event message) {
-            if (message.getType() != null && !"container".equals(message.getType())) {
-                // this check is added because of bug in the docker swarm which do not filter events
-                // in case of new response format of 'get events' we should skip all not filtered by swarm event types
-                return;
-            }
+    @Override
+    public void process(Event message) {
+      if (message.getType() != null && !"container".equals(message.getType())) {
+        // this check is added because of bug in the docker swarm which do not filter events
+        // in case of new response format of 'get events' we should skip all not filtered by swarm event types
+        return;
+      }
 
-            switch (message.getStatus()) {
-                case "oom":
-                    containersOomTimestamps.put(message.getId(), message.getId());
-                    LOG.info("OOM of process in container {} has been detected", message.getId());
-                    break;
-                case "die":
-                    InstanceStateEvent.Type instanceStateChangeType;
-                    if (containersOomTimestamps.getIfPresent(message.getId()) != null) {
-                        instanceStateChangeType = InstanceStateEvent.Type.OOM;
-                        containersOomTimestamps.invalidate(message.getId());
-                        LOG.info("OOM of container '{}' has been detected", message.getId());
-                    } else {
-                        instanceStateChangeType = InstanceStateEvent.Type.DIE;
-                    }
-                    Pair<String, String> instanceIds = instances.get(message.getId());
-                    if (instanceIds != null) {
-                        eventService.publish(new InstanceStateEvent(instanceIds.first,
-                                                                    instanceIds.second,
-                                                                    instanceStateChangeType));
-                        lastProcessedEventDate = message.getTime();
-                    }
-                    break;
-                default:
-                    // we don't care about other event types
-            }
-        }
+      switch (message.getStatus()) {
+        case "oom":
+          containersOomTimestamps.put(message.getId(), message.getId());
+          LOG.info("OOM of process in container {} has been detected", message.getId());
+          break;
+        case "die":
+          InstanceStateEvent.Type instanceStateChangeType;
+          if (containersOomTimestamps.getIfPresent(message.getId()) != null) {
+            instanceStateChangeType = InstanceStateEvent.Type.OOM;
+            containersOomTimestamps.invalidate(message.getId());
+            LOG.info("OOM of container '{}' has been detected", message.getId());
+          } else {
+            instanceStateChangeType = InstanceStateEvent.Type.DIE;
+          }
+          Pair<String, String> instanceIds = instances.get(message.getId());
+          if (instanceIds != null) {
+            eventService.publish(
+                new InstanceStateEvent(
+                    instanceIds.first, instanceIds.second, instanceStateChangeType));
+            lastProcessedEventDate = message.getTime();
+          }
+          break;
+        default:
+          // we don't care about other event types
+      }
+    }
 

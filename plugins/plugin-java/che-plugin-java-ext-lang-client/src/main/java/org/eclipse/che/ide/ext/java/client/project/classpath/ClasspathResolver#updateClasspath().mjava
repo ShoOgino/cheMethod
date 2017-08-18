@@ -1,49 +1,63 @@
-    /** Concatenates classpath entries and update classpath file. */
-    public Promise<Void> updateClasspath() {
+  /** Concatenates classpath entries and update classpath file. */
+  public Promise<Void> updateClasspath() {
 
-        final Resource resource = appContext.getResource();
+    final Resource resource = appContext.getResource();
 
-        checkState(resource != null);
+    checkState(resource != null);
 
-        final Optional<Project> optProject = resource.getRelatedProject();
+    final Optional<Project> optProject = resource.getRelatedProject();
 
-        checkState(optProject.isPresent());
+    checkState(optProject.isPresent());
 
-        final List<ClasspathEntryDto> entries = new ArrayList<>();
-        for (String path : libs) {
-            entries.add(dtoFactory.createDto(ClasspathEntryDto.class).withPath(path).withEntryKind(LIBRARY));
-        }
-        for (ClasspathEntryDto container : containers) {
-            entries.add(container);
-        }
-        for (String path : sources) {
-            entries.add(dtoFactory.createDto(ClasspathEntryDto.class).withPath(path).withEntryKind(SOURCE));
-        }
-        for (String path : projects) {
-            entries.add(dtoFactory.createDto(ClasspathEntryDto.class).withPath(path).withEntryKind(PROJECT));
-        }
-
-        final Project project = optProject.get();
-
-        Promise<Void> promise = classpathUpdater.setRawClasspath(project.getLocation().toString(), entries);
-
-        promise.then(new Operation<Void>() {
-            @Override
-            public void apply(Void arg) throws OperationException {
-                project.synchronize().then(new Operation<Resource[]>() {
-                    @Override
-                    public void apply(Resource[] arg) throws OperationException {
-                        eventBus.fireEvent(new ClasspathChangedEvent(project.getLocation().toString(), entries));
-                    }
-                });
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
-                notificationManager.notify("Problems with updating classpath", arg.getMessage(), FAIL, EMERGE_MODE);
-            }
-        });
-
-        return promise;
+    final List<ClasspathEntryDto> entries = new ArrayList<>();
+    for (String path : libs) {
+      entries.add(
+          dtoFactory.createDto(ClasspathEntryDto.class).withPath(path).withEntryKind(LIBRARY));
     }
+    for (ClasspathEntryDto container : containers) {
+      entries.add(container);
+    }
+    for (String path : sources) {
+      entries.add(
+          dtoFactory.createDto(ClasspathEntryDto.class).withPath(path).withEntryKind(SOURCE));
+    }
+    for (String path : projects) {
+      entries.add(
+          dtoFactory.createDto(ClasspathEntryDto.class).withPath(path).withEntryKind(PROJECT));
+    }
+
+    final Project project = optProject.get();
+
+    Promise<Void> promise =
+        classpathUpdater.setRawClasspath(project.getLocation().toString(), entries);
+
+    promise
+        .then(
+            new Operation<Void>() {
+              @Override
+              public void apply(Void arg) throws OperationException {
+                project
+                    .synchronize()
+                    .then(
+                        new Operation<Resource[]>() {
+                          @Override
+                          public void apply(Resource[] arg) throws OperationException {
+                            eventBus.fireEvent(
+                                new ClasspathChangedEvent(
+                                    project.getLocation().toString(), entries));
+                          }
+                        });
+              }
+            })
+        .catchError(
+            new Operation<PromiseError>() {
+              @Override
+              public void apply(PromiseError arg) throws OperationException {
+                notificationManager.notify(
+                    "Problems with updating classpath", arg.getMessage(), FAIL, EMERGE_MODE);
+              }
+            });
+
+    return promise;
+  }
 

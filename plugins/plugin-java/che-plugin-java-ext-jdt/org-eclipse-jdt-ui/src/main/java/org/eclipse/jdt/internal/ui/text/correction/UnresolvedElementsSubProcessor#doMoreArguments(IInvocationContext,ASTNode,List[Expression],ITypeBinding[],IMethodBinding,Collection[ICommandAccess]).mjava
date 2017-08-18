@@ -1,96 +1,126 @@
-	private static void doMoreArguments(IInvocationContext context, ASTNode invocationNode, List<Expression> arguments, ITypeBinding[]
-			argTypes, IMethodBinding methodRef, Collection<ICommandAccess> proposals) throws
-																																																				 CoreException {
-		ITypeBinding[] paramTypes= methodRef.getParameterTypes();
-		int k= 0, nSkipped= 0;
-		int diff= argTypes.length - paramTypes.length;
-		int[] indexSkipped= new int[diff];
-		for (int i= 0; i < argTypes.length; i++) {
-			if (k < paramTypes.length && canAssign(argTypes[i], paramTypes[k])) {
-				k++; // match
-			} else {
-				if (nSkipped >= diff) {
-					return; // too different
-				}
-				indexSkipped[nSkipped++]= i;
-			}
-		}
+  private static void doMoreArguments(
+      IInvocationContext context,
+      ASTNode invocationNode,
+      List<Expression> arguments,
+      ITypeBinding[] argTypes,
+      IMethodBinding methodRef,
+      Collection<ICommandAccess> proposals)
+      throws CoreException {
+    ITypeBinding[] paramTypes = methodRef.getParameterTypes();
+    int k = 0, nSkipped = 0;
+    int diff = argTypes.length - paramTypes.length;
+    int[] indexSkipped = new int[diff];
+    for (int i = 0; i < argTypes.length; i++) {
+      if (k < paramTypes.length && canAssign(argTypes[i], paramTypes[k])) {
+        k++; // match
+      } else {
+        if (nSkipped >= diff) {
+          return; // too different
+        }
+        indexSkipped[nSkipped++] = i;
+      }
+    }
 
-		ICompilationUnit cu= context.getCompilationUnit();
-		CompilationUnit astRoot= context.getASTRoot();
+    ICompilationUnit cu = context.getCompilationUnit();
+    CompilationUnit astRoot = context.getASTRoot();
 
-		// remove arguments
-		{
-			ASTRewrite rewrite= ASTRewrite.create(astRoot.getAST());
+    // remove arguments
+    {
+      ASTRewrite rewrite = ASTRewrite.create(astRoot.getAST());
 
-			for (int i= diff - 1; i >= 0; i--) {
-				rewrite.remove(arguments.get(indexSkipped[i]), null);
-			}
-			String[] arg= new String[] { ASTResolving.getMethodSignature(methodRef) };
-			String label;
-			if (diff == 1) {
-				label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_removeargument_description, arg);
-			} else {
-				label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_removearguments_description, arg);
-			}
-			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_REMOVE);
-			ASTRewriteCorrectionProposal
-					proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.REMOVE_ARGUMENTS, image);
-			proposals.add(proposal);
-		}
+      for (int i = diff - 1; i >= 0; i--) {
+        rewrite.remove(arguments.get(indexSkipped[i]), null);
+      }
+      String[] arg = new String[] {ASTResolving.getMethodSignature(methodRef)};
+      String label;
+      if (diff == 1) {
+        label =
+            Messages.format(
+                CorrectionMessages.UnresolvedElementsSubProcessor_removeargument_description, arg);
+      } else {
+        label =
+            Messages.format(
+                CorrectionMessages.UnresolvedElementsSubProcessor_removearguments_description, arg);
+      }
+      Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_REMOVE);
+      ASTRewriteCorrectionProposal proposal =
+          new ASTRewriteCorrectionProposal(
+              label, cu, rewrite, IProposalRelevance.REMOVE_ARGUMENTS, image);
+      proposals.add(proposal);
+    }
 
-		IMethodBinding methodDecl= methodRef.getMethodDeclaration();
-		ITypeBinding declaringType= methodDecl.getDeclaringClass();
+    IMethodBinding methodDecl = methodRef.getMethodDeclaration();
+    ITypeBinding declaringType = methodDecl.getDeclaringClass();
 
-		// add parameters
-		if (!declaringType.isFromSource()) {
-			return;
-		}
-		ICompilationUnit targetCU= ASTResolving.findCompilationUnitForBinding(cu, astRoot, declaringType);
-		if (targetCU != null) {
+    // add parameters
+    if (!declaringType.isFromSource()) {
+      return;
+    }
+    ICompilationUnit targetCU =
+        ASTResolving.findCompilationUnitForBinding(cu, astRoot, declaringType);
+    if (targetCU != null) {
 
-			if (isImplicitConstructor(methodDecl)) {
-				return;
-			}
+      if (isImplicitConstructor(methodDecl)) {
+        return;
+      }
 
-			ChangeDescription[] changeDesc= new ChangeDescription[argTypes.length];
-			ITypeBinding[] changeTypes= new ITypeBinding[diff];
-			for (int i= diff - 1; i >= 0; i--) {
-				int idx= indexSkipped[i];
-				Expression arg= arguments.get(idx);
-				String name= getExpressionBaseName(arg);
-				ITypeBinding newType= Bindings.normalizeTypeBinding(argTypes[idx]);
-				if (newType == null) {
-					newType= astRoot.getAST().resolveWellKnownType("java.lang.Object"); //$NON-NLS-1$
-				}
-				if (newType.isWildcardType()) {
-					newType= ASTResolving.normalizeWildcardType(newType, true, astRoot.getAST());
-				}
-				if (!ASTResolving.isUseableTypeInContext(newType, methodDecl, false)) {
-					return;
-				}
-				changeDesc[idx]= new InsertDescription(newType, name);
-				changeTypes[i]= newType;
-			}
-			String[] arg= new String[] { ASTResolving.getMethodSignature(methodDecl), getTypeNames(changeTypes) };
-			String label;
-			if (methodDecl.isConstructor()) {
-				if (diff == 1) {
-					label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_addparam_constr_description, arg);
-				} else {
-					label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_addparams_constr_description, arg);
-				}
-			} else {
-				if (diff == 1) {
-					label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_addparam_description, arg);
-				} else {
-					label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_addparams_description, arg);
-				}
-			}
-			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_ADD);
-			ChangeMethodSignatureProposal
-					proposal= new ChangeMethodSignatureProposal(label, targetCU, invocationNode, methodDecl, changeDesc, null, IProposalRelevance.CHANGE_METHOD_ADD_PARAMETER, image);
-			proposals.add(proposal);
-		}
-	}
+      ChangeDescription[] changeDesc = new ChangeDescription[argTypes.length];
+      ITypeBinding[] changeTypes = new ITypeBinding[diff];
+      for (int i = diff - 1; i >= 0; i--) {
+        int idx = indexSkipped[i];
+        Expression arg = arguments.get(idx);
+        String name = getExpressionBaseName(arg);
+        ITypeBinding newType = Bindings.normalizeTypeBinding(argTypes[idx]);
+        if (newType == null) {
+          newType = astRoot.getAST().resolveWellKnownType("java.lang.Object"); //$NON-NLS-1$
+        }
+        if (newType.isWildcardType()) {
+          newType = ASTResolving.normalizeWildcardType(newType, true, astRoot.getAST());
+        }
+        if (!ASTResolving.isUseableTypeInContext(newType, methodDecl, false)) {
+          return;
+        }
+        changeDesc[idx] = new InsertDescription(newType, name);
+        changeTypes[i] = newType;
+      }
+      String[] arg =
+          new String[] {ASTResolving.getMethodSignature(methodDecl), getTypeNames(changeTypes)};
+      String label;
+      if (methodDecl.isConstructor()) {
+        if (diff == 1) {
+          label =
+              Messages.format(
+                  CorrectionMessages.UnresolvedElementsSubProcessor_addparam_constr_description,
+                  arg);
+        } else {
+          label =
+              Messages.format(
+                  CorrectionMessages.UnresolvedElementsSubProcessor_addparams_constr_description,
+                  arg);
+        }
+      } else {
+        if (diff == 1) {
+          label =
+              Messages.format(
+                  CorrectionMessages.UnresolvedElementsSubProcessor_addparam_description, arg);
+        } else {
+          label =
+              Messages.format(
+                  CorrectionMessages.UnresolvedElementsSubProcessor_addparams_description, arg);
+        }
+      }
+      Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_ADD);
+      ChangeMethodSignatureProposal proposal =
+          new ChangeMethodSignatureProposal(
+              label,
+              targetCU,
+              invocationNode,
+              methodDecl,
+              changeDesc,
+              null,
+              IProposalRelevance.CHANGE_METHOD_ADD_PARAMETER,
+              image);
+      proposals.add(proposal);
+    }
+  }
 

@@ -1,35 +1,50 @@
-    private void internalInitialize() {
-        DevMachine devMachine = appContext.getDevMachine();
-        String devMachineId = devMachine.getId();
-        String wsAgentWebSocketUrl = devMachine.getWsAgentWebSocketUrl();
-        String wsAgentUrl = wsAgentWebSocketUrl.replaceFirst("api/ws", "wsagent");
-        String execAgentUrl = devMachine.getExecAgentUrl();
-        String separator = wsAgentUrl.contains("?") ? "&" : "?";
-        String queryParams = appContext.getApplicationWebsocketId().map(id -> separator + "clientId=" + id).orElse("");
-        Set<Runnable> initActions = appContext.getApplicationWebsocketId().isPresent() ? emptySet() : singleton(this::processWsId);
+  private void internalInitialize() {
+    DevMachine devMachine = appContext.getDevMachine();
+    String devMachineId = devMachine.getId();
+    String wsAgentWebSocketUrl = devMachine.getWsAgentWebSocketUrl();
+    String wsAgentUrl = wsAgentWebSocketUrl.replaceFirst("api/ws", "wsagent");
+    String execAgentUrl = devMachine.getExecAgentUrl();
+    String separator = wsAgentUrl.contains("?") ? "&" : "?";
+    String queryParams =
+        appContext.getApplicationWebsocketId().map(id -> separator + "clientId=" + id).orElse("");
+    Set<Runnable> initActions =
+        appContext.getApplicationWebsocketId().isPresent()
+            ? emptySet()
+            : singleton(this::processWsId);
 
-        initializer.initialize("ws-agent", singletonMap("url", wsAgentUrl + queryParams), initActions);
-        initializer.initialize(devMachineId, singletonMap("url", execAgentUrl));
+    initializer.initialize("ws-agent", singletonMap("url", wsAgentUrl + queryParams), initActions);
+    initializer.initialize(devMachineId, singletonMap("url", execAgentUrl));
 
-        for (MachineEntity machineEntity : appContext.getActiveRuntime().getMachines()) {
-            if (!machineEntity.isDev()) {
-                initializer.initialize(machineEntity.getId(), singletonMap("url", machineEntity.getExecAgentUrl()));
-                execAgentCommandManager.getProcesses(machineEntity.getId(), false)
-                                       .onSuccess(processes -> {
-                                           Consumer<Integer> pidConsumer = pid -> execAgentCommandManager
-                                                   .getProcessLogs(machineEntity.getId(), pid, null, null, 50, 0)
-                                                   .onSuccess(logs -> logs.forEach(log -> {
-                                                       String fixedLog = log.getText().replaceAll("\\[STDOUT\\] ", "");
-                                                       String machineName = machineEntity.getDisplayName();
-                                                       eventBus.fireEvent(new EnvironmentOutputEvent(fixedLog, machineName));
-                                                   }));
+    for (MachineEntity machineEntity : appContext.getActiveRuntime().getMachines()) {
+      if (!machineEntity.isDev()) {
+        initializer.initialize(
+            machineEntity.getId(), singletonMap("url", machineEntity.getExecAgentUrl()));
+        execAgentCommandManager
+            .getProcesses(machineEntity.getId(), false)
+            .onSuccess(
+                processes -> {
+                  Consumer<Integer> pidConsumer =
+                      pid ->
+                          execAgentCommandManager
+                              .getProcessLogs(machineEntity.getId(), pid, null, null, 50, 0)
+                              .onSuccess(
+                                  logs ->
+                                      logs.forEach(
+                                          log -> {
+                                            String fixedLog =
+                                                log.getText().replaceAll("\\[STDOUT\\] ", "");
+                                            String machineName = machineEntity.getDisplayName();
+                                            eventBus.fireEvent(
+                                                new EnvironmentOutputEvent(fixedLog, machineName));
+                                          }));
 
-                                           processes.stream()
-                                                    .filter(it -> "CheWsAgent".equals(it.getName()))
-                                                    .map(DtoWithPid::getPid)
-                                                    .forEach(pidConsumer);
-                                       });
-            }
-        }
+                  processes
+                      .stream()
+                      .filter(it -> "CheWsAgent".equals(it.getName()))
+                      .map(DtoWithPid::getPid)
+                      .forEach(pidConsumer);
+                });
+      }
     }
+  }
 

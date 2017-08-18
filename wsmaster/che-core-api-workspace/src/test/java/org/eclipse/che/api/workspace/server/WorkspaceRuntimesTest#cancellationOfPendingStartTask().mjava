@@ -1,48 +1,54 @@
-    @Test
-    public void cancellationOfPendingStartTask() throws Throwable {
-        WorkspaceImpl workspace = newWorkspace("workspace", "env-name");
-        when(sharedPool.submit(any())).thenReturn(Futures.immediateFuture(null));
+  @Test
+  public void cancellationOfPendingStartTask() throws Throwable {
+    WorkspaceImpl workspace = newWorkspace("workspace", "env-name");
+    when(sharedPool.submit(any())).thenReturn(Futures.immediateFuture(null));
 
-        CompletableFuture<WorkspaceRuntimeImpl> cmpFuture = runtimes.startAsync(workspace, "env-name", false);
+    CompletableFuture<WorkspaceRuntimeImpl> cmpFuture =
+        runtimes.startAsync(workspace, "env-name", false);
 
-        // the real start is not being executed, fake sharedPool suppressed it
-        // so the situation is the same to the one if the task is cancelled before
-        // executor service started executing it
-        runtimes.stop(workspace.getId());
+    // the real start is not being executed, fake sharedPool suppressed it
+    // so the situation is the same to the one if the task is cancelled before
+    // executor service started executing it
+    runtimes.stop(workspace.getId());
 
-        // start awaiting clients MUST receive interruption
-        try {
-            cmpFuture.get();
-        } catch (ExecutionException x) {
-            verifyCompletionException(cmpFuture,
-                                      EnvironmentStartInterruptedException.class,
-                                      "Start of environment 'env-name' in workspace 'workspace' is interrupted");
-        }
-
-        // if there is a state when the future is being cancelled,
-        // and start task is marked as used, executor must not execute the
-        // task but throw cancellation exception instead, once start task is
-        // completed clients receive interrupted exception and cancellation doesn't bother them
-        try {
-            captureAsyncTaskAndExecuteSynchronously();
-        } catch (CancellationException cancelled) {
-            assertEquals(cancelled.getMessage(), "Start of the workspace 'workspace' was cancelled");
-        }
-
-        verifyEventsSequence(event("workspace",
-                                   WorkspaceStatus.STOPPED,
-                                   WorkspaceStatus.STARTING,
-                                   EventType.STARTING,
-                                   null),
-                             event("workspace",
-                                   WorkspaceStatus.STARTING,
-                                   WorkspaceStatus.STOPPING,
-                                   EventType.STOPPING,
-                                   null),
-                             event("workspace",
-                                   WorkspaceStatus.STOPPING,
-                                   WorkspaceStatus.STOPPED,
-                                   EventType.STOPPED,
-                                   null));
+    // start awaiting clients MUST receive interruption
+    try {
+      cmpFuture.get();
+    } catch (ExecutionException x) {
+      verifyCompletionException(
+          cmpFuture,
+          EnvironmentStartInterruptedException.class,
+          "Start of environment 'env-name' in workspace 'workspace' is interrupted");
     }
+
+    // if there is a state when the future is being cancelled,
+    // and start task is marked as used, executor must not execute the
+    // task but throw cancellation exception instead, once start task is
+    // completed clients receive interrupted exception and cancellation doesn't bother them
+    try {
+      captureAsyncTaskAndExecuteSynchronously();
+    } catch (CancellationException cancelled) {
+      assertEquals(cancelled.getMessage(), "Start of the workspace 'workspace' was cancelled");
+    }
+
+    verifyEventsSequence(
+        event(
+            "workspace",
+            WorkspaceStatus.STOPPED,
+            WorkspaceStatus.STARTING,
+            EventType.STARTING,
+            null),
+        event(
+            "workspace",
+            WorkspaceStatus.STARTING,
+            WorkspaceStatus.STOPPING,
+            EventType.STOPPING,
+            null),
+        event(
+            "workspace",
+            WorkspaceStatus.STOPPING,
+            WorkspaceStatus.STOPPED,
+            EventType.STOPPED,
+            null));
+  }
 

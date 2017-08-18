@@ -1,57 +1,69 @@
-	/**
-	 * Creates and returns a new MethodDeclaration that represents the factory method to be used in
-	 * place of direct calls to the constructor in question.
-	 * 
-	 * @param ast An AST used as a factory for various AST nodes
-	 * @param ctorBinding binding for the constructor being wrapped
-	 * @param unitRewriter the ASTRewrite to be used
-	 * @return the new method declaration
-	 * @throws CoreException if an exception occurs while accessing its corresponding resource
-	 */
-	private MethodDeclaration createFactoryMethod(AST ast, IMethodBinding ctorBinding, ASTRewrite unitRewriter) throws CoreException {
-		MethodDeclaration newMethod= ast.newMethodDeclaration();
-		SimpleName newMethodName= ast.newSimpleName(fNewMethodName);
-		ClassInstanceCreation newCtorCall= ast.newClassInstanceCreation();
-		ReturnStatement ret= ast.newReturnStatement();
-		Block body= ast.newBlock();
-		List<Statement>		stmts= body.statements();
-		String		retTypeName= ctorBinding.getName();
+  /**
+   * Creates and returns a new MethodDeclaration that represents the factory method to be used in
+   * place of direct calls to the constructor in question.
+   *
+   * @param ast An AST used as a factory for various AST nodes
+   * @param ctorBinding binding for the constructor being wrapped
+   * @param unitRewriter the ASTRewrite to be used
+   * @return the new method declaration
+   * @throws CoreException if an exception occurs while accessing its corresponding resource
+   */
+  private MethodDeclaration createFactoryMethod(
+      AST ast, IMethodBinding ctorBinding, ASTRewrite unitRewriter) throws CoreException {
+    MethodDeclaration newMethod = ast.newMethodDeclaration();
+    SimpleName newMethodName = ast.newSimpleName(fNewMethodName);
+    ClassInstanceCreation newCtorCall = ast.newClassInstanceCreation();
+    ReturnStatement ret = ast.newReturnStatement();
+    Block body = ast.newBlock();
+    List<Statement> stmts = body.statements();
+    String retTypeName = ctorBinding.getName();
 
-		createFactoryMethodSignature(ast, newMethod);
+    createFactoryMethodSignature(ast, newMethod);
 
-		newMethod.setName(newMethodName);
-		newMethod.setBody(body);
+    newMethod.setName(newMethodName);
+    newMethod.setBody(body);
 
-		ITypeBinding declaringClass= fCtorBinding.getDeclaringClass();
-		ITypeBinding[] ctorOwnerTypeParameters= declaringClass.getTypeParameters();
+    ITypeBinding declaringClass = fCtorBinding.getDeclaringClass();
+    ITypeBinding[] ctorOwnerTypeParameters = declaringClass.getTypeParameters();
 
-		setMethodReturnType(newMethod, retTypeName, ctorOwnerTypeParameters, ast);
+    setMethodReturnType(newMethod, retTypeName, ctorOwnerTypeParameters, ast);
 
-		newMethod.modifiers().addAll(ASTNodeFactory.newModifiers(ast, Modifier.STATIC | Modifier.PUBLIC));
+    newMethod
+        .modifiers()
+        .addAll(ASTNodeFactory.newModifiers(ast, Modifier.STATIC | Modifier.PUBLIC));
 
-		setCtorTypeArguments(newCtorCall, retTypeName, ctorOwnerTypeParameters, ast);
+    setCtorTypeArguments(newCtorCall, retTypeName, ctorOwnerTypeParameters, ast);
 
-		createFactoryMethodConstructorArgs(ast, newCtorCall);
+    createFactoryMethodConstructorArgs(ast, newCtorCall);
 
-		if (Modifier.isAbstract(declaringClass.getModifiers())) {
-			AnonymousClassDeclaration decl= ast.newAnonymousClassDeclaration();
-			IMethodBinding[] unimplementedMethods= getUnimplementedMethods(declaringClass);
-			CodeGenerationSettings settings= JavaPreferencesSettings.getCodeGenerationSettings(fCUHandle.getJavaProject());
-			ImportRewriteContext context= new ContextSensitiveImportRewriteContext(fFactoryCU, decl.getStartPosition(), fImportRewriter);
-			for (int i= 0; i < unimplementedMethods.length; i++) {
-				IMethodBinding unImplementedMethod= unimplementedMethods[i];
-				MethodDeclaration newMethodDecl= StubUtility2
-						.createImplementationStub(fCUHandle, unitRewriter, fImportRewriter, context, unImplementedMethod,
-												  unImplementedMethod.getDeclaringClass()
-																	 .getName(), settings, false);
-				decl.bodyDeclarations().add(newMethodDecl);
-			}
-			newCtorCall.setAnonymousClassDeclaration(decl);
-		}
+    if (Modifier.isAbstract(declaringClass.getModifiers())) {
+      AnonymousClassDeclaration decl = ast.newAnonymousClassDeclaration();
+      IMethodBinding[] unimplementedMethods = getUnimplementedMethods(declaringClass);
+      CodeGenerationSettings settings =
+          JavaPreferencesSettings.getCodeGenerationSettings(fCUHandle.getJavaProject());
+      ImportRewriteContext context =
+          new ContextSensitiveImportRewriteContext(
+              fFactoryCU, decl.getStartPosition(), fImportRewriter);
+      for (int i = 0; i < unimplementedMethods.length; i++) {
+        IMethodBinding unImplementedMethod = unimplementedMethods[i];
+        MethodDeclaration newMethodDecl =
+            StubUtility2.createImplementationStub(
+                fCUHandle,
+                unitRewriter,
+                fImportRewriter,
+                context,
+                unImplementedMethod,
+                unImplementedMethod.getDeclaringClass().getName(),
+                settings,
+                false);
+        decl.bodyDeclarations().add(newMethodDecl);
+      }
+      newCtorCall.setAnonymousClassDeclaration(decl);
+    }
 
-		ret.setExpression(newCtorCall);
-		stmts.add(ret);
+    ret.setExpression(newCtorCall);
+    stmts.add(ret);
 
-		return newMethod;
-	}
+    return newMethod;
+  }
 

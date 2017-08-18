@@ -1,93 +1,115 @@
-	/**
-	 * Look "in the vicinity" of the given range to find the <code>ClassInstanceCreation</code>
-	 * node that this search hit identified. Necessary because the <code>SearchEngine</code>
-	 * doesn't always cough up text extents that <code>NodeFinder.perform()</code> agrees with.
-	 * @param start
-	 * @param length
-	 * @param unitAST
-	 * @return return a {@link ClassInstanceCreation} or a {@link MethodRef} or <code>null</code> if this is really a constructor->constructor call (e.g. "this(...)")
-	 * @throws CoreException
-	 */
-	private ASTNode getCtorCallAt(int start, int length, CompilationUnit unitAST) throws CoreException {
-		ICompilationUnit unitHandle= ASTCreator.getCu(unitAST);
-		ASTNode node= NodeFinder.perform(unitAST, start, length);
+  /**
+   * Look "in the vicinity" of the given range to find the <code>ClassInstanceCreation</code> node
+   * that this search hit identified. Necessary because the <code>SearchEngine</code> doesn't always
+   * cough up text extents that <code>NodeFinder.perform()</code> agrees with.
+   *
+   * @param start
+   * @param length
+   * @param unitAST
+   * @return return a {@link ClassInstanceCreation} or a {@link MethodRef} or <code>null</code> if
+   *     this is really a constructor->constructor call (e.g. "this(...)")
+   * @throws CoreException
+   */
+  private ASTNode getCtorCallAt(int start, int length, CompilationUnit unitAST)
+      throws CoreException {
+    ICompilationUnit unitHandle = ASTCreator.getCu(unitAST);
+    ASTNode node = NodeFinder.perform(unitAST, start, length);
 
-		if (node == null)
-			throw new CoreException(JavaUIStatus.createError(IStatus.ERROR,
-															 Messages.format(
-																	 RefactoringCoreMessages
-																			 .IntroduceFactory_noASTNodeForConstructorSearchHit,
-																	 new Object[]{Integer.toString(start), Integer.toString(start + length),
-																				  BasicElementLabels.getJavaCodeString(
-																						  unitHandle.getSource()
-																									.substring(start, start + length)),
-																				  BasicElementLabels.getFileName(unitHandle)}),
-															 null));
+    if (node == null)
+      throw new CoreException(
+          JavaUIStatus.createError(
+              IStatus.ERROR,
+              Messages.format(
+                  RefactoringCoreMessages.IntroduceFactory_noASTNodeForConstructorSearchHit,
+                  new Object[] {
+                    Integer.toString(start),
+                    Integer.toString(start + length),
+                    BasicElementLabels.getJavaCodeString(
+                        unitHandle.getSource().substring(start, start + length)),
+                    BasicElementLabels.getFileName(unitHandle)
+                  }),
+              null));
 
-		if (node instanceof ClassInstanceCreation) {
-			if (((ClassInstanceCreation)node).getAnonymousClassDeclaration() != null) {
-				// Cannot replace anonymous inner class, see https://bugs.eclipse.org/bugs/show_bug.cgi?id=250660
-				fConstructorVisibility= Modifier.PROTECTED;
-				return null;
-			}
-			return node;
-		} else if (node instanceof VariableDeclaration) {
-			Expression init= ((VariableDeclaration) node).getInitializer();
+    if (node instanceof ClassInstanceCreation) {
+      if (((ClassInstanceCreation) node).getAnonymousClassDeclaration() != null) {
+        // Cannot replace anonymous inner class, see https://bugs.eclipse.org/bugs/show_bug.cgi?id=250660
+        fConstructorVisibility = Modifier.PROTECTED;
+        return null;
+      }
+      return node;
+    } else if (node instanceof VariableDeclaration) {
+      Expression init = ((VariableDeclaration) node).getInitializer();
 
-			if (init instanceof ClassInstanceCreation) {
-				return init;
-			} else if (init != null)
-				throw new CoreException(JavaUIStatus.createError(IStatus.ERROR,
-																 Messages.format(
-																		 RefactoringCoreMessages
-																				 .IntroduceFactory_unexpectedInitializerNodeType,
-																		 new Object[]{BasicElementLabels.getJavaCodeString(init.toString()),
-																					  BasicElementLabels.getFileName(unitHandle)}),
-																 null));
-			else
-				throw new CoreException(JavaUIStatus.createError(IStatus.ERROR,
-																 Messages.format(
-																		 RefactoringCoreMessages.IntroduceFactory_noConstructorCallNodeInsideFoundVarbleDecl,
-																		 BasicElementLabels.getJavaCodeString(node.toString())),
-																 null));
-		} else if (node instanceof ConstructorInvocation) {
-			// This is a call we can bypass; it's from one constructor flavor
-			// to another flavor on the same class.
-			return null;
-		} else if (node instanceof SuperConstructorInvocation) {
-			// This is a call we can bypass; it's from one constructor flavor
-			// to another flavor on the same class.
-			fConstructorVisibility= Modifier.PROTECTED;
-			return null;
-		} else if (node instanceof ExpressionStatement) {
-			Expression expr= ((ExpressionStatement) node).getExpression();
+      if (init instanceof ClassInstanceCreation) {
+        return init;
+      } else if (init != null)
+        throw new CoreException(
+            JavaUIStatus.createError(
+                IStatus.ERROR,
+                Messages.format(
+                    RefactoringCoreMessages.IntroduceFactory_unexpectedInitializerNodeType,
+                    new Object[] {
+                      BasicElementLabels.getJavaCodeString(init.toString()),
+                      BasicElementLabels.getFileName(unitHandle)
+                    }),
+                null));
+      else
+        throw new CoreException(
+            JavaUIStatus.createError(
+                IStatus.ERROR,
+                Messages.format(
+                    RefactoringCoreMessages
+                        .IntroduceFactory_noConstructorCallNodeInsideFoundVarbleDecl,
+                    BasicElementLabels.getJavaCodeString(node.toString())),
+                null));
+    } else if (node instanceof ConstructorInvocation) {
+      // This is a call we can bypass; it's from one constructor flavor
+      // to another flavor on the same class.
+      return null;
+    } else if (node instanceof SuperConstructorInvocation) {
+      // This is a call we can bypass; it's from one constructor flavor
+      // to another flavor on the same class.
+      fConstructorVisibility = Modifier.PROTECTED;
+      return null;
+    } else if (node instanceof ExpressionStatement) {
+      Expression expr = ((ExpressionStatement) node).getExpression();
 
-			if (expr instanceof ClassInstanceCreation)
-				return expr;
-			else
-				throw new CoreException(JavaUIStatus.createError(IStatus.ERROR,
-																 Messages.format(
-																		 RefactoringCoreMessages.IntroduceFactory_unexpectedASTNodeTypeForConstructorSearchHit,
-																		 new Object[]{BasicElementLabels.getJavaCodeString(expr.toString()),
-																					  BasicElementLabels.getFileName(unitHandle)}),
-																 null));
-		} else if (node instanceof SimpleName && (node.getParent() instanceof MethodDeclaration || node.getParent() instanceof
-				AbstractTypeDeclaration)) {
-			// We seem to have been given a hit for an implicit call to the base-class constructor.
-			// Do nothing with this (implicit) call, but have to make sure we make the derived class
-			// doesn't lose access to the base-class constructor (so make it 'protected', not 'private').
-			fConstructorVisibility= Modifier.PROTECTED;
-			return null;
-		} else if (node instanceof MethodRef) {
-			return node;
-		} else
-			throw new CoreException(JavaUIStatus.createError(IStatus.ERROR,
-															 Messages.format(
-																	 RefactoringCoreMessages.IntroduceFactory_unexpectedASTNodeTypeForConstructorSearchHit,
-																	 new Object[]{BasicElementLabels.getJavaElementName(
-																			 node.getClass().getName() + "('" + node.toString() + "')"),
-																				  BasicElementLabels.getFileName(unitHandle)}),
-															 //$NON-NLS-1$ //$NON-NLS-2$
-															 null));
-	}
+      if (expr instanceof ClassInstanceCreation) return expr;
+      else
+        throw new CoreException(
+            JavaUIStatus.createError(
+                IStatus.ERROR,
+                Messages.format(
+                    RefactoringCoreMessages
+                        .IntroduceFactory_unexpectedASTNodeTypeForConstructorSearchHit,
+                    new Object[] {
+                      BasicElementLabels.getJavaCodeString(expr.toString()),
+                      BasicElementLabels.getFileName(unitHandle)
+                    }),
+                null));
+    } else if (node instanceof SimpleName
+        && (node.getParent() instanceof MethodDeclaration
+            || node.getParent() instanceof AbstractTypeDeclaration)) {
+      // We seem to have been given a hit for an implicit call to the base-class constructor.
+      // Do nothing with this (implicit) call, but have to make sure we make the derived class
+      // doesn't lose access to the base-class constructor (so make it 'protected', not 'private').
+      fConstructorVisibility = Modifier.PROTECTED;
+      return null;
+    } else if (node instanceof MethodRef) {
+      return node;
+    } else
+      throw new CoreException(
+          JavaUIStatus.createError(
+              IStatus.ERROR,
+              Messages.format(
+                  RefactoringCoreMessages
+                      .IntroduceFactory_unexpectedASTNodeTypeForConstructorSearchHit,
+                  new Object[] {
+                    BasicElementLabels.getJavaElementName(
+                        node.getClass().getName() + "('" + node.toString() + "')"),
+                    BasicElementLabels.getFileName(unitHandle)
+                  }),
+              //$NON-NLS-1$ //$NON-NLS-2$
+              null));
+  }
 

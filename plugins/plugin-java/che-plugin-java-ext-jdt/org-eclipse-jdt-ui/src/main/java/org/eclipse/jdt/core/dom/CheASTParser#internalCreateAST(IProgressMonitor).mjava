@@ -1,171 +1,184 @@
-	private ASTNode internalCreateAST(IProgressMonitor monitor) {
-		boolean needToResolveBindings = (this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0;
-		switch(this.astKind) {
-			case K_CLASS_BODY_DECLARATIONS :
-			case K_EXPRESSION :
-			case K_STATEMENTS :
-				if (this.rawSource == null) {
-					if (this.typeRoot != null) {
-						// get the source from the type root
-						if (this.typeRoot instanceof ICompilationUnit) {
-							org.eclipse.jdt.internal.compiler.env.ICompilationUnit sourceUnit = (org.eclipse.jdt.internal.compiler.env.ICompilationUnit) this.typeRoot;
-							this.rawSource = sourceUnit.getContents();
-						} else if (this.typeRoot instanceof IClassFile) {
-							try {
-								String sourceString = this.typeRoot.getSource();
-								if (sourceString != null) {
-									this.rawSource = sourceString.toCharArray();
-								}
-							} catch(JavaModelException e) {
-								// an error occured accessing the java element
-								StringWriter stringWriter = new StringWriter();
-								PrintWriter writer = null;
-								try {
-									writer = new PrintWriter(stringWriter);
-									e.printStackTrace(writer);
-								} finally {
-									if (writer != null) writer.close();
-								}
-								throw new IllegalStateException(String.valueOf(stringWriter.getBuffer()));
-							}
-						}
-					}
-				}
-				if (this.rawSource != null) {
-					if (this.sourceOffset + this.sourceLength > this.rawSource.length) {
-						throw new IllegalStateException();
-					}
-					return internalCreateASTForKind();
-				}
-				break;
-			case K_COMPILATION_UNIT :
-				CompilationUnitDeclaration compilationUnitDeclaration = null;
-				try {
-					NodeSearcher searcher = null;
-					org.eclipse.jdt.internal.compiler.env.ICompilationUnit sourceUnit = null;
-					WorkingCopyOwner wcOwner = this.workingCopyOwner;
-					if (this.typeRoot instanceof ICompilationUnit) {
-							/*
-							 * this.compilationUnitSource is an instance of org.eclipse.jdt.internal.core.CompilationUnit that implements
-							 * both org.eclipse.jdt.core.ICompilationUnit and org.eclipse.jdt.internal.compiler.env.ICompilationUnit
-							 */
-							sourceUnit = (org.eclipse.jdt.internal.compiler.env.ICompilationUnit) this.typeRoot;
-							/*
-							 * use a BasicCompilation that caches the source instead of using the compilationUnitSource directly
-							 * (if it is a working copy, the source can change between the parse and the AST convertion)
-							 * (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=75632)
-							 */
-							sourceUnit = new BasicCompilationUnit(sourceUnit.getContents(), sourceUnit.getPackageName(), new String(sourceUnit.getFileName()), this.project);
-							wcOwner = ((ICompilationUnit) this.typeRoot).getOwner();
-					} else if (this.typeRoot instanceof IClassFile) {
-						try {
-							String sourceString = this.typeRoot.getSource();
-							if (sourceString == null) {
-								throw new IllegalStateException();
-							}
-							PackageFragment packageFragment = (PackageFragment) this.typeRoot.getParent();
-							BinaryType type = (BinaryType) this.typeRoot.findPrimaryType();
-							IBinaryType binaryType = (IBinaryType) type.getElementInfo();
-							// file name is used to recreate the Java element, so it has to be the toplevel .class file name
-							char[] fileName = binaryType.getFileName();
-							int firstDollar = CharOperation.indexOf('$', fileName);
-							if (firstDollar != -1) {
-								char[] suffix = SuffixConstants.SUFFIX_class;
-								int suffixLength = suffix.length;
-								char[] newFileName = new char[firstDollar + suffixLength];
-								System.arraycopy(fileName, 0, newFileName, 0, firstDollar);
-								System.arraycopy(suffix, 0, newFileName, firstDollar, suffixLength);
-								fileName = newFileName;
-							}
-							sourceUnit = new BasicCompilationUnit(sourceString.toCharArray(), Util.toCharArrays(packageFragment.names), new String(fileName), this.project);
-						} catch(JavaModelException e) {
-							// an error occured accessing the java element
-							StringWriter stringWriter = new StringWriter();
-							PrintWriter writer = null;
-							try {
-								writer = new PrintWriter(stringWriter);
-								e.printStackTrace(writer);
-							} finally {
-								if (writer != null) writer.close();
-							}
-							throw new IllegalStateException(String.valueOf(stringWriter.getBuffer()));
-						}
-					} else if (this.rawSource != null) {
-						needToResolveBindings = 
-							((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0)
-							&& this.unitName != null
-							&& (this.project != null
-									|| this.classpaths != null
-									|| this.sourcepaths != null
-									|| ((this.bits & CompilationUnitResolver.INCLUDE_RUNNING_VM_BOOTCLASSPATH) != 0))
-							&& this.compilerOptions != null;
-						sourceUnit = new BasicCompilationUnit(this.rawSource, null, this.unitName == null ? "" : this.unitName, this.project); //$NON-NLS-1$
-					} else {
-						throw new IllegalStateException();
-					}
-					if ((this.bits & CompilationUnitResolver.PARTIAL) != 0) {
-						searcher = new NodeSearcher(this.focalPointPosition);
-					}
-					int flags = 0;
-					if ((this.bits & CompilationUnitResolver.STATEMENT_RECOVERY) != 0) {
-						flags |= ICompilationUnit.ENABLE_STATEMENTS_RECOVERY;
-					}
-					if (searcher == null && ((this.bits & CompilationUnitResolver.IGNORE_METHOD_BODIES) != 0)) {
-						flags |= ICompilationUnit.IGNORE_METHOD_BODIES;
-					}
-					if (needToResolveBindings) {
-						if ((this.bits & CompilationUnitResolver.BINDING_RECOVERY) != 0) {
-							flags |= ICompilationUnit.ENABLE_BINDINGS_RECOVERY;
-						}
-						try {
-							// parse and resolve
-							compilationUnitDeclaration =
-								CheCompilationUnitResolver.resolve(
-										sourceUnit,
-										this.project,
-										getClasspath(),
-										searcher,
-										this.compilerOptions,
-										this.workingCopyOwner,
-										flags,
-										monitor);
-						} catch (JavaModelException e) {
-							flags &= ~ICompilationUnit.ENABLE_BINDINGS_RECOVERY;
-							compilationUnitDeclaration = CompilationUnitResolver.parse(
-									sourceUnit,
-									searcher,
-									this.compilerOptions,
-									flags);
-							needToResolveBindings = false;
-						}
-					} else {
-						compilationUnitDeclaration = CompilationUnitResolver.parse(
-								sourceUnit,
-								searcher,
-								this.compilerOptions,
-								flags);
-						needToResolveBindings = false;
-					}
-					CompilationUnit result = CompilationUnitResolver.convert(
-							compilationUnitDeclaration,
-							sourceUnit.getContents(),
-							this.apiLevel,
-							this.compilerOptions,
-							needToResolveBindings,
-							wcOwner,
-							needToResolveBindings ? new DefaultBindingResolver.BindingTables() : null,
-							flags,
-							monitor,
-							this.project != null);
-					result.setTypeRoot(this.typeRoot);
-					return result;
-				} finally {
-					if (compilationUnitDeclaration != null
-							&& ((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0)) {
-						compilationUnitDeclaration.cleanUp();
-					}
-				}
-		}
-		throw new IllegalStateException();
-	}
+  private ASTNode internalCreateAST(IProgressMonitor monitor) {
+    boolean needToResolveBindings = (this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0;
+    switch (this.astKind) {
+      case K_CLASS_BODY_DECLARATIONS:
+      case K_EXPRESSION:
+      case K_STATEMENTS:
+        if (this.rawSource == null) {
+          if (this.typeRoot != null) {
+            // get the source from the type root
+            if (this.typeRoot instanceof ICompilationUnit) {
+              org.eclipse.jdt.internal.compiler.env.ICompilationUnit sourceUnit =
+                  (org.eclipse.jdt.internal.compiler.env.ICompilationUnit) this.typeRoot;
+              this.rawSource = sourceUnit.getContents();
+            } else if (this.typeRoot instanceof IClassFile) {
+              try {
+                String sourceString = this.typeRoot.getSource();
+                if (sourceString != null) {
+                  this.rawSource = sourceString.toCharArray();
+                }
+              } catch (JavaModelException e) {
+                // an error occured accessing the java element
+                StringWriter stringWriter = new StringWriter();
+                PrintWriter writer = null;
+                try {
+                  writer = new PrintWriter(stringWriter);
+                  e.printStackTrace(writer);
+                } finally {
+                  if (writer != null) writer.close();
+                }
+                throw new IllegalStateException(String.valueOf(stringWriter.getBuffer()));
+              }
+            }
+          }
+        }
+        if (this.rawSource != null) {
+          if (this.sourceOffset + this.sourceLength > this.rawSource.length) {
+            throw new IllegalStateException();
+          }
+          return internalCreateASTForKind();
+        }
+        break;
+      case K_COMPILATION_UNIT:
+        CompilationUnitDeclaration compilationUnitDeclaration = null;
+        try {
+          NodeSearcher searcher = null;
+          org.eclipse.jdt.internal.compiler.env.ICompilationUnit sourceUnit = null;
+          WorkingCopyOwner wcOwner = this.workingCopyOwner;
+          if (this.typeRoot instanceof ICompilationUnit) {
+            /*
+             * this.compilationUnitSource is an instance of org.eclipse.jdt.internal.core.CompilationUnit that implements
+             * both org.eclipse.jdt.core.ICompilationUnit and org.eclipse.jdt.internal.compiler.env.ICompilationUnit
+             */
+            sourceUnit = (org.eclipse.jdt.internal.compiler.env.ICompilationUnit) this.typeRoot;
+            /*
+             * use a BasicCompilation that caches the source instead of using the compilationUnitSource directly
+             * (if it is a working copy, the source can change between the parse and the AST convertion)
+             * (see https://bugs.eclipse.org/bugs/show_bug.cgi?id=75632)
+             */
+            sourceUnit =
+                new BasicCompilationUnit(
+                    sourceUnit.getContents(),
+                    sourceUnit.getPackageName(),
+                    new String(sourceUnit.getFileName()),
+                    this.project);
+            wcOwner = ((ICompilationUnit) this.typeRoot).getOwner();
+          } else if (this.typeRoot instanceof IClassFile) {
+            try {
+              String sourceString = this.typeRoot.getSource();
+              if (sourceString == null) {
+                throw new IllegalStateException();
+              }
+              PackageFragment packageFragment = (PackageFragment) this.typeRoot.getParent();
+              BinaryType type = (BinaryType) this.typeRoot.findPrimaryType();
+              IBinaryType binaryType = (IBinaryType) type.getElementInfo();
+              // file name is used to recreate the Java element, so it has to be the toplevel .class file name
+              char[] fileName = binaryType.getFileName();
+              int firstDollar = CharOperation.indexOf('$', fileName);
+              if (firstDollar != -1) {
+                char[] suffix = SuffixConstants.SUFFIX_class;
+                int suffixLength = suffix.length;
+                char[] newFileName = new char[firstDollar + suffixLength];
+                System.arraycopy(fileName, 0, newFileName, 0, firstDollar);
+                System.arraycopy(suffix, 0, newFileName, firstDollar, suffixLength);
+                fileName = newFileName;
+              }
+              sourceUnit =
+                  new BasicCompilationUnit(
+                      sourceString.toCharArray(),
+                      Util.toCharArrays(packageFragment.names),
+                      new String(fileName),
+                      this.project);
+            } catch (JavaModelException e) {
+              // an error occured accessing the java element
+              StringWriter stringWriter = new StringWriter();
+              PrintWriter writer = null;
+              try {
+                writer = new PrintWriter(stringWriter);
+                e.printStackTrace(writer);
+              } finally {
+                if (writer != null) writer.close();
+              }
+              throw new IllegalStateException(String.valueOf(stringWriter.getBuffer()));
+            }
+          } else if (this.rawSource != null) {
+            needToResolveBindings =
+                ((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0)
+                    && this.unitName != null
+                    && (this.project != null
+                        || this.classpaths != null
+                        || this.sourcepaths != null
+                        || ((this.bits & CompilationUnitResolver.INCLUDE_RUNNING_VM_BOOTCLASSPATH)
+                            != 0))
+                    && this.compilerOptions != null;
+            sourceUnit =
+                new BasicCompilationUnit(
+                    this.rawSource,
+                    null,
+                    this.unitName == null ? "" : this.unitName,
+                    this.project); //$NON-NLS-1$
+          } else {
+            throw new IllegalStateException();
+          }
+          if ((this.bits & CompilationUnitResolver.PARTIAL) != 0) {
+            searcher = new NodeSearcher(this.focalPointPosition);
+          }
+          int flags = 0;
+          if ((this.bits & CompilationUnitResolver.STATEMENT_RECOVERY) != 0) {
+            flags |= ICompilationUnit.ENABLE_STATEMENTS_RECOVERY;
+          }
+          if (searcher == null
+              && ((this.bits & CompilationUnitResolver.IGNORE_METHOD_BODIES) != 0)) {
+            flags |= ICompilationUnit.IGNORE_METHOD_BODIES;
+          }
+          if (needToResolveBindings) {
+            if ((this.bits & CompilationUnitResolver.BINDING_RECOVERY) != 0) {
+              flags |= ICompilationUnit.ENABLE_BINDINGS_RECOVERY;
+            }
+            try {
+              // parse and resolve
+              compilationUnitDeclaration =
+                  CheCompilationUnitResolver.resolve(
+                      sourceUnit,
+                      this.project,
+                      getClasspath(),
+                      searcher,
+                      this.compilerOptions,
+                      this.workingCopyOwner,
+                      flags,
+                      monitor);
+            } catch (JavaModelException e) {
+              flags &= ~ICompilationUnit.ENABLE_BINDINGS_RECOVERY;
+              compilationUnitDeclaration =
+                  CompilationUnitResolver.parse(sourceUnit, searcher, this.compilerOptions, flags);
+              needToResolveBindings = false;
+            }
+          } else {
+            compilationUnitDeclaration =
+                CompilationUnitResolver.parse(sourceUnit, searcher, this.compilerOptions, flags);
+            needToResolveBindings = false;
+          }
+          CompilationUnit result =
+              CompilationUnitResolver.convert(
+                  compilationUnitDeclaration,
+                  sourceUnit.getContents(),
+                  this.apiLevel,
+                  this.compilerOptions,
+                  needToResolveBindings,
+                  wcOwner,
+                  needToResolveBindings ? new DefaultBindingResolver.BindingTables() : null,
+                  flags,
+                  monitor,
+                  this.project != null);
+          result.setTypeRoot(this.typeRoot);
+          return result;
+        } finally {
+          if (compilationUnitDeclaration != null
+              && ((this.bits & CompilationUnitResolver.RESOLVE_BINDING) != 0)) {
+            compilationUnitDeclaration.cleanUp();
+          }
+        }
+    }
+    throw new IllegalStateException();
+  }
 

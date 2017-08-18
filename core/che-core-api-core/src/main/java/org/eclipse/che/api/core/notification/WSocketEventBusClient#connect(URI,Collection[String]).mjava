@@ -1,40 +1,42 @@
-    private void connect(final URI wsUri, final Collection<String> channels) throws IOException, DeploymentException {
-        Future<WSClient> clientFuture = connections.get(wsUri);
-        if (clientFuture == null) {
-            FutureTask<WSClient> newFuture = new FutureTask<>(() -> {
+  private void connect(final URI wsUri, final Collection<String> channels)
+      throws IOException, DeploymentException {
+    Future<WSClient> clientFuture = connections.get(wsUri);
+    if (clientFuture == null) {
+      FutureTask<WSClient> newFuture =
+          new FutureTask<>(
+              () -> {
                 WSClient wsClient = new WSClient(wsUri, new WSocketListener(wsUri, channels));
-                wsClient.connect((int)WS_CONNECTION_TIMEOUT);
+                wsClient.connect((int) WS_CONNECTION_TIMEOUT);
                 return wsClient;
-            });
-            clientFuture = connections.putIfAbsent(wsUri, newFuture);
-            if (clientFuture == null) {
-                clientFuture = newFuture;
-                newFuture.run();
-            }
-        }
-        boolean connected = false;
-        try {
-            clientFuture.get(); // wait for connection
-            connected = true;
-        } catch (ExecutionException e) {
-            final Throwable cause = e.getCause();
-            if (cause instanceof Error) {
-                throw (Error)cause;
-            } else if (cause instanceof RuntimeException) {
-                throw (RuntimeException)cause;
-            } else if (cause instanceof IOException) {
-                throw (IOException)cause;
-            } else if (cause instanceof DeploymentException)
-                throw (DeploymentException)cause;
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            LOG.info("Client interrupted " + e.getLocalizedMessage());
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-        } finally {
-            if (!connected) {
-                connections.remove(wsUri);
-            }
-        }
+              });
+      clientFuture = connections.putIfAbsent(wsUri, newFuture);
+      if (clientFuture == null) {
+        clientFuture = newFuture;
+        newFuture.run();
+      }
     }
+    boolean connected = false;
+    try {
+      clientFuture.get(); // wait for connection
+      connected = true;
+    } catch (ExecutionException e) {
+      final Throwable cause = e.getCause();
+      if (cause instanceof Error) {
+        throw (Error) cause;
+      } else if (cause instanceof RuntimeException) {
+        throw (RuntimeException) cause;
+      } else if (cause instanceof IOException) {
+        throw (IOException) cause;
+      } else if (cause instanceof DeploymentException) throw (DeploymentException) cause;
+      throw new RuntimeException(e);
+    } catch (InterruptedException e) {
+      LOG.info("Client interrupted " + e.getLocalizedMessage());
+      Thread.currentThread().interrupt();
+      throw new RuntimeException(e);
+    } finally {
+      if (!connected) {
+        connections.remove(wsUri);
+      }
+    }
+  }
 

@@ -1,56 +1,72 @@
-	public static NullAnnotationsFix createNullAnnotationInSignatureFix(CompilationUnit compilationUnit, IProblemLocation problem,
-																		ChangeKind changeKind, boolean isArgumentProblem) {
-		String nullableAnnotationName = getNullableAnnotationName(compilationUnit.getJavaElement(), false);
-		String nonNullAnnotationName = getNonNullAnnotationName(compilationUnit.getJavaElement(), false);
-		String annotationToAdd = nullableAnnotationName;
-		String annotationToRemove = nonNullAnnotationName;
+  public static NullAnnotationsFix createNullAnnotationInSignatureFix(
+      CompilationUnit compilationUnit,
+      IProblemLocation problem,
+      ChangeKind changeKind,
+      boolean isArgumentProblem) {
+    String nullableAnnotationName =
+        getNullableAnnotationName(compilationUnit.getJavaElement(), false);
+    String nonNullAnnotationName =
+        getNonNullAnnotationName(compilationUnit.getJavaElement(), false);
+    String annotationToAdd = nullableAnnotationName;
+    String annotationToRemove = nonNullAnnotationName;
 
-		switch (problem.getProblemId()) {
-			case IProblem.IllegalDefinitionToNonNullParameter:
-			case IProblem.IllegalRedefinitionToNonNullParameter:
-				// case ParameterLackingNullableAnnotation: // never proposed with modifyOverridden
-				if (changeKind == ChangeKind.OVERRIDDEN) {
-					annotationToAdd= nonNullAnnotationName;
-					annotationToRemove= nullableAnnotationName;
-				}
-				break;
-			case IProblem.ParameterLackingNonNullAnnotation:
-			case IProblem.IllegalReturnNullityRedefinition:
-				if (changeKind != ChangeKind.OVERRIDDEN) {
-					annotationToAdd= nonNullAnnotationName;
-					annotationToRemove= nullableAnnotationName;
-				}
-				break;
-			case IProblem.RequiredNonNullButProvidedNull:
-			case IProblem.RequiredNonNullButProvidedPotentialNull:
-			case IProblem.RequiredNonNullButProvidedUnknown:
-			case IProblem.RequiredNonNullButProvidedSpecdNullable:
-				if (isArgumentProblem == (changeKind != ChangeKind.TARGET)) {
-					annotationToAdd= nonNullAnnotationName;
-					annotationToRemove= nullableAnnotationName;
-				}
-				break;
-			case IProblem.ConflictingNullAnnotations:
-			case IProblem.ConflictingInheritedNullAnnotations:
-				if (changeKind == ChangeKind.INVERSE) {
-					annotationToAdd= nonNullAnnotationName;
-					annotationToRemove= nullableAnnotationName;
-				}
-			// all others propose to add @Nullable
-		}
+    switch (problem.getProblemId()) {
+      case IProblem.IllegalDefinitionToNonNullParameter:
+      case IProblem.IllegalRedefinitionToNonNullParameter:
+        // case ParameterLackingNullableAnnotation: // never proposed with modifyOverridden
+        if (changeKind == ChangeKind.OVERRIDDEN) {
+          annotationToAdd = nonNullAnnotationName;
+          annotationToRemove = nullableAnnotationName;
+        }
+        break;
+      case IProblem.ParameterLackingNonNullAnnotation:
+      case IProblem.IllegalReturnNullityRedefinition:
+        if (changeKind != ChangeKind.OVERRIDDEN) {
+          annotationToAdd = nonNullAnnotationName;
+          annotationToRemove = nullableAnnotationName;
+        }
+        break;
+      case IProblem.RequiredNonNullButProvidedNull:
+      case IProblem.RequiredNonNullButProvidedPotentialNull:
+      case IProblem.RequiredNonNullButProvidedUnknown:
+      case IProblem.RequiredNonNullButProvidedSpecdNullable:
+        if (isArgumentProblem == (changeKind != ChangeKind.TARGET)) {
+          annotationToAdd = nonNullAnnotationName;
+          annotationToRemove = nullableAnnotationName;
+        }
+        break;
+      case IProblem.ConflictingNullAnnotations:
+      case IProblem.ConflictingInheritedNullAnnotations:
+        if (changeKind == ChangeKind.INVERSE) {
+          annotationToAdd = nonNullAnnotationName;
+          annotationToRemove = nullableAnnotationName;
+        }
+        // all others propose to add @Nullable
+    }
 
-		// when performing one change at a time we can actually modify another CU than the current one:
-		NullAnnotationsRewriteOperations.SignatureAnnotationRewriteOperation operation= NullAnnotationsRewriteOperations
-				.createAddAnnotationOperation(compilationUnit, problem, annotationToAdd, annotationToRemove, null,
-											  false/*thisUnitOnly*/, true/*allowRemove*/, isArgumentProblem, changeKind);
-		if (operation == null)
-			return null;
+    // when performing one change at a time we can actually modify another CU than the current one:
+    NullAnnotationsRewriteOperations.SignatureAnnotationRewriteOperation operation =
+        NullAnnotationsRewriteOperations.createAddAnnotationOperation(
+            compilationUnit,
+            problem,
+            annotationToAdd,
+            annotationToRemove,
+            null,
+            false /*thisUnitOnly*/,
+            true /*allowRemove*/,
+            isArgumentProblem,
+            changeKind);
+    if (operation == null) return null;
 
-		if (annotationToAdd == nonNullAnnotationName) {
-			operation.fRemoveIfNonNullByDefault= true;
-			operation.fNonNullByDefaultName= getNonNullByDefaultAnnotationName(compilationUnit.getJavaElement(), false);
-		}
-		return new NullAnnotationsFix(operation.getMessage(), operation.getCompilationUnit(), // note that this uses the findings from createAddAnnotationOperation(..)
-				new NullAnnotationsRewriteOperations.SignatureAnnotationRewriteOperation[] { operation });
-	}
+    if (annotationToAdd == nonNullAnnotationName) {
+      operation.fRemoveIfNonNullByDefault = true;
+      operation.fNonNullByDefaultName =
+          getNonNullByDefaultAnnotationName(compilationUnit.getJavaElement(), false);
+    }
+    return new NullAnnotationsFix(
+        operation.getMessage(),
+        operation
+            .getCompilationUnit(), // note that this uses the findings from createAddAnnotationOperation(..)
+        new NullAnnotationsRewriteOperations.SignatureAnnotationRewriteOperation[] {operation});
+  }
 

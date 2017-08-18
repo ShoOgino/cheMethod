@@ -1,50 +1,54 @@
-    private Promise<Project> doImport(final Path path, final SourceStorage sourceStorage) {
-        final ProjectNotificationSubscriber subscriber = subscriberFactory.createSubscriber();
-        subscriber.subscribe(path.lastSegment());
+  private Promise<Project> doImport(final Path path, final SourceStorage sourceStorage) {
+    final ProjectNotificationSubscriber subscriber = subscriberFactory.createSubscriber();
+    subscriber.subscribe(path.lastSegment());
 
-        MutableProjectConfig importConfig = new MutableProjectConfig();
-        importConfig.setPath(path.toString());
-        importConfig.setSource(sourceStorage);
+    MutableProjectConfig importConfig = new MutableProjectConfig();
+    importConfig.setPath(path.toString());
+    importConfig.setSource(sourceStorage);
 
-        return appContext.getWorkspaceRoot()
-                         .importProject()
-                         .withBody(importConfig)
-                         .send()
-                         .thenPromise(new Function<Project, Promise<Project>>() {
-                             @Override
-                             public Promise<Project> apply(Project project) throws FunctionException {
-                                 subscriber.onSuccess();
+    return appContext
+        .getWorkspaceRoot()
+        .importProject()
+        .withBody(importConfig)
+        .send()
+        .thenPromise(
+            new Function<Project, Promise<Project>>() {
+              @Override
+              public Promise<Project> apply(Project project) throws FunctionException {
+                subscriber.onSuccess();
 
-                                 return projectResolver.resolve(project);
-                             }
-                         })
-                         .catchErrorPromise(new Function<PromiseError, Promise<Project>>() {
-                             @Override
-                             public Promise<Project> apply(PromiseError exception) throws FunctionException {
-                                 subscriber.onFailure(exception.getCause().getMessage());
+                return projectResolver.resolve(project);
+              }
+            })
+        .catchErrorPromise(
+            new Function<PromiseError, Promise<Project>>() {
+              @Override
+              public Promise<Project> apply(PromiseError exception) throws FunctionException {
+                subscriber.onFailure(exception.getCause().getMessage());
 
-                                 switch (getErrorCode(exception.getCause())) {
-                                     case UNABLE_GET_PRIVATE_SSH_KEY:
-                                         throw new IllegalStateException(localizationConstant.importProjectMessageUnableGetSshKey());
-                                     case UNAUTHORIZED_SVN_OPERATION:
-                                         return recallImportWithCredentials(sourceStorage, path);
-                                     case UNAUTHORIZED_GIT_OPERATION:
-                                         final Map<String, String> attributes = ExceptionUtils.getAttributes(exception.getCause());
-                                         final String providerName = attributes.get(PROVIDER_NAME);
-                                         final String authenticateUrl = attributes.get(AUTHENTICATE_URL);
-                                         if (!Strings.isNullOrEmpty(providerName) && !Strings.isNullOrEmpty(authenticateUrl)) {
-                                             return authUserAndRecallImport(providerName,
-                                                                            authenticateUrl,
-                                                                            path,
-                                                                            sourceStorage,
-                                                                            subscriber);
-                                         } else {
-                                             throw new IllegalStateException(localizationConstant.oauthFailedToGetAuthenticatorText());
-                                         }
-                                     default:
-                                         throw new IllegalStateException(exception.getCause());
-                                 }
-                             }
-                         });
-    }
+                switch (getErrorCode(exception.getCause())) {
+                  case UNABLE_GET_PRIVATE_SSH_KEY:
+                    throw new IllegalStateException(
+                        localizationConstant.importProjectMessageUnableGetSshKey());
+                  case UNAUTHORIZED_SVN_OPERATION:
+                    return recallImportWithCredentials(sourceStorage, path);
+                  case UNAUTHORIZED_GIT_OPERATION:
+                    final Map<String, String> attributes =
+                        ExceptionUtils.getAttributes(exception.getCause());
+                    final String providerName = attributes.get(PROVIDER_NAME);
+                    final String authenticateUrl = attributes.get(AUTHENTICATE_URL);
+                    if (!Strings.isNullOrEmpty(providerName)
+                        && !Strings.isNullOrEmpty(authenticateUrl)) {
+                      return authUserAndRecallImport(
+                          providerName, authenticateUrl, path, sourceStorage, subscriber);
+                    } else {
+                      throw new IllegalStateException(
+                          localizationConstant.oauthFailedToGetAuthenticatorText());
+                    }
+                  default:
+                    throw new IllegalStateException(exception.getCause());
+                }
+              }
+            });
+  }
 

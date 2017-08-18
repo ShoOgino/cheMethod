@@ -1,45 +1,45 @@
-	@Override
-	public boolean visit(Assignment node) {
-		Expression leftHandSide = node.getLeftHandSide();
-		if (!considerBinding(resolveBinding(leftHandSide), leftHandSide))
-			return true;
+  @Override
+  public boolean visit(Assignment node) {
+    Expression leftHandSide = node.getLeftHandSide();
+    if (!considerBinding(resolveBinding(leftHandSide), leftHandSide)) return true;
 
-		checkParent(node);
-		Expression rightHandSide = node.getRightHandSide();
-		if (!fIsFieldFinal) {
-			// Write access.
-			AST ast = node.getAST();
-			MethodInvocation invocation = ast.newMethodInvocation();
-			invocation.setName(ast.newSimpleName(fSetter));
-			fReferencingSetter = true;
-			Expression receiver = getReceiver(leftHandSide);
-			if (receiver != null)
-				invocation.setExpression((Expression)fRewriter.createCopyTarget(receiver));
-			List<Expression> arguments = invocation.arguments();
-			if (node.getOperator() == Assignment.Operator.ASSIGN) {
-				arguments.add((Expression)fRewriter.createCopyTarget(rightHandSide));
-			} else {
-				// This is the compound assignment case: field+= 10;
-				InfixExpression exp = ast.newInfixExpression();
-				exp.setOperator(ASTNodes.convertToInfixOperator(node.getOperator()));
-				MethodInvocation getter = ast.newMethodInvocation();
-				getter.setName(ast.newSimpleName(fGetter));
-				fReferencingGetter = true;
-				if (receiver != null)
-					getter.setExpression((Expression)fRewriter.createCopyTarget(receiver));
-				exp.setLeftOperand(getter);
-				Expression rhs = (Expression)fRewriter.createCopyTarget(rightHandSide);
-				if (NecessaryParenthesesChecker.needsParenthesesForRightOperand(rightHandSide, exp, leftHandSide.resolveTypeBinding())) {
-					ParenthesizedExpression p = ast.newParenthesizedExpression();
-					p.setExpression(rhs);
-					rhs = p;
-				}
-				exp.setRightOperand(rhs);
-				arguments.add(exp);
-			}
-			fRewriter.replace(node, invocation, createGroupDescription(WRITE_ACCESS));
-		}
-		rightHandSide.accept(this);
-		return false;
-	}
+    checkParent(node);
+    Expression rightHandSide = node.getRightHandSide();
+    if (!fIsFieldFinal) {
+      // Write access.
+      AST ast = node.getAST();
+      MethodInvocation invocation = ast.newMethodInvocation();
+      invocation.setName(ast.newSimpleName(fSetter));
+      fReferencingSetter = true;
+      Expression receiver = getReceiver(leftHandSide);
+      if (receiver != null)
+        invocation.setExpression((Expression) fRewriter.createCopyTarget(receiver));
+      List<Expression> arguments = invocation.arguments();
+      if (node.getOperator() == Assignment.Operator.ASSIGN) {
+        arguments.add((Expression) fRewriter.createCopyTarget(rightHandSide));
+      } else {
+        // This is the compound assignment case: field+= 10;
+        InfixExpression exp = ast.newInfixExpression();
+        exp.setOperator(ASTNodes.convertToInfixOperator(node.getOperator()));
+        MethodInvocation getter = ast.newMethodInvocation();
+        getter.setName(ast.newSimpleName(fGetter));
+        fReferencingGetter = true;
+        if (receiver != null)
+          getter.setExpression((Expression) fRewriter.createCopyTarget(receiver));
+        exp.setLeftOperand(getter);
+        Expression rhs = (Expression) fRewriter.createCopyTarget(rightHandSide);
+        if (NecessaryParenthesesChecker.needsParenthesesForRightOperand(
+            rightHandSide, exp, leftHandSide.resolveTypeBinding())) {
+          ParenthesizedExpression p = ast.newParenthesizedExpression();
+          p.setExpression(rhs);
+          rhs = p;
+        }
+        exp.setRightOperand(rhs);
+        arguments.add(exp);
+      }
+      fRewriter.replace(node, invocation, createGroupDescription(WRITE_ACCESS));
+    }
+    rightHandSide.accept(this);
+    return false;
+  }
 

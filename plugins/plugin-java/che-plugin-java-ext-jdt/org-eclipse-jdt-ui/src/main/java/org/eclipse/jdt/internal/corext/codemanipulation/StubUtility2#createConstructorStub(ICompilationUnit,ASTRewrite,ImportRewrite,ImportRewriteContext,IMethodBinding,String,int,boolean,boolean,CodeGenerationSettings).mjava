@@ -1,61 +1,74 @@
-	/* This method should work with all AST levels. */
-	public static MethodDeclaration createConstructorStub(ICompilationUnit unit,
-														  ASTRewrite rewrite,
-														  ImportRewrite imports,
-														  ImportRewriteContext context,
-														  IMethodBinding binding,
-														  String type,
-														  int modifiers,
-														  boolean omitSuperForDefConst,
-														  boolean todo,
-														  CodeGenerationSettings settings) throws
+  /* This method should work with all AST levels. */
+  public static MethodDeclaration createConstructorStub(
+      ICompilationUnit unit,
+      ASTRewrite rewrite,
+      ImportRewrite imports,
+      ImportRewriteContext context,
+      IMethodBinding binding,
+      String type,
+      int modifiers,
+      boolean omitSuperForDefConst,
+      boolean todo,
+      CodeGenerationSettings settings)
+      throws CoreException {
+    AST ast = rewrite.getAST();
+    MethodDeclaration decl = ast.newMethodDeclaration();
+    decl.modifiers()
+        .addAll(
+            ASTNodeFactory.newModifiers(ast, modifiers & ~Modifier.ABSTRACT & ~Modifier.NATIVE));
+    decl.setName(ast.newSimpleName(type));
+    decl.setConstructor(true);
 
-																																																																						   CoreException {
-		AST ast= rewrite.getAST();
-		MethodDeclaration decl= ast.newMethodDeclaration();
-		decl.modifiers().addAll(ASTNodeFactory.newModifiers(ast, modifiers & ~Modifier.ABSTRACT & ~Modifier.NATIVE));
-		decl.setName(ast.newSimpleName(type));
-		decl.setConstructor(true);
+    createTypeParameters(imports, context, ast, binding, decl);
 
-		createTypeParameters(imports, context, ast, binding, decl);
+    List<SingleVariableDeclaration> parameters =
+        createParameters(unit.getJavaProject(), imports, context, ast, binding, null, decl);
 
-		List<SingleVariableDeclaration> parameters= createParameters(unit.getJavaProject(), imports, context, ast, binding, null, decl);
+    createThrownExceptions(decl, binding, imports, context, ast);
 
-		createThrownExceptions(decl, binding, imports, context, ast);
+    Block body = ast.newBlock();
+    decl.setBody(body);
 
-		Block body= ast.newBlock();
-		decl.setBody(body);
+    String delimiter = StubUtility.getLineDelimiterUsed(unit);
+    String bodyStatement = ""; //$NON-NLS-1$
+    if (!omitSuperForDefConst || !parameters.isEmpty()) {
+      SuperConstructorInvocation invocation = ast.newSuperConstructorInvocation();
+      SingleVariableDeclaration varDecl = null;
+      for (Iterator<SingleVariableDeclaration> iterator = parameters.iterator();
+          iterator.hasNext();
+          ) {
+        varDecl = iterator.next();
+        invocation.arguments().add(ast.newSimpleName(varDecl.getName().getIdentifier()));
+      }
+      bodyStatement =
+          ASTNodes.asFormattedString(
+              invocation, 0, delimiter, unit.getJavaProject().getOptions(true));
+    }
 
-		String delimiter= StubUtility.getLineDelimiterUsed(unit);
-		String bodyStatement= ""; //$NON-NLS-1$
-		if (!omitSuperForDefConst || !parameters.isEmpty()) {
-			SuperConstructorInvocation invocation= ast.newSuperConstructorInvocation();
-			SingleVariableDeclaration varDecl= null;
-			for (Iterator<SingleVariableDeclaration> iterator= parameters.iterator(); iterator.hasNext();) {
-				varDecl= iterator.next();
-				invocation.arguments().add(ast.newSimpleName(varDecl.getName().getIdentifier()));
-			}
-			bodyStatement= ASTNodes.asFormattedString(invocation, 0, delimiter, unit.getJavaProject().getOptions(true));
-		}
+    if (todo) {
+      String placeHolder =
+          CodeGeneration.getMethodBodyContent(
+              unit, type, binding.getName(), true, bodyStatement, delimiter);
+      if (placeHolder != null) {
+        ReturnStatement todoNode =
+            (ReturnStatement)
+                rewrite.createStringPlaceholder(placeHolder, ASTNode.RETURN_STATEMENT);
+        body.statements().add(todoNode);
+      }
+    } else {
+      ReturnStatement statementNode =
+          (ReturnStatement)
+              rewrite.createStringPlaceholder(bodyStatement, ASTNode.RETURN_STATEMENT);
+      body.statements().add(statementNode);
+    }
 
-		if (todo) {
-			String placeHolder= CodeGeneration.getMethodBodyContent(unit, type, binding.getName(), true, bodyStatement, delimiter);
-			if (placeHolder != null) {
-				ReturnStatement todoNode= (ReturnStatement) rewrite.createStringPlaceholder(placeHolder, ASTNode.RETURN_STATEMENT);
-				body.statements().add(todoNode);
-			}
-		} else {
-			ReturnStatement statementNode= (ReturnStatement) rewrite.createStringPlaceholder(bodyStatement, ASTNode.RETURN_STATEMENT);
-			body.statements().add(statementNode);
-		}
-
-		if (settings != null && settings.createComments) {
-			String string= CodeGeneration.getMethodComment(unit, type, decl, binding, delimiter);
-			if (string != null) {
-				Javadoc javadoc= (Javadoc) rewrite.createStringPlaceholder(string, ASTNode.JAVADOC);
-				decl.setJavadoc(javadoc);
-			}
-		}
-		return decl;
-	}
+    if (settings != null && settings.createComments) {
+      String string = CodeGeneration.getMethodComment(unit, type, decl, binding, delimiter);
+      if (string != null) {
+        Javadoc javadoc = (Javadoc) rewrite.createStringPlaceholder(string, ASTNode.JAVADOC);
+        decl.setJavadoc(javadoc);
+      }
+    }
+    return decl;
+  }
 

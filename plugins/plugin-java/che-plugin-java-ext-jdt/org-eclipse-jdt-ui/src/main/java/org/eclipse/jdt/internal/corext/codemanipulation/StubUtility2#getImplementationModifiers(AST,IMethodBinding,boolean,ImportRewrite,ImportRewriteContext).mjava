@@ -1,66 +1,74 @@
-	private static List<IExtendedModifier> getImplementationModifiers(AST ast, IMethodBinding method, boolean inInterface, ImportRewrite importRewrite, ImportRewriteContext context) throws
-																																													  JavaModelException {
-		IJavaProject javaProject= importRewrite.getCompilationUnit().getJavaProject();
-		int modifiers= method.getModifiers() & ~Modifier.ABSTRACT & ~Modifier.NATIVE & ~Modifier.PRIVATE;
-		if (inInterface) {
-			modifiers= modifiers & ~Modifier.PROTECTED;
-			if (!method.getDeclaringClass().isInterface() ) {
-				modifiers= modifiers | Modifier.PUBLIC;
-			}
-		} else {
-			modifiers= modifiers & ~Modifier.DEFAULT;
-		}
-		IAnnotationBinding[] annotations= method.getAnnotations();
-		
-		if (modifiers != Modifier.NONE && annotations.length > 0) {
-			// need an AST of the source method to preserve order of modifiers
-			IMethod iMethod= (IMethod) method.getJavaElement();
-			if (iMethod != null && JavaElementUtil.isSourceAvailable(iMethod)) {
-				CheASTParser parser= CheASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
-				parser.setSource(iMethod.getTypeRoot());
-				parser.setIgnoreMethodBodies(true);
-				CompilationUnit otherCU= (CompilationUnit) parser.createAST(null);
-				ASTNode otherMethod= NodeFinder.perform(otherCU, iMethod.getSourceRange());
-				if (otherMethod instanceof MethodDeclaration) {
-					MethodDeclaration otherMD= (MethodDeclaration) otherMethod;
-					ArrayList<IExtendedModifier> result= new ArrayList<IExtendedModifier>();
-					List<IExtendedModifier> otherModifiers= otherMD.modifiers();
-					for (IExtendedModifier otherModifier : otherModifiers) {
-						if (otherModifier instanceof Modifier) {
-							int otherFlag= ((Modifier) otherModifier).getKeyword().toFlagValue();
-							if ((otherFlag & modifiers) != 0) {
-								modifiers= ~otherFlag & modifiers;
-								result.addAll(ast.newModifiers(otherFlag));
-							}
-						} else {
-							Annotation otherAnnotation= (Annotation) otherModifier;
-							String n= otherAnnotation.getTypeName().getFullyQualifiedName();
-							for (IAnnotationBinding annotation : annotations) {
-								ITypeBinding otherAnnotationType= annotation.getAnnotationType();
-								String qn= otherAnnotationType.getQualifiedName();
-								if (qn.endsWith(n) && (qn.length() == n.length() || qn.charAt(qn.length() - n.length() - 1) == '.')) {
-									if (StubUtility2.isCopyOnInheritAnnotation(otherAnnotationType, javaProject))
-										result.add(importRewrite.addAnnotation(annotation, ast, context));
-									break;
-								}
-							}
-						}
-					}
-					result.addAll(ASTNodeFactory.newModifiers(ast, modifiers));
-					return result;
-				}
-			}
-		}
-		
-		ArrayList<IExtendedModifier> result= new ArrayList<IExtendedModifier>();
-		
-		for (IAnnotationBinding annotation : annotations) {
-			if (StubUtility2.isCopyOnInheritAnnotation(annotation.getAnnotationType(), javaProject))
-				result.add(importRewrite.addAnnotation(annotation, ast, context));
-		}
-		
-		result.addAll(ASTNodeFactory.newModifiers(ast, modifiers));
-		
-		return result;
-	}
+  private static List<IExtendedModifier> getImplementationModifiers(
+      AST ast,
+      IMethodBinding method,
+      boolean inInterface,
+      ImportRewrite importRewrite,
+      ImportRewriteContext context)
+      throws JavaModelException {
+    IJavaProject javaProject = importRewrite.getCompilationUnit().getJavaProject();
+    int modifiers =
+        method.getModifiers() & ~Modifier.ABSTRACT & ~Modifier.NATIVE & ~Modifier.PRIVATE;
+    if (inInterface) {
+      modifiers = modifiers & ~Modifier.PROTECTED;
+      if (!method.getDeclaringClass().isInterface()) {
+        modifiers = modifiers | Modifier.PUBLIC;
+      }
+    } else {
+      modifiers = modifiers & ~Modifier.DEFAULT;
+    }
+    IAnnotationBinding[] annotations = method.getAnnotations();
+
+    if (modifiers != Modifier.NONE && annotations.length > 0) {
+      // need an AST of the source method to preserve order of modifiers
+      IMethod iMethod = (IMethod) method.getJavaElement();
+      if (iMethod != null && JavaElementUtil.isSourceAvailable(iMethod)) {
+        CheASTParser parser = CheASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+        parser.setSource(iMethod.getTypeRoot());
+        parser.setIgnoreMethodBodies(true);
+        CompilationUnit otherCU = (CompilationUnit) parser.createAST(null);
+        ASTNode otherMethod = NodeFinder.perform(otherCU, iMethod.getSourceRange());
+        if (otherMethod instanceof MethodDeclaration) {
+          MethodDeclaration otherMD = (MethodDeclaration) otherMethod;
+          ArrayList<IExtendedModifier> result = new ArrayList<IExtendedModifier>();
+          List<IExtendedModifier> otherModifiers = otherMD.modifiers();
+          for (IExtendedModifier otherModifier : otherModifiers) {
+            if (otherModifier instanceof Modifier) {
+              int otherFlag = ((Modifier) otherModifier).getKeyword().toFlagValue();
+              if ((otherFlag & modifiers) != 0) {
+                modifiers = ~otherFlag & modifiers;
+                result.addAll(ast.newModifiers(otherFlag));
+              }
+            } else {
+              Annotation otherAnnotation = (Annotation) otherModifier;
+              String n = otherAnnotation.getTypeName().getFullyQualifiedName();
+              for (IAnnotationBinding annotation : annotations) {
+                ITypeBinding otherAnnotationType = annotation.getAnnotationType();
+                String qn = otherAnnotationType.getQualifiedName();
+                if (qn.endsWith(n)
+                    && (qn.length() == n.length()
+                        || qn.charAt(qn.length() - n.length() - 1) == '.')) {
+                  if (StubUtility2.isCopyOnInheritAnnotation(otherAnnotationType, javaProject))
+                    result.add(importRewrite.addAnnotation(annotation, ast, context));
+                  break;
+                }
+              }
+            }
+          }
+          result.addAll(ASTNodeFactory.newModifiers(ast, modifiers));
+          return result;
+        }
+      }
+    }
+
+    ArrayList<IExtendedModifier> result = new ArrayList<IExtendedModifier>();
+
+    for (IAnnotationBinding annotation : annotations) {
+      if (StubUtility2.isCopyOnInheritAnnotation(annotation.getAnnotationType(), javaProject))
+        result.add(importRewrite.addAnnotation(annotation, ast, context));
+    }
+
+    result.addAll(ASTNodeFactory.newModifiers(ast, modifiers));
+
+    return result;
+  }
 

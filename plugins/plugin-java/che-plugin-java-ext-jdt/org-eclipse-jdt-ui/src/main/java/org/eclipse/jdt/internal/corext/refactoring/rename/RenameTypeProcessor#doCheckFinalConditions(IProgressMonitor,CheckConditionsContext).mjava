@@ -1,111 +1,113 @@
-	@Override
-	protected RefactoringStatus doCheckFinalConditions(IProgressMonitor pm, CheckConditionsContext context) throws CoreException {
-		Assert.isNotNull(fType, "type"); //$NON-NLS-1$
-		Assert.isNotNull(getNewElementName(), "newName"); //$NON-NLS-1$
-		RefactoringStatus result= new RefactoringStatus();
+  @Override
+  protected RefactoringStatus doCheckFinalConditions(
+      IProgressMonitor pm, CheckConditionsContext context) throws CoreException {
+    Assert.isNotNull(fType, "type"); //$NON-NLS-1$
+    Assert.isNotNull(getNewElementName(), "newName"); //$NON-NLS-1$
+    RefactoringStatus result = new RefactoringStatus();
 
-		int referenceSearchTicks= fUpdateReferences || fUpdateSimilarElements ? 15 : 0;
-		int affectedCusTicks= fUpdateReferences || fUpdateSimilarElements ? 10 : 1;
-		int similarElementTicks= fUpdateSimilarElements ? 85 : 0;
-		int createChangeTicks = 5;
-		int qualifiedNamesTicks= fUpdateQualifiedNames ? 50 : 0;
+    int referenceSearchTicks = fUpdateReferences || fUpdateSimilarElements ? 15 : 0;
+    int affectedCusTicks = fUpdateReferences || fUpdateSimilarElements ? 10 : 1;
+    int similarElementTicks = fUpdateSimilarElements ? 85 : 0;
+    int createChangeTicks = 5;
+    int qualifiedNamesTicks = fUpdateQualifiedNames ? 50 : 0;
 
-		try{
-			pm.beginTask("", 12 + referenceSearchTicks + affectedCusTicks + similarElementTicks + createChangeTicks + qualifiedNamesTicks); //$NON-NLS-1$
-			pm.setTaskName(RefactoringCoreMessages.RenameTypeRefactoring_checking);
+    try {
+      pm.beginTask(
+          "",
+          12
+              + referenceSearchTicks
+              + affectedCusTicks
+              + similarElementTicks
+              + createChangeTicks
+              + qualifiedNamesTicks); //$NON-NLS-1$
+      pm.setTaskName(RefactoringCoreMessages.RenameTypeRefactoring_checking);
 
-			fChangeManager= new TextChangeManager(true);
+      fChangeManager = new TextChangeManager(true);
 
-			result.merge(checkNewElementName(getNewElementName()));
-			if (result.hasFatalError())
-				return result;
-			result.merge(Checks.checkIfCuBroken(fType));
-			if (result.hasFatalError())
-				return result;
-			pm.worked(1);
+      result.merge(checkNewElementName(getNewElementName()));
+      if (result.hasFatalError()) return result;
+      result.merge(Checks.checkIfCuBroken(fType));
+      if (result.hasFatalError()) return result;
+      pm.worked(1);
 
-			result.merge(checkTypesInCompilationUnit());
-			pm.worked(1);
+      result.merge(checkTypesInCompilationUnit());
+      pm.worked(1);
 
-			result.merge(checkForMethodsWithConstructorNames());
-			pm.worked(1);
+      result.merge(checkForMethodsWithConstructorNames());
+      pm.worked(1);
 
-			result.merge(checkImportedTypes());
-			pm.worked(1);
+      result.merge(checkImportedTypes());
+      pm.worked(1);
 
-			if (Checks.isTopLevel(fType)) {
-				ICompilationUnit cu= fType.getCompilationUnit();
-				String newCUName= JavaModelUtil.getRenamedCUName(cu, getNewElementName());
-				if (! newCUName.equals(cu.getElementName()))
-					result.merge(Checks.checkCompilationUnitNewName(cu, getNewElementName()));
-			}
-			pm.worked(1);
+      if (Checks.isTopLevel(fType)) {
+        ICompilationUnit cu = fType.getCompilationUnit();
+        String newCUName = JavaModelUtil.getRenamedCUName(cu, getNewElementName());
+        if (!newCUName.equals(cu.getElementName()))
+          result.merge(Checks.checkCompilationUnitNewName(cu, getNewElementName()));
+      }
+      pm.worked(1);
 
-			if (isPrimaryType())
-				result.merge(checkNewPathValidity());
-			pm.worked(1);
+      if (isPrimaryType()) result.merge(checkNewPathValidity());
+      pm.worked(1);
 
-			result.merge(checkEnclosingTypes());
-			pm.worked(1);
+      result.merge(checkEnclosingTypes());
+      pm.worked(1);
 
-			result.merge(checkEnclosedTypes());
-			pm.worked(1);
+      result.merge(checkEnclosedTypes());
+      pm.worked(1);
 
-			result.merge(checkTypesInPackage());
-			pm.worked(1);
+      result.merge(checkTypesInPackage());
+      pm.worked(1);
 
-			result.merge(checkTypesImportedInCu());
-			pm.worked(1);
+      result.merge(checkTypesImportedInCu());
+      pm.worked(1);
 
-			result.merge(Checks.checkForMainAndNativeMethods(fType));
-			pm.worked(1);
+      result.merge(Checks.checkForMainAndNativeMethods(fType));
+      pm.worked(1);
 
-			// before doing any expensive analysis
-			if (result.hasFatalError())
-				return result;
+      // before doing any expensive analysis
+      if (result.hasFatalError()) return result;
 
-			result.merge(analyseEnclosedTypes());
-			pm.worked(1);
-			// before doing _the really_ expensive analysis
-			if (result.hasFatalError())
-				return result;
+      result.merge(analyseEnclosedTypes());
+      pm.worked(1);
+      // before doing _the really_ expensive analysis
+      if (result.hasFatalError()) return result;
 
-			// Load references, including similarly named elements
-			if (fUpdateReferences || fUpdateSimilarElements) {
-				pm.setTaskName(RefactoringCoreMessages.RenameTypeRefactoring_searching);
-				result.merge(initializeReferences(new SubProgressMonitor(pm, referenceSearchTicks)));
-			} else {
-				fReferences= new SearchResultGroup[0];
-			}
+      // Load references, including similarly named elements
+      if (fUpdateReferences || fUpdateSimilarElements) {
+        pm.setTaskName(RefactoringCoreMessages.RenameTypeRefactoring_searching);
+        result.merge(initializeReferences(new SubProgressMonitor(pm, referenceSearchTicks)));
+      } else {
+        fReferences = new SearchResultGroup[0];
+      }
 
-			pm.setTaskName(RefactoringCoreMessages.RenameTypeRefactoring_checking);
-			if (pm.isCanceled())
-				throw new OperationCanceledException();
+      pm.setTaskName(RefactoringCoreMessages.RenameTypeRefactoring_checking);
+      if (pm.isCanceled()) throw new OperationCanceledException();
 
-			if (fUpdateReferences || fUpdateSimilarElements) {
-				result.merge(analyzeAffectedCompilationUnits(new SubProgressMonitor(pm, affectedCusTicks)));
-			} else {
-				Checks.checkCompileErrorsInAffectedFile(result, fType.getResource());
-				pm.worked(affectedCusTicks);
-			}
+      if (fUpdateReferences || fUpdateSimilarElements) {
+        result.merge(analyzeAffectedCompilationUnits(new SubProgressMonitor(pm, affectedCusTicks)));
+      } else {
+        Checks.checkCompileErrorsInAffectedFile(result, fType.getResource());
+        pm.worked(affectedCusTicks);
+      }
 
-			if (result.hasFatalError())
-				return result;
+      if (result.hasFatalError()) return result;
 
-			if (fUpdateSimilarElements) {
-				result.merge(initializeSimilarElementsRenameProcessors(new SubProgressMonitor(pm, similarElementTicks), context));
-				if (result.hasFatalError())
-					return result;
-			}
+      if (fUpdateSimilarElements) {
+        result.merge(
+            initializeSimilarElementsRenameProcessors(
+                new SubProgressMonitor(pm, similarElementTicks), context));
+        if (result.hasFatalError()) return result;
+      }
 
-			createChanges(new SubProgressMonitor(pm, createChangeTicks));
+      createChanges(new SubProgressMonitor(pm, createChangeTicks));
 
-			if (fUpdateQualifiedNames)
-				computeQualifiedNameMatches(new SubProgressMonitor(pm, qualifiedNamesTicks));
+      if (fUpdateQualifiedNames)
+        computeQualifiedNameMatches(new SubProgressMonitor(pm, qualifiedNamesTicks));
 
-			return result;
-		} finally {
-			pm.done();
-		}
-	}
+      return result;
+    } finally {
+      pm.done();
+    }
+  }
 

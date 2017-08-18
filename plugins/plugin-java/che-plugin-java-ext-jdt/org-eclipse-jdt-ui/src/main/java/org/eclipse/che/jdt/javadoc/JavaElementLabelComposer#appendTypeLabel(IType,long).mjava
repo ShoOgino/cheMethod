@@ -1,141 +1,149 @@
-	/**
-	 * Appends the label for a type. Considers the T_* flags.
-	 *
-	 * @param type the element to render
-	 * @param flags the rendering flags. Flags with names starting with 'T_' are considered.
-	 */
-	public void appendTypeLabel(IType type, long flags) {
+  /**
+   * Appends the label for a type. Considers the T_* flags.
+   *
+   * @param type the element to render
+   * @param flags the rendering flags. Flags with names starting with 'T_' are considered.
+   */
+  public void appendTypeLabel(IType type, long flags) {
 
-		if (getFlag(flags, JavaElementLabels.T_FULLY_QUALIFIED)) {
-			IPackageFragment pack= type.getPackageFragment();
-			if (!pack.isDefaultPackage()) {
-				appendPackageFragmentLabel(pack, (flags & QUALIFIER_FLAGS));
-				fBuffer.append('.');
-			}
-		}
-		IJavaElement parent= type.getParent();
-		if (getFlag(flags, JavaElementLabels.T_FULLY_QUALIFIED | JavaElementLabels.T_CONTAINER_QUALIFIED)) {
-			IType declaringType= type.getDeclaringType();
-			if (declaringType != null) {
-				appendTypeLabel(declaringType, JavaElementLabels.T_CONTAINER_QUALIFIED | (flags & QUALIFIER_FLAGS));
-				fBuffer.append('.');
-			}
-			int parentType= parent.getElementType();
-			if (parentType == IJavaElement.METHOD || parentType == IJavaElement.FIELD || parentType == IJavaElement.INITIALIZER) { // anonymous or local
-				appendElementLabel(parent, 0);
-				fBuffer.append('.');
-			}
-		}
+    if (getFlag(flags, JavaElementLabels.T_FULLY_QUALIFIED)) {
+      IPackageFragment pack = type.getPackageFragment();
+      if (!pack.isDefaultPackage()) {
+        appendPackageFragmentLabel(pack, (flags & QUALIFIER_FLAGS));
+        fBuffer.append('.');
+      }
+    }
+    IJavaElement parent = type.getParent();
+    if (getFlag(
+        flags, JavaElementLabels.T_FULLY_QUALIFIED | JavaElementLabels.T_CONTAINER_QUALIFIED)) {
+      IType declaringType = type.getDeclaringType();
+      if (declaringType != null) {
+        appendTypeLabel(
+            declaringType, JavaElementLabels.T_CONTAINER_QUALIFIED | (flags & QUALIFIER_FLAGS));
+        fBuffer.append('.');
+      }
+      int parentType = parent.getElementType();
+      if (parentType == IJavaElement.METHOD
+          || parentType == IJavaElement.FIELD
+          || parentType == IJavaElement.INITIALIZER) { // anonymous or local
+        appendElementLabel(parent, 0);
+        fBuffer.append('.');
+      }
+    }
 
-		String typeName;
-		boolean isAnonymous= false;
-		if (type.isLambda()) {
-			typeName= "() -> {...}"; //$NON-NLS-1$
-			try {
-				String[] superInterfaceSignatures= type.getSuperInterfaceTypeSignatures();
-				if (superInterfaceSignatures.length > 0) {
-					typeName= typeName + ' ' + getSimpleTypeName(type, superInterfaceSignatures[0]);
-				}
-			} catch (JavaModelException e) {
-				//ignore
-			}
+    String typeName;
+    boolean isAnonymous = false;
+    if (type.isLambda()) {
+      typeName = "() -> {...}"; //$NON-NLS-1$
+      try {
+        String[] superInterfaceSignatures = type.getSuperInterfaceTypeSignatures();
+        if (superInterfaceSignatures.length > 0) {
+          typeName = typeName + ' ' + getSimpleTypeName(type, superInterfaceSignatures[0]);
+        }
+      } catch (JavaModelException e) {
+        //ignore
+      }
 
-		} else {
-			typeName= getElementName(type);
-			try {
-				isAnonymous= type.isAnonymous();
-			} catch (JavaModelException e1) {
-				// should not happen, but let's play safe:
-				isAnonymous= typeName.length() == 0;
-			}
-			if (isAnonymous) {
-				try {
-					if (parent instanceof IField && type.isEnum()) {
-						typeName= '{' + JavaElementLabels.ELLIPSIS_STRING + '}';
-					} else {
-						String supertypeName;
-						String[] superInterfaceSignatures= type.getSuperInterfaceTypeSignatures();
-						if (superInterfaceSignatures.length > 0) {
-							supertypeName= getSimpleTypeName(type, superInterfaceSignatures[0]);
-						} else {
-							supertypeName= getSimpleTypeName(type, type.getSuperclassTypeSignature());
-						}
-						typeName= MessageFormat.format("new {0}() '{'...}" , supertypeName);
-					}
-				} catch (JavaModelException e) {
-					//ignore
-					typeName= "new Anonymous";
-				}
-			}
-		}
-		fBuffer.append(typeName);
+    } else {
+      typeName = getElementName(type);
+      try {
+        isAnonymous = type.isAnonymous();
+      } catch (JavaModelException e1) {
+        // should not happen, but let's play safe:
+        isAnonymous = typeName.length() == 0;
+      }
+      if (isAnonymous) {
+        try {
+          if (parent instanceof IField && type.isEnum()) {
+            typeName = '{' + JavaElementLabels.ELLIPSIS_STRING + '}';
+          } else {
+            String supertypeName;
+            String[] superInterfaceSignatures = type.getSuperInterfaceTypeSignatures();
+            if (superInterfaceSignatures.length > 0) {
+              supertypeName = getSimpleTypeName(type, superInterfaceSignatures[0]);
+            } else {
+              supertypeName = getSimpleTypeName(type, type.getSuperclassTypeSignature());
+            }
+            typeName = MessageFormat.format("new {0}() '{'...}", supertypeName);
+          }
+        } catch (JavaModelException e) {
+          //ignore
+          typeName = "new Anonymous";
+        }
+      }
+    }
+    fBuffer.append(typeName);
 
-		if (getFlag(flags, JavaElementLabels.T_TYPE_PARAMETERS)) {
-			if (getFlag(flags, JavaElementLabels.USE_RESOLVED) && type.isResolved()) {
-				BindingKey key= new BindingKey(type.getKey());
-				if (key.isParameterizedType()) {
-					String[] typeArguments= key.getTypeArguments();
-					appendTypeArgumentSignaturesLabel(type, typeArguments, flags);
-				} else {
-					String[] typeParameters= Signature.getTypeParameters(key.toSignature());
-					appendTypeParameterSignaturesLabel(typeParameters, flags);
-				}
-			} else if (type.exists()) {
-				try {
-					appendTypeParametersLabels(type.getTypeParameters(), flags);
-				} catch (JavaModelException e) {
-					// ignore
-				}
-			}
-		}
+    if (getFlag(flags, JavaElementLabels.T_TYPE_PARAMETERS)) {
+      if (getFlag(flags, JavaElementLabels.USE_RESOLVED) && type.isResolved()) {
+        BindingKey key = new BindingKey(type.getKey());
+        if (key.isParameterizedType()) {
+          String[] typeArguments = key.getTypeArguments();
+          appendTypeArgumentSignaturesLabel(type, typeArguments, flags);
+        } else {
+          String[] typeParameters = Signature.getTypeParameters(key.toSignature());
+          appendTypeParameterSignaturesLabel(typeParameters, flags);
+        }
+      } else if (type.exists()) {
+        try {
+          appendTypeParametersLabels(type.getTypeParameters(), flags);
+        } catch (JavaModelException e) {
+          // ignore
+        }
+      }
+    }
 
-		// category
-		if (getFlag(flags, JavaElementLabels.T_CATEGORY) && type.exists()) {
-			try {
-				appendCategoryLabel(type, flags);
-			} catch (JavaModelException e) {
-				// ignore
-			}
-		}
+    // category
+    if (getFlag(flags, JavaElementLabels.T_CATEGORY) && type.exists()) {
+      try {
+        appendCategoryLabel(type, flags);
+      } catch (JavaModelException e) {
+        // ignore
+      }
+    }
 
-		// post qualification
-		if (getFlag(flags, JavaElementLabels.T_POST_QUALIFIED)) {
-			int offset= fBuffer.length();
-			fBuffer.append(JavaElementLabels.CONCAT_STRING);
-			IType declaringType= type.getDeclaringType();
-			if (declaringType == null && type.isBinary() && isAnonymous) {
-				// workaround for Bug 87165: [model] IType#getDeclaringType() does not work for anonymous binary type
-				String tqn= type.getTypeQualifiedName();
-				int lastDollar= tqn.lastIndexOf('$');
-				if (lastDollar != 1) {
-					String declaringTypeCF= tqn.substring(0, lastDollar) + ".class"; //$NON-NLS-1$
-					declaringType= type.getPackageFragment().getClassFile(declaringTypeCF).getType();
-					try {
-						ISourceRange typeSourceRange= type.getSourceRange();
-						if (declaringType.exists() && SourceRange.isAvailable(typeSourceRange)) {
-							IJavaElement realParent= declaringType.getTypeRoot().getElementAt(typeSourceRange.getOffset() - 1);
-							if (realParent != null) {
-								parent= realParent;
-							}
-						}
-					} catch (JavaModelException e) {
-						// ignore
-					}
-				}
-			}
-			if (declaringType != null) {
-				appendTypeLabel(declaringType, JavaElementLabels.T_FULLY_QUALIFIED | (flags & QUALIFIER_FLAGS));
-				int parentType= parent.getElementType();
-				if (parentType == IJavaElement.METHOD || parentType == IJavaElement.FIELD || parentType == IJavaElement.INITIALIZER) { // anonymous or local
-					fBuffer.append('.');
-					appendElementLabel(parent, 0);
-				}
-			} else {
-				appendPackageFragmentLabel(type.getPackageFragment(), flags & QUALIFIER_FLAGS);
-			}
-//			if (getFlag(flags, JavaElementLabels.COLORIZE)) {
-//				fBuffer.setStyle(offset, fBuffer.length() - offset, QUALIFIER_STYLE);
-//			}
-		}
-	}
+    // post qualification
+    if (getFlag(flags, JavaElementLabels.T_POST_QUALIFIED)) {
+      int offset = fBuffer.length();
+      fBuffer.append(JavaElementLabels.CONCAT_STRING);
+      IType declaringType = type.getDeclaringType();
+      if (declaringType == null && type.isBinary() && isAnonymous) {
+        // workaround for Bug 87165: [model] IType#getDeclaringType() does not work for anonymous binary type
+        String tqn = type.getTypeQualifiedName();
+        int lastDollar = tqn.lastIndexOf('$');
+        if (lastDollar != 1) {
+          String declaringTypeCF = tqn.substring(0, lastDollar) + ".class"; //$NON-NLS-1$
+          declaringType = type.getPackageFragment().getClassFile(declaringTypeCF).getType();
+          try {
+            ISourceRange typeSourceRange = type.getSourceRange();
+            if (declaringType.exists() && SourceRange.isAvailable(typeSourceRange)) {
+              IJavaElement realParent =
+                  declaringType.getTypeRoot().getElementAt(typeSourceRange.getOffset() - 1);
+              if (realParent != null) {
+                parent = realParent;
+              }
+            }
+          } catch (JavaModelException e) {
+            // ignore
+          }
+        }
+      }
+      if (declaringType != null) {
+        appendTypeLabel(
+            declaringType, JavaElementLabels.T_FULLY_QUALIFIED | (flags & QUALIFIER_FLAGS));
+        int parentType = parent.getElementType();
+        if (parentType == IJavaElement.METHOD
+            || parentType == IJavaElement.FIELD
+            || parentType == IJavaElement.INITIALIZER) { // anonymous or local
+          fBuffer.append('.');
+          appendElementLabel(parent, 0);
+        }
+      } else {
+        appendPackageFragmentLabel(type.getPackageFragment(), flags & QUALIFIER_FLAGS);
+      }
+      //			if (getFlag(flags, JavaElementLabels.COLORIZE)) {
+      //				fBuffer.setStyle(offset, fBuffer.length() - offset, QUALIFIER_STYLE);
+      //			}
+    }
+  }
 

@@ -1,39 +1,48 @@
-	private void addReferenceUpdates(TextChangeManager changeManager, ICompilationUnit movedUnit, IProgressMonitor pm,
-									 RefactoringStatus status) throws JavaModelException, CoreException {
-		List<ICompilationUnit> cuList = Arrays.asList(fCus);
-		SearchResultGroup[] references = getReferences(movedUnit, pm, status);
-		for (int i = 0; i < references.length; i++) {
-			SearchResultGroup searchResultGroup = references[i];
-			ICompilationUnit referencingCu = searchResultGroup.getCompilationUnit();
-			if (referencingCu == null)
-				continue;
+  private void addReferenceUpdates(
+      TextChangeManager changeManager,
+      ICompilationUnit movedUnit,
+      IProgressMonitor pm,
+      RefactoringStatus status)
+      throws JavaModelException, CoreException {
+    List<ICompilationUnit> cuList = Arrays.asList(fCus);
+    SearchResultGroup[] references = getReferences(movedUnit, pm, status);
+    for (int i = 0; i < references.length; i++) {
+      SearchResultGroup searchResultGroup = references[i];
+      ICompilationUnit referencingCu = searchResultGroup.getCompilationUnit();
+      if (referencingCu == null) continue;
 
-			boolean simpleReferencesNeedNewImport = simpleReferencesNeedNewImport(movedUnit, referencingCu, cuList);
-			SearchMatch[] results = searchResultGroup.getSearchResults();
-			for (int j = 0; j < results.length; j++) {
-				// TODO: should update type references with results from addImport
-				TypeReference reference= (TypeReference) results[j];
-				if (reference.isImportDeclaration()) {
-					ImportRewrite rewrite= getImportRewrite(referencingCu);
-					IImportDeclaration importDecl= (IImportDeclaration) SearchUtils.getEnclosingJavaElement(results[j]);
-					if (Flags.isStatic(importDecl.getFlags())) {
-						rewrite.removeStaticImport(importDecl.getElementName());
-						addStaticImport(movedUnit, importDecl, rewrite);
-					} else {
-						rewrite.removeImport(importDecl.getElementName());
-						rewrite.addImport(createStringForNewImport(movedUnit, importDecl));
-					}
-				} else if (reference.isQualified()) {
-					TextChange textChange= changeManager.get(referencingCu);
-					String changeName= RefactoringCoreMessages.MoveCuUpdateCreator_update_references;
-					TextEdit replaceEdit= new ReplaceEdit(reference.getOffset(), reference.getSimpleNameStart() - reference.getOffset(), fNewPackage);
-					TextChangeCompatibility.addTextEdit(textChange, changeName, replaceEdit);
-				} else if (simpleReferencesNeedNewImport) {
-					ImportRewrite importEdit= getImportRewrite(referencingCu);
-					String typeName= reference.getSimpleName();
-					importEdit.addImport(getQualifiedType(fDestination.getElementName(), typeName));
-				}
-			}
-		}
-	}
+      boolean simpleReferencesNeedNewImport =
+          simpleReferencesNeedNewImport(movedUnit, referencingCu, cuList);
+      SearchMatch[] results = searchResultGroup.getSearchResults();
+      for (int j = 0; j < results.length; j++) {
+        // TODO: should update type references with results from addImport
+        TypeReference reference = (TypeReference) results[j];
+        if (reference.isImportDeclaration()) {
+          ImportRewrite rewrite = getImportRewrite(referencingCu);
+          IImportDeclaration importDecl =
+              (IImportDeclaration) SearchUtils.getEnclosingJavaElement(results[j]);
+          if (Flags.isStatic(importDecl.getFlags())) {
+            rewrite.removeStaticImport(importDecl.getElementName());
+            addStaticImport(movedUnit, importDecl, rewrite);
+          } else {
+            rewrite.removeImport(importDecl.getElementName());
+            rewrite.addImport(createStringForNewImport(movedUnit, importDecl));
+          }
+        } else if (reference.isQualified()) {
+          TextChange textChange = changeManager.get(referencingCu);
+          String changeName = RefactoringCoreMessages.MoveCuUpdateCreator_update_references;
+          TextEdit replaceEdit =
+              new ReplaceEdit(
+                  reference.getOffset(),
+                  reference.getSimpleNameStart() - reference.getOffset(),
+                  fNewPackage);
+          TextChangeCompatibility.addTextEdit(textChange, changeName, replaceEdit);
+        } else if (simpleReferencesNeedNewImport) {
+          ImportRewrite importEdit = getImportRewrite(referencingCu);
+          String typeName = reference.getSimpleName();
+          importEdit.addImport(getQualifiedType(fDestination.getElementName(), typeName));
+        }
+      }
+    }
+  }
 

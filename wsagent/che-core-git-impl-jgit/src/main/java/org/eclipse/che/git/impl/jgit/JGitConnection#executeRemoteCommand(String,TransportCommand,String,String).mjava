@@ -1,91 +1,105 @@
-    /**
-     * Execute remote jgit command.
-     *
-     * @param remoteUrl
-     *         remote url
-     * @param command
-     *         command to execute
-     * @return executed command
-     * @throws GitException
-     * @throws GitAPIException
-     * @throws UnauthorizedException
-     */
-    @VisibleForTesting
-    Object executeRemoteCommand(String remoteUrl, TransportCommand command, @Nullable String username, @Nullable String password)
-            throws GitException, GitAPIException, UnauthorizedException {
-        File keyDirectory = null;
-        UserCredential credentials = null;
+  /**
+   * Execute remote jgit command.
+   *
+   * @param remoteUrl remote url
+   * @param command command to execute
+   * @return executed command
+   * @throws GitException
+   * @throws GitAPIException
+   * @throws UnauthorizedException
+   */
+  @VisibleForTesting
+  Object executeRemoteCommand(
+      String remoteUrl,
+      TransportCommand command,
+      @Nullable String username,
+      @Nullable String password)
+      throws GitException, GitAPIException, UnauthorizedException {
+    File keyDirectory = null;
+    UserCredential credentials = null;
 
-        try {
-            if (GitUrlUtils.isSSH(remoteUrl)) {
-                keyDirectory = Files.createTempDir();
-                final File sshKey = writePrivateKeyFile(remoteUrl, keyDirectory);
+    try {
+      if (GitUrlUtils.isSSH(remoteUrl)) {
+        keyDirectory = Files.createTempDir();
+        final File sshKey = writePrivateKeyFile(remoteUrl, keyDirectory);
 
-                SshSessionFactory sshSessionFactory = new JschConfigSessionFactory() {
-                    @Override
-                    protected void configure(OpenSshConfig.Host host, Session session) {
-                        session.setConfig("StrictHostKeyChecking", "no");
-                    }
+        SshSessionFactory sshSessionFactory =
+            new JschConfigSessionFactory() {
+              @Override
+              protected void configure(OpenSshConfig.Host host, Session session) {
+                session.setConfig("StrictHostKeyChecking", "no");
+              }
 
-                    @Override
-                    protected JSch getJSch(final OpenSshConfig.Host hc, FS fs) throws JSchException {
-                        JSch jsch = super.getJSch(hc, fs);
-                        jsch.removeAllIdentity();
-                        jsch.addIdentity(sshKey.getAbsolutePath());
-                        return jsch;
-                    }
-                };
-                command.setTransportConfigCallback(transport -> {
-                    // If recursive clone is performed and git-module added by http(s) url is present in the cloned project,
-                    // transport will be instance of TransportHttp in the step of cloning this module
-                    if (transport instanceof SshTransport) {
-                        ((SshTransport)transport).setSshSessionFactory(sshSessionFactory);
-                    }
-                });
-            } else {
-                if (remoteUrl != null && GIT_URL_WITH_CREDENTIALS_PATTERN.matcher(remoteUrl).matches()) {
-                    username = remoteUrl.substring(remoteUrl.indexOf("://") + 3, remoteUrl.lastIndexOf(":"));
-                    password = remoteUrl.substring(remoteUrl.lastIndexOf(":") + 1, remoteUrl.indexOf("@"));
-                    command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, password));
-                } else {
-                    if (username != null && password != null) {
-                        command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, password));
-                    } else {
-                        credentials = credentialsLoader.getUserCredential(remoteUrl);
-                        if (credentials != null) {
-                            command.setCredentialsProvider(new UsernamePasswordCredentialsProvider(credentials.getUserName(),
-                                                                                                   credentials.getPassword()));
-                        }
-                    }
-                }
+              @Override
+              protected JSch getJSch(final OpenSshConfig.Host hc, FS fs) throws JSchException {
+                JSch jsch = super.getJSch(hc, fs);
+                jsch.removeAllIdentity();
+                jsch.addIdentity(sshKey.getAbsolutePath());
+                return jsch;
+              }
+            };
+        command.setTransportConfigCallback(
+            transport -> {
+              // If recursive clone is performed and git-module added by http(s) url is present in the cloned project,
+              // transport will be instance of TransportHttp in the step of cloning this module
+              if (transport instanceof SshTransport) {
+                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
+              }
+            });
+      } else {
+        if (remoteUrl != null && GIT_URL_WITH_CREDENTIALS_PATTERN.matcher(remoteUrl).matches()) {
+          username = remoteUrl.substring(remoteUrl.indexOf("://") + 3, remoteUrl.lastIndexOf(":"));
+          password = remoteUrl.substring(remoteUrl.lastIndexOf(":") + 1, remoteUrl.indexOf("@"));
+          command.setCredentialsProvider(
+              new UsernamePasswordCredentialsProvider(username, password));
+        } else {
+          if (username != null && password != null) {
+            command.setCredentialsProvider(
+                new UsernamePasswordCredentialsProvider(username, password));
+          } else {
+            credentials = credentialsLoader.getUserCredential(remoteUrl);
+            if (credentials != null) {
+              command.setCredentialsProvider(
+                  new UsernamePasswordCredentialsProvider(
+                      credentials.getUserName(), credentials.getPassword()));
             }
-            ProxyAuthenticator.initAuthenticator(remoteUrl);
-            return command.call();
-        } catch (GitException | TransportException exception) {
-            if ("Unable get private ssh key".equals(exception.getMessage())) {
-                throw new UnauthorizedException(exception.getMessage(), ErrorCodes.UNABLE_GET_PRIVATE_SSH_KEY);
-            } else if (exception.getMessage().contains(ERROR_AUTHENTICATION_REQUIRED)) {
-                final ProviderInfo info = credentialsLoader.getProviderInfo(remoteUrl);
-                if (info != null) {
-                    throw new UnauthorizedException(exception.getMessage(),
-                                                    ErrorCodes.UNAUTHORIZED_GIT_OPERATION,
-                                                    ImmutableMap.of(PROVIDER_NAME, info.getProviderName(),
-                                                                    AUTHENTICATE_URL, info.getAuthenticateUrl(),
-                                                                    "authenticated", Boolean.toString(credentials != null)));
-                }
-                throw new UnauthorizedException(exception.getMessage(), ErrorCodes.UNAUTHORIZED_GIT_OPERATION);
-            } else {
-                throw exception;
-            }
-        } finally {
-            if (keyDirectory != null && keyDirectory.exists()) {
-                try {
-                    FileUtils.delete(keyDirectory, FileUtils.RECURSIVE);
-                } catch (IOException exception) {
-                    throw new GitException("Can't remove SSH key directory", exception);
-                }
-            }
-            ProxyAuthenticator.resetAuthenticator();
+          }
         }
+      }
+      ProxyAuthenticator.initAuthenticator(remoteUrl);
+      return command.call();
+    } catch (GitException | TransportException exception) {
+      if ("Unable get private ssh key".equals(exception.getMessage())) {
+        throw new UnauthorizedException(
+            exception.getMessage(), ErrorCodes.UNABLE_GET_PRIVATE_SSH_KEY);
+      } else if (exception.getMessage().contains(ERROR_AUTHENTICATION_REQUIRED)) {
+        final ProviderInfo info = credentialsLoader.getProviderInfo(remoteUrl);
+        if (info != null) {
+          throw new UnauthorizedException(
+              exception.getMessage(),
+              ErrorCodes.UNAUTHORIZED_GIT_OPERATION,
+              ImmutableMap.of(
+                  PROVIDER_NAME,
+                  info.getProviderName(),
+                  AUTHENTICATE_URL,
+                  info.getAuthenticateUrl(),
+                  "authenticated",
+                  Boolean.toString(credentials != null)));
+        }
+        throw new UnauthorizedException(
+            exception.getMessage(), ErrorCodes.UNAUTHORIZED_GIT_OPERATION);
+      } else {
+        throw exception;
+      }
+    } finally {
+      if (keyDirectory != null && keyDirectory.exists()) {
+        try {
+          FileUtils.delete(keyDirectory, FileUtils.RECURSIVE);
+        } catch (IOException exception) {
+          throw new GitException("Can't remove SSH key directory", exception);
+        }
+      }
+      ProxyAuthenticator.resetAuthenticator();
     }
+  }
 

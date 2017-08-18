@@ -1,165 +1,171 @@
-    private void generateType(IType type, StringBuilder builder, String indent) throws JavaModelException {
-        int flags = 0;
+  private void generateType(IType type, StringBuilder builder, String indent)
+      throws JavaModelException {
+    int flags = 0;
 
-        appendAnnotationLabels(type.getAnnotations(), flags, builder, indent.substring(TAB.length()));
-        builder.append(indent.substring(TAB.length()));
-        builder.append(getModifiers(type.getFlags(), type.getFlags())).append(' ').append(getJavaType(type)).append(' ')
-               .append(type.getElementName());
+    appendAnnotationLabels(type.getAnnotations(), flags, builder, indent.substring(TAB.length()));
+    builder.append(indent.substring(TAB.length()));
+    builder
+        .append(getModifiers(type.getFlags(), type.getFlags()))
+        .append(' ')
+        .append(getJavaType(type))
+        .append(' ')
+        .append(type.getElementName());
 
-        if (type.isResolved()) {
-            BindingKey key = new BindingKey(type.getKey());
-            if (key.isParameterizedType()) {
-                String[] typeArguments = key.getTypeArguments();
-                appendTypeArgumentSignaturesLabel(type, typeArguments, flags, builder);
-            } else {
-                String[] typeParameters = Signature.getTypeParameters(key.toSignature());
-                appendTypeParameterSignaturesLabel(typeParameters, builder);
-            }
-        } else {
-            appendTypeParametersLabels(type.getTypeParameters(), flags, builder);
-        }
-
-        if (!"java.lang.Object".equals(type.getSuperclassName()) && !"java.lang.Enum".equals(type.getSuperclassName())) {
-
-            builder.append(" extends ");
-            if (type.getSuperclassTypeSignature() != null) {
-//                appendTypeSignatureLabel(type, type.getSuperclassTypeSignature(), flags, builder);
-                builder.append(Signature.toString(type.getSuperclassTypeSignature()));
-            } else {
-                builder.append(type.getSuperclassName());
-            }
-        }
-        if (!type.isAnnotation()) {
-            if (type.getSuperInterfaceNames().length != 0) {
-                builder.append(" implements ");
-                String[] signatures = type.getSuperInterfaceTypeSignatures();
-                if (signatures.length == 0) {
-                    signatures = type.getSuperInterfaceNames();
-                }
-                for (String interfaceFqn : signatures) {
-                    builder.append(Signature.toString(interfaceFqn)).append(", ");
-                }
-                builder.delete(builder.length() - 2, builder.length());
-            }
-        }
-        builder.append(" {\n");
-
-
-        List<IField> fields = new ArrayList<>();
-        if (type.isEnum()) {
-            builder.append(indent);
-            for (IField field : type.getFields()) {
-                if (field.isEnumConstant()) {
-                    builder.append(field.getElementName()).append(", ");
-                } else {
-                    fields.add(field);
-                }
-            }
-            if (", ".equals(builder.substring(builder.length() - 2))) {
-                builder.delete(builder.length() - 2, builder.length());
-            }
-            builder.append(";\n");
-
-        } else {
-            fields.addAll(Arrays.asList(type.getFields()));
-        }
-
-        for (IField field : fields) {
-            if (Flags.isSynthetic(field.getFlags())) {
-                continue;
-            }
-            appendAnnotationLabels(field.getAnnotations(), flags, builder, indent);
-            builder.append(indent).append(getModifiers(field.getFlags(), type.getFlags()));
-            if (builder.charAt(builder.length() - 1) != ' ') {
-                builder.append(' ');
-            }
-
-            builder.append(Signature.toCharArray(field.getTypeSignature().toCharArray())).append(' ')
-                   .append(field.getElementName());
-            if (field.getConstant() != null) {
-                builder.append(" = ");
-                if (field.getConstant() instanceof String) {
-                    builder.append('"').append(field.getConstant()).append('"');
-                } else {
-                    builder.append(field.getConstant());
-                }
-            }
-            builder.append(";\n");
-        }
-        builder.append('\n');
-
-        for (IMethod method : type.getMethods()) {
-            if (method.getElementName().equals("<clinit>") || Flags.isSynthetic(method.getFlags())) {
-                continue;
-            }
-            appendAnnotationLabels(method.getAnnotations(), flags, builder, indent);
-            BindingKey resolvedKey = method.isResolved() ? new BindingKey(method.getKey()) : null;
-            String resolvedSig = (resolvedKey != null) ? resolvedKey.toSignature() : null;
-            builder.append(indent).append(getModifiers(method.getFlags(), type.getFlags()));
-
-            if (builder.charAt(builder.length() - 1) != ' ') {
-                builder.append(' ');
-            }
-            if (resolvedKey != null) {
-                if (resolvedKey.isParameterizedMethod()) {
-                    String[] typeArgRefs = resolvedKey.getTypeArguments();
-                    if (typeArgRefs.length > 0) {
-                        appendTypeArgumentSignaturesLabel(method, typeArgRefs, flags, builder);
-                        builder.append(' ');
-                    }
-                } else {
-                    String[] typeParameterSigs = Signature.getTypeParameters(resolvedSig);
-                    if (typeParameterSigs.length > 0) {
-                        appendTypeParameterSignaturesLabel(typeParameterSigs, builder);
-                        builder.append(' ');
-                    }
-                }
-            } else if (method.exists()) {
-                ITypeParameter[] typeParameters = method.getTypeParameters();
-                if (typeParameters.length > 0) {
-                    appendTypeParametersLabels(typeParameters, flags, builder);
-                    builder.append(' ');
-                }
-            }
-
-
-            if (!method.isConstructor()) {
-
-                String returnTypeSig = resolvedSig != null ? Signature.getReturnType(resolvedSig) : method.getReturnType();
-                appendTypeSignatureLabel(method, returnTypeSig, 0, builder);
-                builder.append(' ');
-//                builder.append(Signature.toCharArray(method.getReturnType().toCharArray())).append(' ');
-            }
-            builder.append(method.getElementName());
-            builder.append('(');
-            for (ILocalVariable variable : method.getParameters()) {
-                builder.append(Signature.toString(variable.getTypeSignature()));
-                builder.append(' ').append(variable.getElementName()).append(", ");
-
-            }
-
-            if (builder.charAt(builder.length() - 1) == ' ') {
-                builder.delete(builder.length() - 2, builder.length());
-            }
-            builder.append(')');
-            String[] exceptionTypes = method.getExceptionTypes();
-            if (exceptionTypes != null && exceptionTypes.length != 0) {
-                builder.append(' ').append("throws ");
-                for (String exceptionType : exceptionTypes) {
-                    builder.append(Signature.toCharArray(exceptionType.toCharArray())).append(", ");
-                }
-                builder.delete(builder.length() - 2, builder.length());
-            }
-            if (type.isInterface() || type.isAnnotation()) {
-                builder.append(";\n\n");
-            } else {
-                builder.append(" {").append(METHOD_BODY).append("}\n\n");
-            }
-        }
-        for (IType iType : type.getTypes()) {
-            generateType(iType, builder, indent + indent);
-        }
-        builder.append(indent.substring(TAB.length()));
-        builder.append("}\n");
+    if (type.isResolved()) {
+      BindingKey key = new BindingKey(type.getKey());
+      if (key.isParameterizedType()) {
+        String[] typeArguments = key.getTypeArguments();
+        appendTypeArgumentSignaturesLabel(type, typeArguments, flags, builder);
+      } else {
+        String[] typeParameters = Signature.getTypeParameters(key.toSignature());
+        appendTypeParameterSignaturesLabel(typeParameters, builder);
+      }
+    } else {
+      appendTypeParametersLabels(type.getTypeParameters(), flags, builder);
     }
+
+    if (!"java.lang.Object".equals(type.getSuperclassName())
+        && !"java.lang.Enum".equals(type.getSuperclassName())) {
+
+      builder.append(" extends ");
+      if (type.getSuperclassTypeSignature() != null) {
+        //                appendTypeSignatureLabel(type, type.getSuperclassTypeSignature(), flags, builder);
+        builder.append(Signature.toString(type.getSuperclassTypeSignature()));
+      } else {
+        builder.append(type.getSuperclassName());
+      }
+    }
+    if (!type.isAnnotation()) {
+      if (type.getSuperInterfaceNames().length != 0) {
+        builder.append(" implements ");
+        String[] signatures = type.getSuperInterfaceTypeSignatures();
+        if (signatures.length == 0) {
+          signatures = type.getSuperInterfaceNames();
+        }
+        for (String interfaceFqn : signatures) {
+          builder.append(Signature.toString(interfaceFqn)).append(", ");
+        }
+        builder.delete(builder.length() - 2, builder.length());
+      }
+    }
+    builder.append(" {\n");
+
+    List<IField> fields = new ArrayList<>();
+    if (type.isEnum()) {
+      builder.append(indent);
+      for (IField field : type.getFields()) {
+        if (field.isEnumConstant()) {
+          builder.append(field.getElementName()).append(", ");
+        } else {
+          fields.add(field);
+        }
+      }
+      if (", ".equals(builder.substring(builder.length() - 2))) {
+        builder.delete(builder.length() - 2, builder.length());
+      }
+      builder.append(";\n");
+
+    } else {
+      fields.addAll(Arrays.asList(type.getFields()));
+    }
+
+    for (IField field : fields) {
+      if (Flags.isSynthetic(field.getFlags())) {
+        continue;
+      }
+      appendAnnotationLabels(field.getAnnotations(), flags, builder, indent);
+      builder.append(indent).append(getModifiers(field.getFlags(), type.getFlags()));
+      if (builder.charAt(builder.length() - 1) != ' ') {
+        builder.append(' ');
+      }
+
+      builder
+          .append(Signature.toCharArray(field.getTypeSignature().toCharArray()))
+          .append(' ')
+          .append(field.getElementName());
+      if (field.getConstant() != null) {
+        builder.append(" = ");
+        if (field.getConstant() instanceof String) {
+          builder.append('"').append(field.getConstant()).append('"');
+        } else {
+          builder.append(field.getConstant());
+        }
+      }
+      builder.append(";\n");
+    }
+    builder.append('\n');
+
+    for (IMethod method : type.getMethods()) {
+      if (method.getElementName().equals("<clinit>") || Flags.isSynthetic(method.getFlags())) {
+        continue;
+      }
+      appendAnnotationLabels(method.getAnnotations(), flags, builder, indent);
+      BindingKey resolvedKey = method.isResolved() ? new BindingKey(method.getKey()) : null;
+      String resolvedSig = (resolvedKey != null) ? resolvedKey.toSignature() : null;
+      builder.append(indent).append(getModifiers(method.getFlags(), type.getFlags()));
+
+      if (builder.charAt(builder.length() - 1) != ' ') {
+        builder.append(' ');
+      }
+      if (resolvedKey != null) {
+        if (resolvedKey.isParameterizedMethod()) {
+          String[] typeArgRefs = resolvedKey.getTypeArguments();
+          if (typeArgRefs.length > 0) {
+            appendTypeArgumentSignaturesLabel(method, typeArgRefs, flags, builder);
+            builder.append(' ');
+          }
+        } else {
+          String[] typeParameterSigs = Signature.getTypeParameters(resolvedSig);
+          if (typeParameterSigs.length > 0) {
+            appendTypeParameterSignaturesLabel(typeParameterSigs, builder);
+            builder.append(' ');
+          }
+        }
+      } else if (method.exists()) {
+        ITypeParameter[] typeParameters = method.getTypeParameters();
+        if (typeParameters.length > 0) {
+          appendTypeParametersLabels(typeParameters, flags, builder);
+          builder.append(' ');
+        }
+      }
+
+      if (!method.isConstructor()) {
+
+        String returnTypeSig =
+            resolvedSig != null ? Signature.getReturnType(resolvedSig) : method.getReturnType();
+        appendTypeSignatureLabel(method, returnTypeSig, 0, builder);
+        builder.append(' ');
+        //                builder.append(Signature.toCharArray(method.getReturnType().toCharArray())).append(' ');
+      }
+      builder.append(method.getElementName());
+      builder.append('(');
+      for (ILocalVariable variable : method.getParameters()) {
+        builder.append(Signature.toString(variable.getTypeSignature()));
+        builder.append(' ').append(variable.getElementName()).append(", ");
+      }
+
+      if (builder.charAt(builder.length() - 1) == ' ') {
+        builder.delete(builder.length() - 2, builder.length());
+      }
+      builder.append(')');
+      String[] exceptionTypes = method.getExceptionTypes();
+      if (exceptionTypes != null && exceptionTypes.length != 0) {
+        builder.append(' ').append("throws ");
+        for (String exceptionType : exceptionTypes) {
+          builder.append(Signature.toCharArray(exceptionType.toCharArray())).append(", ");
+        }
+        builder.delete(builder.length() - 2, builder.length());
+      }
+      if (type.isInterface() || type.isAnnotation()) {
+        builder.append(";\n\n");
+      } else {
+        builder.append(" {").append(METHOD_BODY).append("}\n\n");
+      }
+    }
+    for (IType iType : type.getTypes()) {
+      generateType(iType, builder, indent + indent);
+    }
+    builder.append(indent.substring(TAB.length()));
+    builder.append("}\n");
+  }
 

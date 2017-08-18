@@ -1,75 +1,89 @@
-	private static boolean getPickoutTypeFromMulticatchProposals(IInvocationContext context, ASTNode node, ArrayList<ASTNode> coveredNodes, Collection<ICommandAccess> resultingCollections) {
-		CatchClause catchClause= (CatchClause) ASTResolving.findAncestor(node, ASTNode.CATCH_CLAUSE);
-		if (catchClause == null) {
-			return false;
-		}
+  private static boolean getPickoutTypeFromMulticatchProposals(
+      IInvocationContext context,
+      ASTNode node,
+      ArrayList<ASTNode> coveredNodes,
+      Collection<ICommandAccess> resultingCollections) {
+    CatchClause catchClause = (CatchClause) ASTResolving.findAncestor(node, ASTNode.CATCH_CLAUSE);
+    if (catchClause == null) {
+      return false;
+    }
 
-		Statement statement= ASTResolving.findParentStatement(node);
-		if (statement != catchClause.getParent() && statement != catchClause.getBody()) {
-			return false; // selection is in a statement inside the body
-		}
+    Statement statement = ASTResolving.findParentStatement(node);
+    if (statement != catchClause.getParent() && statement != catchClause.getBody()) {
+      return false; // selection is in a statement inside the body
+    }
 
-		Type type= catchClause.getException().getType();
-		if (!type.isUnionType()) {
-			return false;
-		}
+    Type type = catchClause.getException().getType();
+    if (!type.isUnionType()) {
+      return false;
+    }
 
-		Type selectedMultiCatchType= null;
-		if (type.isUnionType() && node instanceof Name) {
-			Name topMostName= ASTNodes.getTopMostName((Name)node);
-			ASTNode parent= topMostName.getParent();
-			if (parent instanceof SimpleType || parent instanceof NameQualifiedType) {
-				selectedMultiCatchType= (Type) parent;
-			}
-		}
+    Type selectedMultiCatchType = null;
+    if (type.isUnionType() && node instanceof Name) {
+      Name topMostName = ASTNodes.getTopMostName((Name) node);
+      ASTNode parent = topMostName.getParent();
+      if (parent instanceof SimpleType || parent instanceof NameQualifiedType) {
+        selectedMultiCatchType = (Type) parent;
+      }
+    }
 
-		boolean multipleExceptions= coveredNodes.size() > 1;
-		if ((selectedMultiCatchType == null) && (!(node instanceof UnionType) || !multipleExceptions)) {
-			return false;
-		}
+    boolean multipleExceptions = coveredNodes.size() > 1;
+    if ((selectedMultiCatchType == null) && (!(node instanceof UnionType) || !multipleExceptions)) {
+      return false;
+    }
 
-		if (!multipleExceptions) {
-			coveredNodes.add(selectedMultiCatchType);
-		}
+    if (!multipleExceptions) {
+      coveredNodes.add(selectedMultiCatchType);
+    }
 
-		BodyDeclaration bodyDeclaration= ASTResolving.findParentBodyDeclaration(catchClause);
-		if (!(bodyDeclaration instanceof MethodDeclaration) && !(bodyDeclaration instanceof Initializer)) {
-			return false;
-		}
+    BodyDeclaration bodyDeclaration = ASTResolving.findParentBodyDeclaration(catchClause);
+    if (!(bodyDeclaration instanceof MethodDeclaration)
+        && !(bodyDeclaration instanceof Initializer)) {
+      return false;
+    }
 
-		if (resultingCollections == null) {
-			return true;
-		}
+    if (resultingCollections == null) {
+      return true;
+    }
 
-		AST ast= bodyDeclaration.getAST();
-		ASTRewrite rewrite= ASTRewrite.create(ast);
+    AST ast = bodyDeclaration.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
 
-		CatchClause newCatchClause= ast.newCatchClause();
-		SingleVariableDeclaration newSingleVariableDeclaration= ast.newSingleVariableDeclaration();
-		UnionType newUnionType= ast.newUnionType();
-		List<Type> types= newUnionType.types();
-		for (int i= 0; i < coveredNodes.size(); i++) {
-			ASTNode typeNode= coveredNodes.get(i);
-			types.add((Type) rewrite.createCopyTarget(typeNode));
-			rewrite.remove(typeNode, null);
-		}
-		newSingleVariableDeclaration.setType(newUnionType);
-		newSingleVariableDeclaration.setName((SimpleName) rewrite.createCopyTarget(catchClause.getException().getName()));
-		newCatchClause.setException(newSingleVariableDeclaration);
+    CatchClause newCatchClause = ast.newCatchClause();
+    SingleVariableDeclaration newSingleVariableDeclaration = ast.newSingleVariableDeclaration();
+    UnionType newUnionType = ast.newUnionType();
+    List<Type> types = newUnionType.types();
+    for (int i = 0; i < coveredNodes.size(); i++) {
+      ASTNode typeNode = coveredNodes.get(i);
+      types.add((Type) rewrite.createCopyTarget(typeNode));
+      rewrite.remove(typeNode, null);
+    }
+    newSingleVariableDeclaration.setType(newUnionType);
+    newSingleVariableDeclaration.setName(
+        (SimpleName) rewrite.createCopyTarget(catchClause.getException().getName()));
+    newCatchClause.setException(newSingleVariableDeclaration);
 
-		setCatchClauseBody(newCatchClause, rewrite, catchClause);
+    setCatchClauseBody(newCatchClause, rewrite, catchClause);
 
-		TryStatement tryStatement= (TryStatement)catchClause.getParent();
-		ListRewrite listRewrite= rewrite.getListRewrite(tryStatement, TryStatement.CATCH_CLAUSES_PROPERTY);
-		listRewrite.insertAfter(newCatchClause, catchClause, null);
+    TryStatement tryStatement = (TryStatement) catchClause.getParent();
+    ListRewrite listRewrite =
+        rewrite.getListRewrite(tryStatement, TryStatement.CATCH_CLAUSES_PROPERTY);
+    listRewrite.insertAfter(newCatchClause, catchClause, null);
 
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_OBJS_EXCEPTION);
-		String label= !multipleExceptions
-				? CorrectionMessages.QuickAssistProcessor_move_exception_to_separate_catch_block
-				: CorrectionMessages.QuickAssistProcessor_move_exceptions_to_separate_catch_block;
-		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.MOVE_EXCEPTION_TO_SEPERATE_CATCH_BLOCK, image);
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_OBJS_EXCEPTION);
+    String label =
+        !multipleExceptions
+            ? CorrectionMessages.QuickAssistProcessor_move_exception_to_separate_catch_block
+            : CorrectionMessages.QuickAssistProcessor_move_exceptions_to_separate_catch_block;
+    ASTRewriteCorrectionProposal proposal =
+        new ASTRewriteCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.MOVE_EXCEPTION_TO_SEPERATE_CATCH_BLOCK,
+            image);
 
-		resultingCollections.add(proposal);
-		return true;
-	}
+    resultingCollections.add(proposal);
+    return true;
+  }
 

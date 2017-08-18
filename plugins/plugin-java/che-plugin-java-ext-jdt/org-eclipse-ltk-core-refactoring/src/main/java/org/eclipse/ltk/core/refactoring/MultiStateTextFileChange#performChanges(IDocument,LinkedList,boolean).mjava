@@ -1,54 +1,53 @@
-	/**
-	 * Performs the changes on the specified document.
-	 *
-	 * @param document
-	 *            the document to perform the changes on
-	 * @param undoList
-	 *            the undo list, or <code>null</code> to discard the undos
-	 * @param preview
-	 *            <code>true</code> if the changes are performed for preview,
-	 *            <code>false</code> otherwise
-	 * @throws BadLocationException
-	 *             if the edit tree could not be applied
-	 */
-	private void performChanges(final IDocument document, final LinkedList undoList, final boolean preview) throws BadLocationException {
-		if (! fBuffer.isSynchronizationContextRequested()) {
-			performChangesInSynchronizationContext(document, undoList, preview);
-			return;
-		}
-		
-		ITextFileBufferManager fileBufferManager= FileBuffers.getTextFileBufferManager();
-		
-		/** The lock for waiting for computation in the UI thread to complete. */
-		final Lock completionLock= new Lock();
-		final BadLocationException[] exception= new BadLocationException[1];
-		Runnable runnable= new Runnable() {
-			public void run() {
-				synchronized (completionLock) {
-					try {
-						performChangesInSynchronizationContext(document, undoList, preview);
-					} catch (BadLocationException e) {
-						exception[0]= e;
-					} finally {
-						completionLock.fDone= true;
-						completionLock.notifyAll();
-					}
-				}
-			}
-		};
-		
-		synchronized (completionLock) {
-			fileBufferManager.execute(runnable);
-			while (! completionLock.fDone) {
-				try {
-					completionLock.wait(500);
-				} catch (InterruptedException x) {
-				}
-			}
-		}
-		
-		if (exception[0] != null) {
-			throw exception[0];
-		}
-	}
+  /**
+   * Performs the changes on the specified document.
+   *
+   * @param document the document to perform the changes on
+   * @param undoList the undo list, or <code>null</code> to discard the undos
+   * @param preview <code>true</code> if the changes are performed for preview, <code>false</code>
+   *     otherwise
+   * @throws BadLocationException if the edit tree could not be applied
+   */
+  private void performChanges(
+      final IDocument document, final LinkedList undoList, final boolean preview)
+      throws BadLocationException {
+    if (!fBuffer.isSynchronizationContextRequested()) {
+      performChangesInSynchronizationContext(document, undoList, preview);
+      return;
+    }
+
+    ITextFileBufferManager fileBufferManager = FileBuffers.getTextFileBufferManager();
+
+    /** The lock for waiting for computation in the UI thread to complete. */
+    final Lock completionLock = new Lock();
+    final BadLocationException[] exception = new BadLocationException[1];
+    Runnable runnable =
+        new Runnable() {
+          public void run() {
+            synchronized (completionLock) {
+              try {
+                performChangesInSynchronizationContext(document, undoList, preview);
+              } catch (BadLocationException e) {
+                exception[0] = e;
+              } finally {
+                completionLock.fDone = true;
+                completionLock.notifyAll();
+              }
+            }
+          }
+        };
+
+    synchronized (completionLock) {
+      fileBufferManager.execute(runnable);
+      while (!completionLock.fDone) {
+        try {
+          completionLock.wait(500);
+        } catch (InterruptedException x) {
+        }
+      }
+    }
+
+    if (exception[0] != null) {
+      throw exception[0];
+    }
+  }
 

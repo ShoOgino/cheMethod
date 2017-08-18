@@ -1,45 +1,54 @@
-    @Inject
-    public FileOpenCloseEventListener(final Provider<EditorAgent> editorAgentProvider,
-                                      final EventBus eventBus,
-                                      final ClientServerEventService clientServerEventService) {
+  @Inject
+  public FileOpenCloseEventListener(
+      final Provider<EditorAgent> editorAgentProvider,
+      final EventBus eventBus,
+      final ClientServerEventService clientServerEventService) {
 
-        Log.debug(getClass(), "Adding file event listener");
-        eventBus.addHandler(FileEvent.TYPE, new FileEvent.FileEventHandler() {
-            @Override
-            public void onFileOperation(FileEvent event) {
-                final Path path = event.getFile().getLocation();
-                final EditorAgent editorAgent = editorAgentProvider.get();
+    Log.debug(getClass(), "Adding file event listener");
+    eventBus.addHandler(
+        FileEvent.TYPE,
+        new FileEvent.FileEventHandler() {
+          @Override
+          public void onFileOperation(FileEvent event) {
+            final Path path = event.getFile().getLocation();
+            final EditorAgent editorAgent = editorAgentProvider.get();
 
-                switch (event.getOperationType()) {
-                    case OPEN: {
-                        processFileOpen(path);
-                        break;
-                    }
-                    case CLOSE: {
-                        final EditorPartPresenter closingEditor = event.getEditorTab().getRelativeEditorPart();
-                        final List<EditorPartPresenter> openedEditors = editorAgent.getOpenedEditors();
+            switch (event.getOperationType()) {
+              case OPEN:
+                {
+                  processFileOpen(path);
+                  break;
+                }
+              case CLOSE:
+                {
+                  final EditorPartPresenter closingEditor =
+                      event.getEditorTab().getRelativeEditorPart();
+                  final List<EditorPartPresenter> openedEditors = editorAgent.getOpenedEditors();
 
-                        processFileClose(closingEditor, openedEditors, path);
+                  processFileClose(closingEditor, openedEditors, path);
 
-                        break;
-                    }
+                  break;
                 }
             }
+          }
 
-            private void processFileOpen(Path path) {
-                clientServerEventService.sendFileTrackingStartEvent(path.toString());
+          private void processFileOpen(Path path) {
+            clientServerEventService.sendFileTrackingStartEvent(path.toString());
+          }
+
+          private void processFileClose(
+              EditorPartPresenter closingEditor,
+              List<EditorPartPresenter> openedEditors,
+              Path path) {
+            for (final EditorPartPresenter editor : openedEditors) {
+              final Path editorFilePath = editor.getEditorInput().getFile().getLocation();
+              if (Objects.equals(path, editorFilePath) && closingEditor != editor) {
+                return;
+              }
             }
 
-            private void processFileClose(EditorPartPresenter closingEditor, List<EditorPartPresenter> openedEditors, Path path) {
-                for (final EditorPartPresenter editor : openedEditors) {
-                    final Path editorFilePath = editor.getEditorInput().getFile().getLocation();
-                    if (Objects.equals(path, editorFilePath) && closingEditor != editor) {
-                        return;
-                    }
-                }
-
-                clientServerEventService.sendFileTrackingStopEvent(path.toString());
-            }
+            clientServerEventService.sendFileTrackingStopEvent(path.toString());
+          }
         });
-    }
+  }
 

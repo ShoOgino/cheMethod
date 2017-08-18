@@ -1,55 +1,60 @@
-    private void activateLinkedModeIntoEditor(final RenameRefactoringSession session, final Document document) {
-        mode = linkedEditor.getLinkedMode();
-        LinkedModel model = linkedEditor.createLinkedModel();
-        LinkedModeModel linkedModeModel = session.getLinkedModeModel();
-        List<LinkedModelGroup> groups = new ArrayList<>();
-        for (LinkedPositionGroup positionGroup : linkedModeModel.getGroups()) {
-            LinkedModelGroup group = linkedEditor.createLinkedGroup();
-            LinkedData data = positionGroup.getData();
-            if (data != null) {
-                LinkedModelData modelData = linkedEditor.createLinkedModelData();
-                modelData.setType("link");
-                modelData.setValues(data.getValues());
-                group.setData(modelData);
-            }
-            List<Position> positions = new ArrayList<>();
-            for (Region region : positionGroup.getPositions()) {
-                positions.add(new Position(region.getOffset(), region.getLength()));
-            }
-            group.setPositions(positions);
-            groups.add(group);
-        }
-        model.setGroups(groups);
-        disableAutoSave();
-
-        mode.enterLinkedMode(model);
-
-        mode.addListener(new LinkedMode.LinkedModeListener() {
-            @Override
-            public void onLinkedModeExited(boolean successful, int start, int end) {
-                boolean isSuccessful = false;
-                try {
-                    if (successful) {
-                        isSuccessful = true;
-                        newName = document.getContentRange(start, end - start);
-                        performRename(session);
-                    }
-                } finally {
-                    mode.removeListener(this);
-                    isActiveLinkedEditor = false;
-
-                    boolean isNameChanged = start >= 0 && end >= 0;
-                    if (!isSuccessful && isNameChanged) {
-                        undoChanges();
-                    }
-
-                    if (!isSuccessful) {
-                        clientServerEventService.sendFileTrackingResumeEvent().then(arg -> {
-                            enableAutoSave();
-                        });
-                    }
-                }
-            }
-        });
+  private void activateLinkedModeIntoEditor(
+      final RenameRefactoringSession session, final Document document) {
+    mode = linkedEditor.getLinkedMode();
+    LinkedModel model = linkedEditor.createLinkedModel();
+    LinkedModeModel linkedModeModel = session.getLinkedModeModel();
+    List<LinkedModelGroup> groups = new ArrayList<>();
+    for (LinkedPositionGroup positionGroup : linkedModeModel.getGroups()) {
+      LinkedModelGroup group = linkedEditor.createLinkedGroup();
+      LinkedData data = positionGroup.getData();
+      if (data != null) {
+        LinkedModelData modelData = linkedEditor.createLinkedModelData();
+        modelData.setType("link");
+        modelData.setValues(data.getValues());
+        group.setData(modelData);
+      }
+      List<Position> positions = new ArrayList<>();
+      for (Region region : positionGroup.getPositions()) {
+        positions.add(new Position(region.getOffset(), region.getLength()));
+      }
+      group.setPositions(positions);
+      groups.add(group);
     }
+    model.setGroups(groups);
+    disableAutoSave();
+
+    mode.enterLinkedMode(model);
+
+    mode.addListener(
+        new LinkedMode.LinkedModeListener() {
+          @Override
+          public void onLinkedModeExited(boolean successful, int start, int end) {
+            boolean isSuccessful = false;
+            try {
+              if (successful) {
+                isSuccessful = true;
+                newName = document.getContentRange(start, end - start);
+                performRename(session);
+              }
+            } finally {
+              mode.removeListener(this);
+              isActiveLinkedEditor = false;
+
+              boolean isNameChanged = start >= 0 && end >= 0;
+              if (!isSuccessful && isNameChanged) {
+                undoChanges();
+              }
+
+              if (!isSuccessful) {
+                clientServerEventService
+                    .sendFileTrackingResumeEvent()
+                    .then(
+                        arg -> {
+                          enableAutoSave();
+                        });
+              }
+            }
+          }
+        });
+  }
 

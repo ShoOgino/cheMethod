@@ -1,74 +1,79 @@
-    /**
-     * Creates an ImageStream that tracks the repository.
-     *
-     * <p>Note: This method does not cause the relevant image to actually be pulled to the local
-     * repository, but creating the ImageStream is necessary as it is used to obtain
-     * the address of the internal Docker registry later.
-     *
-     * @see DockerConnector#pull(PullParams, ProgressMonitor)
-     */
-    @Override
-    public void pull(final PullParams params, final ProgressMonitor progressMonitor) throws IOException {
+  /**
+   * Creates an ImageStream that tracks the repository.
+   *
+   * <p>Note: This method does not cause the relevant image to actually be pulled to the local
+   * repository, but creating the ImageStream is necessary as it is used to obtain the address of
+   * the internal Docker registry later.
+   *
+   * @see DockerConnector#pull(PullParams, ProgressMonitor)
+   */
+  @Override
+  public void pull(final PullParams params, final ProgressMonitor progressMonitor)
+      throws IOException {
 
-        String repo = params.getFullRepo();     // image to be pulled
-        String tag = params.getTag();           // e.g. latest, usually
+    String repo = params.getFullRepo(); // image to be pulled
+    String tag = params.getTag(); // e.g. latest, usually
 
-        String imageStreamName = KubernetesStringUtils.convertPullSpecToImageStreamName(repo);
-        ImageStream existingImageStream;
+    String imageStreamName = KubernetesStringUtils.convertPullSpecToImageStreamName(repo);
+    ImageStream existingImageStream;
 
-        try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
-            existingImageStream = openShiftClient.imageStreams()
-                                                 .inNamespace(openShiftCheProjectName)
-                                                 .withName(imageStreamName)
-                                                 .get();
-        }
-
-        if (existingImageStream == null) {
-            try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
-                openShiftClient.imageStreams()
-                               .inNamespace(openShiftCheProjectName)
-                               .createNew()
-                               .withNewMetadata()
-                                   .withName(imageStreamName) // imagestream id
-                               .endMetadata()
-                               .withNewSpec()
-                                   .addNewTag()
-                                       .withName(tag)
-                                       .endTag()
-                               .withDockerImageRepository(repo) // tracking repo
-                               .endSpec()
-                               .withNewStatus()
-                                   .withDockerImageRepository("")
-                               .endStatus()
-                               .done();
-            }
-        }
-
-        // Wait for Image metadata to be obtained.
-        ImageStream createdImageStream;
-        for (int waitCount = 0; waitCount < OPENSHIFT_IMAGESTREAM_MAX_WAIT_COUNT; waitCount++) {
-            try {
-                Thread.sleep(OPENSHIFT_IMAGESTREAM_WAIT_DELAY);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-
-            try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
-                createdImageStream = openShiftClient.imageStreams()
-                                                    .inNamespace(openShiftCheProjectName)
-                                                    .withName(imageStreamName)
-                                                    .get();
-            }
-
-
-            if (createdImageStream != null
-                    && createdImageStream.getStatus().getDockerImageRepository() != null) {
-                LOG.info(String.format("Created ImageStream %s.", imageStreamName));
-                return;
-            }
-        }
-
-        throw new OpenShiftException(String.format("Failed to create ImageStream %s.",
-                                                   imageStreamName));
+    try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+      existingImageStream =
+          openShiftClient
+              .imageStreams()
+              .inNamespace(openShiftCheProjectName)
+              .withName(imageStreamName)
+              .get();
     }
+
+    if (existingImageStream == null) {
+      try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+        openShiftClient
+            .imageStreams()
+            .inNamespace(openShiftCheProjectName)
+            .createNew()
+            .withNewMetadata()
+            .withName(imageStreamName) // imagestream id
+            .endMetadata()
+            .withNewSpec()
+            .addNewTag()
+            .withName(tag)
+            .endTag()
+            .withDockerImageRepository(repo) // tracking repo
+            .endSpec()
+            .withNewStatus()
+            .withDockerImageRepository("")
+            .endStatus()
+            .done();
+      }
+    }
+
+    // Wait for Image metadata to be obtained.
+    ImageStream createdImageStream;
+    for (int waitCount = 0; waitCount < OPENSHIFT_IMAGESTREAM_MAX_WAIT_COUNT; waitCount++) {
+      try {
+        Thread.sleep(OPENSHIFT_IMAGESTREAM_WAIT_DELAY);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+
+      try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+        createdImageStream =
+            openShiftClient
+                .imageStreams()
+                .inNamespace(openShiftCheProjectName)
+                .withName(imageStreamName)
+                .get();
+      }
+
+      if (createdImageStream != null
+          && createdImageStream.getStatus().getDockerImageRepository() != null) {
+        LOG.info(String.format("Created ImageStream %s.", imageStreamName));
+        return;
+      }
+    }
+
+    throw new OpenShiftException(
+        String.format("Failed to create ImageStream %s.", imageStreamName));
+  }
 

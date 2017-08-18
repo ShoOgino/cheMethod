@@ -1,65 +1,79 @@
-	@Override
-	public Change createChange(IProgressMonitor monitor) throws CoreException {
-		try {
-			monitor.beginTask(RefactoringCoreMessages.RenameTypeRefactoring_creating_change, 4);
-			String project= null;
-			IJavaProject javaProject= fType.getJavaProject();
-			if (javaProject != null)
-				project= javaProject.getElementName();
-			int flags= JavaRefactoringDescriptor.JAR_MIGRATION | JavaRefactoringDescriptor.JAR_REFACTORING | RefactoringDescriptor.STRUCTURAL_CHANGE;
-			try {
-				if (!Flags.isPrivate(fType.getFlags()))
-					flags|= RefactoringDescriptor.MULTI_CHANGE;
-				if (fType.isAnonymous() || fType.isLocal())
-					flags|= JavaRefactoringDescriptor.JAR_SOURCE_ATTACHMENT;
-			} catch (JavaModelException exception) {
-				JavaPlugin.log(exception);
-			}
-			final String description= Messages.format(RefactoringCoreMessages.RenameTypeProcessor_descriptor_description_short, BasicElementLabels.getJavaElementName(fType.getElementName()));
-			final String header= Messages.format(RefactoringCoreMessages.RenameTypeProcessor_descriptor_description, new String[] { JavaElementLabels.getElementLabel(fType, JavaElementLabels.ALL_FULLY_QUALIFIED), getNewElementLabel()});
-			final String comment= new JDTRefactoringDescriptorComment(project, this, header).asString();
-			final RenameJavaElementDescriptor descriptor= RefactoringSignatureDescriptorFactory.createRenameJavaElementDescriptor(IJavaRefactorings.RENAME_TYPE);
-			descriptor.setProject(project);
-			descriptor.setDescription(description);
-			descriptor.setComment(comment);
-			descriptor.setFlags(flags);
-			descriptor.setJavaElement(fType);
-			descriptor.setNewName(getNewElementName());
-			descriptor.setUpdateQualifiedNames(fUpdateQualifiedNames);
-			descriptor.setUpdateTextualOccurrences(fUpdateTextualMatches);
-			descriptor.setUpdateReferences(fUpdateReferences);
-			if (fUpdateQualifiedNames && fFilePatterns != null && !"".equals(fFilePatterns)) //$NON-NLS-1$
-				descriptor.setFileNamePatterns(fFilePatterns);
-			descriptor.setUpdateSimilarDeclarations(fUpdateSimilarElements);
-			descriptor.setMatchStrategy(fRenamingStrategy);
-			final DynamicValidationRefactoringChange result= new DynamicValidationRefactoringChange(descriptor, RefactoringCoreMessages.RenameTypeProcessor_change_name);
+  @Override
+  public Change createChange(IProgressMonitor monitor) throws CoreException {
+    try {
+      monitor.beginTask(RefactoringCoreMessages.RenameTypeRefactoring_creating_change, 4);
+      String project = null;
+      IJavaProject javaProject = fType.getJavaProject();
+      if (javaProject != null) project = javaProject.getElementName();
+      int flags =
+          JavaRefactoringDescriptor.JAR_MIGRATION
+              | JavaRefactoringDescriptor.JAR_REFACTORING
+              | RefactoringDescriptor.STRUCTURAL_CHANGE;
+      try {
+        if (!Flags.isPrivate(fType.getFlags())) flags |= RefactoringDescriptor.MULTI_CHANGE;
+        if (fType.isAnonymous() || fType.isLocal())
+          flags |= JavaRefactoringDescriptor.JAR_SOURCE_ATTACHMENT;
+      } catch (JavaModelException exception) {
+        JavaPlugin.log(exception);
+      }
+      final String description =
+          Messages.format(
+              RefactoringCoreMessages.RenameTypeProcessor_descriptor_description_short,
+              BasicElementLabels.getJavaElementName(fType.getElementName()));
+      final String header =
+          Messages.format(
+              RefactoringCoreMessages.RenameTypeProcessor_descriptor_description,
+              new String[] {
+                JavaElementLabels.getElementLabel(fType, JavaElementLabels.ALL_FULLY_QUALIFIED),
+                getNewElementLabel()
+              });
+      final String comment = new JDTRefactoringDescriptorComment(project, this, header).asString();
+      final RenameJavaElementDescriptor descriptor =
+          RefactoringSignatureDescriptorFactory.createRenameJavaElementDescriptor(
+              IJavaRefactorings.RENAME_TYPE);
+      descriptor.setProject(project);
+      descriptor.setDescription(description);
+      descriptor.setComment(comment);
+      descriptor.setFlags(flags);
+      descriptor.setJavaElement(fType);
+      descriptor.setNewName(getNewElementName());
+      descriptor.setUpdateQualifiedNames(fUpdateQualifiedNames);
+      descriptor.setUpdateTextualOccurrences(fUpdateTextualMatches);
+      descriptor.setUpdateReferences(fUpdateReferences);
+      if (fUpdateQualifiedNames && fFilePatterns != null && !"".equals(fFilePatterns)) //$NON-NLS-1$
+      descriptor.setFileNamePatterns(fFilePatterns);
+      descriptor.setUpdateSimilarDeclarations(fUpdateSimilarElements);
+      descriptor.setMatchStrategy(fRenamingStrategy);
+      final DynamicValidationRefactoringChange result =
+          new DynamicValidationRefactoringChange(
+              descriptor, RefactoringCoreMessages.RenameTypeProcessor_change_name);
 
-			if (fChangeManager.containsChangesIn(fType.getCompilationUnit())) {
-				TextChange textChange= fChangeManager.get(fType.getCompilationUnit());
-				if (textChange instanceof TextFileChange) {
-					((TextFileChange) textChange).setSaveMode(TextFileChange.FORCE_SAVE);
-				}
-			}
-			result.addAll(fChangeManager.getAllChanges());
-			if (willRenameCU()) {
-				IResource resource= fType.getCompilationUnit().getResource();
-				if (resource != null && resource.isLinked()) {
-					String ext= resource.getFileExtension();
-					String renamedResourceName;
-					if (ext == null)
-						renamedResourceName= getNewElementName();
-					else
-						renamedResourceName= getNewElementName() + '.' + ext;
-					result.add(new RenameResourceChange(fType.getCompilationUnit().getPath(), renamedResourceName));
-				} else {
-					String renamedCUName= JavaModelUtil.getRenamedCUName(fType.getCompilationUnit(), getNewElementName());
-					result.add(new RenameCompilationUnitChange(fType.getCompilationUnit(), renamedCUName));
-				}
-			}
-			monitor.worked(1);
-			return result;
-		} finally {
-			fChangeManager= null;
-		}
-	}
+      if (fChangeManager.containsChangesIn(fType.getCompilationUnit())) {
+        TextChange textChange = fChangeManager.get(fType.getCompilationUnit());
+        if (textChange instanceof TextFileChange) {
+          ((TextFileChange) textChange).setSaveMode(TextFileChange.FORCE_SAVE);
+        }
+      }
+      result.addAll(fChangeManager.getAllChanges());
+      if (willRenameCU()) {
+        IResource resource = fType.getCompilationUnit().getResource();
+        if (resource != null && resource.isLinked()) {
+          String ext = resource.getFileExtension();
+          String renamedResourceName;
+          if (ext == null) renamedResourceName = getNewElementName();
+          else renamedResourceName = getNewElementName() + '.' + ext;
+          result.add(
+              new RenameResourceChange(fType.getCompilationUnit().getPath(), renamedResourceName));
+        } else {
+          String renamedCUName =
+              JavaModelUtil.getRenamedCUName(fType.getCompilationUnit(), getNewElementName());
+          result.add(new RenameCompilationUnitChange(fType.getCompilationUnit(), renamedCUName));
+        }
+      }
+      monitor.worked(1);
+      return result;
+    } finally {
+      fChangeManager = null;
+    }
+  }
 

@@ -1,45 +1,53 @@
-    private Promise<Project> authUserAndRecallImport(final String providerName,
-                                                     final String authenticateUrl,
-                                                     final Path path,
-                                                     final SourceStorage sourceStorage,
-                                                     final ProjectNotificationSubscriber subscriber) {
+  private Promise<Project> authUserAndRecallImport(
+      final String providerName,
+      final String authenticateUrl,
+      final Path path,
+      final SourceStorage sourceStorage,
+      final ProjectNotificationSubscriber subscriber) {
 
-        return createFromAsyncRequest(new RequestCall<Project>() {
-            @Override
-            public void makeCall(final AsyncCallback<Project> callback) {
-                OAuth2Authenticator authenticator = oAuth2AuthenticatorRegistry.getAuthenticator(providerName);
-                if (authenticator == null) {
-                    authenticator = oAuth2AuthenticatorRegistry.getAuthenticator("default");
-                }
-
-                authenticator.authenticate(OAuth2AuthenticatorUrlProvider.get(appContext.getMasterEndpoint(), authenticateUrl),
-                                           new AsyncCallback<OAuthStatus>() {
-                                               @Override
-                                               public void onFailure(Throwable caught) {
-                                                   callback.onFailure(new Exception(caught.getMessage()));
-                                               }
-
-                                               @Override
-                                               public void onSuccess(OAuthStatus result) {
-                                                   if (!result.equals(OAuthStatus.NOT_PERFORMED)) {
-                                                       doImport(path, sourceStorage).then(new Operation<Project>() {
-                                                           @Override
-                                                           public void apply(Project project) throws OperationException {
-                                                               callback.onSuccess(project);
-                                                           }
-                                                       }).catchError(new Operation<PromiseError>() {
-                                                           @Override
-                                                           public void apply(PromiseError error) throws OperationException {
-                                                               callback.onFailure(error.getCause());
-                                                           }
-                                                       });
-                                                   } else {
-                                                       subscriber.onFailure("Authentication cancelled");
-                                                       callback.onFailure(new IllegalStateException("Authentication cancelled"));
-                                                   }
-                                               }
-                                           });
+    return createFromAsyncRequest(
+        new RequestCall<Project>() {
+          @Override
+          public void makeCall(final AsyncCallback<Project> callback) {
+            OAuth2Authenticator authenticator =
+                oAuth2AuthenticatorRegistry.getAuthenticator(providerName);
+            if (authenticator == null) {
+              authenticator = oAuth2AuthenticatorRegistry.getAuthenticator("default");
             }
+
+            authenticator.authenticate(
+                OAuth2AuthenticatorUrlProvider.get(appContext.getMasterEndpoint(), authenticateUrl),
+                new AsyncCallback<OAuthStatus>() {
+                  @Override
+                  public void onFailure(Throwable caught) {
+                    callback.onFailure(new Exception(caught.getMessage()));
+                  }
+
+                  @Override
+                  public void onSuccess(OAuthStatus result) {
+                    if (!result.equals(OAuthStatus.NOT_PERFORMED)) {
+                      doImport(path, sourceStorage)
+                          .then(
+                              new Operation<Project>() {
+                                @Override
+                                public void apply(Project project) throws OperationException {
+                                  callback.onSuccess(project);
+                                }
+                              })
+                          .catchError(
+                              new Operation<PromiseError>() {
+                                @Override
+                                public void apply(PromiseError error) throws OperationException {
+                                  callback.onFailure(error.getCause());
+                                }
+                              });
+                    } else {
+                      subscriber.onFailure("Authentication cancelled");
+                      callback.onFailure(new IllegalStateException("Authentication cancelled"));
+                    }
+                  }
+                });
+          }
         });
-    }
+  }
 

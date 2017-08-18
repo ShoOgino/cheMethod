@@ -1,80 +1,97 @@
-	public static void getUnusedObjectAllocationProposals(IInvocationContext context, IProblemLocation problem,
-														  Collection<ICommandAccess> proposals) {
-		CompilationUnit root = context.getASTRoot();
-		AST ast = root.getAST();
-		ASTNode selectedNode = problem.getCoveringNode(root);
-		if (selectedNode == null) {
-			return;
-		}
+  public static void getUnusedObjectAllocationProposals(
+      IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+    CompilationUnit root = context.getASTRoot();
+    AST ast = root.getAST();
+    ASTNode selectedNode = problem.getCoveringNode(root);
+    if (selectedNode == null) {
+      return;
+    }
 
-		ASTNode parent = selectedNode.getParent();
+    ASTNode parent = selectedNode.getParent();
 
-		if (parent instanceof ExpressionStatement) {
-			ExpressionStatement expressionStatement = (ExpressionStatement)parent;
-			Expression expr = expressionStatement.getExpression();
-			ITypeBinding exprType = expr.resolveTypeBinding();
+    if (parent instanceof ExpressionStatement) {
+      ExpressionStatement expressionStatement = (ExpressionStatement) parent;
+      Expression expr = expressionStatement.getExpression();
+      ITypeBinding exprType = expr.resolveTypeBinding();
 
-			if (exprType != null && Bindings.isSuperType(ast.resolveWellKnownType("java.lang.Throwable"), exprType)) { //$NON-NLS-1$
-				ASTRewrite rewrite = ASTRewrite.create(ast);
-				TightSourceRangeComputer sourceRangeComputer = new TightSourceRangeComputer();
-				rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
+      if (exprType != null
+          && Bindings.isSuperType(
+              ast.resolveWellKnownType("java.lang.Throwable"), exprType)) { //$NON-NLS-1$
+        ASTRewrite rewrite = ASTRewrite.create(ast);
+        TightSourceRangeComputer sourceRangeComputer = new TightSourceRangeComputer();
+        rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
 
-				ThrowStatement throwStatement = ast.newThrowStatement();
-				throwStatement.setExpression((Expression)rewrite.createMoveTarget(expr));
-				sourceRangeComputer.addTightSourceNode(expressionStatement);
-				rewrite.replace(expressionStatement, throwStatement, null);
+        ThrowStatement throwStatement = ast.newThrowStatement();
+        throwStatement.setExpression((Expression) rewrite.createMoveTarget(expr));
+        sourceRangeComputer.addTightSourceNode(expressionStatement);
+        rewrite.replace(expressionStatement, throwStatement, null);
 
-				String label = CorrectionMessages.LocalCorrectionsSubProcessor_throw_allocated_description;
-				Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-				LinkedCorrectionProposal proposal = new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite,
-																				 IProposalRelevance.THROW_ALLOCATED_OBJECT, image);
-				proposal.setEndPosition(rewrite.track(throwStatement));
-				proposals.add(proposal);
-			}
+        String label = CorrectionMessages.LocalCorrectionsSubProcessor_throw_allocated_description;
+        Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+        LinkedCorrectionProposal proposal =
+            new LinkedCorrectionProposal(
+                label,
+                context.getCompilationUnit(),
+                rewrite,
+                IProposalRelevance.THROW_ALLOCATED_OBJECT,
+                image);
+        proposal.setEndPosition(rewrite.track(throwStatement));
+        proposals.add(proposal);
+      }
 
-			MethodDeclaration method = ASTResolving.findParentMethodDeclaration(selectedNode);
-			if (method != null && !method.isConstructor()) {
-				ASTRewrite rewrite = ASTRewrite.create(ast);
-				TightSourceRangeComputer sourceRangeComputer = new TightSourceRangeComputer();
-				rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
+      MethodDeclaration method = ASTResolving.findParentMethodDeclaration(selectedNode);
+      if (method != null && !method.isConstructor()) {
+        ASTRewrite rewrite = ASTRewrite.create(ast);
+        TightSourceRangeComputer sourceRangeComputer = new TightSourceRangeComputer();
+        rewrite.setTargetSourceRangeComputer(sourceRangeComputer);
 
-				ReturnStatement returnStatement = ast.newReturnStatement();
-				returnStatement.setExpression((Expression)rewrite.createMoveTarget(expr));
-				sourceRangeComputer.addTightSourceNode(expressionStatement);
-				rewrite.replace(expressionStatement, returnStatement, null);
+        ReturnStatement returnStatement = ast.newReturnStatement();
+        returnStatement.setExpression((Expression) rewrite.createMoveTarget(expr));
+        sourceRangeComputer.addTightSourceNode(expressionStatement);
+        rewrite.replace(expressionStatement, returnStatement, null);
 
-				String label = CorrectionMessages.LocalCorrectionsSubProcessor_return_allocated_description;
-				Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-				int relevance;
-				ITypeBinding returnTypeBinding = method.getReturnType2().resolveBinding();
-				if (returnTypeBinding != null && exprType != null && exprType.isAssignmentCompatible(returnTypeBinding)) {
-					relevance = IProposalRelevance.RETURN_ALLOCATED_OBJECT_MATCH;
-				} else if (method.getReturnType2() instanceof PrimitiveType
-						   && ((PrimitiveType)method.getReturnType2()).getPrimitiveTypeCode() == PrimitiveType.VOID) {
-					relevance = IProposalRelevance.RETURN_ALLOCATED_OBJECT_VOID;
-				} else {
-					relevance = IProposalRelevance.RETURN_ALLOCATED_OBJECT;
-				}
-				LinkedCorrectionProposal proposal =
-						new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, relevance, image);
-				proposal.setEndPosition(rewrite.track(returnStatement));
-				proposals.add(proposal);
-			}
+        String label = CorrectionMessages.LocalCorrectionsSubProcessor_return_allocated_description;
+        Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+        int relevance;
+        ITypeBinding returnTypeBinding = method.getReturnType2().resolveBinding();
+        if (returnTypeBinding != null
+            && exprType != null
+            && exprType.isAssignmentCompatible(returnTypeBinding)) {
+          relevance = IProposalRelevance.RETURN_ALLOCATED_OBJECT_MATCH;
+        } else if (method.getReturnType2() instanceof PrimitiveType
+            && ((PrimitiveType) method.getReturnType2()).getPrimitiveTypeCode()
+                == PrimitiveType.VOID) {
+          relevance = IProposalRelevance.RETURN_ALLOCATED_OBJECT_VOID;
+        } else {
+          relevance = IProposalRelevance.RETURN_ALLOCATED_OBJECT;
+        }
+        LinkedCorrectionProposal proposal =
+            new LinkedCorrectionProposal(
+                label, context.getCompilationUnit(), rewrite, relevance, image);
+        proposal.setEndPosition(rewrite.track(returnStatement));
+        proposals.add(proposal);
+      }
 
-			{
-				ASTRewrite rewrite = ASTRewrite.create(ast);
-				rewrite.remove(parent, null);
+      {
+        ASTRewrite rewrite = ASTRewrite.create(ast);
+        rewrite.remove(parent, null);
 
-				String label = CorrectionMessages.LocalCorrectionsSubProcessor_remove_allocated_description;
-				Image image = JavaPluginImages.get(JavaPluginImages.IMG_TOOL_DELETE);//JavaPlugin.getDefault().getWorkbench().getSharedImages().getImage(ISharedImages.IMG_TOOL_DELETE);
-				ASTRewriteCorrectionProposal proposal = new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite,
-																						 IProposalRelevance.REMOVE_UNUSED_ALLOCATED_OBJECT,
-																						 image);
-				proposals.add(proposal);
-			}
+        String label = CorrectionMessages.LocalCorrectionsSubProcessor_remove_allocated_description;
+        Image image =
+            JavaPluginImages.get(
+                JavaPluginImages
+                    .IMG_TOOL_DELETE); //JavaPlugin.getDefault().getWorkbench().getSharedImages().getImage(ISharedImages.IMG_TOOL_DELETE);
+        ASTRewriteCorrectionProposal proposal =
+            new ASTRewriteCorrectionProposal(
+                label,
+                context.getCompilationUnit(),
+                rewrite,
+                IProposalRelevance.REMOVE_UNUSED_ALLOCATED_OBJECT,
+                image);
+        proposals.add(proposal);
+      }
+    }
 
-		}
-
-		QuickAssistProcessor.getAssignToVariableProposals(context, selectedNode, null, proposals);
-	}
+    QuickAssistProcessor.getAssignToVariableProposals(context, selectedNode, null, proposals);
+  }
 

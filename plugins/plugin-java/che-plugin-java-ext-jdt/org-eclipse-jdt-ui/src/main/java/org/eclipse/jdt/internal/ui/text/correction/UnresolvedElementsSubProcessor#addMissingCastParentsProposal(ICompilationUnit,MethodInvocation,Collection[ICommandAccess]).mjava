@@ -1,61 +1,76 @@
-	private static void addMissingCastParentsProposal(ICompilationUnit cu, MethodInvocation invocationNode, Collection<ICommandAccess> proposals) {
-		Expression sender= invocationNode.getExpression();
-		if (sender instanceof ThisExpression) {
-			return;
-		}
+  private static void addMissingCastParentsProposal(
+      ICompilationUnit cu, MethodInvocation invocationNode, Collection<ICommandAccess> proposals) {
+    Expression sender = invocationNode.getExpression();
+    if (sender instanceof ThisExpression) {
+      return;
+    }
 
-		ITypeBinding senderBinding= sender.resolveTypeBinding();
-		if (senderBinding == null || Modifier.isFinal(senderBinding.getModifiers())) {
-			return;
-		}
+    ITypeBinding senderBinding = sender.resolveTypeBinding();
+    if (senderBinding == null || Modifier.isFinal(senderBinding.getModifiers())) {
+      return;
+    }
 
-		if (sender instanceof Name && ((Name) sender).resolveBinding() instanceof ITypeBinding) {
-			return; // static access
-		}
+    if (sender instanceof Name && ((Name) sender).resolveBinding() instanceof ITypeBinding) {
+      return; // static access
+    }
 
-		ASTNode parent= invocationNode.getParent();
-		while (parent instanceof Expression && parent.getNodeType() != ASTNode.CAST_EXPRESSION) {
-			parent= parent.getParent();
-		}
-		boolean hasCastProposal= false;
-		if (parent instanceof CastExpression) {
-			//	(TestCase) x.getName() -> ((TestCase) x).getName
-			hasCastProposal= useExistingParentCastProposal(cu, (CastExpression) parent, sender, invocationNode.getName(), getArgumentTypes
-					(invocationNode.arguments()), proposals);
-		}
-		if (!hasCastProposal) {
-			// x.getName() -> ((TestCase) x).getName
+    ASTNode parent = invocationNode.getParent();
+    while (parent instanceof Expression && parent.getNodeType() != ASTNode.CAST_EXPRESSION) {
+      parent = parent.getParent();
+    }
+    boolean hasCastProposal = false;
+    if (parent instanceof CastExpression) {
+      //	(TestCase) x.getName() -> ((TestCase) x).getName
+      hasCastProposal =
+          useExistingParentCastProposal(
+              cu,
+              (CastExpression) parent,
+              sender,
+              invocationNode.getName(),
+              getArgumentTypes(invocationNode.arguments()),
+              proposals);
+    }
+    if (!hasCastProposal) {
+      // x.getName() -> ((TestCase) x).getName
 
-			Expression target= sender;
-			while (target instanceof ParenthesizedExpression) {
-				target= ((ParenthesizedExpression) target).getExpression();
-			}
+      Expression target = sender;
+      while (target instanceof ParenthesizedExpression) {
+        target = ((ParenthesizedExpression) target).getExpression();
+      }
 
-			String label;
-			if (target.getNodeType() != ASTNode.CAST_EXPRESSION) {
-				String targetName= null;
-				if (target.getLength() <= 18) {
-					targetName= ASTNodes.asString(target);
-				}
-				if (targetName == null) {
-					label= CorrectionMessages.UnresolvedElementsSubProcessor_methodtargetcast_description;
-				} else {
-					label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_methodtargetcast2_description,
-										   BasicElementLabels.getJavaCodeString(targetName));
-				}
-			} else {
-				String targetName= null;
-				if (target.getLength() <= 18) {
-					targetName= ASTNodes.asString(((CastExpression)target).getExpression());
-				}
-				if (targetName == null) {
-					label= CorrectionMessages.UnresolvedElementsSubProcessor_changemethodtargetcast_description;
-				} else {
-					label= Messages.format(CorrectionMessages.UnresolvedElementsSubProcessor_changemethodtargetcast2_description,
-										   BasicElementLabels.getJavaCodeString(targetName));
-				}
-			}
-			proposals.add(new CastCorrectionProposal(label, cu, target, (ITypeBinding) null, IProposalRelevance.CHANGE_CAST));
-		}
-	}
+      String label;
+      if (target.getNodeType() != ASTNode.CAST_EXPRESSION) {
+        String targetName = null;
+        if (target.getLength() <= 18) {
+          targetName = ASTNodes.asString(target);
+        }
+        if (targetName == null) {
+          label = CorrectionMessages.UnresolvedElementsSubProcessor_methodtargetcast_description;
+        } else {
+          label =
+              Messages.format(
+                  CorrectionMessages.UnresolvedElementsSubProcessor_methodtargetcast2_description,
+                  BasicElementLabels.getJavaCodeString(targetName));
+        }
+      } else {
+        String targetName = null;
+        if (target.getLength() <= 18) {
+          targetName = ASTNodes.asString(((CastExpression) target).getExpression());
+        }
+        if (targetName == null) {
+          label =
+              CorrectionMessages.UnresolvedElementsSubProcessor_changemethodtargetcast_description;
+        } else {
+          label =
+              Messages.format(
+                  CorrectionMessages
+                      .UnresolvedElementsSubProcessor_changemethodtargetcast2_description,
+                  BasicElementLabels.getJavaCodeString(targetName));
+        }
+      }
+      proposals.add(
+          new CastCorrectionProposal(
+              label, cu, target, (ITypeBinding) null, IProposalRelevance.CHANGE_CAST));
+    }
+  }
 

@@ -1,73 +1,70 @@
-    /**
-     * Reallocates a new array and copies the data from the previous one.
-     *
-     * @param offset
-     *         the change offset
-     * @param remove
-     *         the number of removed / overwritten characters
-     * @param oldGapSize
-     *         the old gap size
-     * @param newGapSize
-     *         the gap size after the change if no re-allocation would occur (can be negative)
-     * @param newGapStart
-     *         the offset in the array to move the gap to
-     * @return the new gap end
-     * @since 3.3
-     */
-    private int reallocate(int offset, int remove, final int oldGapSize, int newGapSize, final int newGapStart) {
-        // the new content length (without any gap)
-        final int newLength = fContent.length - newGapSize;
-        // the new array size based on the gap factor
-        int newArraySize = (int)(newLength * fSizeMultiplier);
-        newGapSize = newArraySize - newLength;
+  /**
+   * Reallocates a new array and copies the data from the previous one.
+   *
+   * @param offset the change offset
+   * @param remove the number of removed / overwritten characters
+   * @param oldGapSize the old gap size
+   * @param newGapSize the gap size after the change if no re-allocation would occur (can be
+   *     negative)
+   * @param newGapStart the offset in the array to move the gap to
+   * @return the new gap end
+   * @since 3.3
+   */
+  private int reallocate(
+      int offset, int remove, final int oldGapSize, int newGapSize, final int newGapStart) {
+    // the new content length (without any gap)
+    final int newLength = fContent.length - newGapSize;
+    // the new array size based on the gap factor
+    int newArraySize = (int) (newLength * fSizeMultiplier);
+    newGapSize = newArraySize - newLength;
 
-        // bound the gap size within min/max
-        if (newGapSize < fMinGapSize) {
-            newGapSize = fMinGapSize;
-            newArraySize = newLength + newGapSize;
-        } else if (newGapSize > fMaxGapSize) {
-            newGapSize = fMaxGapSize;
-            newArraySize = newLength + newGapSize;
-        }
-
-        // the upper threshold is always twice the gapsize
-        fThreshold = newGapSize * 2;
-        final char[] newContent = allocate(newArraySize);
-        final int newGapEnd = newGapStart + newGapSize;
-
-      /*
-       * Re-allocation: The old content can be copied in at most 3 operations to the newly allocated array. Either one of change
-       * offset and the gap may come first. - unchanged area before the change offset / gap - area between the change offset and
-       * the gap (either one may be first) - rest area after the change offset / after the gap
-       */
-        if (offset < fGapStart) {
-            // change comes before gap
-            arrayCopy(0, newContent, 0, offset);
-            int afterRemove = offset + remove;
-            if (afterRemove < fGapStart) {
-                // removal is completely before the gap
-                final int betweenSize = fGapStart - afterRemove;
-                arrayCopy(afterRemove, newContent, newGapEnd, betweenSize);
-                final int restSize = fContent.length - fGapEnd;
-                arrayCopy(fGapEnd, newContent, newGapEnd + betweenSize, restSize);
-            } else {
-                // removal encompasses the gap
-                afterRemove += oldGapSize;
-                final int restSize = fContent.length - afterRemove;
-                arrayCopy(afterRemove, newContent, newGapEnd, restSize);
-            }
-        } else {
-            // gap comes before change
-            arrayCopy(0, newContent, 0, fGapStart);
-            final int offsetShifted = offset + oldGapSize;
-            final int betweenSize = offsetShifted - fGapEnd;
-            arrayCopy(fGapEnd, newContent, fGapStart, betweenSize);
-            final int afterRemove = offsetShifted + remove;
-            final int restSize = fContent.length - afterRemove;
-            arrayCopy(afterRemove, newContent, newGapEnd, restSize);
-        }
-
-        fContent = newContent;
-        return newGapEnd;
+    // bound the gap size within min/max
+    if (newGapSize < fMinGapSize) {
+      newGapSize = fMinGapSize;
+      newArraySize = newLength + newGapSize;
+    } else if (newGapSize > fMaxGapSize) {
+      newGapSize = fMaxGapSize;
+      newArraySize = newLength + newGapSize;
     }
+
+    // the upper threshold is always twice the gapsize
+    fThreshold = newGapSize * 2;
+    final char[] newContent = allocate(newArraySize);
+    final int newGapEnd = newGapStart + newGapSize;
+
+    /*
+     * Re-allocation: The old content can be copied in at most 3 operations to the newly allocated array. Either one of change
+     * offset and the gap may come first. - unchanged area before the change offset / gap - area between the change offset and
+     * the gap (either one may be first) - rest area after the change offset / after the gap
+     */
+    if (offset < fGapStart) {
+      // change comes before gap
+      arrayCopy(0, newContent, 0, offset);
+      int afterRemove = offset + remove;
+      if (afterRemove < fGapStart) {
+        // removal is completely before the gap
+        final int betweenSize = fGapStart - afterRemove;
+        arrayCopy(afterRemove, newContent, newGapEnd, betweenSize);
+        final int restSize = fContent.length - fGapEnd;
+        arrayCopy(fGapEnd, newContent, newGapEnd + betweenSize, restSize);
+      } else {
+        // removal encompasses the gap
+        afterRemove += oldGapSize;
+        final int restSize = fContent.length - afterRemove;
+        arrayCopy(afterRemove, newContent, newGapEnd, restSize);
+      }
+    } else {
+      // gap comes before change
+      arrayCopy(0, newContent, 0, fGapStart);
+      final int offsetShifted = offset + oldGapSize;
+      final int betweenSize = offsetShifted - fGapEnd;
+      arrayCopy(fGapEnd, newContent, fGapStart, betweenSize);
+      final int afterRemove = offsetShifted + remove;
+      final int restSize = fContent.length - afterRemove;
+      arrayCopy(afterRemove, newContent, newGapEnd, restSize);
+    }
+
+    fContent = newContent;
+    return newGapEnd;
+  }
 

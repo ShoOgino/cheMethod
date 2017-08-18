@@ -1,120 +1,130 @@
-	/**
-	 * Creates edits that describe how to format the given string.
-	 * The given node is used to infer the kind to use to format the string.
-	 * Consider to use {@link #format2(int, String, int, String, java.util.Map)} if the kind is already known.
-	 * Returns <code>null</code> if the code could not be formatted for the given kind.
-	 *
-	 * @param node
-	 *        Use to infer the kind of the code snippet to format.
-	 * @param source
-	 *        The source to format
-	 * @param indentationLevel
-	 *        The initial indentation level, used to shift left/right the entire source fragment.
-	 *        An initial indentation level of zero or below has no effect.
-	 * @param lineSeparator
-	 *        The line separator to use in formatted source,
-	 *        if set to <code>null</code>, then the platform default one will be used.
-	 * @param options
-	 *        The options map to use for formatting with the default code formatter.
-	 *        Recognized options are documented on {@link org.eclipse.jdt.core.JavaCore#getDefaultOptions()}.
-	 *        If set to <code>null</code>, then use the current settings from {@link org.eclipse.jdt.core.JavaCore#getOptions()}.
-	 * @return an TextEdit describing the changes required to format source
-	 * @throws IllegalArgumentException
-	 *         If the offset and length are not inside the string, a IllegalArgumentException is thrown.
-	 */
-	public static TextEdit format2(ASTNode node, String source, int indentationLevel, String lineSeparator, Map<String, String> options) {
-		int code;
-		String prefix= ""; //$NON-NLS-1$
-		String suffix= ""; //$NON-NLS-1$
-		if (node instanceof Statement) {
-			code= CodeFormatter.K_STATEMENTS;
-			if (node.getNodeType() == ASTNode.SWITCH_CASE) {
-				prefix= "switch(1) {"; //$NON-NLS-1$
-				suffix= "}"; //$NON-NLS-1$
-				code= CodeFormatter.K_STATEMENTS;
-			}
-		} else if (node instanceof Expression && node.getNodeType() != ASTNode.VARIABLE_DECLARATION_EXPRESSION) {
-			code= CodeFormatter.K_EXPRESSION;
-		} else if (node instanceof BodyDeclaration) {
-			code= CodeFormatter.K_CLASS_BODY_DECLARATIONS;
-		} else {
-			switch (node.getNodeType()) {
-				case ASTNode.ARRAY_TYPE:
-				case ASTNode.PARAMETERIZED_TYPE:
-				case ASTNode.PRIMITIVE_TYPE:
-				case ASTNode.QUALIFIED_TYPE:
-				case ASTNode.SIMPLE_TYPE:
-					suffix= " x;"; //$NON-NLS-1$
-					code= CodeFormatter.K_CLASS_BODY_DECLARATIONS;
-					break;
-				case ASTNode.WILDCARD_TYPE:
-					prefix= "A<"; //$NON-NLS-1$
-					suffix= "> x;"; //$NON-NLS-1$
-					code= CodeFormatter.K_CLASS_BODY_DECLARATIONS;
-					break;
-				case ASTNode.COMPILATION_UNIT:
-					code= CodeFormatter.K_COMPILATION_UNIT;
-					break;
-				case ASTNode.VARIABLE_DECLARATION_EXPRESSION:
-				case ASTNode.SINGLE_VARIABLE_DECLARATION:
-					suffix= ";"; //$NON-NLS-1$
-					code= CodeFormatter.K_STATEMENTS;
-					break;
-				case ASTNode.VARIABLE_DECLARATION_FRAGMENT:
-					prefix= "A "; //$NON-NLS-1$
-					suffix= ";"; //$NON-NLS-1$
-					code= CodeFormatter.K_STATEMENTS;
-					break;
-				case ASTNode.PACKAGE_DECLARATION:
-				case ASTNode.IMPORT_DECLARATION:
-					suffix= "\nclass A {}"; //$NON-NLS-1$
-					code= CodeFormatter.K_COMPILATION_UNIT;
-					break;
-				case ASTNode.JAVADOC:
-					suffix= "void foo();"; //$NON-NLS-1$
-					code= CodeFormatter.K_CLASS_BODY_DECLARATIONS;
-					break;
-				case ASTNode.CATCH_CLAUSE:
-					prefix= "try {}"; //$NON-NLS-1$
-					code= CodeFormatter.K_STATEMENTS;
-					break;
-				case ASTNode.ANONYMOUS_CLASS_DECLARATION:
-					prefix= "new A()"; //$NON-NLS-1$
-					suffix= ";"; //$NON-NLS-1$
-					code= CodeFormatter.K_STATEMENTS;
-					break;
-				case ASTNode.MEMBER_VALUE_PAIR:
-					prefix= "@Author("; //$NON-NLS-1$
-					suffix= ") class x {}"; //$NON-NLS-1$
-					code= CodeFormatter.K_COMPILATION_UNIT;
-					break;
-				case ASTNode.MODIFIER:
-					suffix= " class x {}"; //$NON-NLS-1$
-					code= CodeFormatter.K_COMPILATION_UNIT;
-					break;
-				case ASTNode.TYPE_PARAMETER:
-					prefix= "class X<"; //$NON-NLS-1$
-					suffix= "> {}"; //$NON-NLS-1$
-					code= CodeFormatter.K_COMPILATION_UNIT;
-					break;
-				case ASTNode.MEMBER_REF:
-				case ASTNode.METHOD_REF:
-				case ASTNode.METHOD_REF_PARAMETER:
-				case ASTNode.TAG_ELEMENT:
-				case ASTNode.TEXT_ELEMENT:
-					// Javadoc formatting not yet supported:
-					return null;
-				default:
-					//Assert.isTrue(false, "Node type not covered: " + node.getClass().getName()); //$NON-NLS-1$
-					return null;
-			}
-		}
+  /**
+   * Creates edits that describe how to format the given string. The given node is used to infer the
+   * kind to use to format the string. Consider to use {@link #format2(int, String, int, String,
+   * java.util.Map)} if the kind is already known. Returns <code>null</code> if the code could not
+   * be formatted for the given kind.
+   *
+   * @param node Use to infer the kind of the code snippet to format.
+   * @param source The source to format
+   * @param indentationLevel The initial indentation level, used to shift left/right the entire
+   *     source fragment. An initial indentation level of zero or below has no effect.
+   * @param lineSeparator The line separator to use in formatted source, if set to <code>null</code>
+   *     , then the platform default one will be used.
+   * @param options The options map to use for formatting with the default code formatter.
+   *     Recognized options are documented on {@link
+   *     org.eclipse.jdt.core.JavaCore#getDefaultOptions()}. If set to <code>null</code>, then use
+   *     the current settings from {@link org.eclipse.jdt.core.JavaCore#getOptions()}.
+   * @return an TextEdit describing the changes required to format source
+   * @throws IllegalArgumentException If the offset and length are not inside the string, a
+   *     IllegalArgumentException is thrown.
+   */
+  public static TextEdit format2(
+      ASTNode node,
+      String source,
+      int indentationLevel,
+      String lineSeparator,
+      Map<String, String> options) {
+    int code;
+    String prefix = ""; //$NON-NLS-1$
+    String suffix = ""; //$NON-NLS-1$
+    if (node instanceof Statement) {
+      code = CodeFormatter.K_STATEMENTS;
+      if (node.getNodeType() == ASTNode.SWITCH_CASE) {
+        prefix = "switch(1) {"; //$NON-NLS-1$
+        suffix = "}"; //$NON-NLS-1$
+        code = CodeFormatter.K_STATEMENTS;
+      }
+    } else if (node instanceof Expression
+        && node.getNodeType() != ASTNode.VARIABLE_DECLARATION_EXPRESSION) {
+      code = CodeFormatter.K_EXPRESSION;
+    } else if (node instanceof BodyDeclaration) {
+      code = CodeFormatter.K_CLASS_BODY_DECLARATIONS;
+    } else {
+      switch (node.getNodeType()) {
+        case ASTNode.ARRAY_TYPE:
+        case ASTNode.PARAMETERIZED_TYPE:
+        case ASTNode.PRIMITIVE_TYPE:
+        case ASTNode.QUALIFIED_TYPE:
+        case ASTNode.SIMPLE_TYPE:
+          suffix = " x;"; //$NON-NLS-1$
+          code = CodeFormatter.K_CLASS_BODY_DECLARATIONS;
+          break;
+        case ASTNode.WILDCARD_TYPE:
+          prefix = "A<"; //$NON-NLS-1$
+          suffix = "> x;"; //$NON-NLS-1$
+          code = CodeFormatter.K_CLASS_BODY_DECLARATIONS;
+          break;
+        case ASTNode.COMPILATION_UNIT:
+          code = CodeFormatter.K_COMPILATION_UNIT;
+          break;
+        case ASTNode.VARIABLE_DECLARATION_EXPRESSION:
+        case ASTNode.SINGLE_VARIABLE_DECLARATION:
+          suffix = ";"; //$NON-NLS-1$
+          code = CodeFormatter.K_STATEMENTS;
+          break;
+        case ASTNode.VARIABLE_DECLARATION_FRAGMENT:
+          prefix = "A "; //$NON-NLS-1$
+          suffix = ";"; //$NON-NLS-1$
+          code = CodeFormatter.K_STATEMENTS;
+          break;
+        case ASTNode.PACKAGE_DECLARATION:
+        case ASTNode.IMPORT_DECLARATION:
+          suffix = "\nclass A {}"; //$NON-NLS-1$
+          code = CodeFormatter.K_COMPILATION_UNIT;
+          break;
+        case ASTNode.JAVADOC:
+          suffix = "void foo();"; //$NON-NLS-1$
+          code = CodeFormatter.K_CLASS_BODY_DECLARATIONS;
+          break;
+        case ASTNode.CATCH_CLAUSE:
+          prefix = "try {}"; //$NON-NLS-1$
+          code = CodeFormatter.K_STATEMENTS;
+          break;
+        case ASTNode.ANONYMOUS_CLASS_DECLARATION:
+          prefix = "new A()"; //$NON-NLS-1$
+          suffix = ";"; //$NON-NLS-1$
+          code = CodeFormatter.K_STATEMENTS;
+          break;
+        case ASTNode.MEMBER_VALUE_PAIR:
+          prefix = "@Author("; //$NON-NLS-1$
+          suffix = ") class x {}"; //$NON-NLS-1$
+          code = CodeFormatter.K_COMPILATION_UNIT;
+          break;
+        case ASTNode.MODIFIER:
+          suffix = " class x {}"; //$NON-NLS-1$
+          code = CodeFormatter.K_COMPILATION_UNIT;
+          break;
+        case ASTNode.TYPE_PARAMETER:
+          prefix = "class X<"; //$NON-NLS-1$
+          suffix = "> {}"; //$NON-NLS-1$
+          code = CodeFormatter.K_COMPILATION_UNIT;
+          break;
+        case ASTNode.MEMBER_REF:
+        case ASTNode.METHOD_REF:
+        case ASTNode.METHOD_REF_PARAMETER:
+        case ASTNode.TAG_ELEMENT:
+        case ASTNode.TEXT_ELEMENT:
+          // Javadoc formatting not yet supported:
+          return null;
+        default:
+          //Assert.isTrue(false, "Node type not covered: " + node.getClass().getName()); //$NON-NLS-1$
+          return null;
+      }
+    }
 
-		String concatStr= prefix + source + suffix;
-		TextEdit edit= format2(code, concatStr, prefix.length(), source.length(), indentationLevel, lineSeparator, options);
-		if (edit != null && prefix.length() > 0) {
-			edit.moveTree(-prefix.length());
-		}
-		return edit;
-	}
+    String concatStr = prefix + source + suffix;
+    TextEdit edit =
+        format2(
+            code,
+            concatStr,
+            prefix.length(),
+            source.length(),
+            indentationLevel,
+            lineSeparator,
+            options);
+    if (edit != null && prefix.length() > 0) {
+      edit.moveTree(-prefix.length());
+    }
+    return edit;
+  }
 

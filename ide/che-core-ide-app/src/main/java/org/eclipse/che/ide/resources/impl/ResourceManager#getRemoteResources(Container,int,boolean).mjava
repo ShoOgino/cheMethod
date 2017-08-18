@@ -1,107 +1,123 @@
-    Promise<Resource[]> getRemoteResources(final Container container, final int depth, boolean includeFiles) {
-        checkArgument(depth > -2, "Invalid depth");
+  Promise<Resource[]> getRemoteResources(
+      final Container container, final int depth, boolean includeFiles) {
+    checkArgument(depth > -2, "Invalid depth");
 
-        if (depth == DEPTH_ZERO) {
-            return promises.resolve(NO_RESOURCES);
+    if (depth == DEPTH_ZERO) {
+      return promises.resolve(NO_RESOURCES);
+    }
+
+    int depthToReload = depth;
+    final Optional<Resource[]> descendants = store.getAll(container.getLocation());
+
+    if (depthToReload != -1 && descendants.isPresent()) {
+      for (Resource resource : descendants.get()) {
+        if (resource.getLocation().segmentCount() - container.getLocation().segmentCount()
+            > depth) {
+          depthToReload =
+              resource.getLocation().segmentCount() - container.getLocation().segmentCount();
         }
+      }
+    }
 
-        int depthToReload = depth;
-        final Optional<Resource[]> descendants = store.getAll(container.getLocation());
-
-        if (depthToReload != -1 && descendants.isPresent()) {
-            for (Resource resource : descendants.get()) {
-                if (resource.getLocation().segmentCount() - container.getLocation().segmentCount() > depth) {
-                    depthToReload = resource.getLocation().segmentCount() - container.getLocation().segmentCount();
-                }
-            }
-        }
-
-        return ps.getTree(container.getLocation(), depthToReload, includeFiles).then(new Function<TreeElement, Resource[]>() {
-            @Override
-            public Resource[] apply(TreeElement tree) throws FunctionException {
+    return ps.getTree(container.getLocation(), depthToReload, includeFiles)
+        .then(
+            new Function<TreeElement, Resource[]>() {
+              @Override
+              public Resource[] apply(TreeElement tree) throws FunctionException {
 
                 class Visitor implements ResourceVisitor {
-                    Resource[] resources;
+                  Resource[] resources;
 
-                    private int size    = 0; //size of total items
-                    private int incStep = 50; //step to increase resource array
+                  private int size = 0; //size of total items
+                  private int incStep = 50; //step to increase resource array
 
-                    private Visitor() {
-                        this.resources = NO_RESOURCES;
+                  private Visitor() {
+                    this.resources = NO_RESOURCES;
+                  }
+
+                  @Override
+                  public void visit(Resource resource) {
+                    if (resource.isProject()) {
+                      inspectProject(resource.asProject());
                     }
 
-                    @Override
-                    public void visit(Resource resource) {
-                        if (resource.isProject()) {
-                            inspectProject(resource.asProject());
-                        }
-
-                        if (size > resources.length - 1) { //check load factor and increase resource array
-                            resources = copyOf(resources, resources.length + incStep);
-                        }
-
-                        resources[size++] = resource;
+                    if (size
+                        > resources.length - 1) { //check load factor and increase resource array
+                      resources = copyOf(resources, resources.length + incStep);
                     }
 
+                    resources[size++] = resource;
+                  }
                 }
 
                 final Visitor visitor = new Visitor();
                 traverse(tree, visitor);
 
                 return copyOf(visitor.resources, visitor.size);
-            }
-        }).then((Function<Resource[], Resource[]>)reloaded -> {
+              }
+            })
+        .then(
+            (Function<Resource[], Resource[]>)
+                reloaded -> {
+                  Resource[] result = new Resource[0];
 
-            Resource[] result = new Resource[0];
+                  if (descendants.isPresent()) {
+                    Resource[] outdated = descendants.get();
 
-            if (descendants.isPresent()) {
-                Resource[] outdated = descendants.get();
-
-                final Resource[] removed = removeAll(outdated, reloaded, false);
-                for (Resource resource : removed) {
-                    store.dispose(resource.getLocation(), false);
-                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, REMOVED)));
-                }
-
-                final Resource[] updated = stream(reloaded).filter(resource -> contains(outdated, resource)).toArray(Resource[]::new);
-                for (Resource resource : updated) {
-                    store.register(resource);
-
-                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, UPDATED)));
-
-                    final Optional<Resource> registered = store.getResource(resource.getLocation());
-                    if (registered.isPresent()) {
-                        result = Arrays.add(result, registered.get());
+                    final Resource[] removed = removeAll(outdated, reloaded, false);
+                    for (Resource resource : removed) {
+                      store.dispose(resource.getLocation(), false);
+                      eventBus.fireEvent(
+                          new ResourceChangedEvent(new ResourceDeltaImpl(resource, REMOVED)));
                     }
-                }
 
-                final Resource[] added = removeAll(reloaded, outdated, false);
-                for (Resource resource : added) {
-                    store.register(resource);
+                    final Resource[] updated =
+                        stream(reloaded)
+                            .filter(resource -> contains(outdated, resource))
+                            .toArray(Resource[]::new);
+                    for (Resource resource : updated) {
+                      store.register(resource);
 
-                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, ADDED)));
+                      eventBus.fireEvent(
+                          new ResourceChangedEvent(new ResourceDeltaImpl(resource, UPDATED)));
 
-                    final Optional<Resource> registered = store.getResource(resource.getLocation());
-                    if (registered.isPresent()) {
+                      final Optional<Resource> registered =
+                          store.getResource(resource.getLocation());
+                      if (registered.isPresent()) {
                         result = Arrays.add(result, registered.get());
+                      }
                     }
-                }
 
+                    final Resource[] added = removeAll(reloaded, outdated, false);
+                    for (Resource resource : added) {
+                      store.register(resource);
 
-            } else {
-                for (Resource resource : reloaded) {
-                    store.register(resource);
+                      eventBus.fireEvent(
+                          new ResourceChangedEvent(new ResourceDeltaImpl(resource, ADDED)));
 
-                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, ADDED)));
-
-                    final Optional<Resource> registered = store.getResource(resource.getLocation());
-                    if (registered.isPresent()) {
+                      final Optional<Resource> registered =
+                          store.getResource(resource.getLocation());
+                      if (registered.isPresent()) {
                         result = Arrays.add(result, registered.get());
+                      }
                     }
-                }
-            }
 
-            return result;
-        });
-    }
+                  } else {
+                    for (Resource resource : reloaded) {
+                      store.register(resource);
+
+                      eventBus.fireEvent(
+                          new ResourceChangedEvent(new ResourceDeltaImpl(resource, ADDED)));
+
+                      final Optional<Resource> registered =
+                          store.getResource(resource.getLocation());
+                      if (registered.isPresent()) {
+                        result = Arrays.add(result, registered.get());
+                      }
+                    }
+                  }
+
+                  return result;
+                });
+  }
 

@@ -1,50 +1,50 @@
-    @Override
-    public void extract(InputStream zipInput, boolean overwrite, int stripNumber)
-            throws IOException, ForbiddenException, ConflictException, ServerException {
-        try (ZipInputStream zip = new ZipInputStream(ZipContent.of(zipInput).getContent())) {
-            InputStream notClosableInputStream = new NotClosableInputStream(zip);
-            ZipEntry zipEntry;
-            while ((zipEntry = zip.getNextEntry()) != null) {
-                VirtualFile extractFolder = folder;
+  @Override
+  public void extract(InputStream zipInput, boolean overwrite, int stripNumber)
+      throws IOException, ForbiddenException, ConflictException, ServerException {
+    try (ZipInputStream zip = new ZipInputStream(ZipContent.of(zipInput).getContent())) {
+      InputStream notClosableInputStream = new NotClosableInputStream(zip);
+      ZipEntry zipEntry;
+      while ((zipEntry = zip.getNextEntry()) != null) {
+        VirtualFile extractFolder = folder;
 
-                Path relativePath = Path.of(zipEntry.getName());
+        Path relativePath = Path.of(zipEntry.getName());
 
-                if (stripNumber > 0) {
-                    if (relativePath.length() <= stripNumber) {
-                        continue;
-                    }
-                    relativePath = relativePath.subPath(stripNumber);
-                }
-
-                if (zipEntry.isDirectory()) {
-                    if (!extractFolder.hasChild(relativePath)) {
-                        extractFolder.createFolder(relativePath.toString());
-                    }
-                    continue;
-                }
-
-                if (relativePath.length() > 1) {
-                    Path neededParentPath = relativePath.getParent();
-                    VirtualFile neededParent = extractFolder.getChild(neededParentPath);
-                    if (neededParent == null) {
-                        neededParent = extractFolder.createFolder(neededParentPath.toString());
-                    }
-                    extractFolder = neededParent;
-                }
-
-                String fileName = relativePath.getName();
-                VirtualFile file = extractFolder.getChild(Path.of(fileName));
-                if (file == null) {
-                    extractFolder.createFile(fileName, notClosableInputStream);
-                } else {
-                    if (overwrite) {
-                        file.updateContent(notClosableInputStream);
-                    } else {
-                        throw new ConflictException(String.format("File '%s' already exists", file.getPath()));
-                    }
-                }
-                zip.closeEntry();
-            }
+        if (stripNumber > 0) {
+          if (relativePath.length() <= stripNumber) {
+            continue;
+          }
+          relativePath = relativePath.subPath(stripNumber);
         }
+
+        if (zipEntry.isDirectory()) {
+          if (!extractFolder.hasChild(relativePath)) {
+            extractFolder.createFolder(relativePath.toString());
+          }
+          continue;
+        }
+
+        if (relativePath.length() > 1) {
+          Path neededParentPath = relativePath.getParent();
+          VirtualFile neededParent = extractFolder.getChild(neededParentPath);
+          if (neededParent == null) {
+            neededParent = extractFolder.createFolder(neededParentPath.toString());
+          }
+          extractFolder = neededParent;
+        }
+
+        String fileName = relativePath.getName();
+        VirtualFile file = extractFolder.getChild(Path.of(fileName));
+        if (file == null) {
+          extractFolder.createFile(fileName, notClosableInputStream);
+        } else {
+          if (overwrite) {
+            file.updateContent(notClosableInputStream);
+          } else {
+            throw new ConflictException(String.format("File '%s' already exists", file.getPath()));
+          }
+        }
+        zip.closeEntry();
+      }
     }
+  }
 

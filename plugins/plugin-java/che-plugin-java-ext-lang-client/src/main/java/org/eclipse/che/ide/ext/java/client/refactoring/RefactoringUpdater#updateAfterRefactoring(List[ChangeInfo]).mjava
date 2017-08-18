@@ -1,73 +1,83 @@
-    /**
-     * Iterates over each refactoring change and according to change type performs specific update operation.
-     * i.e. for {@code ChangeName#UPDATE} updates only opened editors, for {@code ChangeName#MOVE or ChangeName#RENAME_COMPILATION_UNIT}
-     * updates only new paths and opened editors, for {@code ChangeName#RENAME_PACKAGE} reloads package structure and restore expansion.
-     *
-     * @param changes
-     *         applied changes
-     */
-    public Promise<Void> updateAfterRefactoring(List<ChangeInfo> changes) {
-        if (changes == null || changes.isEmpty()) {
-            return promises.resolve(null);
-        }
-
-        ExternalResourceDelta[] deltas = new ExternalResourceDelta[0];
-        final List<String> pathChanged = new ArrayList<>();
-        for (ChangeInfo change : changes) {
-
-            final ExternalResourceDelta delta;
-
-            final Path newPath = Path.valueOf(change.getPath());
-            final Path oldPath = !isNullOrEmpty(change.getOldPath()) ? Path.valueOf(change.getOldPath()) : Path.EMPTY;
-
-            switch (change.getName()) {
-                case MOVE:
-                case RENAME_COMPILATION_UNIT:
-                    delta = new ExternalResourceDelta(newPath, oldPath, ADDED | MOVED_FROM | MOVED_TO);
-                    registerRemovedFile(change);
-                    break;
-                case RENAME_PACKAGE:
-                    delta = new ExternalResourceDelta(newPath, oldPath, ADDED | MOVED_FROM | MOVED_TO);
-                    break;
-                case UPDATE:
-                    if (!isFileRemoved(change.getPath(), changes)) {
-                        pathChanged.add(change.getPath());
-                        registerRemovedFile(change);
-                    }
-                default:
-                    continue;
-            }
-
-            final int index = deltas.length;
-            deltas = Arrays.copyOf(deltas, index + 1);
-            deltas[index] = delta;
-        }
-
-        //here we need to remove file for file that moved or renamed JDT lib sent it to
-        for (int i = 0; i < deltas.length; i++) {
-            if (pathChanged.contains(deltas[i].getToPath().toString())) {
-                pathChanged.remove(deltas[i].getToPath().toString());
-            }
-            if (pathChanged.contains(deltas[i].getFromPath().toString())) {
-                pathChanged.remove(deltas[i].getFromPath().toString());
-            }
-        }
-
-        if (deltas.length > 0) {
-            List<EditorPartPresenter> editorsToUpdate = editorAgent.getOpenedEditors().stream()
-                                                                   .filter(editor -> {
-                                                                       VirtualFile file = editor.getEditorInput().getFile();
-                                                                       String editorPath = file.getLocation().toString();
-                                                                       return pathChanged.contains(editorPath);
-                                                                   })
-                                                                   .collect(toList());
-            return appContext.getWorkspaceRoot().synchronize(deltas).then(appliedDeltas -> {
-                for (ResourceDelta delta : appliedDeltas) {
-                    eventBus.fireEvent(new RevealResourceEvent(delta.getToPath()));
-                }
-            }).then(updateEditors(editorsToUpdate));
-        } else {
-            return updateEditors(editorAgent.getOpenedEditors());
-        }
+  /**
+   * Iterates over each refactoring change and according to change type performs specific update
+   * operation. i.e. for {@code ChangeName#UPDATE} updates only opened editors, for {@code
+   * ChangeName#MOVE or ChangeName#RENAME_COMPILATION_UNIT} updates only new paths and opened
+   * editors, for {@code ChangeName#RENAME_PACKAGE} reloads package structure and restore expansion.
+   *
+   * @param changes applied changes
+   */
+  public Promise<Void> updateAfterRefactoring(List<ChangeInfo> changes) {
+    if (changes == null || changes.isEmpty()) {
+      return promises.resolve(null);
     }
+
+    ExternalResourceDelta[] deltas = new ExternalResourceDelta[0];
+    final List<String> pathChanged = new ArrayList<>();
+    for (ChangeInfo change : changes) {
+
+      final ExternalResourceDelta delta;
+
+      final Path newPath = Path.valueOf(change.getPath());
+      final Path oldPath =
+          !isNullOrEmpty(change.getOldPath()) ? Path.valueOf(change.getOldPath()) : Path.EMPTY;
+
+      switch (change.getName()) {
+        case MOVE:
+        case RENAME_COMPILATION_UNIT:
+          delta = new ExternalResourceDelta(newPath, oldPath, ADDED | MOVED_FROM | MOVED_TO);
+          registerRemovedFile(change);
+          break;
+        case RENAME_PACKAGE:
+          delta = new ExternalResourceDelta(newPath, oldPath, ADDED | MOVED_FROM | MOVED_TO);
+          break;
+        case UPDATE:
+          if (!isFileRemoved(change.getPath(), changes)) {
+            pathChanged.add(change.getPath());
+            registerRemovedFile(change);
+          }
+        default:
+          continue;
+      }
+
+      final int index = deltas.length;
+      deltas = Arrays.copyOf(deltas, index + 1);
+      deltas[index] = delta;
+    }
+
+    //here we need to remove file for file that moved or renamed JDT lib sent it to
+    for (int i = 0; i < deltas.length; i++) {
+      if (pathChanged.contains(deltas[i].getToPath().toString())) {
+        pathChanged.remove(deltas[i].getToPath().toString());
+      }
+      if (pathChanged.contains(deltas[i].getFromPath().toString())) {
+        pathChanged.remove(deltas[i].getFromPath().toString());
+      }
+    }
+
+    if (deltas.length > 0) {
+      List<EditorPartPresenter> editorsToUpdate =
+          editorAgent
+              .getOpenedEditors()
+              .stream()
+              .filter(
+                  editor -> {
+                    VirtualFile file = editor.getEditorInput().getFile();
+                    String editorPath = file.getLocation().toString();
+                    return pathChanged.contains(editorPath);
+                  })
+              .collect(toList());
+      return appContext
+          .getWorkspaceRoot()
+          .synchronize(deltas)
+          .then(
+              appliedDeltas -> {
+                for (ResourceDelta delta : appliedDeltas) {
+                  eventBus.fireEvent(new RevealResourceEvent(delta.getToPath()));
+                }
+              })
+          .then(updateEditors(editorsToUpdate));
+    } else {
+      return updateEditors(editorAgent.getOpenedEditors());
+    }
+  }
 

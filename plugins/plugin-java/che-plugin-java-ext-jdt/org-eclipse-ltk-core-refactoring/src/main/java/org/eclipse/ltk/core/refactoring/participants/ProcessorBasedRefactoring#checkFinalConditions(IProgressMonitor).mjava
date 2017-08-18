@@ -1,72 +1,74 @@
-	/**
-	 * {@inheritDoc}
-	 */
-	public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
-		if (pm == null)
-			pm= new NullProgressMonitor();
-		RefactoringStatus result= new RefactoringStatus();
-		CheckConditionsContext context= createCheckConditionsContext();
+  /** {@inheritDoc} */
+  public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
+    if (pm == null) pm = new NullProgressMonitor();
+    RefactoringStatus result = new RefactoringStatus();
+    CheckConditionsContext context = createCheckConditionsContext();
 
-		pm.beginTask("", 9); //$NON-NLS-1$
-		pm.setTaskName(RefactoringCoreMessages.ProcessorBasedRefactoring_final_conditions);
+    pm.beginTask("", 9); //$NON-NLS-1$
+    pm.setTaskName(RefactoringCoreMessages.ProcessorBasedRefactoring_final_conditions);
 
-		result.merge(getProcessor().checkFinalConditions(new SubProgressMonitor(pm, 5), context));
-		if (result.hasFatalError()) {
-			pm.done();
-			return result;
-		}
-		if (pm.isCanceled())
-			throw new OperationCanceledException();
+    result.merge(getProcessor().checkFinalConditions(new SubProgressMonitor(pm, 5), context));
+    if (result.hasFatalError()) {
+      pm.done();
+      return result;
+    }
+    if (pm.isCanceled()) throw new OperationCanceledException();
 
-		SharableParticipants sharableParticipants= new SharableParticipants(); // must not be shared when checkFinalConditions is called again
-		RefactoringParticipant[] loadedParticipants= getProcessor().loadParticipants(result, sharableParticipants);
-		if (loadedParticipants == null || loadedParticipants.length == 0) {
-			fParticipants= EMPTY_PARTICIPANTS;
-		} else {
-			fParticipants= new ArrayList();
-			for (int i= 0; i < loadedParticipants.length; i++) {
-				fParticipants.add(loadedParticipants[i]);
-			}
-		}
-		if (result.hasFatalError()) {
-			pm.done();
-			return result;
-		}
-		IProgressMonitor sm= new SubProgressMonitor(pm, 2);
+    SharableParticipants sharableParticipants =
+        new SharableParticipants(); // must not be shared when checkFinalConditions is called again
+    RefactoringParticipant[] loadedParticipants =
+        getProcessor().loadParticipants(result, sharableParticipants);
+    if (loadedParticipants == null || loadedParticipants.length == 0) {
+      fParticipants = EMPTY_PARTICIPANTS;
+    } else {
+      fParticipants = new ArrayList();
+      for (int i = 0; i < loadedParticipants.length; i++) {
+        fParticipants.add(loadedParticipants[i]);
+      }
+    }
+    if (result.hasFatalError()) {
+      pm.done();
+      return result;
+    }
+    IProgressMonitor sm = new SubProgressMonitor(pm, 2);
 
-		sm.beginTask("", fParticipants.size()); //$NON-NLS-1$
-		for (Iterator iter= fParticipants.iterator(); iter.hasNext() && !result.hasFatalError(); ) {
+    sm.beginTask("", fParticipants.size()); //$NON-NLS-1$
+    for (Iterator iter = fParticipants.iterator(); iter.hasNext() && !result.hasFatalError(); ) {
 
-			RefactoringParticipant participant= (RefactoringParticipant) iter.next();
+      RefactoringParticipant participant = (RefactoringParticipant) iter.next();
 
-			final PerformanceStats stats= PerformanceStats.getStats(PERF_CHECK_CONDITIONS, getName() + ", " + participant.getName()); //$NON-NLS-1$
-			stats.startRun();
+      final PerformanceStats stats =
+          PerformanceStats.getStats(
+              PERF_CHECK_CONDITIONS, getName() + ", " + participant.getName()); //$NON-NLS-1$
+      stats.startRun();
 
-			try {
-				result.merge(participant.checkConditions(new SubProgressMonitor(sm, 1), context));
-			} catch (OperationCanceledException e) {
-				throw e;
-			} catch (RuntimeException e) {
-				// remove the participant so that it will be ignored during change execution.
-				RefactoringCorePlugin.log(e);
-				result.merge(RefactoringStatus.createErrorStatus(Messages.format(
-					RefactoringCoreMessages.ProcessorBasedRefactoring_check_condition_participant_failed,
-					participant.getName())));
-				iter.remove();
-			}
+      try {
+        result.merge(participant.checkConditions(new SubProgressMonitor(sm, 1), context));
+      } catch (OperationCanceledException e) {
+        throw e;
+      } catch (RuntimeException e) {
+        // remove the participant so that it will be ignored during change execution.
+        RefactoringCorePlugin.log(e);
+        result.merge(
+            RefactoringStatus.createErrorStatus(
+                Messages.format(
+                    RefactoringCoreMessages
+                        .ProcessorBasedRefactoring_check_condition_participant_failed,
+                    participant.getName())));
+        iter.remove();
+      }
 
-			stats.endRun();
+      stats.endRun();
 
-			if (sm.isCanceled())
-				throw new OperationCanceledException();
-		}
-		sm.done();
-		if (result.hasFatalError()) {
-			pm.done();
-			return result;
-		}
-		result.merge(context.check(new SubProgressMonitor(pm, 1)));
-		pm.done();
-		return result;
-	}
+      if (sm.isCanceled()) throw new OperationCanceledException();
+    }
+    sm.done();
+    if (result.hasFatalError()) {
+      pm.done();
+      return result;
+    }
+    result.merge(context.check(new SubProgressMonitor(pm, 1)));
+    pm.done();
+    return result;
+  }
 

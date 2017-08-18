@@ -1,51 +1,55 @@
-    private static void copy(File source, File target, FilenameFilter filter, boolean nio, boolean replaceIfExists)
-            throws IOException {
-        if (source.isDirectory()) {
-            if (!(target.exists() || target.mkdirs())) {
-                throw new IOException(String.format("Unable create directory '%s'. ", target.getAbsolutePath()));
+  private static void copy(
+      File source, File target, FilenameFilter filter, boolean nio, boolean replaceIfExists)
+      throws IOException {
+    if (source.isDirectory()) {
+      if (!(target.exists() || target.mkdirs())) {
+        throw new IOException(
+            String.format("Unable create directory '%s'. ", target.getAbsolutePath()));
+      }
+      if (filter == null) {
+        filter = ANY_FILTER;
+      }
+      String sourceRoot = source.getAbsolutePath();
+      LinkedList<File> q = new LinkedList<>();
+      q.add(source);
+      while (!q.isEmpty()) {
+        File current = q.pop();
+        File[] list = current.listFiles();
+        if (list != null) {
+          for (File f : list) {
+            if (!filter.accept(current, f.getName())) {
+              continue;
             }
-            if (filter == null) {
-                filter = ANY_FILTER;
-            }
-            String sourceRoot = source.getAbsolutePath();
-            LinkedList<File> q = new LinkedList<>();
-            q.add(source);
-            while (!q.isEmpty()) {
-                File current = q.pop();
-                File[] list = current.listFiles();
-                if (list != null) {
-                    for (File f : list) {
-                        if (!filter.accept(current, f.getName())) {
-                            continue;
-                        }
-                        File newFile = new File(target, f.getAbsolutePath().substring(sourceRoot.length() + 1));
-                        if (f.isDirectory()) {
-                            if (!(newFile.exists() || newFile.mkdirs())) {
-                                throw new IOException(String.format("Unable create directory '%s'. ", newFile.getAbsolutePath()));
-                            }
-                            if (!f.equals(target)) {
-                                q.push(f);
-                            }
-                        } else {
-                            if (nio) {
-                                nioCopyFile(f, newFile, replaceIfExists);
-                            } else {
-                                copyFile(f, newFile, replaceIfExists);
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            File parent = target.getParentFile();
-            if (!(parent.exists() || parent.mkdirs())) {
-                throw new IOException(String.format("Unable create directory '%s'. ", parent.getAbsolutePath()));
-            }
-            if (nio) {
-                nioCopyFile(source, target, replaceIfExists);
+            File newFile = new File(target, f.getAbsolutePath().substring(sourceRoot.length() + 1));
+            if (f.isDirectory()) {
+              if (!(newFile.exists() || newFile.mkdirs())) {
+                throw new IOException(
+                    String.format("Unable create directory '%s'. ", newFile.getAbsolutePath()));
+              }
+              if (!f.equals(target)) {
+                q.push(f);
+              }
             } else {
-                copyFile(source, target, replaceIfExists);
+              if (nio) {
+                nioCopyFile(f, newFile, replaceIfExists);
+              } else {
+                copyFile(f, newFile, replaceIfExists);
+              }
             }
+          }
         }
+      }
+    } else {
+      File parent = target.getParentFile();
+      if (!(parent.exists() || parent.mkdirs())) {
+        throw new IOException(
+            String.format("Unable create directory '%s'. ", parent.getAbsolutePath()));
+      }
+      if (nio) {
+        nioCopyFile(source, target, replaceIfExists);
+      } else {
+        copyFile(source, target, replaceIfExists);
+      }
     }
+  }
 

@@ -1,198 +1,162 @@
-	/**
-	 * Saves this workspace's valuable state on disk. Consults with all
-	 * registered plug-ins so that they can coordinate the saving of their
-	 * persistent state as well.
-	 * <p>
-	 * The <code>full</code> parameter indicates whether a full save or a
-	 * snapshot is being requested. Snapshots save the workspace information
-	 * that is considered hard to be recomputed in the unlikely event of a
-	 * crash. It includes parts of the workspace tree, workspace and projects
-	 * descriptions, markers and sync information. Full saves are heavy weight
-	 * operations which save the complete workspace state.
-	 * </p>
-	 * <p>
-	 * To ensure that all outstanding changes to the workspace have been
-	 * reported to interested parties prior to saving, a full save cannot be
-	 * used within the dynamic scope of an <code>IWorkspace.run</code>
-	 * invocation. Snapshots can be called any time and are interpreted by the
-	 * workspace as a hint that a snapshot is required. The workspace will
-	 * perform the snapshot when possible. Even as a hint, snapshots should only
-	 * be called when necessary as they impact system performance. Although
-	 * saving does not change the workspace per se, its execution is serialized
-	 * like methods that write the workspace.
-	 * </p>
-	 * <p>
-	 * The workspace is comprised of several different kinds of data with
-	 * varying degrees of importance. The most important data, the resources
-	 * themselves and their persistent properties, are written to disk
-	 * immediately; other data are kept in volatile memory and only written to
-	 * disk periodically; and other data are maintained in memory and never
-	 * written out. The following table summarizes what gets saved when:
-	 * <ul>
-	 * <li>creating or deleting resource - immediately</li>
-	 * <li>setting contents of file - immediately</li>
-	 * <li>changes to project description - immediately</li>
-	 * <li>session properties - never</li>
-	 * <li>changes to persistent properties - immediately</li>
-	 * <li>markers -<code>save</code></li>
-	 * <li>synchronizer info -<code>save</code></li>
-	 * <li>shape of the workspace resource tree -<code>save</code></li>
-	 * <li>list of active plug-ins - never</li>
-	 * </ul>
-	 * Resource-based plug-in also have data with varying degrees of importance.
-	 * Each plug-in gets to decide the policy for protecting its data, either
-	 * immediately, never, or at <code>save</code> time. For the latter, the
-	 * plug-in coordinates its actions with the workspace (see
-	 * <code>ISaveParticipant</code> for details).
-	 * </p>
-	 * <p>
-	 * If the platform is shutdown (or crashes) after saving the workspace, any
-	 * information written to disk by the last successful workspace
-	 * <code>save</code> will be restored the next time the workspace is
-	 * reopened for the next session. Naturally, information that is written to
-	 * disk immediately will be as of the last time it was changed.
-	 * </p>
-	 * <p>
-	 * The workspace provides a general mechanism for keeping concerned parties
-	 * apprised of any and all changes to resources in the workspace (
-	 * <code>IResourceChangeListener</code>). It is even possible for a
-	 * plug-in to find out about changes to resources that happen between
-	 * workspace sessions (see <code>IWorkspace.addSaveParticipant</code>).
-	 * </p>
-	 * <p>
-	 * At certain points during this method, the entire workspace resource tree
-	 * must be locked to prevent resources from being changed (read access to
-	 * resources is permitted).
-	 * </p>
-	 * <p>
-	 * Implementation note: The execution sequence is as follows.
-	 * <ul>
-	 * <li>A long-term lock on the workspace is taken out to prevent further
-	 * changes to workspace until the save is done.</li>
-	 * <li>The list of saveable resource tree snapshots is initially empty.
-	 * </li>
-	 * <li>A different <code>ISaveContext</code> object is created for each
-	 * registered workspace save participant plug-in, reflecting the kind of
-	 * save (<code>ISaveContext.getKind</code>), the previous save number in
-	 * which this plug-in actively participated, and the new save number (=
-	 * previous save number plus 1).</li>
-	 * <li>Each registered workspace save participant is sent
-	 * <code>prepareToSave(context)</code>, passing in its own context
-	 * object.
-	 * <ul>
-	 * <li>Plug-in suspends all activities until further notice.</li>
-	 * </ul>
-	 * If <code>prepareToSave</code> fails (throws an exception), the problem
-	 * is logged and the participant is marked as unstable.</li>
-	 * <li>In dependent-before-prerequisite order, each registered workspace
-	 * save participant is sent <code>saving(context)</code>, passing in its
-	 * own context object.
-	 * <ul>
-	 * <li>Plug-in decides whether it wants to actively participate in this
-	 * save. The plug-in only needs to actively participate if some of its
-	 * important state has changed since the last time it actively participated.
-	 * If it does decide to actively participate, it writes its important state
-	 * to a brand new file in its plug-in state area under a generated file name
-	 * based on <code>context.getStateNumber()</code> and calls
-	 * <code>context.needStateNumber()</code> to indicate that it has actively
-	 * participated. If upon reactivation the plug-in will want a resource delta
-	 * covering all changes between now and then, the plug-in should invoke
-	 * <code>context.needDelta()</code> to request this now; otherwise, a
-	 * resource delta for the intervening period will not be available on
-	 * reactivation.</li>
-	 * </ul>
-	 * If <code>saving</code> fails (throws an exception), the problem is
-	 * logged and the participant is marked as unstable.</li>
-	 * <li>The plug-in save table contains an entry for each plug-in that has
-	 * registered to participate in workspace saves at some time in the past
-	 * (the list of plug-ins increases monotonically). Each entry records the
-	 * save number of the last successful save in which that plug-in actively
-	 * participated, and, optionally, a saved resource tree (conceptually, this
-	 * is a complete tree; in practice, it is compressed into a special delta
-	 * tree representation). A copy of the plug-in save table is made. Entries
-	 * are created or modified for each registered plug-in to record the
-	 * appropriate save number (either the previous save number, or the previous
-	 * save number plus 1, depending on whether the participant was active and
-	 * asked for a new number).</li>
-	 * <li>The workspace tree, the modified copy of the plug-in save table, all
-	 * markers, etc. and all saveable resource tree snapshots are written to
-	 * disk as <b>one atomic operation </b>.</li>
-	 * <li>The long-term lock on the workspace is released.</li>
-	 * <li>If the atomic save succeeded:
-	 * <ul>
-	 * <li>The modified copy of the plug-in save table becomes the new plug-in
-	 * save table.</li>
-	 * <li>In prerequisite-before-dependent order, each registered workspace
-	 * save participant is sent <code>doneSaving(context)</code>, passing in
-	 * its own context object.
-	 * <ul>
-	 * <li>Plug-in may perform clean up by deleting obsolete state files in its
-	 * plug-in state area.</li>
-	 * <li>Plug-in resumes its normal activities.</li>
-	 * </ul>
-	 * If <code>doneSaving</code> fails (throws an exception), the problem is
-	 * logged and the participant is marked as unstable. (The state number in
-	 * the save table is not rolled back just because of this instability.)
-	 * </li>
-	 * <li>The workspace save operation returns.</li>
-	 * </ul>
-	 * <li>If it failed:
-	 * <ul>
-	 * <li>The workspace previous state is restored.</li>
-	 * <li>In prerequisite-before-dependent order, each registered workspace
-	 * save participant is sent <code>rollback(context)</code>, passing in
-	 * its own context object.
-	 * <ul>
-	 * <li>Plug-in may perform clean up by deleting newly-created but obsolete
-	 * state file in its plug-in state area.</li>
-	 * <li>Plug-in resumes its normal activities.</li>
-	 * </ul>
-	 * If <code>rollback</code> fails (throws an exception), the problem is
-	 * logged and the participant is marked as unstable. (The state number in
-	 * the save table is rolled back anyway.)</li>
-	 * <li>The workspace save operation fails.</li>
-	 * </ul>
-	 * </li>
-	 * </ul>
-	 * </p>
-	 * <p>
-	 * After a full save, the platform can be shutdown. This will cause the
-	 * Resources plug-in and all the other plug-ins to shutdown, without
-	 * disturbing the saved workspace on disk.
-	 * </p>
-	 * <p>
-	 * When the platform is later restarted, activating the Resources plug-in
-	 * opens the saved workspace. This reads into memory the workspace's
-	 * resource tree, plug-in save table, and saved resource tree snapshots
-	 * (everything that was written to disk in the atomic operation above).
-	 * Later, when a plug-in gets reactivated and registers to participate in
-	 * workspace saves, it is handed back the info from its entry in the plug-in
-	 * save table, if it has one. It gets back the number of the last save in
-	 * which it actively participated and, possibly, a resource delta.
-	 * </p>
-	 * <p>
-	 * The only source of long term garbage would come from a plug-in that never
-	 * gets reactivated, or one that gets reactivated but fails to register for
-	 * workspace saves. (There is no such problem with a plug-in that gets
-	 * uninstalled; its easy enough to scrub its state areas and delete its
-	 * entry in the plug-in save table.)
-	 * </p>
-	 * 
-	 * @param full <code>true</code> if this is a full save, and
-	 * <code>false</code> if this is only a snapshot for protecting against
-	 * crashes
-	 * @param monitor a progress monitor, or <code>null</code> if progress
-	 * reporting is not desired
-	 * @return a status that may contain warnings, such as the failure of an
-	 * individual participant
-	 * @exception CoreException if this method fails to save the state of this
-	 * workspace. Reasons include:
-	 * <ul>
-	 * <li>The operation cannot be batched with others.</li>
-	 * </ul>
-	 * @exception OperationCanceledException if the operation is canceled. 
-	 * Cancelation can occur even if no progress monitor is provided.
-	 * @see #addSaveParticipant(Plugin, ISaveParticipant)
-	 */
-	public IStatus save(boolean full, IProgressMonitor monitor) throws CoreException;
+  /**
+   * Saves this workspace's valuable state on disk. Consults with all registered plug-ins so that
+   * they can coordinate the saving of their persistent state as well.
+   *
+   * <p>The <code>full</code> parameter indicates whether a full save or a snapshot is being
+   * requested. Snapshots save the workspace information that is considered hard to be recomputed in
+   * the unlikely event of a crash. It includes parts of the workspace tree, workspace and projects
+   * descriptions, markers and sync information. Full saves are heavy weight operations which save
+   * the complete workspace state.
+   *
+   * <p>To ensure that all outstanding changes to the workspace have been reported to interested
+   * parties prior to saving, a full save cannot be used within the dynamic scope of an <code>
+   * IWorkspace.run</code> invocation. Snapshots can be called any time and are interpreted by the
+   * workspace as a hint that a snapshot is required. The workspace will perform the snapshot when
+   * possible. Even as a hint, snapshots should only be called when necessary as they impact system
+   * performance. Although saving does not change the workspace per se, its execution is serialized
+   * like methods that write the workspace.
+   *
+   * <p>The workspace is comprised of several different kinds of data with varying degrees of
+   * importance. The most important data, the resources themselves and their persistent properties,
+   * are written to disk immediately; other data are kept in volatile memory and only written to
+   * disk periodically; and other data are maintained in memory and never written out. The following
+   * table summarizes what gets saved when:
+   *
+   * <ul>
+   *   <li>creating or deleting resource - immediately
+   *   <li>setting contents of file - immediately
+   *   <li>changes to project description - immediately
+   *   <li>session properties - never
+   *   <li>changes to persistent properties - immediately
+   *   <li>markers -<code>save</code>
+   *   <li>synchronizer info -<code>save</code>
+   *   <li>shape of the workspace resource tree -<code>save</code>
+   *   <li>list of active plug-ins - never
+   * </ul>
+   *
+   * Resource-based plug-in also have data with varying degrees of importance. Each plug-in gets to
+   * decide the policy for protecting its data, either immediately, never, or at <code>save</code>
+   * time. For the latter, the plug-in coordinates its actions with the workspace (see <code>
+   * ISaveParticipant</code> for details).
+   *
+   * <p>If the platform is shutdown (or crashes) after saving the workspace, any information written
+   * to disk by the last successful workspace <code>save</code> will be restored the next time the
+   * workspace is reopened for the next session. Naturally, information that is written to disk
+   * immediately will be as of the last time it was changed.
+   *
+   * <p>The workspace provides a general mechanism for keeping concerned parties apprised of any and
+   * all changes to resources in the workspace ( <code>IResourceChangeListener</code>). It is even
+   * possible for a plug-in to find out about changes to resources that happen between workspace
+   * sessions (see <code>IWorkspace.addSaveParticipant</code>).
+   *
+   * <p>At certain points during this method, the entire workspace resource tree must be locked to
+   * prevent resources from being changed (read access to resources is permitted).
+   *
+   * <p>Implementation note: The execution sequence is as follows.
+   *
+   * <ul>
+   *   <li>A long-term lock on the workspace is taken out to prevent further changes to workspace
+   *       until the save is done.
+   *   <li>The list of saveable resource tree snapshots is initially empty.
+   *   <li>A different <code>ISaveContext</code> object is created for each registered workspace
+   *       save participant plug-in, reflecting the kind of save (<code>ISaveContext.getKind</code>
+   *       ), the previous save number in which this plug-in actively participated, and the new save
+   *       number (= previous save number plus 1).
+   *   <li>Each registered workspace save participant is sent <code>prepareToSave(context)</code>,
+   *       passing in its own context object.
+   *       <ul>
+   *         <li>Plug-in suspends all activities until further notice.
+   *       </ul>
+   *       If <code>prepareToSave</code> fails (throws an exception), the problem is logged and the
+   *       participant is marked as unstable.
+   *   <li>In dependent-before-prerequisite order, each registered workspace save participant is
+   *       sent <code>saving(context)</code>, passing in its own context object.
+   *       <ul>
+   *         <li>Plug-in decides whether it wants to actively participate in this save. The plug-in
+   *             only needs to actively participate if some of its important state has changed since
+   *             the last time it actively participated. If it does decide to actively participate,
+   *             it writes its important state to a brand new file in its plug-in state area under a
+   *             generated file name based on <code>context.getStateNumber()</code> and calls <code>
+   *             context.needStateNumber()</code> to indicate that it has actively participated. If
+   *             upon reactivation the plug-in will want a resource delta covering all changes
+   *             between now and then, the plug-in should invoke <code>context.needDelta()</code> to
+   *             request this now; otherwise, a resource delta for the intervening period will not
+   *             be available on reactivation.
+   *       </ul>
+   *       If <code>saving</code> fails (throws an exception), the problem is logged and the
+   *       participant is marked as unstable.
+   *   <li>The plug-in save table contains an entry for each plug-in that has registered to
+   *       participate in workspace saves at some time in the past (the list of plug-ins increases
+   *       monotonically). Each entry records the save number of the last successful save in which
+   *       that plug-in actively participated, and, optionally, a saved resource tree (conceptually,
+   *       this is a complete tree; in practice, it is compressed into a special delta tree
+   *       representation). A copy of the plug-in save table is made. Entries are created or
+   *       modified for each registered plug-in to record the appropriate save number (either the
+   *       previous save number, or the previous save number plus 1, depending on whether the
+   *       participant was active and asked for a new number).
+   *   <li>The workspace tree, the modified copy of the plug-in save table, all markers, etc. and
+   *       all saveable resource tree snapshots are written to disk as <b>one atomic operation </b>.
+   *   <li>The long-term lock on the workspace is released.
+   *   <li>If the atomic save succeeded:
+   *       <ul>
+   *         <li>The modified copy of the plug-in save table becomes the new plug-in save table.
+   *         <li>In prerequisite-before-dependent order, each registered workspace save participant
+   *             is sent <code>doneSaving(context)</code>, passing in its own context object.
+   *             <ul>
+   *               <li>Plug-in may perform clean up by deleting obsolete state files in its plug-in
+   *                   state area.
+   *               <li>Plug-in resumes its normal activities.
+   *             </ul>
+   *             If <code>doneSaving</code> fails (throws an exception), the problem is logged and
+   *             the participant is marked as unstable. (The state number in the save table is not
+   *             rolled back just because of this instability.)
+   *         <li>The workspace save operation returns.
+   *       </ul>
+   *   <li>If it failed:
+   *       <ul>
+   *         <li>The workspace previous state is restored.
+   *         <li>In prerequisite-before-dependent order, each registered workspace save participant
+   *             is sent <code>rollback(context)</code>, passing in its own context object.
+   *             <ul>
+   *               <li>Plug-in may perform clean up by deleting newly-created but obsolete state
+   *                   file in its plug-in state area.
+   *               <li>Plug-in resumes its normal activities.
+   *             </ul>
+   *             If <code>rollback</code> fails (throws an exception), the problem is logged and the
+   *             participant is marked as unstable. (The state number in the save table is rolled
+   *             back anyway.)
+   *         <li>The workspace save operation fails.
+   *       </ul>
+   * </ul>
+   *
+   * <p>After a full save, the platform can be shutdown. This will cause the Resources plug-in and
+   * all the other plug-ins to shutdown, without disturbing the saved workspace on disk.
+   *
+   * <p>When the platform is later restarted, activating the Resources plug-in opens the saved
+   * workspace. This reads into memory the workspace's resource tree, plug-in save table, and saved
+   * resource tree snapshots (everything that was written to disk in the atomic operation above).
+   * Later, when a plug-in gets reactivated and registers to participate in workspace saves, it is
+   * handed back the info from its entry in the plug-in save table, if it has one. It gets back the
+   * number of the last save in which it actively participated and, possibly, a resource delta.
+   *
+   * <p>The only source of long term garbage would come from a plug-in that never gets reactivated,
+   * or one that gets reactivated but fails to register for workspace saves. (There is no such
+   * problem with a plug-in that gets uninstalled; its easy enough to scrub its state areas and
+   * delete its entry in the plug-in save table.)
+   *
+   * @param full <code>true</code> if this is a full save, and <code>false</code> if this is only a
+   *     snapshot for protecting against crashes
+   * @param monitor a progress monitor, or <code>null</code> if progress reporting is not desired
+   * @return a status that may contain warnings, such as the failure of an individual participant
+   * @exception CoreException if this method fails to save the state of this workspace. Reasons
+   *     include:
+   *     <ul>
+   *       <li>The operation cannot be batched with others.
+   *     </ul>
+   *
+   * @exception OperationCanceledException if the operation is canceled. Cancelation can occur even
+   *     if no progress monitor is provided.
+   * @see #addSaveParticipant(Plugin, ISaveParticipant)
+   */
+  public IStatus save(boolean full, IProgressMonitor monitor) throws CoreException;
 

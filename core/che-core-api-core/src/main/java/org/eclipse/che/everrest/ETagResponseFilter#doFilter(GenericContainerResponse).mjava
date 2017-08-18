@@ -1,72 +1,71 @@
-    /**
-     * Filter the given container response
-     *
-     * @param containerResponse
-     *         the response to use
-     */
-    public void doFilter(GenericContainerResponse containerResponse) {
+  /**
+   * Filter the given container response
+   *
+   * @param containerResponse the response to use
+   */
+  public void doFilter(GenericContainerResponse containerResponse) {
 
-        // get entity of the response
-        Object entity = containerResponse.getEntity();
+    // get entity of the response
+    Object entity = containerResponse.getEntity();
 
-        // no entity, skip
-        if (entity == null) {
-            return;
-        }
-
-        // Only handle JSON content
-        if (!MediaType.APPLICATION_JSON_TYPE.equals(containerResponse.getContentType())) {
-            return;
-        }
-
-        // Get the request
-        ApplicationContext applicationContext = ApplicationContext.getCurrent();
-        Request request = applicationContext.getRequest();
-
-        // manage only GET requests
-        if (!HttpMethod.GET.equals(request.getMethod())) {
-            return;
-        }
-
-        // calculate hash with MD5
-        HashFunction hashFunction = Hashing.md5();
-        Hasher hasher = hashFunction.newHasher();
-        boolean hashingSuccess = true;
-
-        // Manage a list
-        if (entity instanceof List) {
-            List<?> entities = (List)entity;
-            for (Object simpleEntity : entities) {
-                hashingSuccess = addHash(simpleEntity, hasher);
-                if (!hashingSuccess) {
-                    break;
-                }
-            }
-        } else {
-            hashingSuccess = addHash(entity, hasher);
-        }
-
-        // if we're able to handle the hash
-        if (hashingSuccess) {
-
-            // get result of the hash
-            HashCode hashCode = hasher.hash();
-
-            // Create the entity tag
-            EntityTag entityTag = new EntityTag(hashCode.toString());
-
-            // Check the etag
-            Response.ResponseBuilder builder = request.evaluatePreconditions(entityTag);
-
-            // not modified ?
-            if (builder != null) {
-                containerResponse.setResponse(builder.tag(entityTag).build());
-            } else {
-                // it has been changed, so send response with new ETag and entity
-                Response.ResponseBuilder responseBuilder = Response.fromResponse(containerResponse.getResponse()).tag(entityTag);
-                containerResponse.setResponse(responseBuilder.build());
-            }
-        }
-
+    // no entity, skip
+    if (entity == null) {
+      return;
     }
+
+    // Only handle JSON content
+    if (!MediaType.APPLICATION_JSON_TYPE.equals(containerResponse.getContentType())) {
+      return;
+    }
+
+    // Get the request
+    ApplicationContext applicationContext = ApplicationContext.getCurrent();
+    Request request = applicationContext.getRequest();
+
+    // manage only GET requests
+    if (!HttpMethod.GET.equals(request.getMethod())) {
+      return;
+    }
+
+    // calculate hash with MD5
+    HashFunction hashFunction = Hashing.md5();
+    Hasher hasher = hashFunction.newHasher();
+    boolean hashingSuccess = true;
+
+    // Manage a list
+    if (entity instanceof List) {
+      List<?> entities = (List) entity;
+      for (Object simpleEntity : entities) {
+        hashingSuccess = addHash(simpleEntity, hasher);
+        if (!hashingSuccess) {
+          break;
+        }
+      }
+    } else {
+      hashingSuccess = addHash(entity, hasher);
+    }
+
+    // if we're able to handle the hash
+    if (hashingSuccess) {
+
+      // get result of the hash
+      HashCode hashCode = hasher.hash();
+
+      // Create the entity tag
+      EntityTag entityTag = new EntityTag(hashCode.toString());
+
+      // Check the etag
+      Response.ResponseBuilder builder = request.evaluatePreconditions(entityTag);
+
+      // not modified ?
+      if (builder != null) {
+        containerResponse.setResponse(builder.tag(entityTag).build());
+      } else {
+        // it has been changed, so send response with new ETag and entity
+        Response.ResponseBuilder responseBuilder =
+            Response.fromResponse(containerResponse.getResponse()).tag(entityTag);
+        containerResponse.setResponse(responseBuilder.build());
+      }
+    }
+  }
 

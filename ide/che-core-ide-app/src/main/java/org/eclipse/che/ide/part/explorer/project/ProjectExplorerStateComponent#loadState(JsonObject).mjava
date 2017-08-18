@@ -1,45 +1,50 @@
-    @Override
-    public Promise<Void> loadState(@NotNull JsonObject state) {
-        if (state.hasKey(SHOW_HIDDEN_FILES)) {
-            projectExplorer.showHiddenFiles(state.getBoolean(SHOW_HIDDEN_FILES));
-        }
-
-        JsonArray paths = state.hasKey(PATH_PARAM_ID) ? state.getArray(PATH_PARAM_ID) : Json.createArray();
-
-        if (paths.length() == 0) {
-            return promises.resolve(null);
-        }
-
-        Promise<Node> revealPromise = null;
-
-        MessageLoader loader = loaderFactory.newLoader("Restoring project structure...");
-        loader.show();
-
-        for (int i = 0; i < paths.length(); i++) {
-            String path = paths.getString(i);
-            if (revealPromise == null) {
-                revealPromise = revealer.reveal(Path.valueOf(path), false)
-                                        .thenPromise(this::doExpand);
-                continue;
-            }
-
-            revealPromise.thenPromise(node -> revealer.reveal(Path.valueOf(path), false))
-                         .thenPromise(this::doExpand)
-                         .catchError(this::logError);
-        }
-
-        if (revealPromise != null) {
-            revealPromise.then(node -> {
-                loader.hide();
-            }).catchError(error -> {
-                loader.hide();
-            });
-        }
-
-        if (revealPromise == null) {
-            return promises.resolve(null);
-        }
-
-        return revealPromise.thenPromise(ignored -> promises.resolve(null));
+  @Override
+  public Promise<Void> loadState(@NotNull JsonObject state) {
+    if (state.hasKey(SHOW_HIDDEN_FILES)) {
+      projectExplorer.showHiddenFiles(state.getBoolean(SHOW_HIDDEN_FILES));
     }
+
+    JsonArray paths =
+        state.hasKey(PATH_PARAM_ID) ? state.getArray(PATH_PARAM_ID) : Json.createArray();
+
+    if (paths.length() == 0) {
+      return promises.resolve(null);
+    }
+
+    Promise<Node> revealPromise = null;
+
+    MessageLoader loader = loaderFactory.newLoader("Restoring project structure...");
+    loader.show();
+
+    for (int i = 0; i < paths.length(); i++) {
+      String path = paths.getString(i);
+      if (revealPromise == null) {
+        revealPromise = revealer.reveal(Path.valueOf(path), false).thenPromise(this::doExpand);
+        continue;
+      }
+
+      revealPromise
+          .thenPromise(node -> revealer.reveal(Path.valueOf(path), false))
+          .thenPromise(this::doExpand)
+          .catchError(this::logError);
+    }
+
+    if (revealPromise != null) {
+      revealPromise
+          .then(
+              node -> {
+                loader.hide();
+              })
+          .catchError(
+              error -> {
+                loader.hide();
+              });
+    }
+
+    if (revealPromise == null) {
+      return promises.resolve(null);
+    }
+
+    return revealPromise.thenPromise(ignored -> promises.resolve(null));
+  }
 

@@ -1,100 +1,102 @@
-/*
- *  Compute the list of paths which are keying index files.
- */
-private void initializeIndexLocations() {
-	IPath[] projectsAndJars = this.searchScope.enclosingProjectsAndJars();
-	IndexManager manager = JavaModelManager.getIndexManager();
-	// use a linked set to preserve the order during search: see bug 348507
-	LinkedHashSet locations = new LinkedHashSet();
-	IJavaElement focus = MatchLocator.projectOrJarFocus(this.pattern);
-	if (focus == null) {
-		for (int i = 0; i < projectsAndJars.length; i++) {
-			IPath path = projectsAndJars[i];
-			Object target = JavaModel.getTarget(path, false/*don't check existence*/);
-			if (target instanceof IFolder) // case of an external folder
-				path = ((IFolder) target).getFullPath();
-			locations.add(manager.computeIndexLocation(path));
-		}
-	} else {
-		try {
-			// See whether the state builder might be used to reduce the number of index locations
-		
-			// find the projects from projectsAndJars that see the focus then walk those projects looking for the jars from projectsAndJars
-			int length = projectsAndJars.length;
-			JavaProject[] projectsCanSeeFocus = new JavaProject[length];
-			SimpleSet visitedProjects = new SimpleSet(length);
-			int projectIndex = 0;
-			SimpleSet externalLibsToCheck = new SimpleSet(length);
-			ObjectVector superTypes = new ObjectVector();
-			IJavaElement[] focuses = getFocusedElementsAndTypes(this.pattern, focus, superTypes);
-			char[][][] focusQualifiedNames = null;
-			boolean isAutoBuilding = ResourcesPlugin.getWorkspace().getDescription().isAutoBuilding();
-			if (isAutoBuilding && focus instanceof IJavaProject) {
-				focusQualifiedNames = getQualifiedNames(superTypes);
-			}
-			IJavaModel model = JavaModelManager.getJavaModelManager().getJavaModel();
-			for (int i = 0; i < length; i++) {
-				IPath path = projectsAndJars[i];
-				JavaProject project = (JavaProject) getJavaProject(path, model);
-				if (project != null) {
-					visitedProjects.add(project);
-					/*We are adding all modules to the locations for searching in each one.
-					Now the location contains not only current module and Jars on which depends, but also all modules from the workspace.*/
-					locations.add(manager.computeIndexLocation(path));
-					/*int canSeeFocus = canSeeFocus(focuses, project, focusQualifiedNames);
-					if (canSeeFocus == PROJECT_CAN_SEE_FOCUS) {
-						locations.add(manager.computeIndexLocation(path));
-					}
-					if (canSeeFocus != PROJECT_CAN_NOT_SEE_FOCUS) {
-						projectsCanSeeFocus[projectIndex++] = project;
-					}*/
-				} else {
-					externalLibsToCheck.add(path);
-				}
-			}
-			for (int i = 0; i < projectIndex && externalLibsToCheck.elementSize > 0; i++) {
-				IClasspathEntry[] entries = projectsCanSeeFocus[i].getResolvedClasspath();
-				for (int j = entries.length; --j >= 0;) {
-					IClasspathEntry entry = entries[j];
-					if (entry.getEntryKind() == IClasspathEntry.CPE_LIBRARY) {
-						IPath path = entry.getPath();
-						if (externalLibsToCheck.remove(path) != null) {
-							Object target = JavaModel.getTarget(path, false/*don't check existence*/);
-							if (target instanceof IFolder) // case of an external folder
-								path = ((IFolder) target).getFullPath();
-							locations.add(manager.computeIndexLocation(path));
-						}
-					}
-				}
-			}
-			// jar files can be included in the search scope without including one of the projects that references them, so scan all projects that have not been visited
-			if (externalLibsToCheck.elementSize > 0) {
-				IJavaProject[] allProjects = model.getJavaProjects();
-				for (int i = 0, l = allProjects.length; i < l && externalLibsToCheck.elementSize > 0; i++) {
-					JavaProject project = (JavaProject) allProjects[i];
-					if (!visitedProjects.includes(project)) {
-						IClasspathEntry[] entries = project.getResolvedClasspath();
-						for (int j = entries.length; --j >= 0;) {
-							IClasspathEntry entry = entries[j];
-							if (entry.getEntryKind() == IClasspathEntry.CPE_LIBRARY) {
-								IPath path = entry.getPath();
-								if (externalLibsToCheck.remove(path) != null) {
-									Object target = JavaModel.getTarget(path, false/*don't check existence*/);
-									if (target instanceof IFolder) // case of an external folder
-										path = ((IFolder) target).getFullPath();
-									locations.add(manager.computeIndexLocation(path));
-								}
-							}
-						}
-					}
-				}
-			}
-		} catch (JavaModelException e) {
-			// ignored
-		}
-	}
+  /*
+   *  Compute the list of paths which are keying index files.
+   */
+  private void initializeIndexLocations() {
+    IPath[] projectsAndJars = this.searchScope.enclosingProjectsAndJars();
+    IndexManager manager = JavaModelManager.getIndexManager();
+    // use a linked set to preserve the order during search: see bug 348507
+    LinkedHashSet locations = new LinkedHashSet();
+    IJavaElement focus = MatchLocator.projectOrJarFocus(this.pattern);
+    if (focus == null) {
+      for (int i = 0; i < projectsAndJars.length; i++) {
+        IPath path = projectsAndJars[i];
+        Object target = JavaModel.getTarget(path, false /*don't check existence*/);
+        if (target instanceof IFolder) // case of an external folder
+        path = ((IFolder) target).getFullPath();
+        locations.add(manager.computeIndexLocation(path));
+      }
+    } else {
+      try {
+        // See whether the state builder might be used to reduce the number of index locations
 
-	locations.remove(null); // Ensure no nulls
-	this.indexLocations = (IndexLocation[]) locations.toArray(new IndexLocation[locations.size()]);
-}
+        // find the projects from projectsAndJars that see the focus then walk those projects looking for the jars from projectsAndJars
+        int length = projectsAndJars.length;
+        JavaProject[] projectsCanSeeFocus = new JavaProject[length];
+        SimpleSet visitedProjects = new SimpleSet(length);
+        int projectIndex = 0;
+        SimpleSet externalLibsToCheck = new SimpleSet(length);
+        ObjectVector superTypes = new ObjectVector();
+        IJavaElement[] focuses = getFocusedElementsAndTypes(this.pattern, focus, superTypes);
+        char[][][] focusQualifiedNames = null;
+        boolean isAutoBuilding = ResourcesPlugin.getWorkspace().getDescription().isAutoBuilding();
+        if (isAutoBuilding && focus instanceof IJavaProject) {
+          focusQualifiedNames = getQualifiedNames(superTypes);
+        }
+        IJavaModel model = JavaModelManager.getJavaModelManager().getJavaModel();
+        for (int i = 0; i < length; i++) {
+          IPath path = projectsAndJars[i];
+          JavaProject project = (JavaProject) getJavaProject(path, model);
+          if (project != null) {
+            visitedProjects.add(project);
+            /*We are adding all modules to the locations for searching in each one.
+            Now the location contains not only current module and Jars on which depends, but also all modules from the workspace.*/
+            locations.add(manager.computeIndexLocation(path));
+            /*int canSeeFocus = canSeeFocus(focuses, project, focusQualifiedNames);
+            if (canSeeFocus == PROJECT_CAN_SEE_FOCUS) {
+            	locations.add(manager.computeIndexLocation(path));
+            }
+            if (canSeeFocus != PROJECT_CAN_NOT_SEE_FOCUS) {
+            	projectsCanSeeFocus[projectIndex++] = project;
+            }*/
+          } else {
+            externalLibsToCheck.add(path);
+          }
+        }
+        for (int i = 0; i < projectIndex && externalLibsToCheck.elementSize > 0; i++) {
+          IClasspathEntry[] entries = projectsCanSeeFocus[i].getResolvedClasspath();
+          for (int j = entries.length; --j >= 0; ) {
+            IClasspathEntry entry = entries[j];
+            if (entry.getEntryKind() == IClasspathEntry.CPE_LIBRARY) {
+              IPath path = entry.getPath();
+              if (externalLibsToCheck.remove(path) != null) {
+                Object target = JavaModel.getTarget(path, false /*don't check existence*/);
+                if (target instanceof IFolder) // case of an external folder
+                path = ((IFolder) target).getFullPath();
+                locations.add(manager.computeIndexLocation(path));
+              }
+            }
+          }
+        }
+        // jar files can be included in the search scope without including one of the projects that references them, so scan all projects that have not been visited
+        if (externalLibsToCheck.elementSize > 0) {
+          IJavaProject[] allProjects = model.getJavaProjects();
+          for (int i = 0, l = allProjects.length;
+              i < l && externalLibsToCheck.elementSize > 0;
+              i++) {
+            JavaProject project = (JavaProject) allProjects[i];
+            if (!visitedProjects.includes(project)) {
+              IClasspathEntry[] entries = project.getResolvedClasspath();
+              for (int j = entries.length; --j >= 0; ) {
+                IClasspathEntry entry = entries[j];
+                if (entry.getEntryKind() == IClasspathEntry.CPE_LIBRARY) {
+                  IPath path = entry.getPath();
+                  if (externalLibsToCheck.remove(path) != null) {
+                    Object target = JavaModel.getTarget(path, false /*don't check existence*/);
+                    if (target instanceof IFolder) // case of an external folder
+                    path = ((IFolder) target).getFullPath();
+                    locations.add(manager.computeIndexLocation(path));
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (JavaModelException e) {
+        // ignored
+      }
+    }
+
+    locations.remove(null); // Ensure no nulls
+    this.indexLocations = (IndexLocation[]) locations.toArray(new IndexLocation[locations.size()]);
+  }
 

@@ -1,51 +1,60 @@
-    private MavenResult internalResolveProject(File pom, List<String> activeProfiles, List<String> inactiveProfiles,
-                                               List<ResolutionListener> dependencyTreeResolutionListeners) {
+  private MavenResult internalResolveProject(
+      File pom,
+      List<String> activeProfiles,
+      List<String> inactiveProfiles,
+      List<ResolutionListener> dependencyTreeResolutionListeners) {
 
-        MavenExecutionRequest request = newMavenRequest(pom, activeProfiles, inactiveProfiles, Collections.emptyList());
-        request.setUpdateSnapshots(updateSnapshots);
+    MavenExecutionRequest request =
+        newMavenRequest(pom, activeProfiles, inactiveProfiles, Collections.emptyList());
+    request.setUpdateSnapshots(updateSnapshots);
 
-        AtomicReference<MavenResult> reference = new AtomicReference<>();
-        runMavenRequest(request, () -> {
-            try {
-                ProjectBuilder builder = getMavenComponent(ProjectBuilder.class);
+    AtomicReference<MavenResult> reference = new AtomicReference<>();
+    runMavenRequest(
+        request,
+        () -> {
+          try {
+            ProjectBuilder builder = getMavenComponent(ProjectBuilder.class);
 
-                List<ProjectBuildingResult> resultList =
-                        builder.build(Collections.singletonList(pom), false, request.getProjectBuildingRequest());
-                ProjectBuildingResult result = resultList.get(0);
-                MavenProject mavenProject = result.getProject();
-                RepositorySystemSession repositorySession = getMavenComponent(LegacySupport.class).getRepositorySession();
-                if (repositorySession instanceof DefaultRepositorySystemSession) {
-                    ((DefaultRepositorySystemSession)repositorySession)
-                            .setTransferListener(new ArtifactTransferListener(mavenProgressNotifier));
-                    if (workspaceCache != null) {
-                        ((DefaultRepositorySystemSession)repositorySession).setWorkspaceReader(new MavenWorkspaceReader(workspaceCache));
-                    }
-
-                }
-
-                List<Exception> exceptions = new ArrayList<>();
-
-                loadExtensions(mavenProject, exceptions);
-                mavenProject.setDependencyArtifacts(mavenProject.createArtifacts(getMavenComponent(ArtifactFactory.class), null, null));
-
-                ArtifactResolutionRequest resolutionRequest = new ArtifactResolutionRequest();
-                resolutionRequest.setArtifact(mavenProject.getArtifact());
-                resolutionRequest.setRemoteRepositories(mavenProject.getRemoteArtifactRepositories());
-                resolutionRequest.setArtifactDependencies(mavenProject.getDependencyArtifacts());
-                resolutionRequest.setListeners(dependencyTreeResolutionListeners);
-                resolutionRequest.setLocalRepository(localRepo);
-                resolutionRequest.setManagedVersionMap(mavenProject.getManagedVersionMap());
-                resolutionRequest.setResolveTransitively(true);
-                resolutionRequest.setResolveRoot(false);
-                ArtifactResolver resolver = getMavenComponent(ArtifactResolver.class);
-                ArtifactResolutionResult resolve = resolver.resolve(resolutionRequest);
-                mavenProject.setArtifacts(resolve.getArtifacts());
-                reference.set(new MavenResult(mavenProject, exceptions));
-
-            } catch (Exception e) {
-                reference.set(new MavenResult(null, null, Collections.singletonList(e)));
+            List<ProjectBuildingResult> resultList =
+                builder.build(
+                    Collections.singletonList(pom), false, request.getProjectBuildingRequest());
+            ProjectBuildingResult result = resultList.get(0);
+            MavenProject mavenProject = result.getProject();
+            RepositorySystemSession repositorySession =
+                getMavenComponent(LegacySupport.class).getRepositorySession();
+            if (repositorySession instanceof DefaultRepositorySystemSession) {
+              ((DefaultRepositorySystemSession) repositorySession)
+                  .setTransferListener(new ArtifactTransferListener(mavenProgressNotifier));
+              if (workspaceCache != null) {
+                ((DefaultRepositorySystemSession) repositorySession)
+                    .setWorkspaceReader(new MavenWorkspaceReader(workspaceCache));
+              }
             }
+
+            List<Exception> exceptions = new ArrayList<>();
+
+            loadExtensions(mavenProject, exceptions);
+            mavenProject.setDependencyArtifacts(
+                mavenProject.createArtifacts(getMavenComponent(ArtifactFactory.class), null, null));
+
+            ArtifactResolutionRequest resolutionRequest = new ArtifactResolutionRequest();
+            resolutionRequest.setArtifact(mavenProject.getArtifact());
+            resolutionRequest.setRemoteRepositories(mavenProject.getRemoteArtifactRepositories());
+            resolutionRequest.setArtifactDependencies(mavenProject.getDependencyArtifacts());
+            resolutionRequest.setListeners(dependencyTreeResolutionListeners);
+            resolutionRequest.setLocalRepository(localRepo);
+            resolutionRequest.setManagedVersionMap(mavenProject.getManagedVersionMap());
+            resolutionRequest.setResolveTransitively(true);
+            resolutionRequest.setResolveRoot(false);
+            ArtifactResolver resolver = getMavenComponent(ArtifactResolver.class);
+            ArtifactResolutionResult resolve = resolver.resolve(resolutionRequest);
+            mavenProject.setArtifacts(resolve.getArtifacts());
+            reference.set(new MavenResult(mavenProject, exceptions));
+
+          } catch (Exception e) {
+            reference.set(new MavenResult(null, null, Collections.singletonList(e)));
+          }
         });
-        return reference.get();
-    }
+    return reference.get();
+  }
 

@@ -1,72 +1,74 @@
-    /**
-     * Starts the environment publishing all the necessary events.
-     * Respects task interruption & stops the workspace if starting task is cancelled.
-     */
-    private void startEnvironmentAndPublishEvents(EnvironmentImpl environment,
-                                                  String workspaceId,
-                                                  String envName,
-                                                  boolean recover) throws ServerException,
-                                                                          EnvironmentException,
-                                                                          ConflictException,
-                                                                          AgentException {
-        try {
-            envEngine.start(workspaceId,
-                            envName,
-                            environment,
-                            recover,
-                            new WebsocketMessageConsumer<>(format(ENVIRONMENT_OUTPUT_CHANNEL_TEMPLATE, workspaceId)),
-                            machineAgentsLauncher);
-        } catch (EnvironmentStartInterruptedException x) {
-            // environment start was interrupted, it's either shutdown or direct stop
-            // in the case of shutdown make sure the status is correct,
-            // otherwise workspace is already stopping
-            compareAndSetStatus(workspaceId, WorkspaceStatus.STARTING, WorkspaceStatus.STOPPING);
-            removeStateAndPublishStopEvents(workspaceId);
-            throw x;
-        } catch (EnvironmentException | ServerException | ConflictException | AgentException x) {
-            // environment can't be started for some reason, STARTING -> STOPPED
-            removeState(workspaceId);
-            eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                            .withWorkspaceId(workspaceId)
-                                            .withEventType(EventType.ERROR)
-                                            .withPrevStatus(WorkspaceStatus.STARTING)
-                                            .withStatus(WorkspaceStatus.STOPPED)
-                                            .withError("Start of environment '" + envName + "' failed. Error: " + x.getMessage()));
-            throw x;
-        }
-
-        // disallow direct start cancellation, STARTING -> RUNNING
-        WorkspaceStatus prevStatus;
-        try (@SuppressWarnings("unused") Unlocker u = locks.writeLock(workspaceId)) {
-            checkIsNotTerminated("finish workspace start");
-            RuntimeState state = states.get(workspaceId);
-            prevStatus = state.status;
-            if (state.status == WorkspaceStatus.STARTING) {
-                state.status = WorkspaceStatus.RUNNING;
-                state.startTask = null;
-                state.startFuture = null;
-            }
-        }
-
-        // either current thread is interrupted right after status update,
-        // or stop is called directly, anyway stop the environment
-        if (Thread.interrupted() || prevStatus != WorkspaceStatus.STARTING) {
-            try {
-                stopEnvironmentAndPublishEvents(workspaceId, WorkspaceStatus.STARTING);
-            } catch (Exception x) {
-                LOG.error("Couldn't stop the environment '{}' of the workspace '{}'. Error: {}",
-                          envName,
-                          workspaceId,
-                          x.getMessage());
-            }
-            throw new EnvironmentStartInterruptedException(workspaceId, envName);
-        }
-
-        // normally started, notify clients
-        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                        .withWorkspaceId(workspaceId)
-                                        .withStatus(WorkspaceStatus.RUNNING)
-                                        .withEventType(EventType.RUNNING)
-                                        .withPrevStatus(WorkspaceStatus.STARTING));
+  /**
+   * Starts the environment publishing all the necessary events. Respects task interruption & stops
+   * the workspace if starting task is cancelled.
+   */
+  private void startEnvironmentAndPublishEvents(
+      EnvironmentImpl environment, String workspaceId, String envName, boolean recover)
+      throws ServerException, EnvironmentException, ConflictException, AgentException {
+    try {
+      envEngine.start(
+          workspaceId,
+          envName,
+          environment,
+          recover,
+          new WebsocketMessageConsumer<>(format(ENVIRONMENT_OUTPUT_CHANNEL_TEMPLATE, workspaceId)),
+          machineAgentsLauncher);
+    } catch (EnvironmentStartInterruptedException x) {
+      // environment start was interrupted, it's either shutdown or direct stop
+      // in the case of shutdown make sure the status is correct,
+      // otherwise workspace is already stopping
+      compareAndSetStatus(workspaceId, WorkspaceStatus.STARTING, WorkspaceStatus.STOPPING);
+      removeStateAndPublishStopEvents(workspaceId);
+      throw x;
+    } catch (EnvironmentException | ServerException | ConflictException | AgentException x) {
+      // environment can't be started for some reason, STARTING -> STOPPED
+      removeState(workspaceId);
+      eventsService.publish(
+          DtoFactory.newDto(WorkspaceStatusEvent.class)
+              .withWorkspaceId(workspaceId)
+              .withEventType(EventType.ERROR)
+              .withPrevStatus(WorkspaceStatus.STARTING)
+              .withStatus(WorkspaceStatus.STOPPED)
+              .withError(
+                  "Start of environment '" + envName + "' failed. Error: " + x.getMessage()));
+      throw x;
     }
+
+    // disallow direct start cancellation, STARTING -> RUNNING
+    WorkspaceStatus prevStatus;
+    try (@SuppressWarnings("unused")
+        Unlocker u = locks.writeLock(workspaceId)) {
+      checkIsNotTerminated("finish workspace start");
+      RuntimeState state = states.get(workspaceId);
+      prevStatus = state.status;
+      if (state.status == WorkspaceStatus.STARTING) {
+        state.status = WorkspaceStatus.RUNNING;
+        state.startTask = null;
+        state.startFuture = null;
+      }
+    }
+
+    // either current thread is interrupted right after status update,
+    // or stop is called directly, anyway stop the environment
+    if (Thread.interrupted() || prevStatus != WorkspaceStatus.STARTING) {
+      try {
+        stopEnvironmentAndPublishEvents(workspaceId, WorkspaceStatus.STARTING);
+      } catch (Exception x) {
+        LOG.error(
+            "Couldn't stop the environment '{}' of the workspace '{}'. Error: {}",
+            envName,
+            workspaceId,
+            x.getMessage());
+      }
+      throw new EnvironmentStartInterruptedException(workspaceId, envName);
+    }
+
+    // normally started, notify clients
+    eventsService.publish(
+        DtoFactory.newDto(WorkspaceStatusEvent.class)
+            .withWorkspaceId(workspaceId)
+            .withStatus(WorkspaceStatus.RUNNING)
+            .withEventType(EventType.RUNNING)
+            .withPrevStatus(WorkspaceStatus.STARTING));
+  }
 

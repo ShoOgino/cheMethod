@@ -1,124 +1,145 @@
-    /**
-     * @param createContainerParams
-     * @return
-     * @throws IOException
-     */
-    @Override
-    public ContainerCreated createContainer(CreateContainerParams createContainerParams) throws IOException {
-        String containerName = KubernetesStringUtils.convertToContainerName(createContainerParams.getContainerName());
-        String workspaceID = getCheWorkspaceId(createContainerParams);
+  /**
+   * @param createContainerParams
+   * @return
+   * @throws IOException
+   */
+  @Override
+  public ContainerCreated createContainer(CreateContainerParams createContainerParams)
+      throws IOException {
+    String containerName =
+        KubernetesStringUtils.convertToContainerName(createContainerParams.getContainerName());
+    String workspaceID = getCheWorkspaceId(createContainerParams);
 
-        // imageForDocker is the docker version of the image repository. It's needed for other
-        // OpenShiftConnector API methods, but is not acceptable as an OpenShift name
-        String imageForDocker = createContainerParams.getContainerConfig().getImage();
-        // imageStreamTagName is imageForDocker converted into a form that can be used
-        // in OpenShift
-        String imageStreamTagName = KubernetesStringUtils.convertPullSpecToTagName(imageForDocker);
+    // imageForDocker is the docker version of the image repository. It's needed for other
+    // OpenShiftConnector API methods, but is not acceptable as an OpenShift name
+    String imageForDocker = createContainerParams.getContainerConfig().getImage();
+    // imageStreamTagName is imageForDocker converted into a form that can be used
+    // in OpenShift
+    String imageStreamTagName = KubernetesStringUtils.convertPullSpecToTagName(imageForDocker);
 
-        // imageStreamTagName is not enough to fill out a pull spec; it is only the tag, so we
-        // have to get the ImageStreamTag from the tag, and then get the full ImageStreamTag name
-        // from that tag. This works because the tags used in Che are unique.
-        ImageStreamTag imageStreamTag = getImageStreamTagFromRepo(imageStreamTagName);
-        String imageStreamTagPullSpec = imageStreamTag.getMetadata().getName();
+    // imageStreamTagName is not enough to fill out a pull spec; it is only the tag, so we
+    // have to get the ImageStreamTag from the tag, and then get the full ImageStreamTag name
+    // from that tag. This works because the tags used in Che are unique.
+    ImageStreamTag imageStreamTag = getImageStreamTagFromRepo(imageStreamTagName);
+    String imageStreamTagPullSpec = imageStreamTag.getMetadata().getName();
 
-        // Next we need to get the address of the registry where the ImageStreamTag is stored
-        String imageStreamName = KubernetesStringUtils.getImageStreamNameFromPullSpec(imageStreamTagPullSpec);
+    // Next we need to get the address of the registry where the ImageStreamTag is stored
+    String imageStreamName =
+        KubernetesStringUtils.getImageStreamNameFromPullSpec(imageStreamTagPullSpec);
 
-        ImageStream imageStream;
-        try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
-            imageStream = openShiftClient.imageStreams()
-                                         .inNamespace(openShiftCheProjectName)
-                                         .withName(imageStreamName)
-                                         .get();
-            if (imageStream == null) {
-                throw new OpenShiftException("ImageStream not found");
-            }
-        }
-        String registryAddress = imageStream.getStatus()
-                                            .getDockerImageRepository()
-                                            .split("/")[0];
-
-        // The above needs to be combined to form a pull spec that will work when defining a container.
-        String dockerPullSpec = String.format("%s/%s/%s", registryAddress,
-                                                          openShiftCheProjectName,
-                                                          imageStreamTagPullSpec);
-
-        ContainerConfig containerConfig = createContainerParams.getContainerConfig();
-        ImageConfig imageConfig = inspectImage(InspectImageParams.create(imageForDocker)).getConfig();
-
-        final Set<String> exposedPorts = getExposedPorts(containerConfig, imageConfig);
-        final Map<String, String> labels = getLabels(containerConfig, imageConfig);
-        Map<String, String> portsToRefName = getPortsToRefName(labels, exposedPorts);
-
-        String[] envVariables = createContainerParams.getContainerConfig().getEnv();
-        String[] volumes = createContainerParams.getContainerConfig().getHostConfig().getBinds();
-
-        Map<String, String> additionalLabels = createContainerParams.getContainerConfig().getLabels();
-        String networkName = createContainerParams.getContainerConfig().getHostConfig().getNetworkMode();
-        EndpointConfig endpointConfig = createContainerParams.getContainerConfig().getNetworkingConfig().getEndpointsConfig().get(networkName);
-        String[] endpointAliases = endpointConfig != null ? endpointConfig.getAliases() : new String[0];
-        
-        Map<String, Quantity> resourceLimits = new HashMap<>();
-        if (!isNullOrEmpty(cheWorkspaceMemoryLimit)) {
-            LOG.info("Che property 'che.openshift.workspace.memory.override' "
-                   + "used to override workspace memory limit to {}.", cheWorkspaceMemoryLimit);
-            resourceLimits.put("memory", new Quantity(cheWorkspaceMemoryLimit));
-        } else {
-            long memoryLimitBytes = createContainerParams.getContainerConfig().getHostConfig().getMemory();
-            String memoryLimit = Long.toString(memoryLimitBytes / 1048576) + "Mi";
-            LOG.info("Creating workspace pod with memory limit of {}.", memoryLimit);
-            resourceLimits.put("memory", new Quantity(cheWorkspaceMemoryLimit));
-        }
-
-        Map<String, Quantity> resourceRequests = new HashMap<>();
-        if (!isNullOrEmpty(cheWorkspaceMemoryRequest)) {
-            resourceRequests.put("memory", new Quantity(cheWorkspaceMemoryRequest));
-        }
-
-        String deploymentName;
-        String serviceName;
-        if (isDevMachine(createContainerParams)) {
-            serviceName = deploymentName = CHE_OPENSHIFT_RESOURCES_PREFIX + workspaceID;
-        } else {
-            if (endpointAliases.length > 0) {
-                serviceName = endpointAliases[0];
-                deploymentName = CHE_OPENSHIFT_RESOURCES_PREFIX + serviceName;
-            } else {
-                // Should never happen
-                serviceName = deploymentName = CHE_OPENSHIFT_RESOURCES_PREFIX + KubernetesStringUtils.generateWorkspaceID();
-            }
-        }
-        
-        String containerID;
-        OpenShiftClient openShiftClient = new DefaultOpenShiftClient();
-        try {            
-            createOpenShiftService(deploymentName, serviceName, exposedPorts, portsToRefName, additionalLabels, endpointAliases);
-            createOpenShiftDeployment(deploymentName,
-                                                dockerPullSpec,
-                                                containerName,
-                                                exposedPorts,
-                                                portsToRefName,
-                                                envVariables,
-                                                volumes,
-                                                resourceLimits,
-                                                resourceRequests);
-
-            containerID = waitAndRetrieveContainerID(deploymentName);
-            if (containerID == null) {
-                throw new OpenShiftException("Failed to get the ID of the container running in the OpenShift pod");
-            }
-        } catch (IOException | KubernetesClientException e) {
-            // Make sure we clean up deployment and service in case of an error -- otherwise Che can end up
-            // in an inconsistent state.
-            LOG.info("Error while creating Pod, removing deployment");
-            LOG.info(e.getMessage());
-            openShiftDeploymentCleaner.cleanDeploymentResources(deploymentName, openShiftCheProjectName);
-            openShiftClient.resource(imageStreamTag).delete();
-            throw e;
-        } finally {
-            openShiftClient.close();
-        }
-
-        return new ContainerCreated(containerID, null);
+    ImageStream imageStream;
+    try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+      imageStream =
+          openShiftClient
+              .imageStreams()
+              .inNamespace(openShiftCheProjectName)
+              .withName(imageStreamName)
+              .get();
+      if (imageStream == null) {
+        throw new OpenShiftException("ImageStream not found");
+      }
     }
+    String registryAddress = imageStream.getStatus().getDockerImageRepository().split("/")[0];
+
+    // The above needs to be combined to form a pull spec that will work when defining a container.
+    String dockerPullSpec =
+        String.format("%s/%s/%s", registryAddress, openShiftCheProjectName, imageStreamTagPullSpec);
+
+    ContainerConfig containerConfig = createContainerParams.getContainerConfig();
+    ImageConfig imageConfig = inspectImage(InspectImageParams.create(imageForDocker)).getConfig();
+
+    final Set<String> exposedPorts = getExposedPorts(containerConfig, imageConfig);
+    final Map<String, String> labels = getLabels(containerConfig, imageConfig);
+    Map<String, String> portsToRefName = getPortsToRefName(labels, exposedPorts);
+
+    String[] envVariables = createContainerParams.getContainerConfig().getEnv();
+    String[] volumes = createContainerParams.getContainerConfig().getHostConfig().getBinds();
+
+    Map<String, String> additionalLabels = createContainerParams.getContainerConfig().getLabels();
+    String networkName =
+        createContainerParams.getContainerConfig().getHostConfig().getNetworkMode();
+    EndpointConfig endpointConfig =
+        createContainerParams
+            .getContainerConfig()
+            .getNetworkingConfig()
+            .getEndpointsConfig()
+            .get(networkName);
+    String[] endpointAliases = endpointConfig != null ? endpointConfig.getAliases() : new String[0];
+
+    Map<String, Quantity> resourceLimits = new HashMap<>();
+    if (!isNullOrEmpty(cheWorkspaceMemoryLimit)) {
+      LOG.info(
+          "Che property 'che.openshift.workspace.memory.override' "
+              + "used to override workspace memory limit to {}.",
+          cheWorkspaceMemoryLimit);
+      resourceLimits.put("memory", new Quantity(cheWorkspaceMemoryLimit));
+    } else {
+      long memoryLimitBytes =
+          createContainerParams.getContainerConfig().getHostConfig().getMemory();
+      String memoryLimit = Long.toString(memoryLimitBytes / 1048576) + "Mi";
+      LOG.info("Creating workspace pod with memory limit of {}.", memoryLimit);
+      resourceLimits.put("memory", new Quantity(cheWorkspaceMemoryLimit));
+    }
+
+    Map<String, Quantity> resourceRequests = new HashMap<>();
+    if (!isNullOrEmpty(cheWorkspaceMemoryRequest)) {
+      resourceRequests.put("memory", new Quantity(cheWorkspaceMemoryRequest));
+    }
+
+    String deploymentName;
+    String serviceName;
+    if (isDevMachine(createContainerParams)) {
+      serviceName = deploymentName = CHE_OPENSHIFT_RESOURCES_PREFIX + workspaceID;
+    } else {
+      if (endpointAliases.length > 0) {
+        serviceName = endpointAliases[0];
+        deploymentName = CHE_OPENSHIFT_RESOURCES_PREFIX + serviceName;
+      } else {
+        // Should never happen
+        serviceName =
+            deploymentName =
+                CHE_OPENSHIFT_RESOURCES_PREFIX + KubernetesStringUtils.generateWorkspaceID();
+      }
+    }
+
+    String containerID;
+    OpenShiftClient openShiftClient = new DefaultOpenShiftClient();
+    try {
+      createOpenShiftService(
+          deploymentName,
+          serviceName,
+          exposedPorts,
+          portsToRefName,
+          additionalLabels,
+          endpointAliases);
+      createOpenShiftDeployment(
+          deploymentName,
+          dockerPullSpec,
+          containerName,
+          exposedPorts,
+          portsToRefName,
+          envVariables,
+          volumes,
+          resourceLimits,
+          resourceRequests);
+
+      containerID = waitAndRetrieveContainerID(deploymentName);
+      if (containerID == null) {
+        throw new OpenShiftException(
+            "Failed to get the ID of the container running in the OpenShift pod");
+      }
+    } catch (IOException | KubernetesClientException e) {
+      // Make sure we clean up deployment and service in case of an error -- otherwise Che can end up
+      // in an inconsistent state.
+      LOG.info("Error while creating Pod, removing deployment");
+      LOG.info(e.getMessage());
+      openShiftDeploymentCleaner.cleanDeploymentResources(deploymentName, openShiftCheProjectName);
+      openShiftClient.resource(imageStreamTag).delete();
+      throw e;
+    } finally {
+      openShiftClient.close();
+    }
+
+    return new ContainerCreated(containerID, null);
+  }
 

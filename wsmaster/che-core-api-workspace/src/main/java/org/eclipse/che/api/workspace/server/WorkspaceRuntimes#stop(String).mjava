@@ -1,67 +1,64 @@
-    /**
-     * Stops running workspace runtime.
-     *
-     * <p>Stops environment in an implementation specific way.
-     * During the stop of the workspace its runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status.
-     * Workspace may be stopped only if its status is {@link WorkspaceStatus#RUNNING}.
-     *
-     * @param workspaceId
-     *         identifier of workspace which should be stopped
-     * @throws NotFoundException
-     *         when workspace with specified identifier is not running
-     * @throws ServerException
-     *         when any error occurs during workspace stopping
-     * @throws ConflictException
-     *         when running workspace status is different from {@link WorkspaceStatus#RUNNING}
-     * @see CheEnvironmentEngine#stop(String)
-     * @see WorkspaceStatus#STOPPING
-     */
-    public void stop(String workspaceId) throws NotFoundException,
-                                                ServerException,
-                                                ConflictException,
-                                                EnvironmentException {
-        requireNonNull(workspaceId, "Required not-null workspace id");
-        RuntimeState prevState;
-        try (@SuppressWarnings("unused") Unlocker u = locks.writeLock(workspaceId)) {
-            checkIsNotTerminated("stop the workspace");
-            RuntimeState state = getExistingState(workspaceId);
-            if (state.status != WorkspaceStatus.RUNNING && state.status != WorkspaceStatus.STARTING) {
-                throw new ConflictException(format("Couldn't stop the workspace '%s' because its status is '%s'. " +
-                                                   "Workspace can be stopped only if it is 'RUNNING' or 'STARTING'",
-                                                   workspaceId,
-                                                   state.status));
-            }
-            prevState = new RuntimeState(state);
-            state.status = WorkspaceStatus.STOPPING;
-        }
-
-        // workspace is running, stop normally
-        if (prevState.status == WorkspaceStatus.RUNNING) {
-            stopEnvironmentAndPublishEvents(workspaceId, WorkspaceStatus.RUNNING);
-            return;
-        }
-
-        // interrupt workspace start thread
-        prevState.startFuture.cancel(true);
-
-        // if task wasn't called by executor service, then
-        // no real machines were started but, the clients still
-        // have to be notified about the workspace shut down
-        StartTask startTask = prevState.startTask;
-        if (startTask.markAsUsed()) {
-            removeStateAndPublishStopEvents(workspaceId);
-            prevState.startTask.earlyComplete();
-            return;
-        }
-
-        // otherwise stop will be triggered by the start task, wait for it to finish
-        try {
-            startTask.await();
-        } catch (EnvironmentStartInterruptedException ignored) {
-            // environment start successfully interrupted
-        } catch (InterruptedException x) {
-            Thread.currentThread().interrupt();
-            throw new ServerException("Interrupted while waiting for start task cancellation", x);
-        }
+  /**
+   * Stops running workspace runtime.
+   *
+   * <p>Stops environment in an implementation specific way. During the stop of the workspace its
+   * runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status. Workspace may be
+   * stopped only if its status is {@link WorkspaceStatus#RUNNING}.
+   *
+   * @param workspaceId identifier of workspace which should be stopped
+   * @throws NotFoundException when workspace with specified identifier is not running
+   * @throws ServerException when any error occurs during workspace stopping
+   * @throws ConflictException when running workspace status is different from {@link
+   *     WorkspaceStatus#RUNNING}
+   * @see CheEnvironmentEngine#stop(String)
+   * @see WorkspaceStatus#STOPPING
+   */
+  public void stop(String workspaceId)
+      throws NotFoundException, ServerException, ConflictException, EnvironmentException {
+    requireNonNull(workspaceId, "Required not-null workspace id");
+    RuntimeState prevState;
+    try (@SuppressWarnings("unused")
+        Unlocker u = locks.writeLock(workspaceId)) {
+      checkIsNotTerminated("stop the workspace");
+      RuntimeState state = getExistingState(workspaceId);
+      if (state.status != WorkspaceStatus.RUNNING && state.status != WorkspaceStatus.STARTING) {
+        throw new ConflictException(
+            format(
+                "Couldn't stop the workspace '%s' because its status is '%s'. "
+                    + "Workspace can be stopped only if it is 'RUNNING' or 'STARTING'",
+                workspaceId, state.status));
+      }
+      prevState = new RuntimeState(state);
+      state.status = WorkspaceStatus.STOPPING;
     }
+
+    // workspace is running, stop normally
+    if (prevState.status == WorkspaceStatus.RUNNING) {
+      stopEnvironmentAndPublishEvents(workspaceId, WorkspaceStatus.RUNNING);
+      return;
+    }
+
+    // interrupt workspace start thread
+    prevState.startFuture.cancel(true);
+
+    // if task wasn't called by executor service, then
+    // no real machines were started but, the clients still
+    // have to be notified about the workspace shut down
+    StartTask startTask = prevState.startTask;
+    if (startTask.markAsUsed()) {
+      removeStateAndPublishStopEvents(workspaceId);
+      prevState.startTask.earlyComplete();
+      return;
+    }
+
+    // otherwise stop will be triggered by the start task, wait for it to finish
+    try {
+      startTask.await();
+    } catch (EnvironmentStartInterruptedException ignored) {
+      // environment start successfully interrupted
+    } catch (InterruptedException x) {
+      Thread.currentThread().interrupt();
+      throw new ServerException("Interrupted while waiting for start task cancellation", x);
+    }
+  }
 
