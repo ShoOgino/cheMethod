@@ -1,35 +1,35 @@
-    /**
-     * Dump frame.
-     */
-    @Override
-    public StackFrameDump dumpStackFrame() throws DebuggerException {
+  /** Dump frame. */
+  @Override
+  public StackFrameDump dumpStackFrame() throws DebuggerException {
+    try {
+      Map<String, String> locals = gdb.infoLocals().getVariables();
+      locals.putAll(gdb.infoArgs().getVariables());
+
+      List<Variable> variables = new ArrayList<>(locals.size());
+      for (Map.Entry<String, String> e : locals.entrySet()) {
+        String varName = e.getKey();
+        String varValue = e.getValue();
+        String varType;
         try {
-            Map<String, String> locals = gdb.infoLocals().getVariables();
-            locals.putAll(gdb.infoArgs().getVariables());
-
-            List<Variable> variables = new ArrayList<>(locals.size());
-            for (Map.Entry<String, String> e : locals.entrySet()) {
-                String varName = e.getKey();
-                String varValue = e.getValue();
-                String varType;
-                try {
-                    varType = gdb.ptype(varName).getType();
-                } catch (GdbParseException pe) {
-                    LOG.warn(pe.getMessage(), pe);
-                    varType = "";
-                }
-
-                VariablePath variablePath = new VariablePathImpl(singletonList(varName));
-                VariableImpl variable = new VariableImpl(varType, varName, varValue, true, variablePath, Collections.emptyList(), true);
-                variables.add(variable);
-            }
-
-            return new StackFrameDumpImpl(Collections.emptyList(), variables);
-        } catch (GdbTerminatedException e) {
-            disconnect();
-            throw e;
-        } catch (IOException | GdbParseException | InterruptedException e) {
-            throw new DebuggerException("Can't dump stack frame. " + e.getMessage(), e);
+          varType = gdb.ptype(varName).getType();
+        } catch (GdbParseException pe) {
+          LOG.warn(pe.getMessage(), pe);
+          varType = "";
         }
+
+        VariablePath variablePath = new VariablePathImpl(singletonList(varName));
+        VariableImpl variable =
+            new VariableImpl(
+                varType, varName, varValue, true, variablePath, Collections.emptyList(), true);
+        variables.add(variable);
+      }
+
+      return new StackFrameDumpImpl(Collections.emptyList(), variables);
+    } catch (GdbTerminatedException e) {
+      disconnect();
+      throw e;
+    } catch (IOException | GdbParseException | InterruptedException e) {
+      throw new DebuggerException("Can't dump stack frame. " + e.getMessage(), e);
     }
+  }
 

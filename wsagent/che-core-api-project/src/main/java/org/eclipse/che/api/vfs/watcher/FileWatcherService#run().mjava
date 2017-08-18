@@ -1,49 +1,50 @@
-    private void run() {
-        suspended.compareAndSet(true, false);
-        running.compareAndSet(false, true);
+  private void run() {
+    suspended.compareAndSet(true, false);
+    running.compareAndSet(false, true);
 
-        while (running.get()) {
-            try {
-                WatchKey watchKey = service.take();
-                Path dir = keys.get(watchKey);
+    while (running.get()) {
+      try {
+        WatchKey watchKey = service.take();
+        Path dir = keys.get(watchKey);
 
-                List<WatchEvent<?>> watchEvents = watchKey.pollEvents();
+        List<WatchEvent<?>> watchEvents = watchKey.pollEvents();
 
-                if (suspended.get()) {
-                    resetAndRemove(watchKey, dir);
+        if (suspended.get()) {
+          resetAndRemove(watchKey, dir);
 
-                    LOG.debug("File watchers are running in suspended mode - skipping.");
-                    continue;
-                }
-
-                for (WatchEvent<?> event : watchEvents) {
-                    Kind<?> kind = event.kind();
-
-                    if (kind == OVERFLOW) {
-                        LOG.warn("Detected file system events overflowing");
-                        continue;
-                    }
-
-                    WatchEvent<Path> ev = cast(event);
-                    Path item = ev.context();
-                    Path path = dir.resolve(item).toAbsolutePath();
-
-                    if (excludePatternsRegistry.isExcluded(path)) {
-                        LOG.debug("Path is within exclude list, skipping...");
-                        continue;
-                    }
-
-                    handler.handle(path, kind);
-                }
-
-                resetAndRemove(watchKey, dir);
-            } catch (InterruptedException e) {
-                running.compareAndSet(true, false);
-                LOG.debug("Interruption error when running file watcher, most likely caused by stopping it", e);
-            } catch (ClosedWatchServiceException e) {
-                running.compareAndSet(true, false);
-                LOG.debug("Closing watch service while some of keys may be processing", e);
-            }
+          LOG.debug("File watchers are running in suspended mode - skipping.");
+          continue;
         }
+
+        for (WatchEvent<?> event : watchEvents) {
+          Kind<?> kind = event.kind();
+
+          if (kind == OVERFLOW) {
+            LOG.warn("Detected file system events overflowing");
+            continue;
+          }
+
+          WatchEvent<Path> ev = cast(event);
+          Path item = ev.context();
+          Path path = dir.resolve(item).toAbsolutePath();
+
+          if (excludePatternsRegistry.isExcluded(path)) {
+            LOG.debug("Path is within exclude list, skipping...");
+            continue;
+          }
+
+          handler.handle(path, kind);
+        }
+
+        resetAndRemove(watchKey, dir);
+      } catch (InterruptedException e) {
+        running.compareAndSet(true, false);
+        LOG.debug(
+            "Interruption error when running file watcher, most likely caused by stopping it", e);
+      } catch (ClosedWatchServiceException e) {
+        running.compareAndSet(true, false);
+        LOG.debug("Closing watch service while some of keys may be processing", e);
+      }
     }
+  }
 

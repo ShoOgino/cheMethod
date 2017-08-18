@@ -1,32 +1,38 @@
-	public static void evaluateProposals(IType type, String prefix, int offset, int length, int relevance, Set<String> suggestedMethods, Collection<IJavaCompletionProposal> result) throws
+  public static void evaluateProposals(
+      IType type,
+      String prefix,
+      int offset,
+      int length,
+      int relevance,
+      Set<String> suggestedMethods,
+      Collection<IJavaCompletionProposal> result)
+      throws CoreException {
+    if (prefix.length() == 0) {
+      relevance--;
+    }
 
-                                                                                                                                                                                     CoreException {
-		if (prefix.length() == 0) {
-			relevance--;
-		}
+    IField[] fields = type.getFields();
+    IMethod[] methods = type.getMethods();
+    for (int i = 0; i < fields.length; i++) {
+      IField curr = fields[i];
+      if (!JdtFlags.isEnum(curr)) {
+        String getterName = GetterSetterUtil.getGetterName(curr, null);
+        if (Strings.startsWithIgnoreCase(getterName, prefix) && !hasMethod(methods, getterName)) {
+          suggestedMethods.add(getterName);
+          int getterRelevance = relevance;
+          if (JdtFlags.isStatic(curr) && JdtFlags.isFinal(curr)) getterRelevance = relevance - 1;
+          result.add(
+              new GetterSetterCompletionProposal(curr, offset, length, true, getterRelevance));
+        }
 
-		IField[] fields= type.getFields();
-		IMethod[] methods= type.getMethods();
-		for (int i= 0; i < fields.length; i++) {
-			IField curr= fields[i];
-			if (!JdtFlags.isEnum(curr)) {
-				String getterName= GetterSetterUtil.getGetterName(curr, null);
-				if (Strings.startsWithIgnoreCase(getterName, prefix) && !hasMethod(methods, getterName)) {
-					suggestedMethods.add(getterName);
-					int getterRelevance= relevance;
-					if (JdtFlags.isStatic(curr) && JdtFlags.isFinal(curr))
-						getterRelevance= relevance - 1;
-					result.add(new GetterSetterCompletionProposal(curr, offset, length, true, getterRelevance));
-				}
-
-				if (!JdtFlags.isFinal(curr)) {
-					String setterName= GetterSetterUtil.getSetterName(curr, null);
-					if (Strings.startsWithIgnoreCase(setterName, prefix) && !hasMethod(methods, setterName)) {
-						suggestedMethods.add(setterName);
-						result.add(new GetterSetterCompletionProposal(curr, offset, length, false, relevance));
-					}
-				}
-			}
-		}
-	}
+        if (!JdtFlags.isFinal(curr)) {
+          String setterName = GetterSetterUtil.getSetterName(curr, null);
+          if (Strings.startsWithIgnoreCase(setterName, prefix) && !hasMethod(methods, setterName)) {
+            suggestedMethods.add(setterName);
+            result.add(new GetterSetterCompletionProposal(curr, offset, length, false, relevance));
+          }
+        }
+      }
+    }
+  }
 

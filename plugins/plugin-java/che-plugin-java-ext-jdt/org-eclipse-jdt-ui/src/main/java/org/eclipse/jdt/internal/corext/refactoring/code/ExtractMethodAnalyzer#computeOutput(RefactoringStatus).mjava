@@ -1,62 +1,73 @@
-	private void computeOutput(RefactoringStatus status) {
-		// First find all writes inside the selection.
-		FlowContext flowContext= new FlowContext(0, fMaxVariableId + 1);
-		flowContext.setConsiderAccessMode(true);
-		flowContext.setComputeMode(FlowContext.RETURN_VALUES);
-		FlowInfo returnInfo= new InOutFlowAnalyzer(flowContext).perform(getSelectedNodes());
-		IVariableBinding[] returnValues= returnInfo.get(flowContext, FlowInfo.WRITE | FlowInfo.WRITE_POTENTIAL | FlowInfo.UNKNOWN);
+  private void computeOutput(RefactoringStatus status) {
+    // First find all writes inside the selection.
+    FlowContext flowContext = new FlowContext(0, fMaxVariableId + 1);
+    flowContext.setConsiderAccessMode(true);
+    flowContext.setComputeMode(FlowContext.RETURN_VALUES);
+    FlowInfo returnInfo = new InOutFlowAnalyzer(flowContext).perform(getSelectedNodes());
+    IVariableBinding[] returnValues =
+        returnInfo.get(flowContext, FlowInfo.WRITE | FlowInfo.WRITE_POTENTIAL | FlowInfo.UNKNOWN);
 
-		// Compute a selection that exactly covers the selected nodes
-		IRegion region= getSelectedNodeRange();
-		Selection selection= Selection.createFromStartLength(region.getOffset(), region.getLength());
+    // Compute a selection that exactly covers the selected nodes
+    IRegion region = getSelectedNodeRange();
+    Selection selection = Selection.createFromStartLength(region.getOffset(), region.getLength());
 
-		List<IVariableBinding> localReads= new ArrayList<IVariableBinding>();
-		flowContext.setComputeMode(FlowContext.ARGUMENTS);
-		FlowInfo argInfo= new InputFlowAnalyzer(flowContext, selection, true).perform(fEnclosingBodyDeclaration);
-		IVariableBinding[] reads= argInfo.get(flowContext, FlowInfo.READ | FlowInfo.READ_POTENTIAL | FlowInfo.UNKNOWN);
-		outer: for (int i= 0; i < returnValues.length && localReads.size() < returnValues.length; i++) {
-			IVariableBinding binding= returnValues[i];
-			for (int x= 0; x < reads.length; x++) {
-				if (reads[x] == binding) {
-					localReads.add(binding);
-					fReturnValue= binding;
-					continue outer;
-				}
-			}
-		}
-		switch (localReads.size()) {
-			case 0:
-				fReturnValue= null;
-				break;
-			case 1:
-				break;
-			default:
-				fReturnValue= null;
-				StringBuffer affectedLocals= new StringBuffer();
-				for (int i= 0; i < localReads.size(); i++) {
-					IVariableBinding binding= localReads.get(i);
-					String bindingName= BindingLabelProvider
-							.getBindingLabel(binding, BindingLabelProvider.DEFAULT_TEXTFLAGS | JavaElementLabels.F_PRE_TYPE_SIGNATURE);
-					affectedLocals.append(bindingName);
-					if (i != localReads.size() - 1) {
-						affectedLocals.append('\n');
-					}
-				}
-				String message= MessageFormat
-						.format(RefactoringCoreMessages.ExtractMethodAnalyzer_assignments_to_local, new Object[]{affectedLocals.toString()});
-				status.addFatalError(message, JavaStatusContext.create(fCUnit, getSelection()));
-				return;
-		}
-		List<IVariableBinding> callerLocals= new ArrayList<IVariableBinding>(5);
-		FlowInfo localInfo= new InputFlowAnalyzer(flowContext, selection, false).perform(fEnclosingBodyDeclaration);
-		IVariableBinding[] writes= localInfo.get(flowContext, FlowInfo.WRITE | FlowInfo.WRITE_POTENTIAL | FlowInfo.UNKNOWN);
-		for (int i= 0; i < writes.length; i++) {
-			IVariableBinding write= writes[i];
-			if (getSelection().covers(ASTNodes.findDeclaration(write, fEnclosingBodyDeclaration)))
-				callerLocals.add(write);
-		}
-		fCallerLocals= callerLocals.toArray(new IVariableBinding[callerLocals.size()]);
-		if (fReturnValue != null && getSelection().covers(ASTNodes.findDeclaration(fReturnValue, fEnclosingBodyDeclaration)))
-			fReturnLocal= fReturnValue;
-	}
+    List<IVariableBinding> localReads = new ArrayList<IVariableBinding>();
+    flowContext.setComputeMode(FlowContext.ARGUMENTS);
+    FlowInfo argInfo =
+        new InputFlowAnalyzer(flowContext, selection, true).perform(fEnclosingBodyDeclaration);
+    IVariableBinding[] reads =
+        argInfo.get(flowContext, FlowInfo.READ | FlowInfo.READ_POTENTIAL | FlowInfo.UNKNOWN);
+    outer:
+    for (int i = 0; i < returnValues.length && localReads.size() < returnValues.length; i++) {
+      IVariableBinding binding = returnValues[i];
+      for (int x = 0; x < reads.length; x++) {
+        if (reads[x] == binding) {
+          localReads.add(binding);
+          fReturnValue = binding;
+          continue outer;
+        }
+      }
+    }
+    switch (localReads.size()) {
+      case 0:
+        fReturnValue = null;
+        break;
+      case 1:
+        break;
+      default:
+        fReturnValue = null;
+        StringBuffer affectedLocals = new StringBuffer();
+        for (int i = 0; i < localReads.size(); i++) {
+          IVariableBinding binding = localReads.get(i);
+          String bindingName =
+              BindingLabelProvider.getBindingLabel(
+                  binding,
+                  BindingLabelProvider.DEFAULT_TEXTFLAGS | JavaElementLabels.F_PRE_TYPE_SIGNATURE);
+          affectedLocals.append(bindingName);
+          if (i != localReads.size() - 1) {
+            affectedLocals.append('\n');
+          }
+        }
+        String message =
+            MessageFormat.format(
+                RefactoringCoreMessages.ExtractMethodAnalyzer_assignments_to_local,
+                new Object[] {affectedLocals.toString()});
+        status.addFatalError(message, JavaStatusContext.create(fCUnit, getSelection()));
+        return;
+    }
+    List<IVariableBinding> callerLocals = new ArrayList<IVariableBinding>(5);
+    FlowInfo localInfo =
+        new InputFlowAnalyzer(flowContext, selection, false).perform(fEnclosingBodyDeclaration);
+    IVariableBinding[] writes =
+        localInfo.get(flowContext, FlowInfo.WRITE | FlowInfo.WRITE_POTENTIAL | FlowInfo.UNKNOWN);
+    for (int i = 0; i < writes.length; i++) {
+      IVariableBinding write = writes[i];
+      if (getSelection().covers(ASTNodes.findDeclaration(write, fEnclosingBodyDeclaration)))
+        callerLocals.add(write);
+    }
+    fCallerLocals = callerLocals.toArray(new IVariableBinding[callerLocals.size()]);
+    if (fReturnValue != null
+        && getSelection().covers(ASTNodes.findDeclaration(fReturnValue, fEnclosingBodyDeclaration)))
+      fReturnLocal = fReturnValue;
+  }
 

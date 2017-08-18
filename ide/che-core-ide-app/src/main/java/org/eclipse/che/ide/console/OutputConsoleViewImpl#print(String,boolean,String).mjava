@@ -1,51 +1,57 @@
-    @Override
-    public void print(final String text, boolean carriageReturn, String color) {
-        if (this.carriageReturn) {
-            Node lastChild = consoleLines.getElement().getLastChild();
-            if (lastChild != null) {
-                lastChild.removeFromParent();
+  @Override
+  public void print(final String text, boolean carriageReturn, String color) {
+    if (this.carriageReturn) {
+      Node lastChild = consoleLines.getElement().getLastChild();
+      if (lastChild != null) {
+        lastChild.removeFromParent();
+      }
+    }
+
+    this.carriageReturn = carriageReturn;
+
+    final SafeHtml colorOutput =
+        new SafeHtml() {
+          @Override
+          public String asString() {
+
+            if (Strings.isNullOrEmpty(text)) {
+              return " ";
             }
-        }
 
-        this.carriageReturn = carriageReturn;
-
-        final SafeHtml colorOutput = new SafeHtml() {
-            @Override
-            public String asString() {
-
-                if (Strings.isNullOrEmpty(text)) {
-                    return " ";
+            String encoded = SafeHtmlUtils.htmlEscape(text);
+            if (delegate != null) {
+              if (delegate.getCustomizer() != null) {
+                if (delegate.getCustomizer().canCustomize(encoded)) {
+                  encoded = delegate.getCustomizer().customize(encoded);
                 }
-
-                String encoded = SafeHtmlUtils.htmlEscape(text);
-                if (delegate != null) {
-                	if (delegate.getCustomizer() != null) {
-                		if (delegate.getCustomizer().canCustomize(encoded)) {
-                			encoded = delegate.getCustomizer().customize(encoded);
-                		}
-                	}
-                }
-               
-                for (final Pair<RegExp, String> pair : output2Color) {
-                    final MatchResult matcher = pair.first.exec(encoded);
-
-                    if (matcher != null) {
-                        return encoded.replaceAll(matcher.getGroup(1),
-                                               "<span style=\"color: " + pair.second + "\">" + matcher.getGroup(1) + "</span>");
-                    }
-                }
-
-                return encoded;
+              }
             }
+
+            for (final Pair<RegExp, String> pair : output2Color) {
+              final MatchResult matcher = pair.first.exec(encoded);
+
+              if (matcher != null) {
+                return encoded.replaceAll(
+                    matcher.getGroup(1),
+                    "<span style=\"color: "
+                        + pair.second
+                        + "\">"
+                        + matcher.getGroup(1)
+                        + "</span>");
+              }
+            }
+
+            return encoded;
+          }
         };
 
-        PreElement pre = DOM.createElement("pre").cast();
-        pre.setInnerSafeHtml(colorOutput);
-        if (color != null) {
-            pre.getStyle().setColor(color);
-        }
-        consoleLines.getElement().appendChild(pre);
-
-        followOutput();
+    PreElement pre = DOM.createElement("pre").cast();
+    pre.setInnerSafeHtml(colorOutput);
+    if (color != null) {
+      pre.getStyle().setColor(color);
     }
+    consoleLines.getElement().appendChild(pre);
+
+    followOutput();
+  }
 

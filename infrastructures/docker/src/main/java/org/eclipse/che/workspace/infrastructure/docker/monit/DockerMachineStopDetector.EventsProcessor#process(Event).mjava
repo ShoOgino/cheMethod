@@ -1,33 +1,36 @@
-        @Override
-        public void process(Event message) {
-            if (message.getType() != null && !"container".equals(message.getType())) {
-                // this check is added because of bug in the docker swarm which do not filter events
-                // in case of new response format of 'get events' we should skip all not filtered by swarm event types
-                return;
-            }
+    @Override
+    public void process(Event message) {
+      if (message.getType() != null && !"container".equals(message.getType())) {
+        // this check is added because of bug in the docker swarm which do not filter events
+        // in case of new response format of 'get events' we should skip all not filtered by swarm event types
+        return;
+      }
 
-            switch (message.getStatus()) {
-                case "oom":
-                    containersOomTimestamps.put(message.getId(), message.getId());
-                    LOG.debug("OOM of process in container {} has been detected", message.getId());
-                    break;
-                case "die":
-                    String stopReason;
-                    if (containersOomTimestamps.getIfPresent(message.getId()) != null) {
-                        containersOomTimestamps.invalidate(message.getId());
-                        stopReason = "OOM of main process of container was detected.";
-                    } else {
-                        stopReason = "Please, check that container is designed to run in non-interactive terminal.";
-                    }
-                    lastProcessedEventDate = message.getTime();
-                    ContainerDeathHandlerHolder holder = handlers.get(message.getId());
-                    if (holder != null) {
-                        holder.handler.handle(format("Container of machine '%s' unexpectedly stopped. %s",
-                                                     holder.machineName, stopReason));
-                    }
-                    break;
-                default:
-                    // we don't care about other event types
-            }
-        }
+      switch (message.getStatus()) {
+        case "oom":
+          containersOomTimestamps.put(message.getId(), message.getId());
+          LOG.debug("OOM of process in container {} has been detected", message.getId());
+          break;
+        case "die":
+          String stopReason;
+          if (containersOomTimestamps.getIfPresent(message.getId()) != null) {
+            containersOomTimestamps.invalidate(message.getId());
+            stopReason = "OOM of main process of container was detected.";
+          } else {
+            stopReason =
+                "Please, check that container is designed to run in non-interactive terminal.";
+          }
+          lastProcessedEventDate = message.getTime();
+          ContainerDeathHandlerHolder holder = handlers.get(message.getId());
+          if (holder != null) {
+            holder.handler.handle(
+                format(
+                    "Container of machine '%s' unexpectedly stopped. %s",
+                    holder.machineName, stopReason));
+          }
+          break;
+        default:
+          // we don't care about other event types
+      }
+    }
 

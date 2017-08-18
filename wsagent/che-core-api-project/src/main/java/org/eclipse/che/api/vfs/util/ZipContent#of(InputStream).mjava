@@ -1,52 +1,55 @@
-    public static ZipContent of(InputStream in) throws IOException {
-        java.io.File file = null;
-        byte[] inMemory = null;
+  public static ZipContent of(InputStream in) throws IOException {
+    java.io.File file = null;
+    byte[] inMemory = null;
 
-        int count = 0;
-        ByteArrayOutputStream inMemorySpool = new ByteArrayOutputStream(KEEP_IN_MEMORY_THRESHOLD);
+    int count = 0;
+    ByteArrayOutputStream inMemorySpool = new ByteArrayOutputStream(KEEP_IN_MEMORY_THRESHOLD);
 
-        int bytes;
-        final byte[] buff = new byte[COPY_BUFFER_SIZE];
-        while (count <= KEEP_IN_MEMORY_THRESHOLD && (bytes = in.read(buff)) != -1) {
-            inMemorySpool.write(buff, 0, bytes);
-            count += bytes;
-        }
-
-        InputStream spool;
-        if (count > KEEP_IN_MEMORY_THRESHOLD) {
-            file = java.io.File.createTempFile("import", ".zip");
-            try (FileOutputStream fileSpool = new FileOutputStream(file)) {
-                inMemorySpool.writeTo(fileSpool);
-                while ((bytes = in.read(buff)) != -1) {
-                    fileSpool.write(buff, 0, bytes);
-                }
-            }
-            spool = new FileInputStream(file);
-        } else {
-            inMemory = inMemorySpool.toByteArray();
-            spool = new ByteArrayInputStream(inMemory);
-        }
-
-        try (CountingInputStream compressedDataCounter = new CountingInputStream(spool);
-             ZipInputStream zip = new ZipInputStream(compressedDataCounter)) {
-            try (CountingInputStream uncompressedDataCounter = new CountingInputStream(zip)) {
-                ZipEntry zipEntry;
-                while ((zipEntry = zip.getNextEntry()) != null) {
-                    if (!zipEntry.isDirectory()) {
-                        while (uncompressedDataCounter.read(buff) != -1) {
-                            long uncompressedBytes = uncompressedDataCounter.getByteCount();
-                            if (uncompressedBytes > ZIP_THRESHOLD) {
-                                long compressedBytes = compressedDataCounter.getByteCount();
-                                if (uncompressedBytes > (ZIP_RATIO * compressedBytes)) {
-                                    throw new IOException("Zip bomb detected");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            return new ZipContent(inMemory == null ? new DeleteOnCloseFileInputStream(file) : new ByteArrayInputStream(inMemory));
-        }
+    int bytes;
+    final byte[] buff = new byte[COPY_BUFFER_SIZE];
+    while (count <= KEEP_IN_MEMORY_THRESHOLD && (bytes = in.read(buff)) != -1) {
+      inMemorySpool.write(buff, 0, bytes);
+      count += bytes;
     }
+
+    InputStream spool;
+    if (count > KEEP_IN_MEMORY_THRESHOLD) {
+      file = java.io.File.createTempFile("import", ".zip");
+      try (FileOutputStream fileSpool = new FileOutputStream(file)) {
+        inMemorySpool.writeTo(fileSpool);
+        while ((bytes = in.read(buff)) != -1) {
+          fileSpool.write(buff, 0, bytes);
+        }
+      }
+      spool = new FileInputStream(file);
+    } else {
+      inMemory = inMemorySpool.toByteArray();
+      spool = new ByteArrayInputStream(inMemory);
+    }
+
+    try (CountingInputStream compressedDataCounter = new CountingInputStream(spool);
+        ZipInputStream zip = new ZipInputStream(compressedDataCounter)) {
+      try (CountingInputStream uncompressedDataCounter = new CountingInputStream(zip)) {
+        ZipEntry zipEntry;
+        while ((zipEntry = zip.getNextEntry()) != null) {
+          if (!zipEntry.isDirectory()) {
+            while (uncompressedDataCounter.read(buff) != -1) {
+              long uncompressedBytes = uncompressedDataCounter.getByteCount();
+              if (uncompressedBytes > ZIP_THRESHOLD) {
+                long compressedBytes = compressedDataCounter.getByteCount();
+                if (uncompressedBytes > (ZIP_RATIO * compressedBytes)) {
+                  throw new IOException("Zip bomb detected");
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return new ZipContent(
+          inMemory == null
+              ? new DeleteOnCloseFileInputStream(file)
+              : new ByteArrayInputStream(inMemory));
+    }
+  }
 

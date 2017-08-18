@@ -1,59 +1,69 @@
-    @Override
-    public void accept(final IResourceProxyVisitor visitor, final int depth, final int memberFlags) throws CoreException {
-        java.io.File file = workspace.getFile(getFullPath());
-        int maxDepth = depth == IResource.DEPTH_INFINITE ? Integer.MAX_VALUE : depth;
-        try {
-            final ResourceProxy resourceProxy = new ResourceProxy();
-            final int  workspacePath = workspace.getAbsoluteWorkspacePath().length();
-            Files.walkFileTree(file.toPath(), Collections.<FileVisitOption>emptySet(), maxDepth, new FileVisitor<java.nio.file.Path>() {
-                @Override
-                public FileVisitResult preVisitDirectory(java.nio.file.Path dir, BasicFileAttributes attrs) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
+  @Override
+  public void accept(final IResourceProxyVisitor visitor, final int depth, final int memberFlags)
+      throws CoreException {
+    java.io.File file = workspace.getFile(getFullPath());
+    int maxDepth = depth == IResource.DEPTH_INFINITE ? Integer.MAX_VALUE : depth;
+    try {
+      final ResourceProxy resourceProxy = new ResourceProxy();
+      final int workspacePath = workspace.getAbsoluteWorkspacePath().length();
+      Files.walkFileTree(
+          file.toPath(),
+          Collections.<FileVisitOption>emptySet(),
+          maxDepth,
+          new FileVisitor<java.nio.file.Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(
+                java.nio.file.Path dir, BasicFileAttributes attrs) throws IOException {
+              return FileVisitResult.CONTINUE;
+            }
 
-                @Override
-                public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) throws IOException {
-                    FileVisitResult result = FileVisitResult.CONTINUE;
-                    try {
-                        String string = file.toString();
-                        IPath path = new Path(string.substring(workspacePath));
-                        resourceProxy.info = workspace.getResourceInfo(path);
-                        resourceProxy.fullPath = path;
+            @Override
+            public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs)
+                throws IOException {
+              FileVisitResult result = FileVisitResult.CONTINUE;
+              try {
+                String string = file.toString();
+                IPath path = new Path(string.substring(workspacePath));
+                resourceProxy.info = workspace.getResourceInfo(path);
+                resourceProxy.fullPath = path;
 
-                        boolean shouldContinue = true;
-                        switch (depth) {
-                            case DEPTH_ZERO :
-                                shouldContinue = false;
-                                break;
-                            case DEPTH_ONE :
-                                shouldContinue = !Resource.this.path.equals(path.removeLastSegments(1));
-                                break;
-                            case DEPTH_INFINITE :
-                                shouldContinue = true;
-                                break;
-                        }
-                        boolean visit = visitor.visit(resourceProxy) && shouldContinue;
-                        result = visit? FileVisitResult.CONTINUE : FileVisitResult.SKIP_SUBTREE;
-                    } catch (CoreException e) {
-                        throw new WrappedRuntimeException(e);
-                    } finally {
-                        resourceProxy.reset();
-                    }
-                    return result;
+                boolean shouldContinue = true;
+                switch (depth) {
+                  case DEPTH_ZERO:
+                    shouldContinue = false;
+                    break;
+                  case DEPTH_ONE:
+                    shouldContinue = !Resource.this.path.equals(path.removeLastSegments(1));
+                    break;
+                  case DEPTH_INFINITE:
+                    shouldContinue = true;
+                    break;
                 }
+                boolean visit = visitor.visit(resourceProxy) && shouldContinue;
+                result = visit ? FileVisitResult.CONTINUE : FileVisitResult.SKIP_SUBTREE;
+              } catch (CoreException e) {
+                throw new WrappedRuntimeException(e);
+              } finally {
+                resourceProxy.reset();
+              }
+              return result;
+            }
 
-                @Override
-                public FileVisitResult visitFileFailed(java.nio.file.Path file, IOException exc) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
+            @Override
+            public FileVisitResult visitFileFailed(java.nio.file.Path file, IOException exc)
+                throws IOException {
+              return FileVisitResult.CONTINUE;
+            }
 
-                @Override
-                public FileVisitResult postVisitDirectory(java.nio.file.Path dir, IOException exc) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException e) {
-            throw new CoreException(new Status(IStatus.ERROR, ResourcesPlugin.getPluginId(), e.getMessage(), e));
-        }
+            @Override
+            public FileVisitResult postVisitDirectory(java.nio.file.Path dir, IOException exc)
+                throws IOException {
+              return FileVisitResult.CONTINUE;
+            }
+          });
+    } catch (IOException e) {
+      throw new CoreException(
+          new Status(IStatus.ERROR, ResourcesPlugin.getPluginId(), e.getMessage(), e));
     }
+  }
 

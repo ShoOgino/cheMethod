@@ -1,98 +1,110 @@
-	public static void getUnreachableCodeProposals(IInvocationContext context, IProblemLocation problem,
-												   Collection<ICommandAccess> proposals) {
-		CompilationUnit root = context.getASTRoot();
-		ASTNode selectedNode = problem.getCoveringNode(root);
-		if (selectedNode == null) {
-			return;
-		}
+  public static void getUnreachableCodeProposals(
+      IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+    CompilationUnit root = context.getASTRoot();
+    ASTNode selectedNode = problem.getCoveringNode(root);
+    if (selectedNode == null) {
+      return;
+    }
 
-		ASTNode parent = selectedNode.getParent();
-		while (parent instanceof ExpressionStatement) {
-			selectedNode = parent;
-			parent = selectedNode.getParent();
-		}
+    ASTNode parent = selectedNode.getParent();
+    while (parent instanceof ExpressionStatement) {
+      selectedNode = parent;
+      parent = selectedNode.getParent();
+    }
 
-		if (parent instanceof WhileStatement) {
-			addRemoveIncludingConditionProposal(context, parent, null, proposals);
+    if (parent instanceof WhileStatement) {
+      addRemoveIncludingConditionProposal(context, parent, null, proposals);
 
-		} else if (selectedNode.getLocationInParent() == IfStatement.THEN_STATEMENT_PROPERTY) {
-			Statement elseStatement = ((IfStatement)parent).getElseStatement();
-			addRemoveIncludingConditionProposal(context, parent, elseStatement, proposals);
+    } else if (selectedNode.getLocationInParent() == IfStatement.THEN_STATEMENT_PROPERTY) {
+      Statement elseStatement = ((IfStatement) parent).getElseStatement();
+      addRemoveIncludingConditionProposal(context, parent, elseStatement, proposals);
 
-		} else if (selectedNode.getLocationInParent() == IfStatement.ELSE_STATEMENT_PROPERTY) {
-			Statement thenStatement = ((IfStatement)parent).getThenStatement();
-			addRemoveIncludingConditionProposal(context, parent, thenStatement, proposals);
+    } else if (selectedNode.getLocationInParent() == IfStatement.ELSE_STATEMENT_PROPERTY) {
+      Statement thenStatement = ((IfStatement) parent).getThenStatement();
+      addRemoveIncludingConditionProposal(context, parent, thenStatement, proposals);
 
-		} else if (selectedNode.getLocationInParent() == ForStatement.BODY_PROPERTY) {
-			Statement body = ((ForStatement)parent).getBody();
-			addRemoveIncludingConditionProposal(context, parent, body, proposals);
+    } else if (selectedNode.getLocationInParent() == ForStatement.BODY_PROPERTY) {
+      Statement body = ((ForStatement) parent).getBody();
+      addRemoveIncludingConditionProposal(context, parent, body, proposals);
 
-		} else if (selectedNode.getLocationInParent() == ConditionalExpression.THEN_EXPRESSION_PROPERTY) {
-			Expression elseExpression = ((ConditionalExpression)parent).getElseExpression();
-			addRemoveIncludingConditionProposal(context, parent, elseExpression, proposals);
+    } else if (selectedNode.getLocationInParent()
+        == ConditionalExpression.THEN_EXPRESSION_PROPERTY) {
+      Expression elseExpression = ((ConditionalExpression) parent).getElseExpression();
+      addRemoveIncludingConditionProposal(context, parent, elseExpression, proposals);
 
-		} else if (selectedNode.getLocationInParent() == ConditionalExpression.ELSE_EXPRESSION_PROPERTY) {
-			Expression thenExpression = ((ConditionalExpression)parent).getThenExpression();
-			addRemoveIncludingConditionProposal(context, parent, thenExpression, proposals);
+    } else if (selectedNode.getLocationInParent()
+        == ConditionalExpression.ELSE_EXPRESSION_PROPERTY) {
+      Expression thenExpression = ((ConditionalExpression) parent).getThenExpression();
+      addRemoveIncludingConditionProposal(context, parent, thenExpression, proposals);
 
-		} else if (selectedNode.getLocationInParent() == InfixExpression.RIGHT_OPERAND_PROPERTY) {
-			// also offer split && / || condition proposals:
-			InfixExpression infixExpression = (InfixExpression)parent;
-			Expression leftOperand = infixExpression.getLeftOperand();
-			List<Expression> extendedOperands = infixExpression.extendedOperands();
+    } else if (selectedNode.getLocationInParent() == InfixExpression.RIGHT_OPERAND_PROPERTY) {
+      // also offer split && / || condition proposals:
+      InfixExpression infixExpression = (InfixExpression) parent;
+      Expression leftOperand = infixExpression.getLeftOperand();
+      List<Expression> extendedOperands = infixExpression.extendedOperands();
 
-			ASTRewrite rewrite = ASTRewrite.create(parent.getAST());
-			if (extendedOperands.size() == 0) {
-				rewrite.replace(infixExpression, rewrite.createMoveTarget(leftOperand), null);
-			} else {
-				ASTNode firstExtendedOp = rewrite.createMoveTarget(extendedOperands.get(0));
-				rewrite.set(infixExpression, InfixExpression.RIGHT_OPERAND_PROPERTY, firstExtendedOp, null);
-				rewrite.remove(leftOperand, null);
-			}
-			String label = CorrectionMessages.LocalCorrectionsSubProcessor_removeunreachablecode_description;
-			addRemoveProposal(context, rewrite, label, proposals);
+      ASTRewrite rewrite = ASTRewrite.create(parent.getAST());
+      if (extendedOperands.size() == 0) {
+        rewrite.replace(infixExpression, rewrite.createMoveTarget(leftOperand), null);
+      } else {
+        ASTNode firstExtendedOp = rewrite.createMoveTarget(extendedOperands.get(0));
+        rewrite.set(infixExpression, InfixExpression.RIGHT_OPERAND_PROPERTY, firstExtendedOp, null);
+        rewrite.remove(leftOperand, null);
+      }
+      String label =
+          CorrectionMessages.LocalCorrectionsSubProcessor_removeunreachablecode_description;
+      addRemoveProposal(context, rewrite, label, proposals);
 
-			AssistContext assistContext =
-					new AssistContext(context.getCompilationUnit(), infixExpression.getRightOperand().getStartPosition() - 1, 0);
-			assistContext.setASTRoot(root);
-			AdvancedQuickAssistProcessor.getSplitAndConditionProposals(assistContext, infixExpression, proposals);
-			AdvancedQuickAssistProcessor.getSplitOrConditionProposals(assistContext, infixExpression, proposals);
+      AssistContext assistContext =
+          new AssistContext(
+              context.getCompilationUnit(),
+              infixExpression.getRightOperand().getStartPosition() - 1,
+              0);
+      assistContext.setASTRoot(root);
+      AdvancedQuickAssistProcessor.getSplitAndConditionProposals(
+          assistContext, infixExpression, proposals);
+      AdvancedQuickAssistProcessor.getSplitOrConditionProposals(
+          assistContext, infixExpression, proposals);
 
-		} else if (selectedNode instanceof Statement && selectedNode.getLocationInParent().isChildListProperty()) {
-			// remove all statements following the unreachable:
-			List<Statement> statements = ASTNodes.<Statement>getChildListProperty(selectedNode.getParent(),
-																				  (ChildListPropertyDescriptor)selectedNode
-																						  .getLocationInParent());
-			int idx = statements.indexOf(selectedNode);
+    } else if (selectedNode instanceof Statement
+        && selectedNode.getLocationInParent().isChildListProperty()) {
+      // remove all statements following the unreachable:
+      List<Statement> statements =
+          ASTNodes.<Statement>getChildListProperty(
+              selectedNode.getParent(),
+              (ChildListPropertyDescriptor) selectedNode.getLocationInParent());
+      int idx = statements.indexOf(selectedNode);
 
-			ASTRewrite rewrite = ASTRewrite.create(selectedNode.getAST());
-			String label = CorrectionMessages.LocalCorrectionsSubProcessor_removeunreachablecode_description;
+      ASTRewrite rewrite = ASTRewrite.create(selectedNode.getAST());
+      String label =
+          CorrectionMessages.LocalCorrectionsSubProcessor_removeunreachablecode_description;
 
-			if (idx > 0) {
-				Object prevStatement = statements.get(idx - 1);
-				if (prevStatement instanceof IfStatement) {
-					IfStatement ifStatement = (IfStatement)prevStatement;
-					if (ifStatement.getElseStatement() == null) {
-						// remove if (true), see https://bugs.eclipse.org/bugs/show_bug.cgi?id=261519
-						rewrite.replace(ifStatement, rewrite.createMoveTarget(ifStatement.getThenStatement()), null);
-						label = CorrectionMessages.LocalCorrectionsSubProcessor_removeunreachablecode_including_condition_description;
-					}
-				}
-			}
+      if (idx > 0) {
+        Object prevStatement = statements.get(idx - 1);
+        if (prevStatement instanceof IfStatement) {
+          IfStatement ifStatement = (IfStatement) prevStatement;
+          if (ifStatement.getElseStatement() == null) {
+            // remove if (true), see https://bugs.eclipse.org/bugs/show_bug.cgi?id=261519
+            rewrite.replace(
+                ifStatement, rewrite.createMoveTarget(ifStatement.getThenStatement()), null);
+            label =
+                CorrectionMessages
+                    .LocalCorrectionsSubProcessor_removeunreachablecode_including_condition_description;
+          }
+        }
+      }
 
-			for (int i = idx; i < statements.size(); i++) {
-				ASTNode statement = statements.get(i);
-				if (statement instanceof SwitchCase)
-					break; // stop at case *: and default:
-				rewrite.remove(statement, null);
-			}
+      for (int i = idx; i < statements.size(); i++) {
+        ASTNode statement = statements.get(i);
+        if (statement instanceof SwitchCase) break; // stop at case *: and default:
+        rewrite.remove(statement, null);
+      }
 
-			addRemoveProposal(context, rewrite, label, proposals);
+      addRemoveProposal(context, rewrite, label, proposals);
 
-
-		} else {
-			// no special case, just remove the node:
-			addRemoveProposal(context, selectedNode, proposals);
-		}
-	}
+    } else {
+      // no special case, just remove the node:
+      addRemoveProposal(context, selectedNode, proposals);
+    }
+  }
 

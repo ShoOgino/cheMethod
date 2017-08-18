@@ -1,99 +1,131 @@
-    public IStatus run(IProgressMonitor monitor) {
-        final JavaSearchResult textResult = (JavaSearchResult)getSearchResult();
-        textResult.removeAll();
-        // Don't need to pass in working copies in 3.0 here
-        SearchEngine engine = new SearchEngine();
-        try {
+  public IStatus run(IProgressMonitor monitor) {
+    final JavaSearchResult textResult = (JavaSearchResult) getSearchResult();
+    textResult.removeAll();
+    // Don't need to pass in working copies in 3.0 here
+    SearchEngine engine = new SearchEngine();
+    try {
 
-            int totalTicks = 1000;
-            IProject[] projects = JavaSearchScopeFactory.getInstance().getProjects(fPatternData.getScope());
-            final SearchParticipantRecord[] participantDescriptors =
-                    SearchParticipantsExtensionPoint.getInstance().getSearchParticipants(projects);
-            final int[] ticks = new int[participantDescriptors.length];
-            for (int i = 0; i < participantDescriptors.length; i++) {
-                final int iPrime = i;
-                ISafeRunnable runnable = new ISafeRunnable() {
-                    public void handleException(Throwable exception) {
-                        ticks[iPrime] = 0;
-                        String message = SearchMessages.JavaSearchQuery_error_participant_estimate;
-                        JavaPlugin.log(new Status(IStatus.ERROR, JavaPlugin.getPluginId(), 0, message, exception));
-                    }
+      int totalTicks = 1000;
+      IProject[] projects =
+          JavaSearchScopeFactory.getInstance().getProjects(fPatternData.getScope());
+      final SearchParticipantRecord[] participantDescriptors =
+          SearchParticipantsExtensionPoint.getInstance().getSearchParticipants(projects);
+      final int[] ticks = new int[participantDescriptors.length];
+      for (int i = 0; i < participantDescriptors.length; i++) {
+        final int iPrime = i;
+        ISafeRunnable runnable =
+            new ISafeRunnable() {
+              public void handleException(Throwable exception) {
+                ticks[iPrime] = 0;
+                String message = SearchMessages.JavaSearchQuery_error_participant_estimate;
+                JavaPlugin.log(
+                    new Status(IStatus.ERROR, JavaPlugin.getPluginId(), 0, message, exception));
+              }
 
-                    public void run() throws Exception {
-                        ticks[iPrime] = participantDescriptors[iPrime].getParticipant().estimateTicks(fPatternData);
-                    }
-                };
+              public void run() throws Exception {
+                ticks[iPrime] =
+                    participantDescriptors[iPrime].getParticipant().estimateTicks(fPatternData);
+              }
+            };
 
-                SafeRunner.run(runnable);
-                totalTicks += ticks[i];
-            }
+        SafeRunner.run(runnable);
+        totalTicks += ticks[i];
+      }
 
-            SearchPattern pattern;
-            String stringPattern;
+      SearchPattern pattern;
+      String stringPattern;
 
-            if (fPatternData instanceof ElementQuerySpecification) {
-                IJavaElement element = ((ElementQuerySpecification)fPatternData).getElement();
-                stringPattern = JavaElementLabels.getElementLabel(element, JavaElementLabels.ALL_DEFAULT);
-                if (!element.exists()) {
-                    return new Status(IStatus.ERROR, JavaPlugin.getPluginId(), 0,
-                                      Messages.format(SearchMessages.JavaSearchQuery_error_element_does_not_exist, stringPattern), null);
-                }
-                pattern = SearchPattern.createPattern(element, fPatternData.getLimitTo(), SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
-            } else {
-                PatternQuerySpecification patternSpec = (PatternQuerySpecification)fPatternData;
-                stringPattern = patternSpec.getPattern();
-                int matchMode = getMatchMode(stringPattern) | SearchPattern.R_ERASURE_MATCH;
-                if (patternSpec.isCaseSensitive())
-                    matchMode |= SearchPattern.R_CASE_SENSITIVE;
-                pattern = SearchPattern
-                        .createPattern(patternSpec.getPattern(), patternSpec.getSearchFor(), patternSpec.getLimitTo(), matchMode);
-            }
-
-            if (pattern == null) {
-                return new Status(IStatus.ERROR, JavaPlugin.getPluginId(), 0, Messages
-                        .format(SearchMessages.JavaSearchQuery_error_unsupported_pattern, stringPattern), null);
-            }
-            monitor.beginTask(Messages.format(SearchMessages.JavaSearchQuery_task_label, stringPattern), totalTicks);
-            IProgressMonitor mainSearchPM = new SubProgressMonitor(monitor, 1000);
-
-            boolean ignorePotentials = NewSearchUI.arePotentialMatchesIgnored();
-            NewSearchResultCollector collector = new NewSearchResultCollector(textResult, ignorePotentials);
-
-
-            engine.search(pattern, new SearchParticipant[]{SearchEngine.getDefaultSearchParticipant()}, fPatternData.getScope(), collector,
-                          mainSearchPM);
-            for (int i = 0; i < participantDescriptors.length; i++) {
-                final ISearchRequestor requestor = new SearchRequestor(participantDescriptors[i].getParticipant(), textResult);
-                final IProgressMonitor participantPM = new SubProgressMonitor(monitor, ticks[i]);
-
-                final int iPrime = i;
-                ISafeRunnable runnable = new ISafeRunnable() {
-                    public void handleException(Throwable exception) {
-                        participantDescriptors[iPrime].getDescriptor().disable();
-                        String message = SearchMessages.JavaSearchQuery_error_participant_search;
-                        JavaPlugin.log(new Status(IStatus.ERROR, JavaPlugin.getPluginId(), 0, message, exception));
-                    }
-
-                    public void run() throws Exception {
-
-                        final IQueryParticipant participant = participantDescriptors[iPrime].getParticipant();
-
-                        final PerformanceStats stats = PerformanceStats.getStats(PERF_SEARCH_PARTICIPANT, participant);
-                        stats.startRun();
-
-                        participant.search(requestor, fPatternData, participantPM);
-
-                        stats.endRun();
-                    }
-                };
-
-                SafeRunner.run(runnable);
-            }
-
-        } catch (CoreException e) {
-            return e.getStatus();
+      if (fPatternData instanceof ElementQuerySpecification) {
+        IJavaElement element = ((ElementQuerySpecification) fPatternData).getElement();
+        stringPattern = JavaElementLabels.getElementLabel(element, JavaElementLabels.ALL_DEFAULT);
+        if (!element.exists()) {
+          return new Status(
+              IStatus.ERROR,
+              JavaPlugin.getPluginId(),
+              0,
+              Messages.format(
+                  SearchMessages.JavaSearchQuery_error_element_does_not_exist, stringPattern),
+              null);
         }
-        String message = Messages.format(SearchMessages.JavaSearchQuery_status_ok_message, String.valueOf(textResult.getMatchCount()));
-        return new Status(IStatus.OK, JavaPlugin.getPluginId(), 0, message, null);
+        pattern =
+            SearchPattern.createPattern(
+                element, fPatternData.getLimitTo(), SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+      } else {
+        PatternQuerySpecification patternSpec = (PatternQuerySpecification) fPatternData;
+        stringPattern = patternSpec.getPattern();
+        int matchMode = getMatchMode(stringPattern) | SearchPattern.R_ERASURE_MATCH;
+        if (patternSpec.isCaseSensitive()) matchMode |= SearchPattern.R_CASE_SENSITIVE;
+        pattern =
+            SearchPattern.createPattern(
+                patternSpec.getPattern(),
+                patternSpec.getSearchFor(),
+                patternSpec.getLimitTo(),
+                matchMode);
+      }
+
+      if (pattern == null) {
+        return new Status(
+            IStatus.ERROR,
+            JavaPlugin.getPluginId(),
+            0,
+            Messages.format(
+                SearchMessages.JavaSearchQuery_error_unsupported_pattern, stringPattern),
+            null);
+      }
+      monitor.beginTask(
+          Messages.format(SearchMessages.JavaSearchQuery_task_label, stringPattern), totalTicks);
+      IProgressMonitor mainSearchPM = new SubProgressMonitor(monitor, 1000);
+
+      boolean ignorePotentials = NewSearchUI.arePotentialMatchesIgnored();
+      NewSearchResultCollector collector =
+          new NewSearchResultCollector(textResult, ignorePotentials);
+
+      engine.search(
+          pattern,
+          new SearchParticipant[] {SearchEngine.getDefaultSearchParticipant()},
+          fPatternData.getScope(),
+          collector,
+          mainSearchPM);
+      for (int i = 0; i < participantDescriptors.length; i++) {
+        final ISearchRequestor requestor =
+            new SearchRequestor(participantDescriptors[i].getParticipant(), textResult);
+        final IProgressMonitor participantPM = new SubProgressMonitor(monitor, ticks[i]);
+
+        final int iPrime = i;
+        ISafeRunnable runnable =
+            new ISafeRunnable() {
+              public void handleException(Throwable exception) {
+                participantDescriptors[iPrime].getDescriptor().disable();
+                String message = SearchMessages.JavaSearchQuery_error_participant_search;
+                JavaPlugin.log(
+                    new Status(IStatus.ERROR, JavaPlugin.getPluginId(), 0, message, exception));
+              }
+
+              public void run() throws Exception {
+
+                final IQueryParticipant participant =
+                    participantDescriptors[iPrime].getParticipant();
+
+                final PerformanceStats stats =
+                    PerformanceStats.getStats(PERF_SEARCH_PARTICIPANT, participant);
+                stats.startRun();
+
+                participant.search(requestor, fPatternData, participantPM);
+
+                stats.endRun();
+              }
+            };
+
+        SafeRunner.run(runnable);
+      }
+
+    } catch (CoreException e) {
+      return e.getStatus();
     }
+    String message =
+        Messages.format(
+            SearchMessages.JavaSearchQuery_status_ok_message,
+            String.valueOf(textResult.getMatchCount()));
+    return new Status(IStatus.OK, JavaPlugin.getPluginId(), 0, message, null);
+  }
 

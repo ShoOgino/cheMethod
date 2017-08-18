@@ -1,41 +1,47 @@
-    private ReconcileResult reconcile(ICompilationUnit compilationUnit, IJavaProject javaProject) throws JavaModelException {
-        ICompilationUnit workingCopy = null;
-        List<HighlightedPosition> positions;
-        String filePath = compilationUnit.getPath().toString();
+  private ReconcileResult reconcile(ICompilationUnit compilationUnit, IJavaProject javaProject)
+      throws JavaModelException {
+    ICompilationUnit workingCopy = null;
+    List<HighlightedPosition> positions;
+    String filePath = compilationUnit.getPath().toString();
 
-        final ProblemRequestor problemRequestor = new ProblemRequestor();
-        final WorkingCopyOwner wcOwner = createWorkingCopyOwner(problemRequestor);
+    final ProblemRequestor problemRequestor = new ProblemRequestor();
+    final WorkingCopyOwner wcOwner = createWorkingCopyOwner(problemRequestor);
 
+    try {
+      workingCopy = compilationUnit.getWorkingCopy(wcOwner, null);
+      synchronizeWorkingCopyContent(filePath, workingCopy);
+      problemRequestor.reset();
+
+      CompilationUnit unit = workingCopy.reconcile(AST.JLS8, true, wcOwner, null);
+      positions = semanticHighlighting.reconcileSemanticHighlight(unit);
+
+      if (workingCopy instanceof ClassFileWorkingCopy) {
+        //we don't wont to show any errors from ".class" files
+        problemRequestor.reset();
+      }
+    } catch (JavaModelException e) {
+      LOG.error(
+          format(
+              "Can't reconcile class: %s in project: %s",
+              filePath, javaProject.getPath().toOSString()),
+          e);
+      throw e;
+    } finally {
+      if (workingCopy != null && workingCopy.isWorkingCopy()) {
         try {
-            workingCopy = compilationUnit.getWorkingCopy(wcOwner, null);
-            synchronizeWorkingCopyContent(filePath, workingCopy);
-            problemRequestor.reset();
-
-            CompilationUnit unit = workingCopy.reconcile(AST.JLS8, true, wcOwner, null);
-            positions = semanticHighlighting.reconcileSemanticHighlight(unit);
-
-            if (workingCopy instanceof ClassFileWorkingCopy) {
-                //we don't wont to show any errors from ".class" files
-                problemRequestor.reset();
-            }
+          workingCopy.getBuffer().close();
+          workingCopy.discardWorkingCopy();
         } catch (JavaModelException e) {
-            LOG.error(format("Can't reconcile class: %s in project: %s", filePath, javaProject.getPath().toOSString()), e);
-            throw e;
-        } finally {
-            if (workingCopy != null && workingCopy.isWorkingCopy()) {
-                try {
-                    workingCopy.getBuffer().close();
-                    workingCopy.discardWorkingCopy();
-                } catch (JavaModelException e) {
-                    //ignore
-                }
-            }
+          //ignore
         }
-
-        DtoFactory dtoFactory = DtoFactory.getInstance();
-        return dtoFactory.createDto(ReconcileResult.class)
-                         .withFileLocation(compilationUnit.getPath().toOSString())
-                         .withProblems(convertProblems(problemRequestor.problems))
-                         .withHighlightedPositions(positions);
+      }
     }
+
+    DtoFactory dtoFactory = DtoFactory.getInstance();
+    return dtoFactory
+        .createDto(ReconcileResult.class)
+        .withFileLocation(compilationUnit.getPath().toOSString())
+        .withProblems(convertProblems(problemRequestor.problems))
+        .withHighlightedPositions(positions);
+  }
 

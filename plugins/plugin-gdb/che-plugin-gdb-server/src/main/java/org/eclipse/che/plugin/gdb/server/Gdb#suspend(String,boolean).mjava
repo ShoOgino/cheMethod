@@ -1,50 +1,53 @@
-    public Location suspend(final String file, boolean isRemoteConnection) throws IOException, InterruptedException, DebuggerException {
-        if (pid < 0) {
-            throw new DebuggerException("Gdb process not found.");
-        }
-
-        if (isRemoteConnection) {
-            Runtime.getRuntime().exec("kill -SIGINT " + pid).waitFor();
-            sendCommand("signal SIGSTOP ");
-        } else {
-            final List<String> outputs = new ArrayList<>();
-            final ProcessBuilder processBuilder = new ProcessBuilder().command("ps", "-o", "pid,cmd", "--ppid", String.valueOf(pid));
-            final Process process = processBuilder.start();
-
-            LineConsumer stdout = new AbstractLineConsumer() {
-                @Override
-                public void writeLine(String line) throws IOException {
-                    outputs.add(line);
-                }
-            };
-
-            ProcessUtil.process(process, stdout);
-
-            int processId = -1;
-            for (String output : outputs) {
-                try {
-                    final ProcessInfo processInfo = ProcessInfo.parse(output);
-                    if (file.equals(processInfo.getProcessName())) {
-                        processId = processInfo.getProcessId();
-                    }
-                } catch (Exception e) {
-                    //we can't get info about current process, but we are trying to get info about another processes
-                }
-            }
-
-            if (processId == -1) {
-                throw new DebuggerException(format("Process %s not found.", file));
-            }
-            Runtime.getRuntime().exec("kill -SIGINT " + processId).waitFor();
-        }
-
-        final GdbOutput gdbOutput = sendCommand("backtrace");
-        final GdbBacktrace backtrace = GdbBacktrace.parse(gdbOutput);
-        final Map<Integer, Location> frames = backtrace.getFrames();
-
-        if (frames.containsKey(0)) {
-            return frames.get(0);
-        }
-        throw new DebuggerException("Unable recognize current location for debugger session. ");
+  public Location suspend(final String file, boolean isRemoteConnection)
+      throws IOException, InterruptedException, DebuggerException {
+    if (pid < 0) {
+      throw new DebuggerException("Gdb process not found.");
     }
+
+    if (isRemoteConnection) {
+      Runtime.getRuntime().exec("kill -SIGINT " + pid).waitFor();
+      sendCommand("signal SIGSTOP ");
+    } else {
+      final List<String> outputs = new ArrayList<>();
+      final ProcessBuilder processBuilder =
+          new ProcessBuilder().command("ps", "-o", "pid,cmd", "--ppid", String.valueOf(pid));
+      final Process process = processBuilder.start();
+
+      LineConsumer stdout =
+          new AbstractLineConsumer() {
+            @Override
+            public void writeLine(String line) throws IOException {
+              outputs.add(line);
+            }
+          };
+
+      ProcessUtil.process(process, stdout);
+
+      int processId = -1;
+      for (String output : outputs) {
+        try {
+          final ProcessInfo processInfo = ProcessInfo.parse(output);
+          if (file.equals(processInfo.getProcessName())) {
+            processId = processInfo.getProcessId();
+          }
+        } catch (Exception e) {
+          //we can't get info about current process, but we are trying to get info about another processes
+        }
+      }
+
+      if (processId == -1) {
+        throw new DebuggerException(format("Process %s not found.", file));
+      }
+      Runtime.getRuntime().exec("kill -SIGINT " + processId).waitFor();
+    }
+
+    final GdbOutput gdbOutput = sendCommand("backtrace");
+    final GdbBacktrace backtrace = GdbBacktrace.parse(gdbOutput);
+    final Map<Integer, Location> frames = backtrace.getFrames();
+
+    if (frames.containsKey(0)) {
+      return frames.get(0);
+    }
+    throw new DebuggerException("Unable recognize current location for debugger session. ");
+  }
 

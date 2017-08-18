@@ -1,51 +1,52 @@
-    @Override
-    protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
-        startSynchronizer.setStartThread();
-        Map<String, DockerContainerConfig> machineName2config = getContext().getDockerEnvironment().getContainers();
+  @Override
+  protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
+    startSynchronizer.setStartThread();
+    Map<String, DockerContainerConfig> machineName2config =
+        getContext().getDockerEnvironment().getContainers();
+    try {
+      networks.createNetwork(getContext().getDockerEnvironment().getNetwork());
+
+      final boolean restore = isRestoreEnabled(startOptions);
+      for (String machineName : getContext().getOrderedContainers()) {
+        checkInterruption();
+        final DockerContainerConfig config = machineName2config.get(machineName);
+        sendStartingEvent(machineName);
         try {
-            networks.createNetwork(getContext().getDockerEnvironment().getNetwork());
-
-            final boolean restore = isRestoreEnabled(startOptions);
-            for (String machineName : getContext().getOrderedContainers()) {
-                checkInterruption();
-                final DockerContainerConfig config = machineName2config.get(machineName);
-                sendStartingEvent(machineName);
-                try {
-                    if (restore) {
-                        restoreMachine(machineName, config);
-                    } else {
-                        startMachine(machineName, config);
-                    }
-                    sendRunningEvent(machineName);
-                } catch (InfrastructureException e) {
-                    sendFailedEvent(machineName, e.getMessage());
-                    throw e;
-                }
-            }
-            startSynchronizer.complete();
-        } catch (InfrastructureException | InterruptedException | RuntimeException e) {
-            boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
-            try {
-                destroyRuntime(emptyMap());
-            } catch (InternalInfrastructureException destExc) {
-                LOG.error(destExc.getMessage(), destExc);
-            } catch (InfrastructureException ignore) {
-            }
-
-            if (interrupted) {
-                final RuntimeStartInterruptedException ex =
-                        new RuntimeStartInterruptedException(getContext().getIdentity());
-                startSynchronizer.completeExceptionally(ex);
-                throw ex;
-            }
-            startSynchronizer.completeExceptionally(e);
-            try {
-                throw e;
-            } catch (InfrastructureException rethrow) {
-                throw rethrow;
-            } catch (Exception wrap) {
-                throw new InternalInfrastructureException(e.getMessage(), wrap);
-            }
+          if (restore) {
+            restoreMachine(machineName, config);
+          } else {
+            startMachine(machineName, config);
+          }
+          sendRunningEvent(machineName);
+        } catch (InfrastructureException e) {
+          sendFailedEvent(machineName, e.getMessage());
+          throw e;
         }
+      }
+      startSynchronizer.complete();
+    } catch (InfrastructureException | InterruptedException | RuntimeException e) {
+      boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+      try {
+        destroyRuntime(emptyMap());
+      } catch (InternalInfrastructureException destExc) {
+        LOG.error(destExc.getMessage(), destExc);
+      } catch (InfrastructureException ignore) {
+      }
+
+      if (interrupted) {
+        final RuntimeStartInterruptedException ex =
+            new RuntimeStartInterruptedException(getContext().getIdentity());
+        startSynchronizer.completeExceptionally(ex);
+        throw ex;
+      }
+      startSynchronizer.completeExceptionally(e);
+      try {
+        throw e;
+      } catch (InfrastructureException rethrow) {
+        throw rethrow;
+      } catch (Exception wrap) {
+        throw new InternalInfrastructureException(e.getMessage(), wrap);
+      }
     }
+  }
 

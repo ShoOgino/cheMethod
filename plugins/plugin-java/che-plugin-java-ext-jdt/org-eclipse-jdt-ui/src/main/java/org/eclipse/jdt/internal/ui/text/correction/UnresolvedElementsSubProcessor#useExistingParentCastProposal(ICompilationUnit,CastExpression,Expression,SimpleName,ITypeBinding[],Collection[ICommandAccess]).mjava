@@ -1,42 +1,51 @@
-	private static boolean useExistingParentCastProposal(ICompilationUnit cu, CastExpression expression, Expression accessExpression,
-														 SimpleName accessSelector, ITypeBinding[] paramTypes, Collection<ICommandAccess> proposals) {
-		ITypeBinding castType= expression.getType().resolveBinding();
-		if (castType == null) {
-			return false;
-		}
-		if (paramTypes != null) {
-			if (Bindings.findMethodInHierarchy(castType, accessSelector.getIdentifier(), paramTypes) == null) {
-				return false;
-			}
-		} else if (Bindings.findFieldInHierarchy(castType, accessSelector.getIdentifier()) == null) {
-			return false;
-		}
-		ITypeBinding bindingToCast= accessExpression.resolveTypeBinding();
-		if (bindingToCast != null && !bindingToCast.isCastCompatible(castType)) {
-			return false;
-		}
+  private static boolean useExistingParentCastProposal(
+      ICompilationUnit cu,
+      CastExpression expression,
+      Expression accessExpression,
+      SimpleName accessSelector,
+      ITypeBinding[] paramTypes,
+      Collection<ICommandAccess> proposals) {
+    ITypeBinding castType = expression.getType().resolveBinding();
+    if (castType == null) {
+      return false;
+    }
+    if (paramTypes != null) {
+      if (Bindings.findMethodInHierarchy(castType, accessSelector.getIdentifier(), paramTypes)
+          == null) {
+        return false;
+      }
+    } else if (Bindings.findFieldInHierarchy(castType, accessSelector.getIdentifier()) == null) {
+      return false;
+    }
+    ITypeBinding bindingToCast = accessExpression.resolveTypeBinding();
+    if (bindingToCast != null && !bindingToCast.isCastCompatible(castType)) {
+      return false;
+    }
 
-		IMethodBinding res= Bindings.findMethodInHierarchy(castType, accessSelector.getIdentifier(), paramTypes);
-		if (res != null) {
-			AST ast= expression.getAST();
-			ASTRewrite rewrite= ASTRewrite.create(ast);
-			CastExpression newCast= ast.newCastExpression();
-			newCast.setType((Type) ASTNode.copySubtree(ast, expression.getType()));
-			newCast.setExpression((Expression) rewrite.createCopyTarget(accessExpression));
-			ParenthesizedExpression parents= ast.newParenthesizedExpression();
-			parents.setExpression(newCast);
+    IMethodBinding res =
+        Bindings.findMethodInHierarchy(castType, accessSelector.getIdentifier(), paramTypes);
+    if (res != null) {
+      AST ast = expression.getAST();
+      ASTRewrite rewrite = ASTRewrite.create(ast);
+      CastExpression newCast = ast.newCastExpression();
+      newCast.setType((Type) ASTNode.copySubtree(ast, expression.getType()));
+      newCast.setExpression((Expression) rewrite.createCopyTarget(accessExpression));
+      ParenthesizedExpression parents = ast.newParenthesizedExpression();
+      parents.setExpression(newCast);
 
-			ASTNode node= rewrite.createCopyTarget(expression.getExpression());
-			rewrite.replace(expression, node, null);
-			rewrite.replace(accessExpression, parents, null);
+      ASTNode node = rewrite.createCopyTarget(expression.getExpression());
+      rewrite.replace(expression, node, null);
+      rewrite.replace(accessExpression, parents, null);
 
-			String label= CorrectionMessages.UnresolvedElementsSubProcessor_missingcastbrackets_description;
-			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
-			ASTRewriteCorrectionProposal
-					proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.ADD_PARENTHESES_AROUND_CAST, image);
-			proposals.add(proposal);
-			return true;
-		}
-		return false;
-	}
+      String label =
+          CorrectionMessages.UnresolvedElementsSubProcessor_missingcastbrackets_description;
+      Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CAST);
+      ASTRewriteCorrectionProposal proposal =
+          new ASTRewriteCorrectionProposal(
+              label, cu, rewrite, IProposalRelevance.ADD_PARENTHESES_AROUND_CAST, image);
+      proposals.add(proposal);
+      return true;
+    }
+    return false;
+  }
 

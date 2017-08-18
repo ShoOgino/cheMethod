@@ -1,49 +1,53 @@
-        @Override
-        public void run() {
-            final RequestBuilder requestBuilder = new RequestBuilder(RequestBuilder.GET, asyncTaskStatusURL);
-            requestBuilder.setCallback(new RequestCallback() {
-                @Override
-                public void onResponseReceived(Request request, Response response) {
-                    if (SC_NOT_FOUND == response.getStatusCode()) {
-                        callback.onError(request, new JobNotFoundException(response));
-                        if (asyncTaskStatusHandler != null) {
-                            asyncTaskStatusHandler.requestError(asyncTaskStatusURL, new JobNotFoundException(response));
-                        }
-                    } else if (response.getStatusCode() != SC_ACCEPTED) {
-                        callback.onResponseReceived(request, response);
-                        if (asyncTaskStatusHandler != null) {
-                            // check is response successful, for correct handling failed responses
-                            if (callback.isSuccessful(response)) {
-                                asyncTaskStatusHandler.requestFinished(asyncTaskStatusURL);
-                            } else {
-                                asyncTaskStatusHandler.requestError(asyncTaskStatusURL, new ServerException(response));
-                            }
-                        }
-                    } else {
-                        if (asyncTaskStatusHandler != null) {
-                            asyncTaskStatusHandler.requestInProgress(asyncTaskStatusURL);
-                        }
-                        CheckEverRestTaskStatusTimer.this.schedule(asyncTaskCheckingPeriodMillis);
-                    }
-                }
-
-                @Override
-                public void onError(Request request, Throwable exception) {
-                    if (asyncTaskStatusHandler != null) {
-                        asyncTaskStatusHandler.requestError(asyncTaskStatusURL, exception);
-                    }
-
-                    callback.onError(request, exception);
-                }
-            });
-
-            try {
-                requestBuilder.send();
-            } catch (RequestException e) {
+    @Override
+    public void run() {
+      final RequestBuilder requestBuilder =
+          new RequestBuilder(RequestBuilder.GET, asyncTaskStatusURL);
+      requestBuilder.setCallback(
+          new RequestCallback() {
+            @Override
+            public void onResponseReceived(Request request, Response response) {
+              if (SC_NOT_FOUND == response.getStatusCode()) {
+                callback.onError(request, new JobNotFoundException(response));
                 if (asyncTaskStatusHandler != null) {
-                    asyncTaskStatusHandler.requestError(asyncTaskStatusURL, e);
+                  asyncTaskStatusHandler.requestError(
+                      asyncTaskStatusURL, new JobNotFoundException(response));
                 }
-                callback.onFailure(e);
+              } else if (response.getStatusCode() != SC_ACCEPTED) {
+                callback.onResponseReceived(request, response);
+                if (asyncTaskStatusHandler != null) {
+                  // check is response successful, for correct handling failed responses
+                  if (callback.isSuccessful(response)) {
+                    asyncTaskStatusHandler.requestFinished(asyncTaskStatusURL);
+                  } else {
+                    asyncTaskStatusHandler.requestError(
+                        asyncTaskStatusURL, new ServerException(response));
+                  }
+                }
+              } else {
+                if (asyncTaskStatusHandler != null) {
+                  asyncTaskStatusHandler.requestInProgress(asyncTaskStatusURL);
+                }
+                CheckEverRestTaskStatusTimer.this.schedule(asyncTaskCheckingPeriodMillis);
+              }
             }
+
+            @Override
+            public void onError(Request request, Throwable exception) {
+              if (asyncTaskStatusHandler != null) {
+                asyncTaskStatusHandler.requestError(asyncTaskStatusURL, exception);
+              }
+
+              callback.onError(request, exception);
+            }
+          });
+
+      try {
+        requestBuilder.send();
+      } catch (RequestException e) {
+        if (asyncTaskStatusHandler != null) {
+          asyncTaskStatusHandler.requestError(asyncTaskStatusURL, e);
         }
+        callback.onFailure(e);
+      }
+    }
 

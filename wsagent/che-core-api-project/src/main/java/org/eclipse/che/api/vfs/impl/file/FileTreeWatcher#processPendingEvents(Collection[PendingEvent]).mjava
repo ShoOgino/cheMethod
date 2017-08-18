@@ -1,66 +1,76 @@
-    private void processPendingEvents(Collection<PendingEvent> pendingEvents) throws IOException {
-        for (PendingEvent pendingEvent : pendingEvents) {
-            Path eventDirectoryPath = pendingEvent.getPath();
-            WatchedDirectory watchedDirectory = watchedDirectories.get(eventDirectoryPath);
-            if (watchedDirectory == null){
-                continue;
-            }
-            if (Files.exists(eventDirectoryPath)) {
-                boolean isModifiedNotYetReported = true;
+  private void processPendingEvents(Collection<PendingEvent> pendingEvents) throws IOException {
+    for (PendingEvent pendingEvent : pendingEvents) {
+      Path eventDirectoryPath = pendingEvent.getPath();
+      WatchedDirectory watchedDirectory = watchedDirectories.get(eventDirectoryPath);
+      if (watchedDirectory == null) {
+        continue;
+      }
+      if (Files.exists(eventDirectoryPath)) {
+        boolean isModifiedNotYetReported = true;
 
-                final int hitCounter = watchedDirectory.incrementHitCounter();
-                try (DirectoryStream<Path> entries = Files.newDirectoryStream(eventDirectoryPath)) {
-                    for (Path fsItem : entries) {
-                        DirectoryItem directoryItem = watchedDirectory.getItem(fsItem.getFileName());
-                        if (directoryItem == null) {
-                            try {
-                                boolean directory = Files.isDirectory(fsItem);
-                                directoryItem = new DirectoryItem(fsItem.getFileName(), directory, getLastModifiedInMillis(fsItem));
-                                watchedDirectory.addItem(directoryItem);
-                                if (isModifiedNotYetReported){
-                                    isModifiedNotYetReported = false;
-                                    fireWatchEvent(MODIFIED, eventDirectoryPath, true);
-                                }
-                                fireWatchEvent(CREATED, fsItem, directoryItem.isDirectory());
-                                if (directory) {
-                                    walkTreeAndFireCreatedEvents(fsItem);
-                                    setupDirectoryWatcher(fsItem);
-                                }
-                            } catch (IOException ignored) {
-                            }
-                        } else {
-                            long lastModified;
-                            try {
-                                lastModified = getLastModifiedInMillis(fsItem);
-                            } catch (IOException ignored) {
-                                continue;
-                            }
-                            if (lastModified != directoryItem.getLastModified() && Files.isRegularFile(fsItem)) {
-                                fireWatchEvent(MODIFIED, fsItem, false);
-                            }
-                            directoryItem.touch(lastModified);
-                            directoryItem.updateHitCounter(hitCounter);
-                        }
-                    }
+        final int hitCounter = watchedDirectory.incrementHitCounter();
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(eventDirectoryPath)) {
+          for (Path fsItem : entries) {
+            DirectoryItem directoryItem = watchedDirectory.getItem(fsItem.getFileName());
+            if (directoryItem == null) {
+              try {
+                boolean directory = Files.isDirectory(fsItem);
+                directoryItem =
+                    new DirectoryItem(
+                        fsItem.getFileName(), directory, getLastModifiedInMillis(fsItem));
+                watchedDirectory.addItem(directoryItem);
+                if (isModifiedNotYetReported) {
+                  isModifiedNotYetReported = false;
+                  fireWatchEvent(MODIFIED, eventDirectoryPath, true);
                 }
-
-                for (Iterator<DirectoryItem> iterator = watchedDirectory.getItems().iterator(); iterator.hasNext(); ) {
-                    DirectoryItem directoryItem = iterator.next();
-                    if (hitCounter != directoryItem.getHitCount()) {
-                        iterator.remove();
-                        if (isModifiedNotYetReported){
-                            isModifiedNotYetReported = false;
-                            fireWatchEvent(MODIFIED, eventDirectoryPath, true);
-                        }
-                        fireWatchEvent(DELETED, eventDirectoryPath.resolve(directoryItem.getName()), directoryItem.isDirectory());
-                    }
+                fireWatchEvent(CREATED, fsItem, directoryItem.isDirectory());
+                if (directory) {
+                  walkTreeAndFireCreatedEvents(fsItem);
+                  setupDirectoryWatcher(fsItem);
                 }
+              } catch (IOException ignored) {
+              }
             } else {
-                for (DirectoryItem directoryItem : watchedDirectory.getItems()) {
-                    fireWatchEvent(DELETED, eventDirectoryPath.resolve(directoryItem.getName()), directoryItem.isDirectory());
-                }
-                watchedDirectories.remove(eventDirectoryPath);
+              long lastModified;
+              try {
+                lastModified = getLastModifiedInMillis(fsItem);
+              } catch (IOException ignored) {
+                continue;
+              }
+              if (lastModified != directoryItem.getLastModified() && Files.isRegularFile(fsItem)) {
+                fireWatchEvent(MODIFIED, fsItem, false);
+              }
+              directoryItem.touch(lastModified);
+              directoryItem.updateHitCounter(hitCounter);
             }
+          }
         }
+
+        for (Iterator<DirectoryItem> iterator = watchedDirectory.getItems().iterator();
+            iterator.hasNext();
+            ) {
+          DirectoryItem directoryItem = iterator.next();
+          if (hitCounter != directoryItem.getHitCount()) {
+            iterator.remove();
+            if (isModifiedNotYetReported) {
+              isModifiedNotYetReported = false;
+              fireWatchEvent(MODIFIED, eventDirectoryPath, true);
+            }
+            fireWatchEvent(
+                DELETED,
+                eventDirectoryPath.resolve(directoryItem.getName()),
+                directoryItem.isDirectory());
+          }
+        }
+      } else {
+        for (DirectoryItem directoryItem : watchedDirectory.getItems()) {
+          fireWatchEvent(
+              DELETED,
+              eventDirectoryPath.resolve(directoryItem.getName()),
+              directoryItem.isDirectory());
+        }
+        watchedDirectories.remove(eventDirectoryPath);
+      }
     }
+  }
 

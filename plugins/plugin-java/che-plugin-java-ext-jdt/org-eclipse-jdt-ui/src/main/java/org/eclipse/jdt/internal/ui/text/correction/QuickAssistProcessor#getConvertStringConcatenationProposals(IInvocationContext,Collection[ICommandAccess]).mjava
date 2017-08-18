@@ -1,45 +1,47 @@
-	private static boolean getConvertStringConcatenationProposals(IInvocationContext context, Collection<ICommandAccess> resultingCollections) {
-		ASTNode node= context.getCoveringNode();
-		BodyDeclaration parentDecl= ASTResolving.findParentBodyDeclaration(node);
-		if (!(parentDecl instanceof MethodDeclaration || parentDecl instanceof Initializer))
-			return false;
+  private static boolean getConvertStringConcatenationProposals(
+      IInvocationContext context, Collection<ICommandAccess> resultingCollections) {
+    ASTNode node = context.getCoveringNode();
+    BodyDeclaration parentDecl = ASTResolving.findParentBodyDeclaration(node);
+    if (!(parentDecl instanceof MethodDeclaration || parentDecl instanceof Initializer))
+      return false;
 
-		AST ast= node.getAST();
-		ITypeBinding stringBinding= ast.resolveWellKnownType("java.lang.String"); //$NON-NLS-1$
+    AST ast = node.getAST();
+    ITypeBinding stringBinding = ast.resolveWellKnownType("java.lang.String"); //$NON-NLS-1$
 
-		if (node instanceof Expression && !(node instanceof InfixExpression)) {
-			node= node.getParent();
-		}
-		if (node instanceof VariableDeclarationFragment) {
-			node= ((VariableDeclarationFragment) node).getInitializer();
-		} else if (node instanceof Assignment) {
-			node= ((Assignment) node).getRightHandSide();
-		}
+    if (node instanceof Expression && !(node instanceof InfixExpression)) {
+      node = node.getParent();
+    }
+    if (node instanceof VariableDeclarationFragment) {
+      node = ((VariableDeclarationFragment) node).getInitializer();
+    } else if (node instanceof Assignment) {
+      node = ((Assignment) node).getRightHandSide();
+    }
 
-		InfixExpression oldInfixExpression= null;
-		while (node instanceof InfixExpression) {
-			InfixExpression curr= (InfixExpression) node;
-			if (curr.resolveTypeBinding() == stringBinding && curr.getOperator() == InfixExpression.Operator.PLUS) {
-				oldInfixExpression= curr; // is a infix expression we can use
-			} else {
-				break;
-			}
-			node= node.getParent();
-		}
-		if (oldInfixExpression == null)
-			return false;
+    InfixExpression oldInfixExpression = null;
+    while (node instanceof InfixExpression) {
+      InfixExpression curr = (InfixExpression) node;
+      if (curr.resolveTypeBinding() == stringBinding
+          && curr.getOperator() == InfixExpression.Operator.PLUS) {
+        oldInfixExpression = curr; // is a infix expression we can use
+      } else {
+        break;
+      }
+      node = node.getParent();
+    }
+    if (oldInfixExpression == null) return false;
 
-		if (resultingCollections == null) {
-			return true;
-		}
+    if (resultingCollections == null) {
+      return true;
+    }
 
-		LinkedCorrectionProposal stringBufferProposal= getConvertToStringBufferProposal(context, ast, oldInfixExpression);
-		resultingCollections.add(stringBufferProposal);
+    LinkedCorrectionProposal stringBufferProposal =
+        getConvertToStringBufferProposal(context, ast, oldInfixExpression);
+    resultingCollections.add(stringBufferProposal);
 
-		ASTRewriteCorrectionProposal messageFormatProposal= getConvertToMessageFormatProposal(context, ast, oldInfixExpression);
-		if (messageFormatProposal != null)
-			resultingCollections.add(messageFormatProposal);
+    ASTRewriteCorrectionProposal messageFormatProposal =
+        getConvertToMessageFormatProposal(context, ast, oldInfixExpression);
+    if (messageFormatProposal != null) resultingCollections.add(messageFormatProposal);
 
-		return true;
-	}
+    return true;
+  }
 

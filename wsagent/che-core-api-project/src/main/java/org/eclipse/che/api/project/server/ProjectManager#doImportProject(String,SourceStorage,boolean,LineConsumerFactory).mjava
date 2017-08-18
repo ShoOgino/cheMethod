@@ -1,51 +1,62 @@
-    /** Note: Use {@link FileWatcherManager#suspend()} and {@link FileWatcherManager#resume()} while importing source code */
-    private RegisteredProject doImportProject(String path, SourceStorage sourceStorage, boolean rewrite, LineConsumerFactory lineConsumerFactory) throws ServerException,
-                                                                                                                IOException,
-                                                                                                                ForbiddenException,
-                                                                                                                UnauthorizedException,
-                                                                                                                ConflictException,
-                                                                                                                NotFoundException {
-        final ProjectImporter importer = importers.getImporter(sourceStorage.getType());
-        if (importer == null) {
-            throw new NotFoundException(format("Unable import sources project from '%s'. Sources type '%s' is not supported.",
-                                               sourceStorage.getLocation(), sourceStorage.getType()));
-        }
+  /**
+   * Note: Use {@link FileWatcherManager#suspend()} and {@link FileWatcherManager#resume()} while
+   * importing source code
+   */
+  private RegisteredProject doImportProject(
+      String path,
+      SourceStorage sourceStorage,
+      boolean rewrite,
+      LineConsumerFactory lineConsumerFactory)
+      throws ServerException, IOException, ForbiddenException, UnauthorizedException,
+          ConflictException, NotFoundException {
+    final ProjectImporter importer = importers.getImporter(sourceStorage.getType());
+    if (importer == null) {
+      throw new NotFoundException(
+          format(
+              "Unable import sources project from '%s'. Sources type '%s' is not supported.",
+              sourceStorage.getLocation(), sourceStorage.getType()));
+    }
 
-        String normalizePath = (path.startsWith("/")) ? path : "/".concat(path);
-        FolderEntry folder = asFolder(normalizePath);
-        if (folder != null && !rewrite) {
-            throw new ConflictException(format("Project %s already exists ", path));
-        }
+    String normalizePath = (path.startsWith("/")) ? path : "/".concat(path);
+    FolderEntry folder = asFolder(normalizePath);
+    if (folder != null && !rewrite) {
+      throw new ConflictException(format("Project %s already exists ", path));
+    }
 
-        if (folder == null) {
-            folder = getProjectsRoot().createFolder(normalizePath);
-        }
+    if (folder == null) {
+      folder = getProjectsRoot().createFolder(normalizePath);
+    }
 
-        try {
-            importer.importSources(folder, sourceStorage, lineConsumerFactory);
-        } catch (final Exception e) {
-            folder.remove();
-            throw e;
-        }
+    try {
+      importer.importSources(folder, sourceStorage, lineConsumerFactory);
+    } catch (final Exception e) {
+      folder.remove();
+      throw e;
+    }
 
-        final String name = folder.getPath().getName();
-        for (ProjectConfig project : workspaceProjectsHolder.getProjects()) {
-            if (normalizePath.equals(project.getPath())) {
-                // TODO Needed for factory project importing with keepDir. It needs to find more appropriate solution
-                List<String> innerProjects = projectRegistry.getProjects(normalizePath);
-                for (String innerProject : innerProjects) {
-                    RegisteredProject registeredProject = projectRegistry.getProject(innerProject);
-                    projectRegistry.putProject(registeredProject, asFolder(registeredProject.getPath()), true, false);
-                }
-                RegisteredProject rp = projectRegistry.putProject(project, folder, true, false);
-                workspaceProjectsHolder.sync(projectRegistry);
-                return rp;
-            }
+    final String name = folder.getPath().getName();
+    for (ProjectConfig project : workspaceProjectsHolder.getProjects()) {
+      if (normalizePath.equals(project.getPath())) {
+        // TODO Needed for factory project importing with keepDir. It needs to find more appropriate solution
+        List<String> innerProjects = projectRegistry.getProjects(normalizePath);
+        for (String innerProject : innerProjects) {
+          RegisteredProject registeredProject = projectRegistry.getProject(innerProject);
+          projectRegistry.putProject(
+              registeredProject, asFolder(registeredProject.getPath()), true, false);
         }
-
-        RegisteredProject rp = projectRegistry
-                .putProject(new NewProjectConfigImpl(normalizePath, name, BaseProjectType.ID, sourceStorage), folder, true, false);
+        RegisteredProject rp = projectRegistry.putProject(project, folder, true, false);
         workspaceProjectsHolder.sync(projectRegistry);
         return rp;
+      }
     }
+
+    RegisteredProject rp =
+        projectRegistry.putProject(
+            new NewProjectConfigImpl(normalizePath, name, BaseProjectType.ID, sourceStorage),
+            folder,
+            true,
+            false);
+    workspaceProjectsHolder.sync(projectRegistry);
+    return rp;
+  }
 

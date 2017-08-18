@@ -1,49 +1,57 @@
-    /**
-     * Prepare snapshots of all active machines.
-     *
-     * @param machines
-     *         the active machines map
-     */
-    private void snapshotMachines(Map<String, DockerMachine> machines) {
-        List<SnapshotImpl> newSnapshots = new ArrayList<>();
-        final RuntimeIdentity identity = getContext().getIdentity();
-        String devMachineName = getContext().getDevMachineName();
-        for (Map.Entry<String, DockerMachine> dockerMachineEntry : machines.entrySet()) {
-            SnapshotImpl snapshot = SnapshotImpl.builder()
-                                                .generateId()
-                                                .setType("docker") //TODO: do we need that at all?
-                                                .setWorkspaceId(identity.getWorkspaceId())
-                                                .setDescription(identity.getEnvName())
-                                                .setDev(dockerMachineEntry.getKey().equals(devMachineName))
-                                                .setEnvName(identity.getEnvName())
-                                                .setMachineName(dockerMachineEntry.getKey())
-                                                .useCurrentCreationDate()
-                                                .build();
-            try {
-                ProgressMonitor monitor = loggers.newProgressMonitor(dockerMachineEntry.getKey(), identity);
-                DockerMachineSource machineSource = dockerMachineEntry.getValue().saveToSnapshot(monitor);
-                snapshot.setMachineSource(new MachineSourceImpl(machineSource));
-                newSnapshots.add(snapshot);
-            } catch (SnapshotException e) {
-                LOG.error(format("Error occurs on snapshotting of docker machine '%s' in workspace '%s'. Container '%s'",
-                                 dockerMachineEntry.getKey(),
-                                 identity.getWorkspaceId(),
-                                 dockerMachineEntry.getValue().getContainer()),
-                          e);
-            }
-        }
-        try {
-            List<SnapshotImpl> removed = snapshotDao.replaceSnapshots(identity.getWorkspaceId(),
-                                                                      identity.getEnvName(),
-                                                                      newSnapshots);
-            if (!removed.isEmpty()) {
-                LOG.info("Removing old snapshots binaries, workspace id '{}', snapshots to remove '{}'", identity.getWorkspaceId(),
-                         removed.size());
-                removeBinaries(removed);
-            }
-        } catch (SnapshotException e) {
-            LOG.error(format("Couldn't remove existing snapshots metadata for workspace '%s'", identity.getWorkspaceId()), e);
-            removeBinaries(newSnapshots);
-        }
+  /**
+   * Prepare snapshots of all active machines.
+   *
+   * @param machines the active machines map
+   */
+  private void snapshotMachines(Map<String, DockerMachine> machines) {
+    List<SnapshotImpl> newSnapshots = new ArrayList<>();
+    final RuntimeIdentity identity = getContext().getIdentity();
+    String devMachineName = getContext().getDevMachineName();
+    for (Map.Entry<String, DockerMachine> dockerMachineEntry : machines.entrySet()) {
+      SnapshotImpl snapshot =
+          SnapshotImpl.builder()
+              .generateId()
+              .setType("docker") //TODO: do we need that at all?
+              .setWorkspaceId(identity.getWorkspaceId())
+              .setDescription(identity.getEnvName())
+              .setDev(dockerMachineEntry.getKey().equals(devMachineName))
+              .setEnvName(identity.getEnvName())
+              .setMachineName(dockerMachineEntry.getKey())
+              .useCurrentCreationDate()
+              .build();
+      try {
+        ProgressMonitor monitor = loggers.newProgressMonitor(dockerMachineEntry.getKey(), identity);
+        DockerMachineSource machineSource = dockerMachineEntry.getValue().saveToSnapshot(monitor);
+        snapshot.setMachineSource(new MachineSourceImpl(machineSource));
+        newSnapshots.add(snapshot);
+      } catch (SnapshotException e) {
+        LOG.error(
+            format(
+                "Error occurs on snapshotting of docker machine '%s' in workspace '%s'. Container '%s'",
+                dockerMachineEntry.getKey(),
+                identity.getWorkspaceId(),
+                dockerMachineEntry.getValue().getContainer()),
+            e);
+      }
     }
+    try {
+      List<SnapshotImpl> removed =
+          snapshotDao.replaceSnapshots(
+              identity.getWorkspaceId(), identity.getEnvName(), newSnapshots);
+      if (!removed.isEmpty()) {
+        LOG.info(
+            "Removing old snapshots binaries, workspace id '{}', snapshots to remove '{}'",
+            identity.getWorkspaceId(),
+            removed.size());
+        removeBinaries(removed);
+      }
+    } catch (SnapshotException e) {
+      LOG.error(
+          format(
+              "Couldn't remove existing snapshots metadata for workspace '%s'",
+              identity.getWorkspaceId()),
+          e);
+      removeBinaries(newSnapshots);
+    }
+  }
 

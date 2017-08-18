@@ -1,65 +1,79 @@
-		private void inlineReference(Expression reference) throws CoreException {
-			ASTNode importDecl = ASTNodes.getParent(reference, ImportDeclaration.class);
-			if (importDecl != null) {
-				fCuRewrite.getImportRemover().registerInlinedStaticImport((ImportDeclaration)importDecl);
-				return;
-			}
+    private void inlineReference(Expression reference) throws CoreException {
+      ASTNode importDecl = ASTNodes.getParent(reference, ImportDeclaration.class);
+      if (importDecl != null) {
+        fCuRewrite.getImportRemover().registerInlinedStaticImport((ImportDeclaration) importDecl);
+        return;
+      }
 
-			String modifiedInitializer = prepareInitializerForLocation(reference);
-			if (modifiedInitializer == null)
-				return;
+      String modifiedInitializer = prepareInitializerForLocation(reference);
+      if (modifiedInitializer == null) return;
 
-			TextEditGroup msg = fCuRewrite.createGroupDescription(RefactoringCoreMessages.InlineConstantRefactoring_Inline);
+      TextEditGroup msg =
+          fCuRewrite.createGroupDescription(
+              RefactoringCoreMessages.InlineConstantRefactoring_Inline);
 
-			Expression newReference;
-			boolean isStringPlaceholder = false;
+      Expression newReference;
+      boolean isStringPlaceholder = false;
 
-			AST ast = fCuRewrite.getAST();
-			ITypeBinding explicitCast = ASTNodes.getExplicitCast(fInitializer, reference);
-			if (explicitCast != null) {
-				CastExpression cast = ast.newCastExpression();
-				Expression modifiedInitializerExpr =
-						(Expression)fCuRewrite.getASTRewrite().createStringPlaceholder(modifiedInitializer, reference.getNodeType());
-				if (NecessaryParenthesesChecker.needsParentheses(fInitializer, cast, CastExpression.EXPRESSION_PROPERTY)) {
-					ParenthesizedExpression parenthesized = ast.newParenthesizedExpression();
-					parenthesized.setExpression(modifiedInitializerExpr);
-					modifiedInitializerExpr = parenthesized;
-				}
-				cast.setExpression(modifiedInitializerExpr);
-				ImportRewriteContext context = new ContextSensitiveImportRewriteContext(reference, fCuRewrite.getImportRewrite());
-				cast.setType(fCuRewrite.getImportRewrite().addImport(explicitCast, ast, context));
-				newReference = cast;
+      AST ast = fCuRewrite.getAST();
+      ITypeBinding explicitCast = ASTNodes.getExplicitCast(fInitializer, reference);
+      if (explicitCast != null) {
+        CastExpression cast = ast.newCastExpression();
+        Expression modifiedInitializerExpr =
+            (Expression)
+                fCuRewrite
+                    .getASTRewrite()
+                    .createStringPlaceholder(modifiedInitializer, reference.getNodeType());
+        if (NecessaryParenthesesChecker.needsParentheses(
+            fInitializer, cast, CastExpression.EXPRESSION_PROPERTY)) {
+          ParenthesizedExpression parenthesized = ast.newParenthesizedExpression();
+          parenthesized.setExpression(modifiedInitializerExpr);
+          modifiedInitializerExpr = parenthesized;
+        }
+        cast.setExpression(modifiedInitializerExpr);
+        ImportRewriteContext context =
+            new ContextSensitiveImportRewriteContext(reference, fCuRewrite.getImportRewrite());
+        cast.setType(fCuRewrite.getImportRewrite().addImport(explicitCast, ast, context));
+        newReference = cast;
 
-			} else if (fInitializer instanceof ArrayInitializer) {
-				ArrayCreation arrayCreation = ast.newArrayCreation();
-				ArrayType arrayType = (ArrayType)ASTNodeFactory.newType(ast, fOriginalDeclaration);
-				arrayCreation.setType(arrayType);
+      } else if (fInitializer instanceof ArrayInitializer) {
+        ArrayCreation arrayCreation = ast.newArrayCreation();
+        ArrayType arrayType = (ArrayType) ASTNodeFactory.newType(ast, fOriginalDeclaration);
+        arrayCreation.setType(arrayType);
 
-				ArrayInitializer newArrayInitializer =
-						(ArrayInitializer)fCuRewrite.getASTRewrite().createStringPlaceholder(modifiedInitializer,
-																							 ASTNode.ARRAY_INITIALIZER);
-				arrayCreation.setInitializer(newArrayInitializer);
-				newReference = arrayCreation;
+        ArrayInitializer newArrayInitializer =
+            (ArrayInitializer)
+                fCuRewrite
+                    .getASTRewrite()
+                    .createStringPlaceholder(modifiedInitializer, ASTNode.ARRAY_INITIALIZER);
+        arrayCreation.setInitializer(newArrayInitializer);
+        newReference = arrayCreation;
 
-				ITypeBinding typeToAddToImport = ASTNodes.getType(fOriginalDeclaration).resolveBinding();
-				ImportRewriteContext context = new ContextSensitiveImportRewriteContext(reference, fCuRewrite.getImportRewrite());
-				fCuRewrite.getImportRewrite().addImport(typeToAddToImport, context);
-				fCuRewrite.getImportRemover().registerAddedImport(typeToAddToImport.getName());
+        ITypeBinding typeToAddToImport = ASTNodes.getType(fOriginalDeclaration).resolveBinding();
+        ImportRewriteContext context =
+            new ContextSensitiveImportRewriteContext(reference, fCuRewrite.getImportRewrite());
+        fCuRewrite.getImportRewrite().addImport(typeToAddToImport, context);
+        fCuRewrite.getImportRemover().registerAddedImport(typeToAddToImport.getName());
 
-			} else {
-				newReference = (Expression)fCuRewrite.getASTRewrite().createStringPlaceholder(modifiedInitializer, reference.getNodeType
-						());
-				isStringPlaceholder = true;
-			}
+      } else {
+        newReference =
+            (Expression)
+                fCuRewrite
+                    .getASTRewrite()
+                    .createStringPlaceholder(modifiedInitializer, reference.getNodeType());
+        isStringPlaceholder = true;
+      }
 
-			if (NecessaryParenthesesChecker.needsParentheses((isStringPlaceholder ? fInitializer : newReference), reference.getParent(),
-															 reference.getLocationInParent())) {
-				ParenthesizedExpression parenthesized = ast.newParenthesizedExpression();
-				parenthesized.setExpression(newReference);
-				newReference = parenthesized;
-			}
-			fCuRewrite.getASTRewrite().replace(reference, newReference, msg);
-			fSourceRangeComputer.addTightSourceNode(reference);
-			fCuRewrite.getImportRemover().registerRemovedNode(reference);
-		}
+      if (NecessaryParenthesesChecker.needsParentheses(
+          (isStringPlaceholder ? fInitializer : newReference),
+          reference.getParent(),
+          reference.getLocationInParent())) {
+        ParenthesizedExpression parenthesized = ast.newParenthesizedExpression();
+        parenthesized.setExpression(newReference);
+        newReference = parenthesized;
+      }
+      fCuRewrite.getASTRewrite().replace(reference, newReference, msg);
+      fSourceRangeComputer.addTightSourceNode(reference);
+      fCuRewrite.getImportRemover().registerRemovedNode(reference);
+    }
 

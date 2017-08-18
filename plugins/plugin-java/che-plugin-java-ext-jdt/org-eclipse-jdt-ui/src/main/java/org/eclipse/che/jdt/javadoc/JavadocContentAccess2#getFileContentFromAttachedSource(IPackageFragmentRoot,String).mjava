@@ -1,85 +1,81 @@
-    private static String getFileContentFromAttachedSource(IPackageFragmentRoot root, String filePath) throws CoreException {
-        IPath sourceAttachmentPath = root.getSourceAttachmentPath();
-        if (sourceAttachmentPath != null) {
-            File file = null;
-            String encoding = null;
+  private static String getFileContentFromAttachedSource(IPackageFragmentRoot root, String filePath)
+      throws CoreException {
+    IPath sourceAttachmentPath = root.getSourceAttachmentPath();
+    if (sourceAttachmentPath != null) {
+      File file = null;
+      String encoding = null;
 
-            if (sourceAttachmentPath.getDevice() == null) {
-                //the path could be a workspace relative path to a zip or to the source folder
-                IWorkspaceRoot wsRoot = ResourcesPlugin.getWorkspace().getRoot();
-                IResource res = wsRoot.findMember(sourceAttachmentPath);
+      if (sourceAttachmentPath.getDevice() == null) {
+        //the path could be a workspace relative path to a zip or to the source folder
+        IWorkspaceRoot wsRoot = ResourcesPlugin.getWorkspace().getRoot();
+        IResource res = wsRoot.findMember(sourceAttachmentPath);
 
-                if (res instanceof IFile) {
-                    // zip in the workspace
-                    IPath location = res.getLocation();
-                    if (location == null)
-                        return null;
-                    file = location.toFile();
-                    encoding = ((IFile)res).getCharset(false);
+        if (res instanceof IFile) {
+          // zip in the workspace
+          IPath location = res.getLocation();
+          if (location == null) return null;
+          file = location.toFile();
+          encoding = ((IFile) res).getCharset(false);
 
-                } else if (res instanceof IContainer) {
-                    // folder in the workspace
-                    res = ((IContainer)res).findMember(filePath);
-                    if (!(res instanceof IFile))
-                        return null;
-                    encoding = ((IFile)res).getCharset(false);
-                    if (encoding == null)
-                        encoding = getSourceAttachmentEncoding(root);
-                    return getContentsFromInputStream(((IFile)res).getContents(), encoding);
-                }
-            }
-
-            if (file == null || !file.exists())
-                file = sourceAttachmentPath.toFile();
-
-            if (file.isDirectory()) {
-                //the path is an absolute filesystem path to the source folder
-                IPath packagedocPath = sourceAttachmentPath.append(filePath);
-                if (packagedocPath.toFile().exists())
-                    return getFileContent(packagedocPath.toFile());
-
-            } else if (file.exists()) {
-                //the package documentation is in a Jar/Zip
-                IPath sourceAttachmentRootPath = root.getSourceAttachmentRootPath();
-                String packagedocPath;
-                //consider the root path also in the search path if it exists
-                if (sourceAttachmentRootPath != null) {
-                    packagedocPath = sourceAttachmentRootPath.append(filePath).toString();
-                } else {
-                    packagedocPath = filePath;
-                }
-                ZipFile zipFile = null;
-                InputStream in = null;
-                try {
-                    zipFile = new ZipFile(file, ZipFile.OPEN_READ);
-                    ZipEntry packagedocFile = zipFile.getEntry(packagedocPath);
-                    if (packagedocFile != null) {
-                        in = zipFile.getInputStream(packagedocFile);
-                        if (encoding == null)
-                            encoding = getSourceAttachmentEncoding(root);
-                        return getContentsFromInputStream(in, encoding);
-                    }
-                } catch (IOException e) {
-                    throw new CoreException(new Status(IStatus.ERROR, "JavaPlugin.getPluginId()", e.getMessage(), e));
-                } finally {
-                    try {
-                        if (in != null) {
-                            in.close();
-                        }
-                    } catch (IOException e) {
-                        //ignore
-                    }
-                    try {
-                        if (zipFile != null) {
-                            zipFile.close();//this will close the InputStream also
-                        }
-                    } catch (IOException e) {
-                        //ignore
-                    }
-                }
-            }
+        } else if (res instanceof IContainer) {
+          // folder in the workspace
+          res = ((IContainer) res).findMember(filePath);
+          if (!(res instanceof IFile)) return null;
+          encoding = ((IFile) res).getCharset(false);
+          if (encoding == null) encoding = getSourceAttachmentEncoding(root);
+          return getContentsFromInputStream(((IFile) res).getContents(), encoding);
         }
+      }
 
-        return null;
+      if (file == null || !file.exists()) file = sourceAttachmentPath.toFile();
+
+      if (file.isDirectory()) {
+        //the path is an absolute filesystem path to the source folder
+        IPath packagedocPath = sourceAttachmentPath.append(filePath);
+        if (packagedocPath.toFile().exists()) return getFileContent(packagedocPath.toFile());
+
+      } else if (file.exists()) {
+        //the package documentation is in a Jar/Zip
+        IPath sourceAttachmentRootPath = root.getSourceAttachmentRootPath();
+        String packagedocPath;
+        //consider the root path also in the search path if it exists
+        if (sourceAttachmentRootPath != null) {
+          packagedocPath = sourceAttachmentRootPath.append(filePath).toString();
+        } else {
+          packagedocPath = filePath;
+        }
+        ZipFile zipFile = null;
+        InputStream in = null;
+        try {
+          zipFile = new ZipFile(file, ZipFile.OPEN_READ);
+          ZipEntry packagedocFile = zipFile.getEntry(packagedocPath);
+          if (packagedocFile != null) {
+            in = zipFile.getInputStream(packagedocFile);
+            if (encoding == null) encoding = getSourceAttachmentEncoding(root);
+            return getContentsFromInputStream(in, encoding);
+          }
+        } catch (IOException e) {
+          throw new CoreException(
+              new Status(IStatus.ERROR, "JavaPlugin.getPluginId()", e.getMessage(), e));
+        } finally {
+          try {
+            if (in != null) {
+              in.close();
+            }
+          } catch (IOException e) {
+            //ignore
+          }
+          try {
+            if (zipFile != null) {
+              zipFile.close(); //this will close the InputStream also
+            }
+          } catch (IOException e) {
+            //ignore
+          }
+        }
+      }
     }
+
+    return null;
+  }
 

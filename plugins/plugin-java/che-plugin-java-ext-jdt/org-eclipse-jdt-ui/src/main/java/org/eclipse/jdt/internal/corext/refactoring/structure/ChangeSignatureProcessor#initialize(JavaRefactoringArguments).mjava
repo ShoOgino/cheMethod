@@ -1,131 +1,144 @@
-	private RefactoringStatus initialize(JavaRefactoringArguments arguments) {
-		final String handle = arguments.getAttribute(JavaRefactoringDescriptorUtil.ATTRIBUTE_INPUT);
-		if (handle != null) {
-			final IJavaElement element = JavaRefactoringDescriptorUtil.handleToElement(arguments.getProject(), handle, false);
-			if (element == null || !element.exists() || element.getElementType() != IJavaElement.METHOD)
-				return JavaRefactoringDescriptorUtil
-						.createInputFatalStatus(element, getProcessorName(), IJavaRefactorings.CHANGE_METHOD_SIGNATURE);
-			else {
-				fMethod = (IMethod)element;
-				fMethodName = fMethod.getElementName();
-				try {
-					fVisibility = JdtFlags.getVisibilityCode(fMethod);
-					fReturnTypeInfo = new ReturnTypeInfo(Signature.toString(Signature.getReturnType(fMethod.getSignature())));
-				} catch (JavaModelException exception) {
-					return RefactoringStatus.createFatalErrorStatus(
-							Messages.format(RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
-											new Object[]{new Integer(fVisibility),
-														 ATTRIBUTE_VISIBILITY}));
-				}
-			}
-		} else
-			return RefactoringStatus.createFatalErrorStatus(
-					Messages.format(RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
-									JavaRefactoringDescriptorUtil.ATTRIBUTE_INPUT));
-		final String name = arguments.getAttribute(JavaRefactoringDescriptorUtil.ATTRIBUTE_NAME);
-		if (name != null) {
-			fMethodName = name;
-			final RefactoringStatus status = Checks.checkMethodName(fMethodName, fMethod);
-			if (status.hasError())
-				return status;
-		} else
-			return RefactoringStatus.createFatalErrorStatus(
-					Messages.format(RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
-									JavaRefactoringDescriptorUtil.ATTRIBUTE_NAME));
-		final String type = arguments.getAttribute(ATTRIBUTE_RETURN);
-		if (type != null && !"".equals(type)) //$NON-NLS-1$
-			fReturnTypeInfo.setNewTypeName(type);
-		final String visibility = arguments.getAttribute(ATTRIBUTE_VISIBILITY);
-		if (visibility != null && !"".equals(visibility)) {//$NON-NLS-1$
-			int flag = 0;
-			try {
-				flag = Integer.parseInt(visibility);
-			} catch (NumberFormatException exception) {
-				return RefactoringStatus.createFatalErrorStatus(
-						Messages.format(RefactoringCoreMessages.InitializableRefactoring_argument_not_exist, ATTRIBUTE_VISIBILITY));
-			}
-			fVisibility = flag;
-		}
-		int count = 1;
-		String attribute = ATTRIBUTE_PARAMETER + count;
-		String value = null;
-		fParameterInfos = new ArrayList<ParameterInfo>(3);
-		while ((value = arguments.getAttribute(attribute)) != null) {
-			StringTokenizer tokenizer = new StringTokenizer(value, " "); //$NON-NLS-1$
-			if (tokenizer.countTokens() < 6)
-				return RefactoringStatus.createFatalErrorStatus(
-						Messages.format(RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
-										new Object[]{value, ATTRIBUTE_PARAMETER}));
-			String oldTypeName = tokenizer.nextToken();
-			String oldName = tokenizer.nextToken();
-			String oldIndex = tokenizer.nextToken();
-			String newTypeName = tokenizer.nextToken();
-			String newName = tokenizer.nextToken();
-			String deleted = tokenizer.nextToken();
-			ParameterInfo info = null;
-			try {
-				int index = Integer.parseInt(oldIndex);
-				if (index == -1) {
-					String result = arguments.getAttribute(ATTRIBUTE_DEFAULT + count);
-					if (result == null)
-						result = ""; //$NON-NLS-1$
-					info = ParameterInfo.createInfoForAddedParameter(newTypeName, newName, result);
-				} else {
-					info = new ParameterInfo(oldTypeName, oldName, index);
-					info.setNewTypeName(newTypeName);
-					info.setNewName(newName);
-					if (Boolean.valueOf(deleted).booleanValue())
-						info.markAsDeleted();
-				}
-				fParameterInfos.add(info);
-			} catch (NumberFormatException exception) {
-				return RefactoringStatus.createFatalErrorStatus(
-						Messages.format(RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
-										new Object[]{value, ATTRIBUTE_PARAMETER}));
-			}
-			count++;
-			attribute = ATTRIBUTE_PARAMETER + count;
-		}
-		count = 1;
-		fExceptionInfos = new ArrayList<ExceptionInfo>(2);
-		attribute = JavaRefactoringDescriptorUtil.ATTRIBUTE_ELEMENT + count;
-		while ((value = arguments.getAttribute(attribute)) != null) {
-			ExceptionInfo info = null;
-			final String kind = arguments.getAttribute(ATTRIBUTE_KIND + count);
-			if (kind != null) {
-				final IJavaElement element = JavaRefactoringDescriptorUtil.handleToElement(arguments.getProject(), value, false);
-				if (element == null || !element.exists())
-					return JavaRefactoringDescriptorUtil
-							.createInputFatalStatus(element, getProcessorName(), IJavaRefactorings.CHANGE_METHOD_SIGNATURE);
-				else {
-					try {
-						info = new ExceptionInfo(element, Integer.valueOf(kind).intValue(), null);
-					} catch (NumberFormatException exception) {
-						return RefactoringStatus.createFatalErrorStatus(
-								Messages.format(RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
-												new Object[]{kind, ATTRIBUTE_KIND}));
-					}
-				}
-			} else
-				return RefactoringStatus.createFatalErrorStatus(
-						Messages.format(RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
-										new Object[]{kind, ATTRIBUTE_KIND}));
-			fExceptionInfos.add(info);
-			count++;
-			attribute = JavaRefactoringDescriptorUtil.ATTRIBUTE_ELEMENT + count;
-		}
-		final String deprecate = arguments.getAttribute(ATTRIBUTE_DEPRECATE);
-		if (deprecate != null) {
-			fDelegateDeprecation = Boolean.valueOf(deprecate).booleanValue();
-		} else
-			return RefactoringStatus.createFatalErrorStatus(
-					Messages.format(RefactoringCoreMessages.InitializableRefactoring_argument_not_exist, ATTRIBUTE_DEPRECATE));
-		final String delegate = arguments.getAttribute(ATTRIBUTE_DELEGATE);
-		if (delegate != null) {
-			fDelegateUpdating = Boolean.valueOf(delegate).booleanValue();
-		} else
-			return RefactoringStatus.createFatalErrorStatus(
-					Messages.format(RefactoringCoreMessages.InitializableRefactoring_argument_not_exist, ATTRIBUTE_DELEGATE));
-		return new RefactoringStatus();
-	}
+  private RefactoringStatus initialize(JavaRefactoringArguments arguments) {
+    final String handle = arguments.getAttribute(JavaRefactoringDescriptorUtil.ATTRIBUTE_INPUT);
+    if (handle != null) {
+      final IJavaElement element =
+          JavaRefactoringDescriptorUtil.handleToElement(arguments.getProject(), handle, false);
+      if (element == null || !element.exists() || element.getElementType() != IJavaElement.METHOD)
+        return JavaRefactoringDescriptorUtil.createInputFatalStatus(
+            element, getProcessorName(), IJavaRefactorings.CHANGE_METHOD_SIGNATURE);
+      else {
+        fMethod = (IMethod) element;
+        fMethodName = fMethod.getElementName();
+        try {
+          fVisibility = JdtFlags.getVisibilityCode(fMethod);
+          fReturnTypeInfo =
+              new ReturnTypeInfo(
+                  Signature.toString(Signature.getReturnType(fMethod.getSignature())));
+        } catch (JavaModelException exception) {
+          return RefactoringStatus.createFatalErrorStatus(
+              Messages.format(
+                  RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
+                  new Object[] {new Integer(fVisibility), ATTRIBUTE_VISIBILITY}));
+        }
+      }
+    } else
+      return RefactoringStatus.createFatalErrorStatus(
+          Messages.format(
+              RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
+              JavaRefactoringDescriptorUtil.ATTRIBUTE_INPUT));
+    final String name = arguments.getAttribute(JavaRefactoringDescriptorUtil.ATTRIBUTE_NAME);
+    if (name != null) {
+      fMethodName = name;
+      final RefactoringStatus status = Checks.checkMethodName(fMethodName, fMethod);
+      if (status.hasError()) return status;
+    } else
+      return RefactoringStatus.createFatalErrorStatus(
+          Messages.format(
+              RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
+              JavaRefactoringDescriptorUtil.ATTRIBUTE_NAME));
+    final String type = arguments.getAttribute(ATTRIBUTE_RETURN);
+    if (type != null && !"".equals(type)) //$NON-NLS-1$
+    fReturnTypeInfo.setNewTypeName(type);
+    final String visibility = arguments.getAttribute(ATTRIBUTE_VISIBILITY);
+    if (visibility != null && !"".equals(visibility)) { //$NON-NLS-1$
+      int flag = 0;
+      try {
+        flag = Integer.parseInt(visibility);
+      } catch (NumberFormatException exception) {
+        return RefactoringStatus.createFatalErrorStatus(
+            Messages.format(
+                RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
+                ATTRIBUTE_VISIBILITY));
+      }
+      fVisibility = flag;
+    }
+    int count = 1;
+    String attribute = ATTRIBUTE_PARAMETER + count;
+    String value = null;
+    fParameterInfos = new ArrayList<ParameterInfo>(3);
+    while ((value = arguments.getAttribute(attribute)) != null) {
+      StringTokenizer tokenizer = new StringTokenizer(value, " "); //$NON-NLS-1$
+      if (tokenizer.countTokens() < 6)
+        return RefactoringStatus.createFatalErrorStatus(
+            Messages.format(
+                RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
+                new Object[] {value, ATTRIBUTE_PARAMETER}));
+      String oldTypeName = tokenizer.nextToken();
+      String oldName = tokenizer.nextToken();
+      String oldIndex = tokenizer.nextToken();
+      String newTypeName = tokenizer.nextToken();
+      String newName = tokenizer.nextToken();
+      String deleted = tokenizer.nextToken();
+      ParameterInfo info = null;
+      try {
+        int index = Integer.parseInt(oldIndex);
+        if (index == -1) {
+          String result = arguments.getAttribute(ATTRIBUTE_DEFAULT + count);
+          if (result == null) result = ""; //$NON-NLS-1$
+          info = ParameterInfo.createInfoForAddedParameter(newTypeName, newName, result);
+        } else {
+          info = new ParameterInfo(oldTypeName, oldName, index);
+          info.setNewTypeName(newTypeName);
+          info.setNewName(newName);
+          if (Boolean.valueOf(deleted).booleanValue()) info.markAsDeleted();
+        }
+        fParameterInfos.add(info);
+      } catch (NumberFormatException exception) {
+        return RefactoringStatus.createFatalErrorStatus(
+            Messages.format(
+                RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
+                new Object[] {value, ATTRIBUTE_PARAMETER}));
+      }
+      count++;
+      attribute = ATTRIBUTE_PARAMETER + count;
+    }
+    count = 1;
+    fExceptionInfos = new ArrayList<ExceptionInfo>(2);
+    attribute = JavaRefactoringDescriptorUtil.ATTRIBUTE_ELEMENT + count;
+    while ((value = arguments.getAttribute(attribute)) != null) {
+      ExceptionInfo info = null;
+      final String kind = arguments.getAttribute(ATTRIBUTE_KIND + count);
+      if (kind != null) {
+        final IJavaElement element =
+            JavaRefactoringDescriptorUtil.handleToElement(arguments.getProject(), value, false);
+        if (element == null || !element.exists())
+          return JavaRefactoringDescriptorUtil.createInputFatalStatus(
+              element, getProcessorName(), IJavaRefactorings.CHANGE_METHOD_SIGNATURE);
+        else {
+          try {
+            info = new ExceptionInfo(element, Integer.valueOf(kind).intValue(), null);
+          } catch (NumberFormatException exception) {
+            return RefactoringStatus.createFatalErrorStatus(
+                Messages.format(
+                    RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
+                    new Object[] {kind, ATTRIBUTE_KIND}));
+          }
+        }
+      } else
+        return RefactoringStatus.createFatalErrorStatus(
+            Messages.format(
+                RefactoringCoreMessages.InitializableRefactoring_illegal_argument,
+                new Object[] {kind, ATTRIBUTE_KIND}));
+      fExceptionInfos.add(info);
+      count++;
+      attribute = JavaRefactoringDescriptorUtil.ATTRIBUTE_ELEMENT + count;
+    }
+    final String deprecate = arguments.getAttribute(ATTRIBUTE_DEPRECATE);
+    if (deprecate != null) {
+      fDelegateDeprecation = Boolean.valueOf(deprecate).booleanValue();
+    } else
+      return RefactoringStatus.createFatalErrorStatus(
+          Messages.format(
+              RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
+              ATTRIBUTE_DEPRECATE));
+    final String delegate = arguments.getAttribute(ATTRIBUTE_DELEGATE);
+    if (delegate != null) {
+      fDelegateUpdating = Boolean.valueOf(delegate).booleanValue();
+    } else
+      return RefactoringStatus.createFatalErrorStatus(
+          Messages.format(
+              RefactoringCoreMessages.InitializableRefactoring_argument_not_exist,
+              ATTRIBUTE_DELEGATE));
+    return new RefactoringStatus();
+  }
 

@@ -1,63 +1,57 @@
-    /**
-     * Start Docker machine by performing all needed operations such as pull, build, create container, etc.
-     *
-     * @param networkName
-     *         name of a network Docker container should use
-     * @param machineName
-     *         name of Docker machine
-     * @param containerConfig
-     *         configuration of container to start
-     * @param identity
-     *         identity of user that starts machine
-     * @return {@link DockerMachine} instance that represents started container
-     * @throws InternalInfrastructureException
-     *         if internal error occurs
-     * @throws SourceNotFoundException
-     *         if image for container creation is missing
-     * @throws InfrastructureException
-     *         if any other error occurs
-     */
-    public DockerMachine startContainer(String networkName,
-                                        String machineName,
-                                        DockerContainerConfig containerConfig,
-                                        RuntimeIdentity identity,
-                                        AbnormalMachineStopHandler abnormalMachineStopHandler)
-            throws InfrastructureException {
-        String workspaceId = identity.getWorkspaceId();
+  /**
+   * Start Docker machine by performing all needed operations such as pull, build, create container,
+   * etc.
+   *
+   * @param networkName name of a network Docker container should use
+   * @param machineName name of Docker machine
+   * @param containerConfig configuration of container to start
+   * @param identity identity of user that starts machine
+   * @return {@link DockerMachine} instance that represents started container
+   * @throws InternalInfrastructureException if internal error occurs
+   * @throws SourceNotFoundException if image for container creation is missing
+   * @throws InfrastructureException if any other error occurs
+   */
+  public DockerMachine startContainer(
+      String networkName,
+      String machineName,
+      DockerContainerConfig containerConfig,
+      RuntimeIdentity identity,
+      AbnormalMachineStopHandler abnormalMachineStopHandler)
+      throws InfrastructureException {
+    String workspaceId = identity.getWorkspaceId();
 
-        // copy to not affect/be affected by changes in origin
-        containerConfig = new DockerContainerConfig(containerConfig);
-        final ProgressMonitor progressMonitor = machineLoggerFactory.newProgressMonitor(machineName, identity);
-        String container = null;
-        try {
-            String image = prepareImage(machineName, containerConfig, progressMonitor);
+    // copy to not affect/be affected by changes in origin
+    containerConfig = new DockerContainerConfig(containerConfig);
+    final ProgressMonitor progressMonitor =
+        machineLoggerFactory.newProgressMonitor(machineName, identity);
+    String container = null;
+    try {
+      String image = prepareImage(machineName, containerConfig, progressMonitor);
 
-            container = createContainer(machineName,
-                                        image,
-                                        networkName,
-                                        containerConfig);
+      container = createContainer(machineName, image, networkName, containerConfig);
 
-            connectContainerToAdditionalNetworks(container, containerConfig);
+      connectContainerToAdditionalNetworks(container, containerConfig);
 
-            docker.startContainer(StartContainerParams.create(container));
+      docker.startContainer(StartContainerParams.create(container));
 
-            ContainerInfo runningContainer = getRunningContainer(container);
+      ContainerInfo runningContainer = getRunningContainer(container);
 
-            readContainerLogsInSeparateThread(container,
-                                              workspaceId,
-                                              containerConfig.getId(),
-                                              machineLoggerFactory.newLogsProcessor(machineName, identity));
+      readContainerLogsInSeparateThread(
+          container,
+          workspaceId,
+          containerConfig.getId(),
+          machineLoggerFactory.newLogsProcessor(machineName, identity));
 
-            dockerInstanceStopDetector.startDetection(container, machineName, abnormalMachineStopHandler);
+      dockerInstanceStopDetector.startDetection(container, machineName, abnormalMachineStopHandler);
 
-            return machineCreator.create(runningContainer);
-        } catch (RuntimeException | IOException | InfrastructureException e) {
-            cleanUpContainer(container);
-            if (e instanceof InfrastructureException) {
-                throw (InfrastructureException)e;
-            } else {
-                throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
-            }
-        }
+      return machineCreator.create(runningContainer);
+    } catch (RuntimeException | IOException | InfrastructureException e) {
+      cleanUpContainer(container);
+      if (e instanceof InfrastructureException) {
+        throw (InfrastructureException) e;
+      } else {
+        throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
+      }
     }
+  }
 

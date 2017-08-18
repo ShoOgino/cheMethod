@@ -1,56 +1,57 @@
-    @Override
-    protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
-        try {
-            project.cleanUp();
+  @Override
+  protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
+    try {
+      project.cleanUp();
 
-            prepareOpenShiftPVCs(getContext().getOpenShiftEnvironment().getPersistentVolumeClaims());
+      prepareOpenShiftPVCs(getContext().getOpenShiftEnvironment().getPersistentVolumeClaims());
 
-            List<Service> createdServices = new ArrayList<>();
-            for (Service service : getContext().getOpenShiftEnvironment().getServices().values()) {
-                createdServices.add(project.services().create(service));
-            }
+      List<Service> createdServices = new ArrayList<>();
+      for (Service service : getContext().getOpenShiftEnvironment().getServices().values()) {
+        createdServices.add(project.services().create(service));
+      }
 
-            List<Route> createdRoutes = new ArrayList<>();
-            for (Route route : getContext().getOpenShiftEnvironment().getRoutes().values()) {
-                createdRoutes.add(project.routes().create(route));
-            }
+      List<Route> createdRoutes = new ArrayList<>();
+      for (Route route : getContext().getOpenShiftEnvironment().getRoutes().values()) {
+        createdRoutes.add(project.routes().create(route));
+      }
 
-            ServerResolver serverResolver = ServerResolver.of(createdServices, createdRoutes);
+      ServerResolver serverResolver = ServerResolver.of(createdServices, createdRoutes);
 
-            for (Pod toCreate : getContext().getOpenShiftEnvironment().getPods().values()) {
-                Pod createdPod = project.pods().create(toCreate);
-                for (Container container : createdPod.getSpec().getContainers()) {
-                    OpenShiftMachine machine = new OpenShiftMachine(createdPod.getMetadata().getName(),
-                                                                    container.getName(),
-                                                                    serverResolver.resolve(createdPod, container),
-                                                                    project);
-                    machines.put(machine.getName(), machine);
-                    sendStartingEvent(machine.getName());
-                }
-            }
-
-            //TODO Rework it to parallel waiting
-            for (OpenShiftMachine machine : machines.values()) {
-                machine.waitRunning(machineStartTimeoutMin);
-                final String machineName = machine.getName();
-                bootstrapperFactory.create(getContext().getIdentity(),
-                                           getContext().getMachineConfigs()
-                                                       .get(machineName)
-                                                       .getInstallers(),
-                                           machine)
-                                   .bootstrap();
-
-                ServersReadinessChecker check = new ServersReadinessChecker(machineName,
-                                                                            machine.getServers(),
-                                                                            serverCheckerFactory);
-                check.startAsync(new ServerReadinessHandler(machineName));
-                check.await();
-                sendRunningEvent(machine.getName());
-            }
-        } catch (RuntimeException | InterruptedException e) {
-            LOG.error("Failed to start of OpenShift runtime. " + e.getMessage(), e);
-            project.cleanUp();
-            throw new InfrastructureException(e.getMessage(), e);
+      for (Pod toCreate : getContext().getOpenShiftEnvironment().getPods().values()) {
+        Pod createdPod = project.pods().create(toCreate);
+        for (Container container : createdPod.getSpec().getContainers()) {
+          OpenShiftMachine machine =
+              new OpenShiftMachine(
+                  createdPod.getMetadata().getName(),
+                  container.getName(),
+                  serverResolver.resolve(createdPod, container),
+                  project);
+          machines.put(machine.getName(), machine);
+          sendStartingEvent(machine.getName());
         }
+      }
+
+      //TODO Rework it to parallel waiting
+      for (OpenShiftMachine machine : machines.values()) {
+        machine.waitRunning(machineStartTimeoutMin);
+        final String machineName = machine.getName();
+        bootstrapperFactory
+            .create(
+                getContext().getIdentity(),
+                getContext().getMachineConfigs().get(machineName).getInstallers(),
+                machine)
+            .bootstrap();
+
+        ServersReadinessChecker check =
+            new ServersReadinessChecker(machineName, machine.getServers(), serverCheckerFactory);
+        check.startAsync(new ServerReadinessHandler(machineName));
+        check.await();
+        sendRunningEvent(machine.getName());
+      }
+    } catch (RuntimeException | InterruptedException e) {
+      LOG.error("Failed to start of OpenShift runtime. " + e.getMessage(), e);
+      project.cleanUp();
+      throw new InfrastructureException(e.getMessage(), e);
     }
+  }
 

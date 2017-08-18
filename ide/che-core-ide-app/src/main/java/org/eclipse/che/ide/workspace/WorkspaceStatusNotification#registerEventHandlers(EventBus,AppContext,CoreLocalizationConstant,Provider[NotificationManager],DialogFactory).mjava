@@ -1,49 +1,63 @@
-    @Inject
-    private void registerEventHandlers(EventBus eventBus,
-                                       AppContext appContext,
-                                       CoreLocalizationConstant messages,
-                                       Provider<NotificationManager> notificationManagerProvider,
-                                       DialogFactory dialogFactory) {
+  @Inject
+  private void registerEventHandlers(
+      EventBus eventBus,
+      AppContext appContext,
+      CoreLocalizationConstant messages,
+      Provider<NotificationManager> notificationManagerProvider,
+      DialogFactory dialogFactory) {
 
-        eventBus.addHandler(BasicIDEInitializedEvent.TYPE, e -> {
-            WorkspaceStatus status = appContext.getWorkspace().getStatus();
+    eventBus.addHandler(
+        BasicIDEInitializedEvent.TYPE,
+        e -> {
+          WorkspaceStatus status = appContext.getWorkspace().getStatus();
 
-            if (status == STARTING) {
-                show(STARTING_WORKSPACE_RUNTIME);
-            } else if (status == STOPPING) {
-                show(STOPPING_WORKSPACE);
-            }
-        });
-
-        eventBus.addHandler(WorkspaceStartingEvent.TYPE, e -> {
-            setSuccess(WORKSPACE_STOPPED);
+          if (status == STARTING) {
             show(STARTING_WORKSPACE_RUNTIME);
-        });
-
-        eventBus.addHandler(WorkspaceRunningEvent.TYPE, e -> setSuccess(STARTING_WORKSPACE_RUNTIME));
-
-        eventBus.addHandler(WorkspaceStoppingEvent.TYPE, e -> {
-            setSuccess(STARTING_WORKSPACE_RUNTIME);
+          } else if (status == STOPPING) {
             show(STOPPING_WORKSPACE);
+          }
         });
 
-        eventBus.addHandler(WorkspaceStoppedEvent.TYPE, e -> {
-            setSuccess(STOPPING_WORKSPACE);
-            setSuccess(STARTING_WORKSPACE_RUNTIME);
+    eventBus.addHandler(
+        WorkspaceStartingEvent.TYPE,
+        e -> {
+          setSuccess(WORKSPACE_STOPPED);
+          show(STARTING_WORKSPACE_RUNTIME);
+        });
 
-            if (e.isError()) {
-                notificationManagerProvider.get().notify(messages.workspaceStartFailed(), FAIL, FLOAT_MODE);
+    eventBus.addHandler(WorkspaceRunningEvent.TYPE, e -> setSuccess(STARTING_WORKSPACE_RUNTIME));
 
-                String errorMessage = e.getErrorMessage();
-                if (!errorMessage.isEmpty()) {
-                    WorkspaceImpl currentWorkspace = appContext.getWorkspace();
-                    String workspaceName = currentWorkspace.getConfig().getName();
+    eventBus.addHandler(
+        WorkspaceStoppingEvent.TYPE,
+        e -> {
+          setSuccess(STARTING_WORKSPACE_RUNTIME);
+          show(STOPPING_WORKSPACE);
+        });
 
-                    dialogFactory.createMessageDialog(messages.startWsErrorTitle(),
-                                                      messages.startWsErrorContent(workspaceName, errorMessage),
-                                                      null).show();
-                }
+    eventBus.addHandler(
+        WorkspaceStoppedEvent.TYPE,
+        e -> {
+          setSuccess(STOPPING_WORKSPACE);
+          setSuccess(STARTING_WORKSPACE_RUNTIME);
+
+          if (e.isError()) {
+            notificationManagerProvider
+                .get()
+                .notify(messages.workspaceStartFailed(), FAIL, FLOAT_MODE);
+
+            String errorMessage = e.getErrorMessage();
+            if (!errorMessage.isEmpty()) {
+              WorkspaceImpl currentWorkspace = appContext.getWorkspace();
+              String workspaceName = currentWorkspace.getConfig().getName();
+
+              dialogFactory
+                  .createMessageDialog(
+                      messages.startWsErrorTitle(),
+                      messages.startWsErrorContent(workspaceName, errorMessage),
+                      null)
+                  .show();
             }
+          }
         });
-    }
+  }
 

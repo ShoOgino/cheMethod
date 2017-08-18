@@ -1,52 +1,52 @@
-        @Override
-        public void onLoad(final LoadEvent event) {
-            Node parent = event.getRequestedNode();
-            tree.getView().onLoadChange(tree.getNodeDescriptor(parent), false);
+    @Override
+    public void onLoad(final LoadEvent event) {
+      Node parent = event.getRequestedNode();
+      tree.getView().onLoadChange(tree.getNodeDescriptor(parent), false);
 
-            //remove joint element if non-leaf node doesn't have any children
-            if (!parent.isLeaf() && event.getReceivedNodes().isEmpty()) {
-                tree.getView().onJointChange(tree.getNodeDescriptor(parent), Tree.Joint.NONE);
-            }
+      //remove joint element if non-leaf node doesn't have any children
+      if (!parent.isLeaf() && event.getReceivedNodes().isEmpty()) {
+        tree.getView().onJointChange(tree.getNodeDescriptor(parent), Tree.Joint.NONE);
+      }
 
-            NodeDescriptor requested = tree.getNodeDescriptor(parent);
+      NodeDescriptor requested = tree.getNodeDescriptor(parent);
 
-            if (requested == null) {
-                //smth happened, that requested node isn't registered in storage
-                Log.error(this.getClass(), "Requested node not found.");
-                return;
-            }
+      if (requested == null) {
+        //smth happened, that requested node isn't registered in storage
+        Log.error(this.getClass(), "Requested node not found.");
+        return;
+      }
 
-            requested.setLoading(false);
+      requested.setLoading(false);
 
-            //search node which has been removed from server to remove them from the tree
-            List<NodeDescriptor> removedNodes = findRemovedNodes(requested, event.getReceivedNodes());
+      //search node which has been removed from server to remove them from the tree
+      List<NodeDescriptor> removedNodes = findRemovedNodes(requested, event.getReceivedNodes());
 
-            //now search new nodes to add then into the tree
-            List<Node> newNodes = findNewNodes(requested, event.getReceivedNodes());
+      //now search new nodes to add then into the tree
+      List<Node> newNodes = findNewNodes(requested, event.getReceivedNodes());
 
-            if (removedNodes.isEmpty() && newNodes.equals(event.getReceivedNodes())) {
-                tree.getNodeStorage().replaceChildren(parent, newNodes);
-            } else {
-                for (NodeDescriptor removed : removedNodes) {
-                    if (!tree.getNodeStorage().remove(removed.getNode())) {
-                        Log.info(this.getClass(), "Failed to remove node: " + removed.getNode().getName());
-                    }
-                }
-
-                for (Node newNode : newNodes) {
-                    tree.getNodeStorage().add(parent, newNode);
-                }
-            }
-
-            //Iterate on nested descendants to make additional load request
-            if (childRequested.remove(parent)) {
-                for (Node node : tree.getNodeStorage().getChildren(parent)) {
-                    if (tree.isExpanded(node)) {
-                        loadChildren(node, true);
-                    }
-                }
-            }
-
-            fireEvent(new PostLoadEvent(event.getRequestedNode(), event.getReceivedNodes()));
+      if (removedNodes.isEmpty() && newNodes.equals(event.getReceivedNodes())) {
+        tree.getNodeStorage().replaceChildren(parent, newNodes);
+      } else {
+        for (NodeDescriptor removed : removedNodes) {
+          if (!tree.getNodeStorage().remove(removed.getNode())) {
+            Log.info(this.getClass(), "Failed to remove node: " + removed.getNode().getName());
+          }
         }
+
+        for (Node newNode : newNodes) {
+          tree.getNodeStorage().add(parent, newNode);
+        }
+      }
+
+      //Iterate on nested descendants to make additional load request
+      if (childRequested.remove(parent)) {
+        for (Node node : tree.getNodeStorage().getChildren(parent)) {
+          if (tree.isExpanded(node)) {
+            loadChildren(node, true);
+          }
+        }
+      }
+
+      fireEvent(new PostLoadEvent(event.getRequestedNode(), event.getReceivedNodes()));
+    }
 

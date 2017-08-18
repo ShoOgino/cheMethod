@@ -1,139 +1,147 @@
-    private String createNewBody(ImportRewrite importRewrite) throws CoreException {
-        if (importRewrite == null)
-            return null;
+  private String createNewBody(ImportRewrite importRewrite) throws CoreException {
+    if (importRewrite == null) return null;
 
-        ICompilationUnit workingCopy = null;
-        try {
-            String name = "Type" + System.currentTimeMillis(); //$NON-NLS-1$
-            workingCopy = fCompilationUnit.getPrimary().getWorkingCopy(null);
+    ICompilationUnit workingCopy = null;
+    try {
+      String name = "Type" + System.currentTimeMillis(); //$NON-NLS-1$
+      workingCopy = fCompilationUnit.getPrimary().getWorkingCopy(null);
 
+      ISourceRange range = fSuperType.getSourceRange();
+      boolean sameUnit = range != null && fCompilationUnit.equals(fSuperType.getCompilationUnit());
 
-            ISourceRange range = fSuperType.getSourceRange();
-            boolean sameUnit = range != null && fCompilationUnit.equals(fSuperType.getCompilationUnit());
+      // creates a type that extends the super type
+      String dummyClassContent = createDummyType(name);
 
-            // creates a type that extends the super type
-            String dummyClassContent = createDummyType(name);
+      StringBuffer workingCopyContents = new StringBuffer(fCompilationUnit.getSource());
+      int insertPosition;
+      if (sameUnit) {
+        insertPosition = range.getOffset() + range.getLength();
+      } else {
+        ISourceRange firstTypeRange = fCompilationUnit.getTypes()[0].getSourceRange();
+        insertPosition = firstTypeRange.getOffset();
+      }
+      if (fSuperType.isLocal()) {
+        // add an extra block: helps the AST to recover
+        workingCopyContents.insert(insertPosition, '{' + dummyClassContent + '}');
+        insertPosition++;
+      } else {
+        /*
+         * The two empty lines are added because the trackedDeclaration uses the covered range
+         * and hence would also included comments that directly follow the dummy class.
+         */
+        workingCopyContents.insert(insertPosition, dummyClassContent + "\n\n"); //$NON-NLS-1$
+      }
 
-            StringBuffer workingCopyContents = new StringBuffer(fCompilationUnit.getSource());
-            int insertPosition;
-            if (sameUnit) {
-                insertPosition = range.getOffset() + range.getLength();
-            } else {
-                ISourceRange firstTypeRange = fCompilationUnit.getTypes()[0].getSourceRange();
-                insertPosition = firstTypeRange.getOffset();
-            }
-            if (fSuperType.isLocal()) {
-                // add an extra block: helps the AST to recover
-                workingCopyContents.insert(insertPosition, '{' + dummyClassContent + '}');
-                insertPosition++;
-            } else {
-				/*
-				 * The two empty lines are added because the trackedDeclaration uses the covered range
-				 * and hence would also included comments that directly follow the dummy class.
-				 */
-                workingCopyContents.insert(insertPosition, dummyClassContent + "\n\n"); //$NON-NLS-1$
-            }
+      workingCopy.getBuffer().setContents(workingCopyContents.toString());
 
-            workingCopy.getBuffer().setContents(workingCopyContents.toString());
+      CheASTParser parser = CheASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+      parser.setResolveBindings(true);
+      parser.setStatementsRecovery(true);
+      parser.setSource(workingCopy);
 
-            CheASTParser parser = CheASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
-            parser.setResolveBindings(true);
-            parser.setStatementsRecovery(true);
-            parser.setSource(workingCopy);
+      CompilationUnit astRoot = (CompilationUnit) parser.createAST(new NullProgressMonitor());
+      ASTNode newType = NodeFinder.perform(astRoot, insertPosition, dummyClassContent.length());
+      if (!(newType instanceof AbstractTypeDeclaration)) return null;
 
-            CompilationUnit astRoot = (CompilationUnit)parser.createAST(new NullProgressMonitor());
-            ASTNode newType = NodeFinder.perform(astRoot, insertPosition, dummyClassContent.length());
-            if (!(newType instanceof AbstractTypeDeclaration))
-                return null;
+      AbstractTypeDeclaration declaration = (AbstractTypeDeclaration) newType;
+      ITypeBinding dummyTypeBinding = declaration.resolveBinding();
+      if (dummyTypeBinding == null) return null;
 
-            AbstractTypeDeclaration declaration= (AbstractTypeDeclaration) newType;
-			ITypeBinding dummyTypeBinding= declaration.resolveBinding();
-			if (dummyTypeBinding == null)
-				return null;
+      IMethodBinding[] bindings =
+          StubUtility2.getOverridableMethods(astRoot.getAST(), dummyTypeBinding, true);
 
-			IMethodBinding[] bindings= StubUtility2.getOverridableMethods(astRoot.getAST(), dummyTypeBinding, true);
-			
-			if (fSuperType.isInterface()) {
-				ITypeBinding[] dummySuperInterfaces= dummyTypeBinding.getInterfaces();
-				if (dummySuperInterfaces.length == 0 || dummySuperInterfaces.length == 1 && dummySuperInterfaces[0].isRawType())
-					bindings= new IMethodBinding[0];
-			} else {
-				ITypeBinding dummySuperclass= dummyTypeBinding.getSuperclass();
-				if (dummySuperclass == null || dummySuperclass.isRawType())
-					bindings= new IMethodBinding[0];
-			}
-			
-			CodeGenerationSettings settings= JavaPreferencesSettings.getCodeGenerationSettings(fSuperType.getJavaProject());
+      if (fSuperType.isInterface()) {
+        ITypeBinding[] dummySuperInterfaces = dummyTypeBinding.getInterfaces();
+        if (dummySuperInterfaces.length == 0
+            || dummySuperInterfaces.length == 1 && dummySuperInterfaces[0].isRawType())
+          bindings = new IMethodBinding[0];
+      } else {
+        ITypeBinding dummySuperclass = dummyTypeBinding.getSuperclass();
+        if (dummySuperclass == null || dummySuperclass.isRawType())
+          bindings = new IMethodBinding[0];
+      }
 
-			IMethodBinding[] methodsToOverride= null;
+      CodeGenerationSettings settings =
+          JavaPreferencesSettings.getCodeGenerationSettings(fSuperType.getJavaProject());
 
-			IType type= null;
-			if (!fSuperType.isInterface() && !fSuperType.isAnnotation()) {
-				IJavaElement typeElement= dummyTypeBinding.getJavaElement();
-				// add extra checks here as the recovered code is fragile
-				if (typeElement instanceof IType && name.equals(typeElement.getElementName()) && typeElement.exists()) {
-					type= (IType) typeElement;
-				}
-			}
+      IMethodBinding[] methodsToOverride = null;
 
-			if (type != null) {
-//				OverrideMethodDialog dialog= new OverrideMethodDialog(JavaPlugin.getActiveWorkbenchShell(), null, type, true);
-//				dialog.setGenerateComment(false);
-//				dialog.setElementPositionEnabled(false);
-//				if (dialog.open() == Window.OK) {
-//					Object[] selection= dialog.getResult();
-//					ArrayList<Object> result= new ArrayList<Object>(selection.length);
-//					for (int i= 0; i < selection.length; i++) {
-//						if (selection[i] instanceof IMethodBinding)
-//							result.add(selection[i]);
-//					}
-//					methodsToOverride= result.toArray(new IMethodBinding[result.size()]);
-//					settings.createComments= dialog.getGenerateComment();
-//				} else {
-//					// cancelled
-//					setReplacementString(""); //$NON-NLS-1$
-//					setReplacementLength(0);
-//					return null;
-//				}
-				//TODO window
-				throw new UnsupportedOperationException();
-			} else {
-				settings.createComments= false;
-				List<IMethodBinding> result= new ArrayList<IMethodBinding>();
-				for (int i= 0; i < bindings.length; i++) {
-					IMethodBinding curr= bindings[i];
-					if (Modifier.isAbstract(curr.getModifiers()))
-						result.add(curr);
-				}
-				methodsToOverride= result.toArray(new IMethodBinding[result.size()]);
-			}
-			ASTRewrite rewrite= ASTRewrite.create(astRoot.getAST());
-			ITrackedNodePosition trackedDeclaration= rewrite.track(declaration);
+      IType type = null;
+      if (!fSuperType.isInterface() && !fSuperType.isAnnotation()) {
+        IJavaElement typeElement = dummyTypeBinding.getJavaElement();
+        // add extra checks here as the recovered code is fragile
+        if (typeElement instanceof IType
+            && name.equals(typeElement.getElementName())
+            && typeElement.exists()) {
+          type = (IType) typeElement;
+        }
+      }
 
-			ListRewrite rewriter= rewrite.getListRewrite(declaration, declaration.getBodyDeclarationsProperty());
-			for (int i= 0; i < methodsToOverride.length; i++) {
-				IMethodBinding curr= methodsToOverride[i];
-				MethodDeclaration stub= StubUtility2.createImplementationStub(workingCopy, rewrite, importRewrite, null, curr, dummyTypeBinding.getName(), settings, dummyTypeBinding.isInterface());
-				rewriter.insertFirst(stub, null);
-			}
+      if (type != null) {
+        //				OverrideMethodDialog dialog= new OverrideMethodDialog(JavaPlugin.getActiveWorkbenchShell(), null, type, true);
+        //				dialog.setGenerateComment(false);
+        //				dialog.setElementPositionEnabled(false);
+        //				if (dialog.open() == Window.OK) {
+        //					Object[] selection= dialog.getResult();
+        //					ArrayList<Object> result= new ArrayList<Object>(selection.length);
+        //					for (int i= 0; i < selection.length; i++) {
+        //						if (selection[i] instanceof IMethodBinding)
+        //							result.add(selection[i]);
+        //					}
+        //					methodsToOverride= result.toArray(new IMethodBinding[result.size()]);
+        //					settings.createComments= dialog.getGenerateComment();
+        //				} else {
+        //					// cancelled
+        //					setReplacementString(""); //$NON-NLS-1$
+        //					setReplacementLength(0);
+        //					return null;
+        //				}
+        //TODO window
+        throw new UnsupportedOperationException();
+      } else {
+        settings.createComments = false;
+        List<IMethodBinding> result = new ArrayList<IMethodBinding>();
+        for (int i = 0; i < bindings.length; i++) {
+          IMethodBinding curr = bindings[i];
+          if (Modifier.isAbstract(curr.getModifiers())) result.add(curr);
+        }
+        methodsToOverride = result.toArray(new IMethodBinding[result.size()]);
+      }
+      ASTRewrite rewrite = ASTRewrite.create(astRoot.getAST());
+      ITrackedNodePosition trackedDeclaration = rewrite.track(declaration);
 
+      ListRewrite rewriter =
+          rewrite.getListRewrite(declaration, declaration.getBodyDeclarationsProperty());
+      for (int i = 0; i < methodsToOverride.length; i++) {
+        IMethodBinding curr = methodsToOverride[i];
+        MethodDeclaration stub =
+            StubUtility2.createImplementationStub(
+                workingCopy,
+                rewrite,
+                importRewrite,
+                null,
+                curr,
+                dummyTypeBinding.getName(),
+                settings,
+                dummyTypeBinding.isInterface());
+        rewriter.insertFirst(stub, null);
+      }
 
-			IDocument document= new Document(workingCopy.getSource());
-			try {
-				rewrite.rewriteAST().apply(document);
+      IDocument document = new Document(workingCopy.getSource());
+      try {
+        rewrite.rewriteAST().apply(document);
 
-				int bodyStart= trackedDeclaration.getStartPosition() + dummyClassContent.indexOf('{');
-				int bodyEnd= trackedDeclaration.getStartPosition() + trackedDeclaration.getLength();
-				return document.get(bodyStart, bodyEnd - bodyStart);
-			} catch (MalformedTreeException exception) {
-				JavaPlugin.log(exception);
-			} catch (BadLocationException exception) {
-				JavaPlugin.log(exception);
-			}
-			return null;
-		} finally {
-			if (workingCopy != null)
-				workingCopy.discardWorkingCopy();
-		}
-	}
+        int bodyStart = trackedDeclaration.getStartPosition() + dummyClassContent.indexOf('{');
+        int bodyEnd = trackedDeclaration.getStartPosition() + trackedDeclaration.getLength();
+        return document.get(bodyStart, bodyEnd - bodyStart);
+      } catch (MalformedTreeException exception) {
+        JavaPlugin.log(exception);
+      } catch (BadLocationException exception) {
+        JavaPlugin.log(exception);
+      }
+      return null;
+    } finally {
+      if (workingCopy != null) workingCopy.discardWorkingCopy();
+    }
+  }
 

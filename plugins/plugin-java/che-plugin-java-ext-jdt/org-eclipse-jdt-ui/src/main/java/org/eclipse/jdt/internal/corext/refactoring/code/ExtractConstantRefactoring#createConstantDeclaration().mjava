@@ -1,66 +1,74 @@
-	private void createConstantDeclaration() throws CoreException {
-		Type type= getConstantType();
+  private void createConstantDeclaration() throws CoreException {
+    Type type = getConstantType();
 
-		IExpressionFragment fragment= getSelectedExpression();
-		Expression initializer= getSelectedExpression().createCopyTarget(fCuRewrite.getASTRewrite(), true);
+    IExpressionFragment fragment = getSelectedExpression();
+    Expression initializer =
+        getSelectedExpression().createCopyTarget(fCuRewrite.getASTRewrite(), true);
 
-		AST ast= fCuRewrite.getAST();
-		VariableDeclarationFragment variableDeclarationFragment= ast.newVariableDeclarationFragment();
-		variableDeclarationFragment.setName(ast.newSimpleName(fConstantName));
-		variableDeclarationFragment.setInitializer(initializer);
+    AST ast = fCuRewrite.getAST();
+    VariableDeclarationFragment variableDeclarationFragment = ast.newVariableDeclarationFragment();
+    variableDeclarationFragment.setName(ast.newSimpleName(fConstantName));
+    variableDeclarationFragment.setInitializer(initializer);
 
-		FieldDeclaration fieldDeclaration= ast.newFieldDeclaration(variableDeclarationFragment);
-		fieldDeclaration.setType(type);
-		Modifier.ModifierKeyword accessModifier= Modifier.ModifierKeyword.toKeyword(fVisibility);
-		if (accessModifier != null)
-			fieldDeclaration.modifiers().add(ast.newModifier(accessModifier));
-		fieldDeclaration.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD));
-		fieldDeclaration.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.FINAL_KEYWORD));
+    FieldDeclaration fieldDeclaration = ast.newFieldDeclaration(variableDeclarationFragment);
+    fieldDeclaration.setType(type);
+    Modifier.ModifierKeyword accessModifier = Modifier.ModifierKeyword.toKeyword(fVisibility);
+    if (accessModifier != null) fieldDeclaration.modifiers().add(ast.newModifier(accessModifier));
+    fieldDeclaration.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.STATIC_KEYWORD));
+    fieldDeclaration.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.FINAL_KEYWORD));
 
-		boolean createComments= JavaPreferencesSettings.getCodeGenerationSettings(fCu.getJavaProject()).createComments;
-		if (createComments) {
-			String comment= CodeGeneration.getFieldComment(fCu, getConstantTypeName(), fConstantName, StubUtility.getLineDelimiterUsed(fCu));
-			if (comment != null && comment.length() > 0) {
-				Javadoc doc= (Javadoc) fCuRewrite.getASTRewrite().createStringPlaceholder(comment, ASTNode.JAVADOC);
-				fieldDeclaration.setJavadoc(doc);
-			}
-		}
+    boolean createComments =
+        JavaPreferencesSettings.getCodeGenerationSettings(fCu.getJavaProject()).createComments;
+    if (createComments) {
+      String comment =
+          CodeGeneration.getFieldComment(
+              fCu, getConstantTypeName(), fConstantName, StubUtility.getLineDelimiterUsed(fCu));
+      if (comment != null && comment.length() > 0) {
+        Javadoc doc =
+            (Javadoc) fCuRewrite.getASTRewrite().createStringPlaceholder(comment, ASTNode.JAVADOC);
+        fieldDeclaration.setJavadoc(doc);
+      }
+    }
 
-		AbstractTypeDeclaration parent= getContainingTypeDeclarationNode();
-		ListRewrite listRewrite= fCuRewrite.getASTRewrite().getListRewrite(parent, parent.getBodyDeclarationsProperty());
-		TextEditGroup msg= fCuRewrite.createGroupDescription(RefactoringCoreMessages.ExtractConstantRefactoring_declare_constant);
-		if (insertFirst()) {
-			listRewrite.insertFirst(fieldDeclaration, msg);
-		} else {
-			listRewrite.insertAfter(fieldDeclaration, getNodeToInsertConstantDeclarationAfter(), msg);
-		}
+    AbstractTypeDeclaration parent = getContainingTypeDeclarationNode();
+    ListRewrite listRewrite =
+        fCuRewrite.getASTRewrite().getListRewrite(parent, parent.getBodyDeclarationsProperty());
+    TextEditGroup msg =
+        fCuRewrite.createGroupDescription(
+            RefactoringCoreMessages.ExtractConstantRefactoring_declare_constant);
+    if (insertFirst()) {
+      listRewrite.insertFirst(fieldDeclaration, msg);
+    } else {
+      listRewrite.insertAfter(fieldDeclaration, getNodeToInsertConstantDeclarationAfter(), msg);
+    }
 
-		if (fLinkedProposalModel != null) {
-			ASTRewrite rewrite= fCuRewrite.getASTRewrite();
-			LinkedProposalPositionGroup nameGroup= fLinkedProposalModel.getPositionGroup(KEY_NAME, true);
-			nameGroup.addPosition(rewrite.track(variableDeclarationFragment.getName()), true);
+    if (fLinkedProposalModel != null) {
+      ASTRewrite rewrite = fCuRewrite.getASTRewrite();
+      LinkedProposalPositionGroup nameGroup = fLinkedProposalModel.getPositionGroup(KEY_NAME, true);
+      nameGroup.addPosition(rewrite.track(variableDeclarationFragment.getName()), true);
 
-			String[] nameSuggestions= guessConstantNames();
-			if (nameSuggestions.length > 0 && !nameSuggestions[0].equals(fConstantName)) {
-				nameGroup.addProposal(fConstantName, null, nameSuggestions.length + 1);
-			}
-			for (int i= 0; i < nameSuggestions.length; i++) {
-				nameGroup.addProposal(nameSuggestions[i], null, nameSuggestions.length - i);
-			}
+      String[] nameSuggestions = guessConstantNames();
+      if (nameSuggestions.length > 0 && !nameSuggestions[0].equals(fConstantName)) {
+        nameGroup.addProposal(fConstantName, null, nameSuggestions.length + 1);
+      }
+      for (int i = 0; i < nameSuggestions.length; i++) {
+        nameGroup.addProposal(nameSuggestions[i], null, nameSuggestions.length - i);
+      }
 
-			LinkedProposalPositionGroup typeGroup= fLinkedProposalModel.getPositionGroup(KEY_TYPE, true);
-			typeGroup.addPosition(rewrite.track(type), true);
+      LinkedProposalPositionGroup typeGroup = fLinkedProposalModel.getPositionGroup(KEY_TYPE, true);
+      typeGroup.addPosition(rewrite.track(type), true);
 
-			ITypeBinding typeBinding= guessBindingForReference(fragment.getAssociatedExpression());
-			if (typeBinding != null) {
-				ITypeBinding[] relaxingTypes= ASTResolving.getNarrowingTypes(ast, typeBinding);
-				for (int i= 0; i < relaxingTypes.length; i++) {
-					typeGroup.addProposal(relaxingTypes[i], fCuRewrite.getCu(), relaxingTypes.length - i);
-				}
-			}
-			boolean isInterface= parent.resolveBinding() != null && parent.resolveBinding().isInterface();
-			ModifierCorrectionSubProcessor
-					.installLinkedVisibilityProposals(fLinkedProposalModel, rewrite, fieldDeclaration.modifiers(), isInterface);
-		}
-	}
+      ITypeBinding typeBinding = guessBindingForReference(fragment.getAssociatedExpression());
+      if (typeBinding != null) {
+        ITypeBinding[] relaxingTypes = ASTResolving.getNarrowingTypes(ast, typeBinding);
+        for (int i = 0; i < relaxingTypes.length; i++) {
+          typeGroup.addProposal(relaxingTypes[i], fCuRewrite.getCu(), relaxingTypes.length - i);
+        }
+      }
+      boolean isInterface =
+          parent.resolveBinding() != null && parent.resolveBinding().isInterface();
+      ModifierCorrectionSubProcessor.installLinkedVisibilityProposals(
+          fLinkedProposalModel, rewrite, fieldDeclaration.modifiers(), isInterface);
+    }
+  }
 

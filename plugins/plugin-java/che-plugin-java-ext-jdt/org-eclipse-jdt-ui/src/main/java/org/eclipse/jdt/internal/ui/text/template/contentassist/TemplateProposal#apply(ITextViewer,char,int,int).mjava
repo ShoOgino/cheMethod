@@ -1,132 +1,132 @@
-    /*
-     * @see org.eclipse.jface.text.contentassist.ICompletionProposalExtension2#apply(org.eclipse.jface.text.ITextViewer, char, int, int)
-     */
-    public void apply(ITextViewer viewer, char trigger, int stateMask, int offset) {
+  /*
+   * @see org.eclipse.jface.text.contentassist.ICompletionProposalExtension2#apply(org.eclipse.jface.text.ITextViewer, char, int, int)
+   */
+  public void apply(ITextViewer viewer, char trigger, int stateMask, int offset) {
 
-        IDocument document = viewer.getDocument();
+    IDocument document = viewer.getDocument();
+    try {
+      fContext.setReadOnly(false);
+      int start;
+      TemplateBuffer templateBuffer;
+      try {
+        beginCompoundChange(viewer);
+
+        int oldReplaceOffset = getReplaceOffset();
         try {
-            fContext.setReadOnly(false);
-            int start;
-            TemplateBuffer templateBuffer;
-            try {
-                beginCompoundChange(viewer);
+          // this may already modify the document (e.g. add imports)
+          templateBuffer = fContext.evaluate(fTemplate);
+        } catch (TemplateException e1) {
+          fSelectedRegion = fRegion;
+          return;
+        }
 
-                int oldReplaceOffset = getReplaceOffset();
-                try {
-                    // this may already modify the document (e.g. add imports)
-                    templateBuffer = fContext.evaluate(fTemplate);
-                } catch (TemplateException e1) {
-                    fSelectedRegion = fRegion;
-                    return;
+        start = getReplaceOffset();
+        int shift = start - oldReplaceOffset;
+        int end = Math.max(getReplaceEndOffset(), offset + shift);
+
+        // insert template string
+        if (end > document.getLength()) end = offset;
+        String templateString = templateBuffer.getString();
+        document.replace(start, end - start, templateString);
+      } finally {
+        endCompoundChange(viewer);
+      }
+
+      // translate positions
+      LinkedModeModelImpl model = new LinkedModeModelImpl();
+      TemplateVariable[] variables = templateBuffer.getVariables();
+
+      MultiVariableGuess guess =
+          fContext instanceof CompilationUnitContext
+              ? ((CompilationUnitContext) fContext).getMultiVariableGuess()
+              : null;
+
+      boolean hasPositions = false;
+      for (int i = 0; i != variables.length; i++) {
+        TemplateVariable variable = variables[i];
+
+        if (variable.isUnambiguous()) continue;
+
+        LinkedPositionGroupImpl group = new LinkedPositionGroupImpl();
+
+        int[] offsets = variable.getOffsets();
+        int length = variable.getLength();
+
+        LinkedPosition first;
+        if (guess != null && variable instanceof MultiVariable) {
+          first =
+              new VariablePosition(
+                  document, offsets[0] + start, length, guess, (MultiVariable) variable);
+          guess.addSlave((VariablePosition) first);
+        } else {
+          String[] values = variable.getValues();
+          ICompletionProposal[] proposals = new ICompletionProposal[values.length];
+          for (int j = 0; j < values.length; j++) {
+            //						ensurePositionCategoryInstalled(document, model);
+            Position pos = new Position(offsets[0] + start, length);
+            //						document.addPosition(getCategory(), pos);
+            proposals[j] = new PositionBasedCompletionProposal(values[j], pos, length);
+          }
+
+          if (proposals.length > 1)
+            first = new ProposalPosition(document, offsets[0] + start, length, proposals);
+          else first = new LinkedPosition(document, offsets[0] + start, length);
+        }
+
+        for (int j = 0; j != offsets.length; j++)
+          if (j == 0) {
+            if (first instanceof ProposalPosition) {
+              RegionImpl region = new RegionImpl();
+              region.setLength(first.getLength());
+              region.setOffset(first.getOffset());
+              LinkedDataImpl data = new LinkedDataImpl();
+              ICompletionProposal[] choices = ((ProposalPosition) first).getChoices();
+              if (choices != null) {
+                for (ICompletionProposal choice : choices) {
+                  data.addValues(choice.getDisplayString());
                 }
-
-                start = getReplaceOffset();
-                int shift = start - oldReplaceOffset;
-                int end = Math.max(getReplaceEndOffset(), offset + shift);
-
-                // insert template string
-                if (end > document.getLength())
-                    end = offset;
-                String templateString = templateBuffer.getString();
-                document.replace(start, end - start, templateString);
-            } finally {
-                endCompoundChange(viewer);
+                group.setData(data);
+              }
+              group.addPositions(region);
+            } else {
+              RegionImpl region = new RegionImpl();
+              region.setLength(first.getLength());
+              region.setOffset(first.getOffset());
+              group.addPositions(region);
             }
+          } else {
+            RegionImpl region = new RegionImpl();
+            region.setLength(length);
+            region.setOffset(offsets[j] + start);
+            group.addPositions(region);
+          }
 
-            // translate positions
-            LinkedModeModelImpl model = new LinkedModeModelImpl();
-			TemplateVariable[] variables = templateBuffer.getVariables();
+        model.addGroups(group);
+        hasPositions = true;
+      }
 
-			MultiVariableGuess guess= fContext instanceof CompilationUnitContext ? ((CompilationUnitContext) fContext).getMultiVariableGuess() : null;
+      if (hasPositions) {
+        model.setEscapePosition(getCaretOffset(templateBuffer) + start);
+        this.linkedModeModel = model;
+        //				model.forceInstall();
+        //				JavaEditor editor= getJavaEditor();
+        //				if (editor != null) {
+        //					model.addLinkingListener(new EditorHighlightingSynchronizer(editor));
+        //				}
+        //
+        //				LinkedModeUI ui= new EditorLinkedModeUI(model, viewer);
+        //				ui.setExitPosition(viewer, getCaretOffset(templateBuffer) + start, 0, Integer.MAX_VALUE);
+        //				ui.enter();
 
-			boolean hasPositions= false;
-			for (int i= 0; i != variables.length; i++) {
-				TemplateVariable variable= variables[i];
+        fSelectedRegion = fRegion; //ui.getSelectedRegion();
+      } else {
+        fSelectedRegion = new Region(getCaretOffset(templateBuffer) + start, 0);
+      }
 
-				if (variable.isUnambiguous())
-					continue;
-
-				LinkedPositionGroupImpl group= new LinkedPositionGroupImpl();
-
-				int[] offsets= variable.getOffsets();
-				int length= variable.getLength();
-
-				LinkedPosition first;
-				if (guess != null && variable instanceof MultiVariable) {
-					first= new VariablePosition(document, offsets[0] + start, length, guess, (MultiVariable) variable);
-					guess.addSlave((VariablePosition) first);
-				} else {
-					String[] values= variable.getValues();
-					ICompletionProposal[] proposals= new ICompletionProposal[values.length];
-					for (int j= 0; j < values.length; j++) {
-//						ensurePositionCategoryInstalled(document, model);
-						Position pos= new Position(offsets[0] + start, length);
-//						document.addPosition(getCategory(), pos);
-						proposals[j]= new PositionBasedCompletionProposal(values[j], pos, length);
-					}
-
-					if (proposals.length > 1)
-						first= new ProposalPosition(document, offsets[0] + start, length, proposals);
-					else
-						first= new LinkedPosition(document, offsets[0] + start, length);
-				}
-
-				for (int j= 0; j != offsets.length; j++)
-					if (j == 0) {
-                        if(first instanceof ProposalPosition){
-                            RegionImpl region = new RegionImpl();
-                            region.setLength(first.getLength());
-                            region.setOffset(first.getOffset());
-                            LinkedDataImpl data = new LinkedDataImpl();
-                            ICompletionProposal[] choices = ((ProposalPosition)first).getChoices();
-                            if(choices != null) {
-                                for (ICompletionProposal choice : choices) {
-                                    data.addValues(choice.getDisplayString());
-                                }
-                                group.setData(data);
-                            }
-                            group.addPositions(region);
-                        } else {
-                            RegionImpl region = new RegionImpl();
-                            region.setLength(first.getLength());
-                            region.setOffset(first.getOffset());
-                            group.addPositions(region);
-                        }
-                    }
-					else {
-                        RegionImpl region = new RegionImpl();
-                        region.setLength(length);
-                        region.setOffset(offsets[j] + start);
-                        group.addPositions(region);
-                    }
-
-				model.addGroups(group);
-				hasPositions= true;
-			}
-
-			if (hasPositions) {
-				model.setEscapePosition(getCaretOffset(templateBuffer) + start);
-                this.linkedModeModel = model;
-//				model.forceInstall();
-//				JavaEditor editor= getJavaEditor();
-//				if (editor != null) {
-//					model.addLinkingListener(new EditorHighlightingSynchronizer(editor));
-//				}
-//
-//				LinkedModeUI ui= new EditorLinkedModeUI(model, viewer);
-//				ui.setExitPosition(viewer, getCaretOffset(templateBuffer) + start, 0, Integer.MAX_VALUE);
-//				ui.enter();
-
-				fSelectedRegion= fRegion;//ui.getSelectedRegion();
-			} else {
-				fSelectedRegion= new Region(getCaretOffset(templateBuffer) + start, 0);
-			}
-
-		} catch (BadLocationException e) {
-			JavaPlugin.log(e);
-//			openErrorDialog(viewer.getTextWidget().getShell(), e);
-			fSelectedRegion= fRegion;
-		}
-
+    } catch (BadLocationException e) {
+      JavaPlugin.log(e);
+      //			openErrorDialog(viewer.getTextWidget().getShell(), e);
+      fSelectedRegion = fRegion;
     }
+  }
 

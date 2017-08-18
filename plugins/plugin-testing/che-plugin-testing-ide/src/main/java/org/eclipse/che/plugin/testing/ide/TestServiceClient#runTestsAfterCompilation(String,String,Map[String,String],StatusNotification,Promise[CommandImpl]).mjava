@@ -1,88 +1,118 @@
-    Promise<TestResult> runTestsAfterCompilation(String projectPath,
-                                                 String testFramework,
-                                                 Map<String, String> parameters,
-                                                 StatusNotification statusNotification,
-                                                 Promise<CommandImpl> compileCommand) {
-        return compileCommand.thenPromise(command -> {
-            final MachineImpl machine;
-            if (command == null) {
-                machine = null;
-            } else {
-                WorkspaceImpl workspace = appContext.getWorkspace();
-                machine = workspace.getDevMachine().orElse(null);
-            }
+  Promise<TestResult> runTestsAfterCompilation(
+      String projectPath,
+      String testFramework,
+      Map<String, String> parameters,
+      StatusNotification statusNotification,
+      Promise<CommandImpl> compileCommand) {
+    return compileCommand.thenPromise(
+        command -> {
+          final MachineImpl machine;
+          if (command == null) {
+            machine = null;
+          } else {
+            WorkspaceImpl workspace = appContext.getWorkspace();
+            machine = workspace.getDevMachine().orElse(null);
+          }
 
-            if (machine == null) {
-                if (statusNotification != null) {
-                    statusNotification.setContent("Executing the tests without preliminary compilation.");
-                }
-                return sendTests(projectPath, testFramework, parameters);
-            }
-
+          if (machine == null) {
             if (statusNotification != null) {
-                statusNotification.setContent("Compiling the project before starting the test session.");
+              statusNotification.setContent("Executing the tests without preliminary compilation.");
             }
-            return promiseFromExecutorBody(new ExecutorBody<TestResult>() {
+            return sendTests(projectPath, testFramework, parameters);
+          }
+
+          if (statusNotification != null) {
+            statusNotification.setContent(
+                "Compiling the project before starting the test session.");
+          }
+          return promiseFromExecutorBody(
+              new ExecutorBody<TestResult>() {
                 boolean compiled = false;
 
                 @Override
-                public void apply(final ResolveFunction<TestResult> resolve, RejectFunction reject) {
-                    macroProcessor.expandMacros(command.getCommandLine()).then(new Operation<String>() {
-                        @Override
-                        public void apply(String expandedCommandLine) throws OperationException {
-                            Map<String, String> attributes = new HashMap<>();
-                            attributes.putAll(command.getAttributes());
-                            attributes.remove(COMMAND_PREVIEW_URL_ATTRIBUTE_NAME);
+                public void apply(
+                    final ResolveFunction<TestResult> resolve, RejectFunction reject) {
+                  macroProcessor
+                      .expandMacros(command.getCommandLine())
+                      .then(
+                          new Operation<String>() {
+                            @Override
+                            public void apply(String expandedCommandLine)
+                                throws OperationException {
+                              Map<String, String> attributes = new HashMap<>();
+                              attributes.putAll(command.getAttributes());
+                              attributes.remove(COMMAND_PREVIEW_URL_ATTRIBUTE_NAME);
 
-                            CommandImpl expandedCommand = new CommandImpl(command.getName(), expandedCommandLine,
-                                                                          command.getType(), attributes);
+                              CommandImpl expandedCommand =
+                                  new CommandImpl(
+                                      command.getName(), expandedCommandLine,
+                                      command.getType(), attributes);
 
-                            final CommandOutputConsole console = commandConsoleFactory.create(expandedCommand, machine.getName());
+                              final CommandOutputConsole console =
+                                  commandConsoleFactory.create(expandedCommand, machine.getName());
 
-                            processesPanelPresenter.addCommandOutput(console);
-                            ExecAgentConsumer<ProcessStartResponseDto> processPromise = execAgentCommandManager.startProcess(machine.getName(),
-                                                                                                                             expandedCommand);
-                            processPromise.then(startResonse -> {
-                                if (!startResonse.getAlive()) {
-                                    reject.apply(promiseFromThrowable(new Throwable(PROJECT_BUILD_NOT_STARTED_MESSAGE)));
-                                }
-                            }).thenIfProcessStartedEvent(console.getProcessStartedConsumer()).thenIfProcessStdErrEvent(evt -> {
-                                if (evt.getText().contains("BUILD SUCCESS")) {
-                                    compiled = true;
-                                }
-                                console.getStdErrConsumer().accept(evt);
-                            }).thenIfProcessStdOutEvent(evt -> {
-                                if (evt.getText().contains("BUILD SUCCESS")) {
-                                    compiled = true;
-                                }
-                                console.getStdOutConsumer().accept(evt);
-                            }).thenIfProcessDiedEvent(evt -> {
-                                console.getProcessDiedConsumer().accept(evt);
-                                if (compiled) {
-                                    if (statusNotification != null) {
-                                        statusNotification.setContent(EXECUTING_TESTS_MESSAGE);
-                                    }
-                                    sendTests(projectPath,
-                                              testFramework,
-                                              parameters).then(new Operation<TestResult>() {
-                                        @Override
-                                        public void apply(TestResult result) throws OperationException {
-                                            resolve.apply(result);
+                              processesPanelPresenter.addCommandOutput(console);
+                              ExecAgentConsumer<ProcessStartResponseDto> processPromise =
+                                  execAgentCommandManager.startProcess(
+                                      machine.getName(), expandedCommand);
+                              processPromise
+                                  .then(
+                                      startResonse -> {
+                                        if (!startResonse.getAlive()) {
+                                          reject.apply(
+                                              promiseFromThrowable(
+                                                  new Throwable(
+                                                      PROJECT_BUILD_NOT_STARTED_MESSAGE)));
                                         }
-                                    }, new Operation<PromiseError>() {
-                                        @Override
-                                        public void apply(PromiseError error) throws OperationException {
-                                            reject.apply(error);
+                                      })
+                                  .thenIfProcessStartedEvent(console.getProcessStartedConsumer())
+                                  .thenIfProcessStdErrEvent(
+                                      evt -> {
+                                        if (evt.getText().contains("BUILD SUCCESS")) {
+                                          compiled = true;
                                         }
-                                    });
-                                } else {
-                                    reject.apply(promiseFromThrowable(new Throwable(PROJECT_BUILD_FAILED_MESSAGE)));
-                                }
-                            });
-                        }
-                    });
+                                        console.getStdErrConsumer().accept(evt);
+                                      })
+                                  .thenIfProcessStdOutEvent(
+                                      evt -> {
+                                        if (evt.getText().contains("BUILD SUCCESS")) {
+                                          compiled = true;
+                                        }
+                                        console.getStdOutConsumer().accept(evt);
+                                      })
+                                  .thenIfProcessDiedEvent(
+                                      evt -> {
+                                        console.getProcessDiedConsumer().accept(evt);
+                                        if (compiled) {
+                                          if (statusNotification != null) {
+                                            statusNotification.setContent(EXECUTING_TESTS_MESSAGE);
+                                          }
+                                          sendTests(projectPath, testFramework, parameters)
+                                              .then(
+                                                  new Operation<TestResult>() {
+                                                    @Override
+                                                    public void apply(TestResult result)
+                                                        throws OperationException {
+                                                      resolve.apply(result);
+                                                    }
+                                                  },
+                                                  new Operation<PromiseError>() {
+                                                    @Override
+                                                    public void apply(PromiseError error)
+                                                        throws OperationException {
+                                                      reject.apply(error);
+                                                    }
+                                                  });
+                                        } else {
+                                          reject.apply(
+                                              promiseFromThrowable(
+                                                  new Throwable(PROJECT_BUILD_FAILED_MESSAGE)));
+                                        }
+                                      });
+                            }
+                          });
                 }
-            });
+              });
         });
-    }
+  }
 

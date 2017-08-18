@@ -1,47 +1,60 @@
-    @Inject
-    MachineStatusEventHandler(RequestHandlerConfigurator configurator,
-                              EventBus eventBus,
-                              AppContext appContext,
-                              WorkspaceServiceClient workspaceServiceClient) {
-        this.appContext = appContext;
+  @Inject
+  MachineStatusEventHandler(
+      RequestHandlerConfigurator configurator,
+      EventBus eventBus,
+      AppContext appContext,
+      WorkspaceServiceClient workspaceServiceClient) {
+    this.appContext = appContext;
 
-        BiConsumer<String, MachineStatusEvent> operation = (String endpointId, MachineStatusEvent event) -> {
-            Log.debug(getClass(), "Received notification from endpoint: " + endpointId);
+    BiConsumer<String, MachineStatusEvent> operation =
+        (String endpointId, MachineStatusEvent event) -> {
+          Log.debug(getClass(), "Received notification from endpoint: " + endpointId);
 
-            final String machineName = event.getMachineName();
-            final String workspaceId = event.getIdentity().getWorkspaceId();
+          final String machineName = event.getMachineName();
+          final String workspaceId = event.getIdentity().getWorkspaceId();
 
-            workspaceServiceClient.getWorkspace(workspaceId).then(workspace -> {
-                RuntimeImpl workspaceRuntime = workspace.getRuntime();
-                if (workspaceRuntime == null) {
-                    return;
-                }
+          workspaceServiceClient
+              .getWorkspace(workspaceId)
+              .then(
+                  workspace -> {
+                    RuntimeImpl workspaceRuntime = workspace.getRuntime();
+                    if (workspaceRuntime == null) {
+                      return;
+                    }
 
-                // Update workspace model in AppContext before firing an event.
-                // Because AppContext always must return an actual workspace model.
-                ((AppContextImpl)appContext).setWorkspace(workspace);
+                    // Update workspace model in AppContext before firing an event.
+                    // Because AppContext always must return an actual workspace model.
+                    ((AppContextImpl) appContext).setWorkspace(workspace);
 
-                switch (event.getEventType()) {
-                    case STARTING:
-                        getMachineByName(machineName).ifPresent(m -> eventBus.fireEvent(new MachineStartingEvent(m)));
+                    switch (event.getEventType()) {
+                      case STARTING:
+                        getMachineByName(machineName)
+                            .ifPresent(m -> eventBus.fireEvent(new MachineStartingEvent(m)));
                         break;
-                    case RUNNING:
-                        getMachineByName(machineName).ifPresent(m -> eventBus.fireEvent(new MachineRunningEvent(m)));
+                      case RUNNING:
+                        getMachineByName(machineName)
+                            .ifPresent(m -> eventBus.fireEvent(new MachineRunningEvent(m)));
                         break;
-                    case STOPPED:
-                        getMachineByName(machineName).ifPresent(m -> eventBus.fireEvent(new MachineStoppedEvent(m)));
+                      case STOPPED:
+                        getMachineByName(machineName)
+                            .ifPresent(m -> eventBus.fireEvent(new MachineStoppedEvent(m)));
                         break;
-                    case FAILED:
-                        getMachineByName(machineName).ifPresent(m -> eventBus.fireEvent(new MachineFailedEvent(m, event.getError())));
+                      case FAILED:
+                        getMachineByName(machineName)
+                            .ifPresent(
+                                m ->
+                                    eventBus.fireEvent(
+                                        new MachineFailedEvent(m, event.getError())));
                         break;
-                }
-            });
+                    }
+                  });
         };
 
-        configurator.newConfiguration()
-                    .methodName(MACHINE_STATUS_CHANGED_METHOD)
-                    .paramsAsDto(MachineStatusEvent.class)
-                    .noResult()
-                    .withBiConsumer(operation);
-    }
+    configurator
+        .newConfiguration()
+        .methodName(MACHINE_STATUS_CHANGED_METHOD)
+        .paramsAsDto(MachineStatusEvent.class)
+        .noResult()
+        .withBiConsumer(operation);
+  }
 

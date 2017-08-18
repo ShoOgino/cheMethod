@@ -1,70 +1,72 @@
-    @Override
-    String serialize() {
-        StringBuilder builder = new StringBuilder();
-        final Class<?> dtoInterface = getDtoInterface();
-        final String dtoInterfaceName = dtoInterface.getCanonicalName();
-        emitPreamble(dtoInterface, builder);
-        List<Method> getters = getDtoGetters(dtoInterface);
-        // A set of the super getters
-        Set<String> superGetterNames = getSuperGetterNames(dtoInterface);
-        // Enumerate the getters and emit field names and getters + setters.
-        emitFields(getters, builder, superGetterNames);
-        emitGettersAndSetters(getters, builder);
-        List<Method> inheritedGetters = getInheritedDtoGetters(dtoInterface);
-        List<Method> methods = new ArrayList<>();
-        methods.addAll(getters);
-        Set<String> getterNames = new HashSet<>();
-        for (Method getter : getters) {
-            getterNames.add(getter.getName());
-        }
-        for (Method getter : inheritedGetters) {
-            if (getterNames.add(getter.getName())) {
-                methods.add(getter);
-            }
-        }
-        // equals, hashCode, serialization and copy constructor
-        emitEqualsAndHashCode(methods, builder);
-        emitSerializer(methods, builder);
-        emitDeserializer(methods, builder);
-        emitDeserializerShortcut(builder);
-        emitCopyConstructor(methods, builder);
-        // Delegation DTO methods.
-        emitDelegateMethods(builder);
-        // "builder" method, it is method that set field and return "this" instance
-        emitWithMethods(getters, dtoInterfaceName, builder);
-        // Implement withXXX methods that are declared directly in this DTO even if there are no any getter for the fields.
-        // Need that to override methods from super DTO and return correct type for with method.
-        // @DTO
-        // public interface A {
-        //     String getProperty();
-        //     void setProperty(String property);
-        //     A withProperty();
-        // }
-        //
-        // @DTO
-        // public interface B extends A {
-        //     // New methods
-        //     ...
-        //     // Override method to return type B instead of A.
-        //     B withProperty();
-        // }
-        getterNames.clear();
-        for (Method getter : getters) {
-            getterNames.add(getter.getName());
-        }
-        for (Method method : dtoInterface.getDeclaredMethods()) {
-            if (!method.isDefault() && method.getName().startsWith("with")) {
-                String noPrefixName = method.getName().substring(4);
-                // Check do we already generate withXXX method or not.
-                // If there is getter in DTO interface we already have withXXX method
-                if (!getterNames.contains("get" + noPrefixName) && !getterNames.contains("is" + noPrefixName)) {
-                    String fieldName = Character.toLowerCase(noPrefixName.charAt(0)) + noPrefixName.substring(1);
-                    String parameterFqn = getFqParameterizedName(method.getGenericParameterTypes()[0]);
-                    emitWithMethod(method.getName(), fieldName, parameterFqn, dtoInterfaceName, builder);
-                }
-            }
-        }
-        emitPostamble(builder);
-        return builder.toString();
+  @Override
+  String serialize() {
+    StringBuilder builder = new StringBuilder();
+    final Class<?> dtoInterface = getDtoInterface();
+    final String dtoInterfaceName = dtoInterface.getCanonicalName();
+    emitPreamble(dtoInterface, builder);
+    List<Method> getters = getDtoGetters(dtoInterface);
+    // A set of the super getters
+    Set<String> superGetterNames = getSuperGetterNames(dtoInterface);
+    // Enumerate the getters and emit field names and getters + setters.
+    emitFields(getters, builder, superGetterNames);
+    emitGettersAndSetters(getters, builder);
+    List<Method> inheritedGetters = getInheritedDtoGetters(dtoInterface);
+    List<Method> methods = new ArrayList<>();
+    methods.addAll(getters);
+    Set<String> getterNames = new HashSet<>();
+    for (Method getter : getters) {
+      getterNames.add(getter.getName());
     }
+    for (Method getter : inheritedGetters) {
+      if (getterNames.add(getter.getName())) {
+        methods.add(getter);
+      }
+    }
+    // equals, hashCode, serialization and copy constructor
+    emitEqualsAndHashCode(methods, builder);
+    emitSerializer(methods, builder);
+    emitDeserializer(methods, builder);
+    emitDeserializerShortcut(builder);
+    emitCopyConstructor(methods, builder);
+    // Delegation DTO methods.
+    emitDelegateMethods(builder);
+    // "builder" method, it is method that set field and return "this" instance
+    emitWithMethods(getters, dtoInterfaceName, builder);
+    // Implement withXXX methods that are declared directly in this DTO even if there are no any getter for the fields.
+    // Need that to override methods from super DTO and return correct type for with method.
+    // @DTO
+    // public interface A {
+    //     String getProperty();
+    //     void setProperty(String property);
+    //     A withProperty();
+    // }
+    //
+    // @DTO
+    // public interface B extends A {
+    //     // New methods
+    //     ...
+    //     // Override method to return type B instead of A.
+    //     B withProperty();
+    // }
+    getterNames.clear();
+    for (Method getter : getters) {
+      getterNames.add(getter.getName());
+    }
+    for (Method method : dtoInterface.getDeclaredMethods()) {
+      if (!method.isDefault() && method.getName().startsWith("with")) {
+        String noPrefixName = method.getName().substring(4);
+        // Check do we already generate withXXX method or not.
+        // If there is getter in DTO interface we already have withXXX method
+        if (!getterNames.contains("get" + noPrefixName)
+            && !getterNames.contains("is" + noPrefixName)) {
+          String fieldName =
+              Character.toLowerCase(noPrefixName.charAt(0)) + noPrefixName.substring(1);
+          String parameterFqn = getFqParameterizedName(method.getGenericParameterTypes()[0]);
+          emitWithMethod(method.getName(), fieldName, parameterFqn, dtoInterfaceName, builder);
+        }
+      }
+    }
+    emitPostamble(builder);
+    return builder.toString();
+  }
 

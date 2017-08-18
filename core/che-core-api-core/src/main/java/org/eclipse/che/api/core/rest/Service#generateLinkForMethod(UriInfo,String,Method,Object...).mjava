@@ -1,95 +1,104 @@
-    private Link generateLinkForMethod(UriInfo uriInfo, String linkRel, Method method, Object... pathParameters) {
-        String httpMethod = null;
-        final HttpMethod httpMethodAnnotation = getMetaAnnotation(method, HttpMethod.class);
-        if (httpMethodAnnotation != null) {
-            httpMethod = httpMethodAnnotation.value();
-        }
-        if (httpMethod == null) {
-            throw new IllegalArgumentException(
-                    format("Method '%s' has not any HTTP method annotation and may not be used to produce link.", method.getName()));
-        }
-
-        final Consumes consumes = getAnnotation(method, Consumes.class);
-        final Produces produces = getAnnotation(method, Produces.class);
-
-        final UriBuilder baseUriBuilder = uriInfo.getBaseUriBuilder();
-        final LinkedList<String> matchedURIs = new LinkedList<>(uriInfo.getMatchedURIs());
-        // Get path to the root resource.
-        if (uriInfo.getMatchedResources().size() < matchedURIs.size()) {
-            matchedURIs.remove();
-        }
-
-        while (!matchedURIs.isEmpty()) {
-            baseUriBuilder.path(matchedURIs.pollLast());
-        }
-
-        final Path path = method.getAnnotation(Path.class);
-        if (path != null) {
-            baseUriBuilder.path(path.value());
-        }
-
-        final Link link = DtoFactory.getInstance().createDto(Link.class)
-                                    .withRel(linkRel)
-                                    .withHref(baseUriBuilder.build(pathParameters).toString())
-                                    .withMethod(httpMethod);
-        if (consumes != null) {
-            link.setConsumes(consumes.value()[0]);
-        }
-        if (produces != null) {
-            link.setProduces(produces.value()[0]);
-        }
-
-        Class<?>[] parameterClasses = method.getParameterTypes();
-        if (parameterClasses.length > 0) {
-            Annotation[][] annotations = method.getParameterAnnotations();
-            for (int i = 0; i < parameterClasses.length; i++) {
-                if (annotations[i].length > 0) {
-                    boolean isBodyParameter = false;
-                    QueryParam queryParam = null;
-                    Description description = null;
-                    Required required = null;
-                    Valid valid = null;
-                    DefaultValue defaultValue = null;
-                    for (int j = 0; j < annotations[i].length; j++) {
-                        Annotation annotation = annotations[i][j];
-                        isBodyParameter |= !JAX_RS_ANNOTATIONS.contains(annotation.annotationType().getName());
-                        Class<?> annotationType = annotation.annotationType();
-                        if (annotationType == QueryParam.class) {
-                            queryParam = (QueryParam)annotation;
-                        } else if (annotationType == Description.class) {
-                            description = (Description)annotation;
-                        } else if (annotationType == Required.class) {
-                            required = (Required)annotation;
-                        } else if (annotationType == Valid.class) {
-                            valid = (Valid)annotation;
-                        } else if (annotationType == DefaultValue.class) {
-                            defaultValue = (DefaultValue)annotation;
-                        }
-                    }
-                    if (queryParam != null) {
-                        LinkParameter parameter = DtoFactory.getInstance().createDto(LinkParameter.class)
-                                                            .withName(queryParam.value())
-                                                            .withRequired(required != null)
-                                                            .withType(getParameterType(parameterClasses[i]));
-                        if (defaultValue != null) {
-                            parameter.setDefaultValue(defaultValue.value());
-                        }
-                        if (description != null) {
-                            parameter.setDescription(description.value());
-                        }
-                        if (valid != null) {
-                            parameter.setValid(Arrays.asList(valid.value()));
-                        }
-                        link.getParameters().add(parameter);
-                    } else if (isBodyParameter) {
-                        if (description != null) {
-                            link.setRequestBody(DtoFactory.getInstance().createDto(RequestBodyDescriptor.class)
-                                                          .withDescription(description.value()));
-                        }
-                    }
-                }
-            }
-        }
-        return link;
+  private Link generateLinkForMethod(
+      UriInfo uriInfo, String linkRel, Method method, Object... pathParameters) {
+    String httpMethod = null;
+    final HttpMethod httpMethodAnnotation = getMetaAnnotation(method, HttpMethod.class);
+    if (httpMethodAnnotation != null) {
+      httpMethod = httpMethodAnnotation.value();
     }
+    if (httpMethod == null) {
+      throw new IllegalArgumentException(
+          format(
+              "Method '%s' has not any HTTP method annotation and may not be used to produce link.",
+              method.getName()));
+    }
+
+    final Consumes consumes = getAnnotation(method, Consumes.class);
+    final Produces produces = getAnnotation(method, Produces.class);
+
+    final UriBuilder baseUriBuilder = uriInfo.getBaseUriBuilder();
+    final LinkedList<String> matchedURIs = new LinkedList<>(uriInfo.getMatchedURIs());
+    // Get path to the root resource.
+    if (uriInfo.getMatchedResources().size() < matchedURIs.size()) {
+      matchedURIs.remove();
+    }
+
+    while (!matchedURIs.isEmpty()) {
+      baseUriBuilder.path(matchedURIs.pollLast());
+    }
+
+    final Path path = method.getAnnotation(Path.class);
+    if (path != null) {
+      baseUriBuilder.path(path.value());
+    }
+
+    final Link link =
+        DtoFactory.getInstance()
+            .createDto(Link.class)
+            .withRel(linkRel)
+            .withHref(baseUriBuilder.build(pathParameters).toString())
+            .withMethod(httpMethod);
+    if (consumes != null) {
+      link.setConsumes(consumes.value()[0]);
+    }
+    if (produces != null) {
+      link.setProduces(produces.value()[0]);
+    }
+
+    Class<?>[] parameterClasses = method.getParameterTypes();
+    if (parameterClasses.length > 0) {
+      Annotation[][] annotations = method.getParameterAnnotations();
+      for (int i = 0; i < parameterClasses.length; i++) {
+        if (annotations[i].length > 0) {
+          boolean isBodyParameter = false;
+          QueryParam queryParam = null;
+          Description description = null;
+          Required required = null;
+          Valid valid = null;
+          DefaultValue defaultValue = null;
+          for (int j = 0; j < annotations[i].length; j++) {
+            Annotation annotation = annotations[i][j];
+            isBodyParameter |= !JAX_RS_ANNOTATIONS.contains(annotation.annotationType().getName());
+            Class<?> annotationType = annotation.annotationType();
+            if (annotationType == QueryParam.class) {
+              queryParam = (QueryParam) annotation;
+            } else if (annotationType == Description.class) {
+              description = (Description) annotation;
+            } else if (annotationType == Required.class) {
+              required = (Required) annotation;
+            } else if (annotationType == Valid.class) {
+              valid = (Valid) annotation;
+            } else if (annotationType == DefaultValue.class) {
+              defaultValue = (DefaultValue) annotation;
+            }
+          }
+          if (queryParam != null) {
+            LinkParameter parameter =
+                DtoFactory.getInstance()
+                    .createDto(LinkParameter.class)
+                    .withName(queryParam.value())
+                    .withRequired(required != null)
+                    .withType(getParameterType(parameterClasses[i]));
+            if (defaultValue != null) {
+              parameter.setDefaultValue(defaultValue.value());
+            }
+            if (description != null) {
+              parameter.setDescription(description.value());
+            }
+            if (valid != null) {
+              parameter.setValid(Arrays.asList(valid.value()));
+            }
+            link.getParameters().add(parameter);
+          } else if (isBodyParameter) {
+            if (description != null) {
+              link.setRequestBody(
+                  DtoFactory.getInstance()
+                      .createDto(RequestBodyDescriptor.class)
+                      .withDescription(description.value()));
+            }
+          }
+        }
+      }
+    }
+    return link;
+  }
 

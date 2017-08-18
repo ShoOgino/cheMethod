@@ -1,32 +1,34 @@
-    private Consumer<String> transmitConsumer(String path) {
-        return id -> {
-            String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
-            String project = normalizedPath.split("/")[0];
-            String itemPath = normalizedPath.substring(normalizedPath.indexOf("/") + 1);
-            try {
-                Status status = gitConnectionFactory.getConnection(project).status(StatusFormat.SHORT);
-                GitChangeEventDto.Type type;
-                if (status.getAdded().contains(itemPath)) {
-                    type = ADDED;
-                } else if (status.getUntracked().contains(itemPath)) {
-                    type = UNTRACKED;
-                } else if (status.getModified().contains(itemPath) || status.getChanged().contains(itemPath)) {
-                    type = MODIFIED;
-                } else {
-                    type = GitChangeEventDto.Type.NOT_MODIFIED;
-                }
+  private Consumer<String> transmitConsumer(String path) {
+    return id -> {
+      String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+      String project = normalizedPath.split("/")[0];
+      String itemPath = normalizedPath.substring(normalizedPath.indexOf("/") + 1);
+      try {
+        Status status = gitConnectionFactory.getConnection(project).status(StatusFormat.SHORT);
+        GitChangeEventDto.Type type;
+        if (status.getAdded().contains(itemPath)) {
+          type = ADDED;
+        } else if (status.getUntracked().contains(itemPath)) {
+          type = UNTRACKED;
+        } else if (status.getModified().contains(itemPath)
+            || status.getChanged().contains(itemPath)) {
+          type = MODIFIED;
+        } else {
+          type = GitChangeEventDto.Type.NOT_MODIFIED;
+        }
 
-                transmitter.newRequest()
-                           .endpointId(id)
-                           .methodName(OUTGOING_METHOD)
-                           .paramsAsDto(newDto(GitChangeEventDto.class).withPath(path).withType(type))
-                           .sendAndSkipResult();
-            } catch (GitException e) {
-                String errorMessage = e.getMessage();
-                if (!("Not a git repository".equals(errorMessage))) {
-                    LOG.error(errorMessage);
-                }
-            }
-        };
-    }
+        transmitter
+            .newRequest()
+            .endpointId(id)
+            .methodName(OUTGOING_METHOD)
+            .paramsAsDto(newDto(GitChangeEventDto.class).withPath(path).withType(type))
+            .sendAndSkipResult();
+      } catch (GitException e) {
+        String errorMessage = e.getMessage();
+        if (!("Not a git repository".equals(errorMessage))) {
+          LOG.error(errorMessage);
+        }
+      }
+    };
+  }
 

@@ -1,36 +1,43 @@
-    protected Promise<Void> delete(final Resource resource) {
-        checkArgument(!resource.getLocation().isRoot(), "Workspace root is not allowed to be moved");
+  protected Promise<Void> delete(final Resource resource) {
+    checkArgument(!resource.getLocation().isRoot(), "Workspace root is not allowed to be moved");
 
-        return ps.deleteItem(resource.getLocation()).then((Function<Void, Void>)ignored -> {
-            Resource[] descToRemove = null;
+    return ps.deleteItem(resource.getLocation())
+        .then(
+            (Function<Void, Void>)
+                ignored -> {
+                  Resource[] descToRemove = null;
 
-            if (resource instanceof Container) {
-                final Optional<Resource[]> optDescendants = store.getAll(resource.getLocation());
+                  if (resource instanceof Container) {
+                    final Optional<Resource[]> optDescendants =
+                        store.getAll(resource.getLocation());
 
-                if (optDescendants.isPresent()) {
-                    descToRemove = optDescendants.get();
-                }
-            }
-
-            store.dispose(resource.getLocation(), !resource.isFile());
-
-            if (isResourceOpened(resource)) {
-                deletedFilesController.add(resource.getLocation().toString());
-            }
-
-            eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(resource, REMOVED | DERIVED)));
-
-            if (descToRemove != null) {
-                for (Resource toRemove : descToRemove) {
-                    if (isResourceOpened(toRemove)) {
-                        deletedFilesController.add(toRemove.getLocation().toString());
+                    if (optDescendants.isPresent()) {
+                      descToRemove = optDescendants.get();
                     }
+                  }
 
-                    eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(toRemove, REMOVED | DERIVED)));
-                }
-            }
+                  store.dispose(resource.getLocation(), !resource.isFile());
 
-            return null;
-        });
-    }
+                  if (isResourceOpened(resource)) {
+                    deletedFilesController.add(resource.getLocation().toString());
+                  }
+
+                  eventBus.fireEvent(
+                      new ResourceChangedEvent(new ResourceDeltaImpl(resource, REMOVED | DERIVED)));
+
+                  if (descToRemove != null) {
+                    for (Resource toRemove : descToRemove) {
+                      if (isResourceOpened(toRemove)) {
+                        deletedFilesController.add(toRemove.getLocation().toString());
+                      }
+
+                      eventBus.fireEvent(
+                          new ResourceChangedEvent(
+                              new ResourceDeltaImpl(toRemove, REMOVED | DERIVED)));
+                    }
+                  }
+
+                  return null;
+                });
+  }
 

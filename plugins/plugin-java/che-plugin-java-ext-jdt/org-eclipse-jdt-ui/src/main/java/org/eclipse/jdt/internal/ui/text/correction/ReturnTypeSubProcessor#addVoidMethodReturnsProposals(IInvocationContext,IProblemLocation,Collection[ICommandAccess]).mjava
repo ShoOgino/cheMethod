@@ -1,75 +1,85 @@
-	public static void addVoidMethodReturnsProposals(IInvocationContext context, IProblemLocation problem,
-													 Collection<ICommandAccess> proposals) {
-		ICompilationUnit cu = context.getCompilationUnit();
+  public static void addVoidMethodReturnsProposals(
+      IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+    ICompilationUnit cu = context.getCompilationUnit();
 
-		CompilationUnit astRoot = context.getASTRoot();
-		ASTNode selectedNode = problem.getCoveringNode(astRoot);
-		if (selectedNode == null) {
-			return;
-		}
+    CompilationUnit astRoot = context.getASTRoot();
+    ASTNode selectedNode = problem.getCoveringNode(astRoot);
+    if (selectedNode == null) {
+      return;
+    }
 
-		BodyDeclaration decl = ASTResolving.findParentBodyDeclaration(selectedNode);
-		if (decl instanceof MethodDeclaration && selectedNode.getNodeType() == ASTNode.RETURN_STATEMENT) {
-			ReturnStatement returnStatement = (ReturnStatement)selectedNode;
-			Expression expr = returnStatement.getExpression();
-			if (expr != null) {
-				AST ast = astRoot.getAST();
+    BodyDeclaration decl = ASTResolving.findParentBodyDeclaration(selectedNode);
+    if (decl instanceof MethodDeclaration
+        && selectedNode.getNodeType() == ASTNode.RETURN_STATEMENT) {
+      ReturnStatement returnStatement = (ReturnStatement) selectedNode;
+      Expression expr = returnStatement.getExpression();
+      if (expr != null) {
+        AST ast = astRoot.getAST();
 
-				ITypeBinding binding = Bindings.normalizeTypeBinding(expr.resolveTypeBinding());
-				if (binding == null) {
-					binding = ast.resolveWellKnownType("java.lang.Object"); //$NON-NLS-1$
-				}
-				if (binding.isWildcardType()) {
-					binding = ASTResolving.normalizeWildcardType(binding, true, ast);
-				}
+        ITypeBinding binding = Bindings.normalizeTypeBinding(expr.resolveTypeBinding());
+        if (binding == null) {
+          binding = ast.resolveWellKnownType("java.lang.Object"); //$NON-NLS-1$
+        }
+        if (binding.isWildcardType()) {
+          binding = ASTResolving.normalizeWildcardType(binding, true, ast);
+        }
 
-				MethodDeclaration methodDeclaration = (MethodDeclaration)decl;
+        MethodDeclaration methodDeclaration = (MethodDeclaration) decl;
 
-				ASTRewrite rewrite = ASTRewrite.create(ast);
+        ASTRewrite rewrite = ASTRewrite.create(ast);
 
-				String label = Messages.format(CorrectionMessages.ReturnTypeSubProcessor_voidmethodreturns_description,
-											   BindingLabelProvider.getBindingLabel(binding, BindingLabelProvider.DEFAULT_TEXTFLAGS));
-				Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-				LinkedCorrectionProposal
-						proposal= new LinkedCorrectionProposal(label, cu, rewrite, IProposalRelevance.VOID_METHOD_RETURNS, image);
-				ImportRewrite imports= proposal.createImportRewrite(astRoot);
-				ImportRewriteContext importRewriteContext= new ContextSensitiveImportRewriteContext(methodDeclaration, imports);
-				Type newReturnType= imports.addImport(binding, ast, importRewriteContext);
+        String label =
+            Messages.format(
+                CorrectionMessages.ReturnTypeSubProcessor_voidmethodreturns_description,
+                BindingLabelProvider.getBindingLabel(
+                    binding, BindingLabelProvider.DEFAULT_TEXTFLAGS));
+        Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+        LinkedCorrectionProposal proposal =
+            new LinkedCorrectionProposal(
+                label, cu, rewrite, IProposalRelevance.VOID_METHOD_RETURNS, image);
+        ImportRewrite imports = proposal.createImportRewrite(astRoot);
+        ImportRewriteContext importRewriteContext =
+            new ContextSensitiveImportRewriteContext(methodDeclaration, imports);
+        Type newReturnType = imports.addImport(binding, ast, importRewriteContext);
 
-				if (methodDeclaration.isConstructor()) {
-					rewrite.set(methodDeclaration, MethodDeclaration.CONSTRUCTOR_PROPERTY, Boolean.FALSE, null);
-					rewrite.set(methodDeclaration, MethodDeclaration.RETURN_TYPE2_PROPERTY, newReturnType, null);
-				} else {
-					rewrite.replace(methodDeclaration.getReturnType2(), newReturnType, null);
-				}
-				String key= "return_type"; //$NON-NLS-1$
-				proposal.addLinkedPosition(rewrite.track(newReturnType), true, key);
-				ITypeBinding[] bindings= ASTResolving.getRelaxingTypes(ast, binding);
-				for (int i= 0; i < bindings.length; i++) {
-					proposal.addLinkedPositionProposal(key, bindings[i]);
-				}
+        if (methodDeclaration.isConstructor()) {
+          rewrite.set(
+              methodDeclaration, MethodDeclaration.CONSTRUCTOR_PROPERTY, Boolean.FALSE, null);
+          rewrite.set(
+              methodDeclaration, MethodDeclaration.RETURN_TYPE2_PROPERTY, newReturnType, null);
+        } else {
+          rewrite.replace(methodDeclaration.getReturnType2(), newReturnType, null);
+        }
+        String key = "return_type"; //$NON-NLS-1$
+        proposal.addLinkedPosition(rewrite.track(newReturnType), true, key);
+        ITypeBinding[] bindings = ASTResolving.getRelaxingTypes(ast, binding);
+        for (int i = 0; i < bindings.length; i++) {
+          proposal.addLinkedPositionProposal(key, bindings[i]);
+        }
 
-				Javadoc javadoc= methodDeclaration.getJavadoc();
-				if (javadoc != null) {
-					TagElement newTag= ast.newTagElement();
-					newTag.setTagName(TagElement.TAG_RETURN);
-					TextElement commentStart= ast.newTextElement();
-					newTag.fragments().add(commentStart);
+        Javadoc javadoc = methodDeclaration.getJavadoc();
+        if (javadoc != null) {
+          TagElement newTag = ast.newTagElement();
+          newTag.setTagName(TagElement.TAG_RETURN);
+          TextElement commentStart = ast.newTextElement();
+          newTag.fragments().add(commentStart);
 
-					JavadocTagsSubProcessor.insertTag(rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY), newTag, null);
-					proposal.addLinkedPosition(rewrite.track(commentStart), false, "comment_start"); //$NON-NLS-1$
+          JavadocTagsSubProcessor.insertTag(
+              rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY), newTag, null);
+          proposal.addLinkedPosition(
+              rewrite.track(commentStart), false, "comment_start"); //$NON-NLS-1$
+        }
+        proposals.add(proposal);
+      }
+      ASTRewrite rewrite = ASTRewrite.create(decl.getAST());
+      rewrite.remove(returnStatement.getExpression(), null);
 
-				}
-				proposals.add(proposal);
-			}
-			ASTRewrite rewrite= ASTRewrite.create(decl.getAST());
-			rewrite.remove(returnStatement.getExpression(), null);
-
-			String label= CorrectionMessages.ReturnTypeSubProcessor_removereturn_description;
-			Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-			ASTRewriteCorrectionProposal
-					proposal= new ASTRewriteCorrectionProposal(label, cu, rewrite, IProposalRelevance.CHANGE_TO_RETURN, image);
-			proposals.add(proposal);
-		}
-	}
+      String label = CorrectionMessages.ReturnTypeSubProcessor_removereturn_description;
+      Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+      ASTRewriteCorrectionProposal proposal =
+          new ASTRewriteCorrectionProposal(
+              label, cu, rewrite, IProposalRelevance.CHANGE_TO_RETURN, image);
+      proposals.add(proposal);
+    }
+  }
 

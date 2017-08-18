@@ -1,136 +1,129 @@
-	/*
-	 * returns false iff
-	 * <ul>
-	 * <li><code>indexBinding</code> is used for anything else then accessing
-	 * an element of <code>arrayBinding</code></li>
-	 * <li><code>arrayBinding</code> is assigned</li>
-	 * <li>an element of <code>arrayBinding</code> is assigned</li>
-	 * <li><code>lengthBinding</code> is referenced</li>
-	 * </ul>
-	 * within <code>body</code>
-	 */
-	private boolean validateBody(ForStatement statement) {
-		Statement body= statement.getBody();
-		try {
-			body.accept(new GenericVisitor() {
-				/**
-				 * {@inheritDoc}
-				 */
-				@Override
-				protected boolean visitNode(ASTNode node) {
-					if (node instanceof Name) {
-						Name name= (Name)node;
-						IBinding nameBinding= name.resolveBinding();
-						if (nameBinding == null)
-							throw new InvalidBodyError();
+  /*
+   * returns false iff
+   * <ul>
+   * <li><code>indexBinding</code> is used for anything else then accessing
+   * an element of <code>arrayBinding</code></li>
+   * <li><code>arrayBinding</code> is assigned</li>
+   * <li>an element of <code>arrayBinding</code> is assigned</li>
+   * <li><code>lengthBinding</code> is referenced</li>
+   * </ul>
+   * within <code>body</code>
+   */
+  private boolean validateBody(ForStatement statement) {
+    Statement body = statement.getBody();
+    try {
+      body.accept(
+          new GenericVisitor() {
+            /** {@inheritDoc} */
+            @Override
+            protected boolean visitNode(ASTNode node) {
+              if (node instanceof Name) {
+                Name name = (Name) node;
+                IBinding nameBinding = name.resolveBinding();
+                if (nameBinding == null) throw new InvalidBodyError();
 
-						if (nameBinding.equals(fIndexBinding)) {
-							if (node.getLocationInParent() != ArrayAccess.INDEX_PROPERTY)
-								throw new InvalidBodyError();
+                if (nameBinding.equals(fIndexBinding)) {
+                  if (node.getLocationInParent() != ArrayAccess.INDEX_PROPERTY)
+                    throw new InvalidBodyError();
 
-							ArrayAccess arrayAccess= (ArrayAccess)node.getParent();
-							Expression array= arrayAccess.getArray();
-							if (array instanceof QualifiedName) {
-								if (!(fArrayAccess instanceof QualifiedName))
-									throw new InvalidBodyError();
+                  ArrayAccess arrayAccess = (ArrayAccess) node.getParent();
+                  Expression array = arrayAccess.getArray();
+                  if (array instanceof QualifiedName) {
+                    if (!(fArrayAccess instanceof QualifiedName)) throw new InvalidBodyError();
 
-								IBinding varBinding1= ((QualifiedName) array).getQualifier().resolveBinding();
-								if (varBinding1 == null)
-									throw new InvalidBodyError();
+                    IBinding varBinding1 = ((QualifiedName) array).getQualifier().resolveBinding();
+                    if (varBinding1 == null) throw new InvalidBodyError();
 
-								IBinding varBinding2= ((QualifiedName) fArrayAccess).getQualifier().resolveBinding();
-								if (!varBinding1.equals(varBinding2))
-									throw new InvalidBodyError();
-							} else if (array instanceof FieldAccess) {
-								Expression arrayExpression= ((FieldAccess) array).getExpression();
-								if (arrayExpression instanceof ThisExpression) {
-									if (fArrayAccess instanceof FieldAccess) {
-										Expression arrayAccessExpression= ((FieldAccess) fArrayAccess).getExpression();
-										if (!(arrayAccessExpression instanceof ThisExpression))
-											throw new InvalidBodyError();
-									} else if (fArrayAccess instanceof QualifiedName) {
-										throw new InvalidBodyError();
-									}
-								} else {
-									if (!(fArrayAccess instanceof FieldAccess))
-										throw new InvalidBodyError();
+                    IBinding varBinding2 =
+                        ((QualifiedName) fArrayAccess).getQualifier().resolveBinding();
+                    if (!varBinding1.equals(varBinding2)) throw new InvalidBodyError();
+                  } else if (array instanceof FieldAccess) {
+                    Expression arrayExpression = ((FieldAccess) array).getExpression();
+                    if (arrayExpression instanceof ThisExpression) {
+                      if (fArrayAccess instanceof FieldAccess) {
+                        Expression arrayAccessExpression =
+                            ((FieldAccess) fArrayAccess).getExpression();
+                        if (!(arrayAccessExpression instanceof ThisExpression))
+                          throw new InvalidBodyError();
+                      } else if (fArrayAccess instanceof QualifiedName) {
+                        throw new InvalidBodyError();
+                      }
+                    } else {
+                      if (!(fArrayAccess instanceof FieldAccess)) throw new InvalidBodyError();
 
-									Expression arrayAccessExpression= ((FieldAccess) fArrayAccess).getExpression();
-									if (!arrayExpression.subtreeMatch(new JdtASTMatcher(), arrayAccessExpression)) {
-										throw new InvalidBodyError();
-									}
-								}
-							} else {
-								if (fArrayAccess instanceof QualifiedName) {
-									throw new InvalidBodyError();
-								}
-								if (fArrayAccess instanceof FieldAccess) {
-									Expression arrayAccessExpression= ((FieldAccess) fArrayAccess).getExpression();
-									if (!(arrayAccessExpression instanceof ThisExpression))
-										throw new InvalidBodyError();
-								}
-							}
+                      Expression arrayAccessExpression =
+                          ((FieldAccess) fArrayAccess).getExpression();
+                      if (!arrayExpression.subtreeMatch(
+                          new JdtASTMatcher(), arrayAccessExpression)) {
+                        throw new InvalidBodyError();
+                      }
+                    }
+                  } else {
+                    if (fArrayAccess instanceof QualifiedName) {
+                      throw new InvalidBodyError();
+                    }
+                    if (fArrayAccess instanceof FieldAccess) {
+                      Expression arrayAccessExpression =
+                          ((FieldAccess) fArrayAccess).getExpression();
+                      if (!(arrayAccessExpression instanceof ThisExpression))
+                        throw new InvalidBodyError();
+                    }
+                  }
 
-							IBinding binding= getBinding(array);
-							if (binding == null)
-								throw new InvalidBodyError();
+                  IBinding binding = getBinding(array);
+                  if (binding == null) throw new InvalidBodyError();
 
-							if (!fArrayBinding.equals(binding))
-								throw new InvalidBodyError();
+                  if (!fArrayBinding.equals(binding)) throw new InvalidBodyError();
 
-						} else if (nameBinding.equals(fArrayBinding)) {
-							if (isAssigned(node))
-								throw new InvalidBodyError();
-						} else if (nameBinding.equals(fLengthBinding)) {
-							throw new InvalidBodyError();
-						} else if (fElementDeclaration != null && nameBinding.equals(fElementDeclaration.getName().resolveBinding())) {
-							if (isAssigned(node))
-								fElementDeclaration= null;
-						}
-					}
+                } else if (nameBinding.equals(fArrayBinding)) {
+                  if (isAssigned(node)) throw new InvalidBodyError();
+                } else if (nameBinding.equals(fLengthBinding)) {
+                  throw new InvalidBodyError();
+                } else if (fElementDeclaration != null
+                    && nameBinding.equals(fElementDeclaration.getName().resolveBinding())) {
+                  if (isAssigned(node)) fElementDeclaration = null;
+                }
+              }
 
-					return true;
-				}
+              return true;
+            }
 
-				private boolean isAssigned(ASTNode current) {
-					while (current != null && !(current instanceof Statement)) {
-						if (current.getLocationInParent() == Assignment.LEFT_HAND_SIDE_PROPERTY)
-							return true;
+            private boolean isAssigned(ASTNode current) {
+              while (current != null && !(current instanceof Statement)) {
+                if (current.getLocationInParent() == Assignment.LEFT_HAND_SIDE_PROPERTY)
+                  return true;
 
-						if (current instanceof PrefixExpression)
-							return true;
+                if (current instanceof PrefixExpression) return true;
 
-						if (current instanceof PostfixExpression)
-							return true;
+                if (current instanceof PostfixExpression) return true;
 
-						current= current.getParent();
-					}
+                current = current.getParent();
+              }
 
-					return false;
-				}
+              return false;
+            }
 
-				@Override
-				public boolean visit(ArrayAccess node) {
-					if (fElementDeclaration != null)
-						return super.visit(node);
+            @Override
+            public boolean visit(ArrayAccess node) {
+              if (fElementDeclaration != null) return super.visit(node);
 
-					IBinding binding= getBinding(node.getArray());
-					if (fArrayBinding.equals(binding)) {
-						IBinding index= getBinding(node.getIndex());
-						if (fIndexBinding.equals(index)) {
-							if (node.getLocationInParent() == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
-								fElementDeclaration= (VariableDeclarationFragment)node.getParent();
-							}
-						}
-					}
-					return super.visit(node);
-				}
+              IBinding binding = getBinding(node.getArray());
+              if (fArrayBinding.equals(binding)) {
+                IBinding index = getBinding(node.getIndex());
+                if (fIndexBinding.equals(index)) {
+                  if (node.getLocationInParent()
+                      == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
+                    fElementDeclaration = (VariableDeclarationFragment) node.getParent();
+                  }
+                }
+              }
+              return super.visit(node);
+            }
+          });
+    } catch (InvalidBodyError e) {
+      return false;
+    }
 
-			});
-		} catch (InvalidBodyError e) {
-			return false;
-		}
-
-		return true;
-	}
+    return true;
+  }
 

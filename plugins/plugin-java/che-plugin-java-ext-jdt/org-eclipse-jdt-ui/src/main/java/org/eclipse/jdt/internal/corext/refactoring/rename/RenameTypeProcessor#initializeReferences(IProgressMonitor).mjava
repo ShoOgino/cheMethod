@@ -1,143 +1,156 @@
-	/**
-	 * Initializes the references to the type and the similarly named elements. This
-	 * method creates both the fReferences and the fPreloadedElementToName
-	 * fields.
-	 *
-	 * May be called from the UI.
-	 * @param monitor progress monitor
-	 * @return initialization status
-	 * @throws JavaModelException some fundamental error with the underlying model
-	 * @throws OperationCanceledException if user canceled the task
-	 *
-	 */
-	public RefactoringStatus initializeReferences(IProgressMonitor monitor) throws JavaModelException, OperationCanceledException {
+  /**
+   * Initializes the references to the type and the similarly named elements. This method creates
+   * both the fReferences and the fPreloadedElementToName fields.
+   *
+   * <p>May be called from the UI.
+   *
+   * @param monitor progress monitor
+   * @return initialization status
+   * @throws JavaModelException some fundamental error with the underlying model
+   * @throws OperationCanceledException if user canceled the task
+   */
+  public RefactoringStatus initializeReferences(IProgressMonitor monitor)
+      throws JavaModelException, OperationCanceledException {
 
-		Assert.isNotNull(fType);
-		Assert.isNotNull(getNewElementName());
+    Assert.isNotNull(fType);
+    Assert.isNotNull(getNewElementName());
 
-		// Do not search again if the preconditions have not changed.
-		// Search depends on the type, the new name, the similarly named elements, and
-		// the strategy
+    // Do not search again if the preconditions have not changed.
+    // Search depends on the type, the new name, the similarly named elements, and
+    // the strategy
 
-		if (fReferences != null && (getNewElementName().equals(fCachedNewName)) && (fCachedRenameSimilarElements == getUpdateSimilarDeclarations()) && (fCachedRenamingStrategy == fRenamingStrategy))
-			return fCachedRefactoringStatus;
+    if (fReferences != null
+        && (getNewElementName().equals(fCachedNewName))
+        && (fCachedRenameSimilarElements == getUpdateSimilarDeclarations())
+        && (fCachedRenamingStrategy == fRenamingStrategy)) return fCachedRefactoringStatus;
 
-		fCachedNewName= getNewElementName();
-		fCachedRenameSimilarElements= fUpdateSimilarElements;
-		fCachedRenamingStrategy= fRenamingStrategy;
-		fCachedRefactoringStatus= new RefactoringStatus();
+    fCachedNewName = getNewElementName();
+    fCachedRenameSimilarElements = fUpdateSimilarElements;
+    fCachedRenamingStrategy = fRenamingStrategy;
+    fCachedRefactoringStatus = new RefactoringStatus();
 
+    try {
+      SearchPattern pattern =
+          SearchPattern.createPattern(
+              fType, IJavaSearchConstants.REFERENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
 
-		try {
-			SearchPattern pattern= SearchPattern.createPattern(fType, IJavaSearchConstants.REFERENCES, SearchUtils.GENERICS_AGNOSTIC_MATCH_RULE);
+      String binaryRefsDescription =
+          Messages.format(
+              RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description,
+              BasicElementLabels.getJavaElementName(fType.getElementName()));
+      ReferencesInBinaryContext binaryRefs = new ReferencesInBinaryContext(binaryRefsDescription);
 
-			String binaryRefsDescription= Messages.format(RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description , BasicElementLabels.getJavaElementName(fType.getElementName()));
-			ReferencesInBinaryContext binaryRefs= new ReferencesInBinaryContext(binaryRefsDescription);
+      fReferences =
+          RefactoringSearchEngine.search(
+              pattern,
+              RefactoringScopeFactory.create(fType, true, false),
+              new TypeOccurrenceCollector(fType, binaryRefs),
+              monitor,
+              fCachedRefactoringStatus);
 
-			fReferences= RefactoringSearchEngine.search(
-					pattern,
-					RefactoringScopeFactory.create(fType, true, false),
-					new TypeOccurrenceCollector(fType, binaryRefs),
-					monitor,
-					fCachedRefactoringStatus);
+      binaryRefs.addErrorIfNecessary(fCachedRefactoringStatus);
+      fReferences = Checks.excludeCompilationUnits(fReferences, fCachedRefactoringStatus);
 
-			binaryRefs.addErrorIfNecessary(fCachedRefactoringStatus);
-			fReferences= Checks.excludeCompilationUnits(fReferences, fCachedRefactoringStatus);
+      fPreloadedElementToName = new LinkedHashMap<IJavaElement, String>();
+      fPreloadedElementToSelection = new HashMap<IJavaElement, Boolean>();
 
-			fPreloadedElementToName= new LinkedHashMap<IJavaElement, String>();
-			fPreloadedElementToSelection= new HashMap<IJavaElement, Boolean>();
+      final String unQualifiedTypeName = fType.getElementName();
 
-			final String unQualifiedTypeName= fType.getElementName();
+      monitor.beginTask("", fReferences.length); //$NON-NLS-1$
 
-			monitor.beginTask("", fReferences.length); //$NON-NLS-1$
+      if (getUpdateSimilarDeclarations()) {
 
-			if (getUpdateSimilarDeclarations()) {
+        RenamingNameSuggestor sugg = new RenamingNameSuggestor(fRenamingStrategy);
 
-				RenamingNameSuggestor sugg= new RenamingNameSuggestor(fRenamingStrategy);
+        for (int i = 0; i < fReferences.length; i++) {
+          final ICompilationUnit cu = fReferences[i].getCompilationUnit();
+          if (cu == null) continue;
 
-				for (int i= 0; i < fReferences.length; i++) {
-					final ICompilationUnit cu= fReferences[i].getCompilationUnit();
-					if (cu == null)
-						continue;
+          final SearchMatch[] results = fReferences[i].getSearchResults();
 
-					final SearchMatch[] results= fReferences[i].getSearchResults();
+          for (int j = 0; j < results.length; j++) {
 
-					for (int j= 0; j < results.length; j++) {
+            if (!(results[j] instanceof TypeReferenceMatch)) continue;
 
-						if (! (results[j] instanceof TypeReferenceMatch))
-							continue;
+            final TypeReferenceMatch match = (TypeReferenceMatch) results[j];
+            final List<IJavaElement> matches = new ArrayList<IJavaElement>();
 
-						final TypeReferenceMatch match= (TypeReferenceMatch) results[j];
-						final List<IJavaElement> matches= new ArrayList<IJavaElement>();
+            if (match.getLocalElement() != null) {
+              if (match.getLocalElement() instanceof ILocalVariable) {
+                matches.add(match.getLocalElement());
+              }
+              // else don't update (e.g. match in type parameter, annotation, ...)
+            } else {
+              matches.add((IJavaElement) match.getElement());
+            }
 
-						if (match.getLocalElement() != null) {
-							if (match.getLocalElement() instanceof ILocalVariable) {
-								matches.add(match.getLocalElement());
-							}
-							// else don't update (e.g. match in type parameter, annotation, ...)
-						} else {
-							matches.add((IJavaElement) match.getElement());
-						}
+            final IJavaElement[] others = match.getOtherElements();
+            if (others != null) matches.addAll(Arrays.asList(others));
 
-						final IJavaElement[] others= match.getOtherElements();
-						if (others != null)
-							matches.addAll(Arrays.asList(others));
+            for (Iterator<IJavaElement> iter = matches.iterator(); iter.hasNext(); ) {
+              final IJavaElement element = iter.next();
 
-						for (Iterator<IJavaElement> iter= matches.iterator(); iter.hasNext();) {
-							final IJavaElement element= iter.next();
+              if (!(element instanceof IMethod)
+                  && !(element instanceof IField)
+                  && !(element instanceof ILocalVariable)) continue;
 
-							if (! (element instanceof IMethod) && ! (element instanceof IField) && ! (element instanceof ILocalVariable))
-								continue;
+              if (!isInDeclaredType(match.getOffset(), element)) continue;
 
-							if (!isInDeclaredType(match.getOffset(), element))
-								continue;
+              if (element instanceof IField) {
+                final IField currentField = (IField) element;
+                final String newFieldName =
+                    sugg.suggestNewFieldName(
+                        currentField.getJavaProject(),
+                        currentField.getElementName(),
+                        Flags.isStatic(currentField.getFlags()),
+                        unQualifiedTypeName,
+                        getNewElementName());
 
-							if (element instanceof IField) {
-								final IField currentField= (IField) element;
-								final String newFieldName= sugg.suggestNewFieldName(currentField.getJavaProject(), currentField.getElementName(), Flags.isStatic(currentField.getFlags()),
-										unQualifiedTypeName, getNewElementName());
+                if (newFieldName != null) fPreloadedElementToName.put(currentField, newFieldName);
 
-								if (newFieldName != null)
-									fPreloadedElementToName.put(currentField, newFieldName);
+              } else if (element instanceof IMethod) {
+                final IMethod currentMethod = (IMethod) element;
+                addMethodRename(unQualifiedTypeName, sugg, currentMethod);
 
-							} else if (element instanceof IMethod) {
-								final IMethod currentMethod= (IMethod) element;
-								addMethodRename(unQualifiedTypeName, sugg, currentMethod);
+              } else if (element instanceof ILocalVariable) {
+                final ILocalVariable currentLocal = (ILocalVariable) element;
+                final boolean isParameter;
 
-							} else if (element instanceof ILocalVariable) {
-								final ILocalVariable currentLocal= (ILocalVariable) element;
-								final boolean isParameter;
+                if (currentLocal.isParameter()) {
+                  addMethodRename(unQualifiedTypeName, sugg, (IMethod) currentLocal.getParent());
+                  isParameter = true;
+                } else isParameter = false;
 
-								if (currentLocal.isParameter()) {
-									addMethodRename(unQualifiedTypeName, sugg, (IMethod) currentLocal.getParent());
-									isParameter= true;
-								} else
-									isParameter= false;
+                final String newLocalName =
+                    sugg.suggestNewLocalName(
+                        currentLocal.getJavaProject(),
+                        currentLocal.getElementName(),
+                        isParameter,
+                        unQualifiedTypeName,
+                        getNewElementName());
 
-								final String newLocalName= sugg
-										.suggestNewLocalName(currentLocal.getJavaProject(), currentLocal.getElementName(), isParameter, unQualifiedTypeName, getNewElementName());
+                if (newLocalName != null) fPreloadedElementToName.put(currentLocal, newLocalName);
+              }
+            }
+          }
+          if (monitor.isCanceled()) throw new OperationCanceledException();
+        }
+      }
 
-								if (newLocalName != null)
-									fPreloadedElementToName.put(currentLocal, newLocalName);
-							}
-						}
-					}
-					if (monitor.isCanceled())
-						throw new OperationCanceledException();
-				}
-			}
+      for (Iterator<IJavaElement> iter = fPreloadedElementToName.keySet().iterator();
+          iter.hasNext();
+          ) {
+        IJavaElement element = iter.next();
+        fPreloadedElementToSelection.put(element, Boolean.TRUE);
+      }
+      fPreloadedElementToNameDefault =
+          new LinkedHashMap<IJavaElement, String>(fPreloadedElementToName);
 
-			for (Iterator<IJavaElement> iter= fPreloadedElementToName.keySet().iterator(); iter.hasNext();) {
-				IJavaElement element= iter.next();
-				fPreloadedElementToSelection.put(element, Boolean.TRUE);
-			}
-			fPreloadedElementToNameDefault= new LinkedHashMap<IJavaElement, String>(fPreloadedElementToName);
-
-		} catch (OperationCanceledException e) {
-			fReferences= null;
-			fPreloadedElementToName= null;
-			throw new OperationCanceledException();
-		}
-		return fCachedRefactoringStatus;
-	}
+    } catch (OperationCanceledException e) {
+      fReferences = null;
+      fPreloadedElementToName = null;
+      throw new OperationCanceledException();
+    }
+    return fCachedRefactoringStatus;
+  }
 

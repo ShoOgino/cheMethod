@@ -1,44 +1,47 @@
-    @Override
-    public synchronized InputStream getInputStream() throws IOException {
-        if (this.headersFields != null) {
-            // already parsed
-            return data;
-        }
-
-        final StringBuilder lineBuf = new StringBuilder();
-        for (int i = 0; i < 8; i++) {
-            int c = rawData.read();
-            if (c == -1) {
-                break;
-            }
-            lineBuf.append((char)c);
-        }
-        if (!lineBuf.toString().startsWith("HTTP/1.")) {
-            throw new IOException("Invalid status line of HTTP response from docker API");
-        }
-        final List<String> headerFields = new ArrayList<>(4);
-        for (; ; ) {
-            int c = rawData.read();
-            if (c == -1) {
-                throw new IOException("Unexpected end of file from docker API");
-            } else if (c == '\n') {
-                if (lineBuf.length() == 0) {
-                    break;
-                }
-                headerFields.add(lineBuf.toString());
-                lineBuf.setLength(0);
-            } else if (c != '\r') {
-                lineBuf.append((char)c);
-            }
-        }
-        this.headersFields = headerFields.toArray(new String[headerFields.size()]);
-        final int contentLength = getContentLength();
-        if (contentLength == 0) {
-            return data = EMPTY;
-        }
-        if (contentLength > 0) {
-            return data = new LimitedInputStream(rawData, contentLength);
-        }
-        return data = "chunked".equals(getHeader("Transfer-Encoding")) ? new ChunkedInputStream(rawData) : rawData;
+  @Override
+  public synchronized InputStream getInputStream() throws IOException {
+    if (this.headersFields != null) {
+      // already parsed
+      return data;
     }
+
+    final StringBuilder lineBuf = new StringBuilder();
+    for (int i = 0; i < 8; i++) {
+      int c = rawData.read();
+      if (c == -1) {
+        break;
+      }
+      lineBuf.append((char) c);
+    }
+    if (!lineBuf.toString().startsWith("HTTP/1.")) {
+      throw new IOException("Invalid status line of HTTP response from docker API");
+    }
+    final List<String> headerFields = new ArrayList<>(4);
+    for (; ; ) {
+      int c = rawData.read();
+      if (c == -1) {
+        throw new IOException("Unexpected end of file from docker API");
+      } else if (c == '\n') {
+        if (lineBuf.length() == 0) {
+          break;
+        }
+        headerFields.add(lineBuf.toString());
+        lineBuf.setLength(0);
+      } else if (c != '\r') {
+        lineBuf.append((char) c);
+      }
+    }
+    this.headersFields = headerFields.toArray(new String[headerFields.size()]);
+    final int contentLength = getContentLength();
+    if (contentLength == 0) {
+      return data = EMPTY;
+    }
+    if (contentLength > 0) {
+      return data = new LimitedInputStream(rawData, contentLength);
+    }
+    return data =
+        "chunked".equals(getHeader("Transfer-Encoding"))
+            ? new ChunkedInputStream(rawData)
+            : rawData;
+  }
 

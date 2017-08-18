@@ -1,119 +1,134 @@
-	private ASTRewrite doAddField() {
-		boolean isParamToField = fNodeToAssign.getNodeType() == ASTNode.SINGLE_VARIABLE_DECLARATION;
+  private ASTRewrite doAddField() {
+    boolean isParamToField = fNodeToAssign.getNodeType() == ASTNode.SINGLE_VARIABLE_DECLARATION;
 
-		ASTNode newTypeDecl = ASTResolving.findParentType(fNodeToAssign);
-		if (newTypeDecl == null) {
-			return null;
-		}
+    ASTNode newTypeDecl = ASTResolving.findParentType(fNodeToAssign);
+    if (newTypeDecl == null) {
+      return null;
+    }
 
-		Expression expression = isParamToField ? ((SingleVariableDeclaration)fNodeToAssign).getName()
-											   : ((ExpressionStatement)fNodeToAssign).getExpression();
+    Expression expression =
+        isParamToField
+            ? ((SingleVariableDeclaration) fNodeToAssign).getName()
+            : ((ExpressionStatement) fNodeToAssign).getExpression();
 
-		AST ast = newTypeDecl.getAST();
-		ASTRewrite rewrite = ASTRewrite.create(ast);
+    AST ast = newTypeDecl.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
 
-		createImportRewrite((CompilationUnit) fNodeToAssign.getRoot());
+    createImportRewrite((CompilationUnit) fNodeToAssign.getRoot());
 
-		BodyDeclaration bodyDecl= ASTResolving.findParentBodyDeclaration(fNodeToAssign);
-		Block body;
-		if (bodyDecl instanceof MethodDeclaration) {
-			body= ((MethodDeclaration) bodyDecl).getBody();
-		} else if (bodyDecl instanceof Initializer) {
-			body= ((Initializer) bodyDecl).getBody();
-		} else {
-			return null;
-		}
+    BodyDeclaration bodyDecl = ASTResolving.findParentBodyDeclaration(fNodeToAssign);
+    Block body;
+    if (bodyDecl instanceof MethodDeclaration) {
+      body = ((MethodDeclaration) bodyDecl).getBody();
+    } else if (bodyDecl instanceof Initializer) {
+      body = ((Initializer) bodyDecl).getBody();
+    } else {
+      return null;
+    }
 
-		IJavaProject project= getCompilationUnit().getJavaProject();
-		boolean isAnonymous= newTypeDecl.getNodeType() == ASTNode.ANONYMOUS_CLASS_DECLARATION;
-		boolean isStatic= Modifier.isStatic(bodyDecl.getModifiers()) && !isAnonymous;
-		boolean isConstructorParam= isParamToField && fNodeToAssign.getParent() instanceof MethodDeclaration && ((MethodDeclaration) fNodeToAssign.getParent()).isConstructor();
-		int modifiers= Modifier.PRIVATE;
-		if (isStatic) {
-			modifiers |= Modifier.STATIC;
-		} else if (isConstructorParam) {
-//			String saveActionsKey= AbstractSaveParticipantPreferenceConfiguration.EDITOR_SAVE_PARTICIPANT_PREFIX + CleanUpPostSaveListener.POSTSAVELISTENER_ID;
-//			IScopeContext[] scopes= { InstanceScope.INSTANCE, new ProjectScope(project.getProject()) };
-//			boolean safeActionsEnabled= Platform.getPreferencesService().getBoolean(JavaPlugin.getPluginId(), saveActionsKey, false, scopes);
-		}
-		if (/*safeActionsEnabled &&*/
-			/*CleanUpOptions.TRUE.equals(PreferenceConstants.getPreference(
-					CleanUpPreferenceUtil.SAVE_PARTICIPANT_KEY_PREFIX + CleanUpConstants.CLEANUP_ON_SAVE_ADDITIONAL_OPTIONS, project))
-			&&*/ CleanUpOptions.TRUE.equals(PreferenceConstants.getPreference(
-				CleanUpPreferenceUtil.SAVE_PARTICIPANT_KEY_PREFIX + CleanUpConstants.VARIABLE_DECLARATIONS_USE_FINAL, project))
-			&& CleanUpOptions.TRUE.equals(PreferenceConstants.getPreference(CleanUpPreferenceUtil.SAVE_PARTICIPANT_KEY_PREFIX + CleanUpConstants.VARIABLE_DECLARATIONS_USE_FINAL_PRIVATE_FIELDS, project))
-				) {
-			int constructors= 0;
-			if (newTypeDecl instanceof AbstractTypeDeclaration) {
-				List<BodyDeclaration> bodyDeclarations= ((AbstractTypeDeclaration) newTypeDecl).bodyDeclarations();
-				for (BodyDeclaration decl : bodyDeclarations) {
-					if (decl instanceof MethodDeclaration && ((MethodDeclaration) decl).isConstructor()) {
-						constructors++;
-					}
-				}
-			}
-			if (constructors == 1) {
-				modifiers |= Modifier.FINAL;
-			}
-		}
+    IJavaProject project = getCompilationUnit().getJavaProject();
+    boolean isAnonymous = newTypeDecl.getNodeType() == ASTNode.ANONYMOUS_CLASS_DECLARATION;
+    boolean isStatic = Modifier.isStatic(bodyDecl.getModifiers()) && !isAnonymous;
+    boolean isConstructorParam =
+        isParamToField
+            && fNodeToAssign.getParent() instanceof MethodDeclaration
+            && ((MethodDeclaration) fNodeToAssign.getParent()).isConstructor();
+    int modifiers = Modifier.PRIVATE;
+    if (isStatic) {
+      modifiers |= Modifier.STATIC;
+    } else if (isConstructorParam) {
+      //			String saveActionsKey= AbstractSaveParticipantPreferenceConfiguration.EDITOR_SAVE_PARTICIPANT_PREFIX + CleanUpPostSaveListener.POSTSAVELISTENER_ID;
+      //			IScopeContext[] scopes= { InstanceScope.INSTANCE, new ProjectScope(project.getProject()) };
+      //			boolean safeActionsEnabled= Platform.getPreferencesService().getBoolean(JavaPlugin.getPluginId(), saveActionsKey, false, scopes);
+    }
+    if (
+    /*safeActionsEnabled &&*/
+    /*CleanUpOptions.TRUE.equals(PreferenceConstants.getPreference(
+    		CleanUpPreferenceUtil.SAVE_PARTICIPANT_KEY_PREFIX + CleanUpConstants.CLEANUP_ON_SAVE_ADDITIONAL_OPTIONS, project))
+    &&*/ CleanUpOptions.TRUE.equals(
+            PreferenceConstants.getPreference(
+                CleanUpPreferenceUtil.SAVE_PARTICIPANT_KEY_PREFIX
+                    + CleanUpConstants.VARIABLE_DECLARATIONS_USE_FINAL,
+                project))
+        && CleanUpOptions.TRUE.equals(
+            PreferenceConstants.getPreference(
+                CleanUpPreferenceUtil.SAVE_PARTICIPANT_KEY_PREFIX
+                    + CleanUpConstants.VARIABLE_DECLARATIONS_USE_FINAL_PRIVATE_FIELDS,
+                project))) {
+      int constructors = 0;
+      if (newTypeDecl instanceof AbstractTypeDeclaration) {
+        List<BodyDeclaration> bodyDeclarations =
+            ((AbstractTypeDeclaration) newTypeDecl).bodyDeclarations();
+        for (BodyDeclaration decl : bodyDeclarations) {
+          if (decl instanceof MethodDeclaration && ((MethodDeclaration) decl).isConstructor()) {
+            constructors++;
+          }
+        }
+      }
+      if (constructors == 1) {
+        modifiers |= Modifier.FINAL;
+      }
+    }
 
-		VariableDeclarationFragment newDeclFrag= addFieldDeclaration(rewrite, newTypeDecl, modifiers, expression);
-		String varName= newDeclFrag.getName().getIdentifier();
+    VariableDeclarationFragment newDeclFrag =
+        addFieldDeclaration(rewrite, newTypeDecl, modifiers, expression);
+    String varName = newDeclFrag.getName().getIdentifier();
 
-		Assignment assignment= ast.newAssignment();
-		assignment.setRightHandSide((Expression) rewrite.createCopyTarget(expression));
+    Assignment assignment = ast.newAssignment();
+    assignment.setRightHandSide((Expression) rewrite.createCopyTarget(expression));
 
-		boolean needsThis= StubUtility.useThisForFieldAccess(project);
-		if (isParamToField) {
-			needsThis |= varName.equals(((SimpleName) expression).getIdentifier());
-		}
+    boolean needsThis = StubUtility.useThisForFieldAccess(project);
+    if (isParamToField) {
+      needsThis |= varName.equals(((SimpleName) expression).getIdentifier());
+    }
 
-		SimpleName accessName= ast.newSimpleName(varName);
-		if (needsThis) {
-			FieldAccess fieldAccess= ast.newFieldAccess();
-			fieldAccess.setName(accessName);
-			if (isStatic) {
-				String typeName= ((AbstractTypeDeclaration) newTypeDecl).getName().getIdentifier();
-				fieldAccess.setExpression(ast.newSimpleName(typeName));
-			} else {
-				fieldAccess.setExpression(ast.newThisExpression());
-			}
-			assignment.setLeftHandSide(fieldAccess);
-		} else {
-			assignment.setLeftHandSide(accessName);
-		}
+    SimpleName accessName = ast.newSimpleName(varName);
+    if (needsThis) {
+      FieldAccess fieldAccess = ast.newFieldAccess();
+      fieldAccess.setName(accessName);
+      if (isStatic) {
+        String typeName = ((AbstractTypeDeclaration) newTypeDecl).getName().getIdentifier();
+        fieldAccess.setExpression(ast.newSimpleName(typeName));
+      } else {
+        fieldAccess.setExpression(ast.newThisExpression());
+      }
+      assignment.setLeftHandSide(fieldAccess);
+    } else {
+      assignment.setLeftHandSide(accessName);
+    }
 
-		ASTNode selectionNode;
-		if (isParamToField) {
-			// assign parameter to field
-			ExpressionStatement statement= ast.newExpressionStatement(assignment);
-			int insertIdx= findAssignmentInsertIndex(body.statements());
-			rewrite.getListRewrite(body, Block.STATEMENTS_PROPERTY).insertAt(statement, insertIdx, null);
-			selectionNode= statement;
-		} else {
-			if (needsSemicolon(expression)) {
-				rewrite.replace(expression, ast.newExpressionStatement(assignment), null);
-			} else {
-				rewrite.replace(expression, assignment, null);
-			}
-			selectionNode= fNodeToAssign;
-		}
+    ASTNode selectionNode;
+    if (isParamToField) {
+      // assign parameter to field
+      ExpressionStatement statement = ast.newExpressionStatement(assignment);
+      int insertIdx = findAssignmentInsertIndex(body.statements());
+      rewrite.getListRewrite(body, Block.STATEMENTS_PROPERTY).insertAt(statement, insertIdx, null);
+      selectionNode = statement;
+    } else {
+      if (needsSemicolon(expression)) {
+        rewrite.replace(expression, ast.newExpressionStatement(assignment), null);
+      } else {
+        rewrite.replace(expression, assignment, null);
+      }
+      selectionNode = fNodeToAssign;
+    }
 
-		addLinkedPosition(rewrite.track(newDeclFrag.getName()), false, KEY_NAME);
-		if (!isParamToField) {
-			FieldDeclaration fieldDeclaration= (FieldDeclaration) newDeclFrag.getParent();
-			addLinkedPosition(rewrite.track(fieldDeclaration.getType()), false, KEY_TYPE);
-		}
-		addLinkedPosition(rewrite.track(accessName), true, KEY_NAME);
-		IVariableBinding variableBinding= newDeclFrag.resolveBinding();
-		if (variableBinding != null) {
-			SimpleName[] linkedNodes= LinkedNodeFinder.findByBinding(fNodeToAssign.getRoot(), variableBinding);
-			for (int i= 0; i < linkedNodes.length; i++) {
-				addLinkedPosition(rewrite.track(linkedNodes[i]), false, KEY_NAME);
-			}
-		}
-		setEndPosition(rewrite.track(selectionNode));
+    addLinkedPosition(rewrite.track(newDeclFrag.getName()), false, KEY_NAME);
+    if (!isParamToField) {
+      FieldDeclaration fieldDeclaration = (FieldDeclaration) newDeclFrag.getParent();
+      addLinkedPosition(rewrite.track(fieldDeclaration.getType()), false, KEY_TYPE);
+    }
+    addLinkedPosition(rewrite.track(accessName), true, KEY_NAME);
+    IVariableBinding variableBinding = newDeclFrag.resolveBinding();
+    if (variableBinding != null) {
+      SimpleName[] linkedNodes =
+          LinkedNodeFinder.findByBinding(fNodeToAssign.getRoot(), variableBinding);
+      for (int i = 0; i < linkedNodes.length; i++) {
+        addLinkedPosition(rewrite.track(linkedNodes[i]), false, KEY_NAME);
+      }
+    }
+    setEndPosition(rewrite.track(selectionNode));
 
-		return rewrite;
-	}
+    return rewrite;
+  }
 

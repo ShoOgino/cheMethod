@@ -1,50 +1,52 @@
-    public void testConcurrentLocks() throws Throwable {
-        final AtomicInteger acquired = new AtomicInteger(0);
-        final CountDownLatch starter = new CountDownLatch(1);
-        final CountDownLatch waiter = new CountDownLatch(2);
-        Runnable task1 = new Runnable() {
-            @Override
-            public void run() {
-                PathLockFactory.PathLock lock = pathLockFactory.getLock(path, false);
-                lock.acquire();
-                acquired.incrementAndGet();
-                starter.countDown();
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ignored) {
-                } finally {
-                    acquired.getAndDecrement();
-                    lock.release();
-                    waiter.countDown();
-                }
+  public void testConcurrentLocks() throws Throwable {
+    final AtomicInteger acquired = new AtomicInteger(0);
+    final CountDownLatch starter = new CountDownLatch(1);
+    final CountDownLatch waiter = new CountDownLatch(2);
+    Runnable task1 =
+        new Runnable() {
+          @Override
+          public void run() {
+            PathLockFactory.PathLock lock = pathLockFactory.getLock(path, false);
+            lock.acquire();
+            acquired.incrementAndGet();
+            starter.countDown();
+            try {
+              Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
+            } finally {
+              acquired.getAndDecrement();
+              lock.release();
+              waiter.countDown();
             }
+          }
         };
-        final List<Throwable> errors = new ArrayList<>(1);
-        Runnable task2 = new Runnable() {
-            @Override
-            public void run() {
-                PathLockFactory.PathLock exclusiveLock = pathLockFactory.getLock(path, true);
-                try {
-                    exclusiveLock.acquire();
-                    // This thread must be blocked while another thread keeps lock.
-                    assertEquals(0, acquired.getAndIncrement());
-                } catch (Throwable e) {
-                    errors.add(e);
-                } finally {
-                    acquired.getAndDecrement();
-                    exclusiveLock.release();
-                    waiter.countDown();
-                }
+    final List<Throwable> errors = new ArrayList<>(1);
+    Runnable task2 =
+        new Runnable() {
+          @Override
+          public void run() {
+            PathLockFactory.PathLock exclusiveLock = pathLockFactory.getLock(path, true);
+            try {
+              exclusiveLock.acquire();
+              // This thread must be blocked while another thread keeps lock.
+              assertEquals(0, acquired.getAndIncrement());
+            } catch (Throwable e) {
+              errors.add(e);
+            } finally {
+              acquired.getAndDecrement();
+              exclusiveLock.release();
+              waiter.countDown();
             }
+          }
         };
-        new Thread(task1).start();
-        starter.await();
-        new Thread(task2).start();
-        waiter.await();
-        assertEquals(0, acquired.get()); // all locks must be released
+    new Thread(task1).start();
+    starter.await();
+    new Thread(task2).start();
+    waiter.await();
+    assertEquals(0, acquired.get()); // all locks must be released
 
-        if (!errors.isEmpty()) {
-            throw errors.get(0);
-        }
+    if (!errors.isEmpty()) {
+      throw errors.get(0);
     }
+  }
 

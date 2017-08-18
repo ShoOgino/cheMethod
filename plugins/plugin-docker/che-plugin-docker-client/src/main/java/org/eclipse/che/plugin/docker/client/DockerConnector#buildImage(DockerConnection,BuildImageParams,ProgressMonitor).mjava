@@ -1,77 +1,90 @@
-    private String buildImage(final DockerConnection dockerConnection,
-                              final BuildImageParams params,
-                              final ProgressMonitor progressMonitor) throws IOException {
-        final String repository = params.getRepository();
+  private String buildImage(
+      final DockerConnection dockerConnection,
+      final BuildImageParams params,
+      final ProgressMonitor progressMonitor)
+      throws IOException {
+    final String repository = params.getRepository();
 
-        try (DockerConnection connection = dockerConnection.method("POST")
-                                                           .path(apiVersionPathPrefix + "/build")
-                                                           .header("X-Registry-Config",
-                                                                   authResolver.getXRegistryConfigHeaderValue(params.getAuthConfigs()))) {
-            addQueryParamIfNotNull(connection, "rm", params.isRemoveIntermediateContainer());
-            addQueryParamIfNotNull(connection, "forcerm", params.isForceRemoveIntermediateContainers());
-            addQueryParamIfNotNull(connection, "memory", params.getMemoryLimit());
-            addQueryParamIfNotNull(connection, "memswap", params.getMemorySwapLimit());
-            addQueryParamIfNotNull(connection, "pull", params.isDoForcePull());
-            addQueryParamIfNotNull(connection, "dockerfile", params.getDockerfile());
-            addQueryParamIfNotNull(connection, "nocache", params.isNoCache());
-            addQueryParamIfNotNull(connection, "q", params.isQuiet());
-            addQueryParamIfNotNull(connection, "cpusetcpus", params.getCpusetCpus());
-            addQueryParamIfNotNull(connection, "cpuperiod", params.getCpuPeriod());
-            addQueryParamIfNotNull(connection, "cpuquota", params.getCpuQuota());
-            if (params.getTag() == null) {
-                addQueryParamIfNotNull(connection, "t", repository);
-            } else {
-                addQueryParamIfNotNull(connection, "t", repository == null ? null : repository + ':' + params.getTag());
-            }
-            if (params.getBuildArgs() != null) {
-                addQueryParamIfNotNull(connection, "buildargs", URLEncoder.encode(GSON.toJson(params.getBuildArgs()), "UTF-8"));
-            }
+    try (DockerConnection connection =
+        dockerConnection
+            .method("POST")
+            .path(apiVersionPathPrefix + "/build")
+            .header(
+                "X-Registry-Config",
+                authResolver.getXRegistryConfigHeaderValue(params.getAuthConfigs()))) {
+      addQueryParamIfNotNull(connection, "rm", params.isRemoveIntermediateContainer());
+      addQueryParamIfNotNull(connection, "forcerm", params.isForceRemoveIntermediateContainers());
+      addQueryParamIfNotNull(connection, "memory", params.getMemoryLimit());
+      addQueryParamIfNotNull(connection, "memswap", params.getMemorySwapLimit());
+      addQueryParamIfNotNull(connection, "pull", params.isDoForcePull());
+      addQueryParamIfNotNull(connection, "dockerfile", params.getDockerfile());
+      addQueryParamIfNotNull(connection, "nocache", params.isNoCache());
+      addQueryParamIfNotNull(connection, "q", params.isQuiet());
+      addQueryParamIfNotNull(connection, "cpusetcpus", params.getCpusetCpus());
+      addQueryParamIfNotNull(connection, "cpuperiod", params.getCpuPeriod());
+      addQueryParamIfNotNull(connection, "cpuquota", params.getCpuQuota());
+      if (params.getTag() == null) {
+        addQueryParamIfNotNull(connection, "t", repository);
+      } else {
+        addQueryParamIfNotNull(
+            connection, "t", repository == null ? null : repository + ':' + params.getTag());
+      }
+      if (params.getBuildArgs() != null) {
+        addQueryParamIfNotNull(
+            connection,
+            "buildargs",
+            URLEncoder.encode(GSON.toJson(params.getBuildArgs()), "UTF-8"));
+      }
 
-            final DockerResponse response = connection.request();
-            if (OK.getStatusCode() != response.getStatus()) {
-                throw getDockerException(response);
-            }
+      final DockerResponse response = connection.request();
+      if (OK.getStatusCode() != response.getStatus()) {
+        throw getDockerException(response);
+      }
 
-            try (InputStream responseStream = response.getInputStream()) {
-                JsonMessageReader<ProgressStatus> progressReader = new JsonMessageReader<>(responseStream, ProgressStatus.class);
+      try (InputStream responseStream = response.getInputStream()) {
+        JsonMessageReader<ProgressStatus> progressReader =
+            new JsonMessageReader<>(responseStream, ProgressStatus.class);
 
-                // Here do some trick to be able interrupt output streaming process.
-                // Current unix socket implementation of DockerConnection doesn't react to interruption.
-                // So to be able to close unix socket connection and free resources we use main thread.
-                // In case of any exception main thread cancels future and close connection.
-                // If Docker connection implementation supports interrupting it will stop streaming on interruption,
-                // if not it will be stopped by closure of unix socket
-                Future<String> imageIdFuture = executor.submit(() -> {
-                    ProgressStatus progressStatus;
-                    while ((progressStatus = progressReader.next()) != null) {
-                        if (progressStatus.getError() != null) {
-                            String errorMessage = progressStatus.getError();
-                            if (errorMessage.matches("Error: image .+ not found")) {
-                                throw new ImageNotFoundException(errorMessage);
-                            }
-                        }
-                        final String buildImageId = getBuildImageId(progressStatus);
-                        if (buildImageId != null) {
-                            return buildImageId;
-                        }
-                        progressMonitor.updateProgress(progressStatus);
+        // Here do some trick to be able interrupt output streaming process.
+        // Current unix socket implementation of DockerConnection doesn't react to interruption.
+        // So to be able to close unix socket connection and free resources we use main thread.
+        // In case of any exception main thread cancels future and close connection.
+        // If Docker connection implementation supports interrupting it will stop streaming on interruption,
+        // if not it will be stopped by closure of unix socket
+        Future<String> imageIdFuture =
+            executor.submit(
+                () -> {
+                  ProgressStatus progressStatus;
+                  while ((progressStatus = progressReader.next()) != null) {
+                    if (progressStatus.getError() != null) {
+                      String errorMessage = progressStatus.getError();
+                      if (errorMessage.matches("Error: image .+ not found")) {
+                        throw new ImageNotFoundException(errorMessage);
+                      }
                     }
+                    final String buildImageId = getBuildImageId(progressStatus);
+                    if (buildImageId != null) {
+                      return buildImageId;
+                    }
+                    progressMonitor.updateProgress(progressStatus);
+                  }
 
-                    throw new DockerException("Docker image build failed. Image id not found in build output.", 500);
+                  throw new DockerException(
+                      "Docker image build failed. Image id not found in build output.", 500);
                 });
 
-                return imageIdFuture.get();
-            } catch (ExecutionException e) {
-                // unwrap exception thrown by task with .getCause()
-                if (e.getCause() instanceof ImageNotFoundException) {
-                    throw new ImageNotFoundException(e.getCause().getLocalizedMessage());
-                } else {
-                    throw new DockerException(e.getCause().getLocalizedMessage(), 500);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new DockerException("Docker image build was interrupted", 500);
-            }
+        return imageIdFuture.get();
+      } catch (ExecutionException e) {
+        // unwrap exception thrown by task with .getCause()
+        if (e.getCause() instanceof ImageNotFoundException) {
+          throw new ImageNotFoundException(e.getCause().getLocalizedMessage());
+        } else {
+          throw new DockerException(e.getCause().getLocalizedMessage(), 500);
         }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new DockerException("Docker image build was interrupted", 500);
+      }
     }
+  }
 

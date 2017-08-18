@@ -1,61 +1,61 @@
-    private int[] getChildProcesses(final int myPid) {
-        final String ps = "ps -e -o ppid,pid,comm"; /* PPID, PID, COMMAND */
-        final List<Integer> children = new ArrayList<>();
-        final StringBuilder error = new StringBuilder();
-        final LineConsumer stdout = new LineConsumer() {
-            @Override
-            public void writeLine(String line) throws IOException {
-                if (line != null && !line.isEmpty()) {
-                    final String[] tokens = UNIX_PS_TABLE_PATTERN.split(line.trim());
-                    if (tokens.length == 3 /* PPID, PID, COMMAND */) {
-                        int ppid;
-                        try {
-                            ppid = Integer.parseInt(tokens[0]);
-                        } catch (NumberFormatException e) {
-                            // May be first line from process table: 'PPID PID COMMAND'. Skip it.
-                            return;
-                        }
-                        if (ppid == myPid) {
-                            int pid = Integer.parseInt(tokens[1]);
-                            children.add(pid);
-                        }
-                    }
+  private int[] getChildProcesses(final int myPid) {
+    final String ps = "ps -e -o ppid,pid,comm"; /* PPID, PID, COMMAND */
+    final List<Integer> children = new ArrayList<>();
+    final StringBuilder error = new StringBuilder();
+    final LineConsumer stdout =
+        new LineConsumer() {
+          @Override
+          public void writeLine(String line) throws IOException {
+            if (line != null && !line.isEmpty()) {
+              final String[] tokens = UNIX_PS_TABLE_PATTERN.split(line.trim());
+              if (tokens.length == 3 /* PPID, PID, COMMAND */) {
+                int ppid;
+                try {
+                  ppid = Integer.parseInt(tokens[0]);
+                } catch (NumberFormatException e) {
+                  // May be first line from process table: 'PPID PID COMMAND'. Skip it.
+                  return;
                 }
+                if (ppid == myPid) {
+                  int pid = Integer.parseInt(tokens[1]);
+                  children.add(pid);
+                }
+              }
             }
+          }
 
-            @Override
-            public void close() throws IOException {
-            }
+          @Override
+          public void close() throws IOException {}
         };
 
-        final LineConsumer stderr = new LineConsumer() {
-            @Override
-            public void writeLine(String line) throws IOException {
-                if (error.length() > 0) {
-                    error.append('\n');
-                }
-                error.append(line);
+    final LineConsumer stderr =
+        new LineConsumer() {
+          @Override
+          public void writeLine(String line) throws IOException {
+            if (error.length() > 0) {
+              error.append('\n');
             }
+            error.append(line);
+          }
 
-            @Override
-            public void close() throws IOException {
-            }
+          @Override
+          public void close() throws IOException {}
         };
 
-        try {
-            ProcessUtil.process(Runtime.getRuntime().exec(ps), stdout, stderr);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-
-        if (error.length() > 0) {
-            throw new IllegalStateException("can't get child processes: " + error.toString());
-        }
-        final int size = children.size();
-        final int[] result = new int[size];
-        for (int i = 0; i < size; i++) {
-            result[i] = children.get(i);
-        }
-        return result;
+    try {
+      ProcessUtil.process(Runtime.getRuntime().exec(ps), stdout, stderr);
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
     }
+
+    if (error.length() > 0) {
+      throw new IllegalStateException("can't get child processes: " + error.toString());
+    }
+    final int size = children.size();
+    final int[] result = new int[size];
+    for (int i = 0; i < size; i++) {
+      result[i] = children.get(i);
+    }
+    return result;
+  }
 

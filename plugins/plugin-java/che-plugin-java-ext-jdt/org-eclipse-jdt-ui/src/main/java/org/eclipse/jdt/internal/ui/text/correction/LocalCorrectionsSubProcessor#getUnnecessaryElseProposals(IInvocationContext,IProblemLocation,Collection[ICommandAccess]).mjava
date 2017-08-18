@@ -1,48 +1,52 @@
-	public static void getUnnecessaryElseProposals(IInvocationContext context, IProblemLocation problem,
-												   Collection<ICommandAccess> proposals) {
-		CompilationUnit root = context.getASTRoot();
-		ASTNode selectedNode = problem.getCoveringNode(root);
-		if (selectedNode == null) {
-			return;
-		}
-		ASTNode parent = selectedNode.getParent();
-		if (parent instanceof ExpressionStatement) {
-			parent = parent.getParent();
-		}
-		if (!(parent instanceof IfStatement)) {
-			return;
-		}
-		IfStatement ifStatement = (IfStatement)parent;
-		ASTNode ifParent = ifStatement.getParent();
-		if (!(ifParent instanceof Block) && !(ifParent instanceof SwitchStatement) &&
-			!ASTNodes.isControlStatementBody(ifStatement.getLocationInParent())) {
-			return;
-		}
+  public static void getUnnecessaryElseProposals(
+      IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) {
+    CompilationUnit root = context.getASTRoot();
+    ASTNode selectedNode = problem.getCoveringNode(root);
+    if (selectedNode == null) {
+      return;
+    }
+    ASTNode parent = selectedNode.getParent();
+    if (parent instanceof ExpressionStatement) {
+      parent = parent.getParent();
+    }
+    if (!(parent instanceof IfStatement)) {
+      return;
+    }
+    IfStatement ifStatement = (IfStatement) parent;
+    ASTNode ifParent = ifStatement.getParent();
+    if (!(ifParent instanceof Block)
+        && !(ifParent instanceof SwitchStatement)
+        && !ASTNodes.isControlStatementBody(ifStatement.getLocationInParent())) {
+      return;
+    }
 
-		ASTRewrite rewrite = ASTRewrite.create(root.getAST());
-		ASTNode placeholder = QuickAssistProcessor.getCopyOfInner(rewrite, ifStatement.getElseStatement(), false);
-		if (placeholder == null) {
-			return;
-		}
-		rewrite.remove(ifStatement.getElseStatement(), null);
+    ASTRewrite rewrite = ASTRewrite.create(root.getAST());
+    ASTNode placeholder =
+        QuickAssistProcessor.getCopyOfInner(rewrite, ifStatement.getElseStatement(), false);
+    if (placeholder == null) {
+      return;
+    }
+    rewrite.remove(ifStatement.getElseStatement(), null);
 
-		if (ifParent instanceof Block) {
-			ListRewrite listRewrite = rewrite.getListRewrite(ifParent, Block.STATEMENTS_PROPERTY);
-			listRewrite.insertAfter(placeholder, ifStatement, null);
-		} else if (ifParent instanceof SwitchStatement) {
-			ListRewrite listRewrite = rewrite.getListRewrite(ifParent, SwitchStatement.STATEMENTS_PROPERTY);
-			listRewrite.insertAfter(placeholder, ifStatement, null);
-		} else {
-			Block block = root.getAST().newBlock();
-			rewrite.replace(ifStatement, block, null);
-			block.statements().add(rewrite.createCopyTarget(ifStatement));
-			block.statements().add(placeholder);
-		}
+    if (ifParent instanceof Block) {
+      ListRewrite listRewrite = rewrite.getListRewrite(ifParent, Block.STATEMENTS_PROPERTY);
+      listRewrite.insertAfter(placeholder, ifStatement, null);
+    } else if (ifParent instanceof SwitchStatement) {
+      ListRewrite listRewrite =
+          rewrite.getListRewrite(ifParent, SwitchStatement.STATEMENTS_PROPERTY);
+      listRewrite.insertAfter(placeholder, ifStatement, null);
+    } else {
+      Block block = root.getAST().newBlock();
+      rewrite.replace(ifStatement, block, null);
+      block.statements().add(rewrite.createCopyTarget(ifStatement));
+      block.statements().add(placeholder);
+    }
 
-		String label = CorrectionMessages.LocalCorrectionsSubProcessor_removeelse_description;
-		Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-		ASTRewriteCorrectionProposal proposal =
-				new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.REMOVE_ELSE, image);
-		proposals.add(proposal);
-	}
+    String label = CorrectionMessages.LocalCorrectionsSubProcessor_removeelse_description;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    ASTRewriteCorrectionProposal proposal =
+        new ASTRewriteCorrectionProposal(
+            label, context.getCompilationUnit(), rewrite, IProposalRelevance.REMOVE_ELSE, image);
+    proposals.add(proposal);
+  }
 

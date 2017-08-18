@@ -1,55 +1,66 @@
-    @Inject
-    public MavenWorkspace(MavenProjectManager manager,
-                          MavenProgressNotifier notifier,
-                          MavenExecutorService executorService,
-                          Provider<ProjectRegistry> projectRegistryProvider,
-                          ClasspathManager classpathManager,
-                          EventService eventService,
-                          EclipseWorkspaceProvider workspaceProvider) {
-        this.projectRegistryProvider = projectRegistryProvider;
-        this.classpathManager = classpathManager;
-        this.manager = manager;
-        resolveExecutor = new MavenTaskExecutor(executorService, notifier);
-        eventService.subscribe(new EventSubscriber<ProjectDeletedEvent>() {
-            @Override
-            public void onEvent(ProjectDeletedEvent event) {
-                IProject project = workspaceProvider.get().getRoot().getProject(event.getProjectPath());
-                manager.delete(Collections.singletonList(project));
-            }
+  @Inject
+  public MavenWorkspace(
+      MavenProjectManager manager,
+      MavenProgressNotifier notifier,
+      MavenExecutorService executorService,
+      Provider<ProjectRegistry> projectRegistryProvider,
+      ClasspathManager classpathManager,
+      EventService eventService,
+      EclipseWorkspaceProvider workspaceProvider) {
+    this.projectRegistryProvider = projectRegistryProvider;
+    this.classpathManager = classpathManager;
+    this.manager = manager;
+    resolveExecutor = new MavenTaskExecutor(executorService, notifier);
+    eventService.subscribe(
+        new EventSubscriber<ProjectDeletedEvent>() {
+          @Override
+          public void onEvent(ProjectDeletedEvent event) {
+            IProject project = workspaceProvider.get().getRoot().getProject(event.getProjectPath());
+            manager.delete(Collections.singletonList(project));
+          }
         });
-        manager.addListener(new MavenProjectListener() {
-            @Override
-            public void projectResolved(MavenProject project, MavenProjectModifications modifications) {
-//                communication.sendUpdateMassage(Collections.emptySet(), Collections.emptyList());
-            }
+    manager.addListener(
+        new MavenProjectListener() {
+          @Override
+          public void projectResolved(
+              MavenProject project, MavenProjectModifications modifications) {
+            //                communication.sendUpdateMassage(Collections.emptySet(), Collections.emptyList());
+          }
 
-            @Override
-            public void projectUpdated(Map<MavenProject, MavenProjectModifications> updated,
-                                       List<MavenProject> removed) {
-                removeProjects(removed);
-                createNewProjects(updated.keySet());
+          @Override
+          public void projectUpdated(
+              Map<MavenProject, MavenProjectModifications> updated, List<MavenProject> removed) {
+            removeProjects(removed);
+            createNewProjects(updated.keySet());
 
-                List<MavenProject> allChangedProjects = new ArrayList<>(updated.keySet().size() + removed.size());
-                allChangedProjects.addAll(updated.keySet());
-                allChangedProjects.addAll(removed);
-                List<MavenProject> needResolve = manager.findDependentProjects(allChangedProjects);
-                needResolve.addAll(updated.keySet());
+            List<MavenProject> allChangedProjects =
+                new ArrayList<>(updated.keySet().size() + removed.size());
+            allChangedProjects.addAll(updated.keySet());
+            allChangedProjects.addAll(removed);
+            List<MavenProject> needResolve = manager.findDependentProjects(allChangedProjects);
+            needResolve.addAll(updated.keySet());
 
-                List<String> updatedPaths = updated.keySet().stream()
-                                                   .map(MavenProject::getProject)
-                                                   .map(IResource::getFullPath)
-                                                   .map(IPath::toOSString)
-                                                   .collect(toList());
-                List<String> removedPaths = removed.stream()
-                                                   .map(MavenProject::getProject)
-                                                   .map(IResource::getFullPath)
-                                                   .map(IPath::toOSString)
-                                                   .collect(toList());
+            List<String> updatedPaths =
+                updated
+                    .keySet()
+                    .stream()
+                    .map(MavenProject::getProject)
+                    .map(IResource::getFullPath)
+                    .map(IPath::toOSString)
+                    .collect(toList());
+            List<String> removedPaths =
+                removed
+                    .stream()
+                    .map(MavenProject::getProject)
+                    .map(IResource::getFullPath)
+                    .map(IPath::toOSString)
+                    .collect(toList());
 
-                addResolveProjects(needResolve);
+            addResolveProjects(needResolve);
 
-                eventService.publish(new MavenUpdateEventImpl(updatedPaths, removedPaths, MavenOutputEvent.TYPE.UPDATE));
-            }
+            eventService.publish(
+                new MavenUpdateEventImpl(updatedPaths, removedPaths, MavenOutputEvent.TYPE.UPDATE));
+          }
         });
-    }
+  }
 

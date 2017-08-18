@@ -1,29 +1,34 @@
-	/*
-	 * @see org.eclipse.ltk.core.refactoring.Change#isValid(org.eclipse.core.runtime.IProgressMonitor)
-	 */
-	public final RefactoringStatus isValid(IProgressMonitor monitor) throws CoreException, OperationCanceledException {
-		if (monitor == null)
-			monitor= new NullProgressMonitor();
-		monitor.beginTask("", 1); //$NON-NLS-1$
-		try {
-			if (fValidationState == null)
-				throw new CoreException(new Status(IStatus.ERROR, RefactoringCorePlugin.getPluginId(), "MultiStateTextFileChange has not been initialialized")); //$NON-NLS-1$
+  /*
+   * @see org.eclipse.ltk.core.refactoring.Change#isValid(org.eclipse.core.runtime.IProgressMonitor)
+   */
+  public final RefactoringStatus isValid(IProgressMonitor monitor)
+      throws CoreException, OperationCanceledException {
+    if (monitor == null) monitor = new NullProgressMonitor();
+    monitor.beginTask("", 1); //$NON-NLS-1$
+    try {
+      if (fValidationState == null)
+        throw new CoreException(
+            new Status(
+                IStatus.ERROR,
+                RefactoringCorePlugin.getPluginId(),
+                "MultiStateTextFileChange has not been initialialized")); //$NON-NLS-1$
 
+      final ITextFileBuffer buffer =
+          FileBuffers.getTextFileBufferManager()
+              .getTextFileBuffer(fFile.getFullPath(), LocationKind.IFILE);
+      fDirty = buffer != null && buffer.isDirty();
 
-			final ITextFileBuffer buffer= FileBuffers.getTextFileBufferManager().getTextFileBuffer(fFile.getFullPath(), LocationKind.IFILE);
-			fDirty= buffer != null && buffer.isDirty();
+      final RefactoringStatus status = fValidationState.isValid(needsSaving());
+      if (needsSaving()) {
+        status.merge(Changes.validateModifiesFiles(new IFile[] {fFile}));
+      } else {
+        // we are reading the file. So it should be at least in sync
+        status.merge(Changes.checkInSync(new IFile[] {fFile}));
+      }
 
-			final RefactoringStatus status= fValidationState.isValid(needsSaving());
-			if (needsSaving()) {
-				status.merge(Changes.validateModifiesFiles(new IFile[] { fFile }));
-			} else {
-				// we are reading the file. So it should be at least in sync
-				status.merge(Changes.checkInSync(new IFile[] { fFile }));
-			}
-
-			return status;
-		} finally {
-			monitor.done();
-		}
-	}
+      return status;
+    } finally {
+      monitor.done();
+    }
+  }
 

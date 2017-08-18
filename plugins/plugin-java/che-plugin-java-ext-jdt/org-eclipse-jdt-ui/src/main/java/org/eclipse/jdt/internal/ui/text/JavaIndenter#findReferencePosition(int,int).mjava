@@ -1,111 +1,111 @@
-	/**
-	 * Returns the reference position regarding to indentation for <code>position</code>,
-	 * or <code>NOT_FOUND</code>.
-	 *
-	 * <p>If <code>peekNextChar</code> is <code>true</code>, the next token after
-	 * <code>offset</code> is read and taken into account when computing the
-	 * indentation. Currently, if the next token is the first token on the line
-	 * (i.e. only preceded by whitespace), the following tokens are specially
-	 * handled:
-	 * <ul>
-	 * 	<li><code>switch</code> labels are indented relative to the switch block</li>
-	 * 	<li>opening curly braces are aligned correctly with the introducing code</li>
-	 * 	<li>closing curly braces are aligned properly with the introducing code of
-	 * 		the matching opening brace</li>
-	 * 	<li>closing parenthesis' are aligned with their opening peer</li>
-	 * 	<li>the <code>else</code> keyword is aligned with its <code>if</code>, anything
-	 * 		else is aligned normally (i.e. with the base of any introducing statements).</li>
-	 *  <li>if there is no token on the same line after <code>offset</code>, the indentation
-	 * 		is the same as for an <code>else</code> keyword</li>
-	 * </ul>
-	 *
-	 * @param offset the offset for which the reference is computed
-	 * @param nextToken the next token to assume in the document
-	 * @return the reference statement relative to which <code>offset</code>
-	 *         should be indented, or {@link JavaHeuristicScanner#NOT_FOUND}
-	 */
-	public int findReferencePosition(int offset, int nextToken) {
-		boolean danglingElse = false;
-		boolean unindent = false;
-		boolean indent = false;
-		boolean matchBrace = false;
-		boolean matchParen = false;
-		boolean matchCase = false;
-		boolean throwsClause = false;
+  /**
+   * Returns the reference position regarding to indentation for <code>position</code>, or <code>
+   * NOT_FOUND</code>.
+   *
+   * <p>If <code>peekNextChar</code> is <code>true</code>, the next token after <code>offset</code>
+   * is read and taken into account when computing the indentation. Currently, if the next token is
+   * the first token on the line (i.e. only preceded by whitespace), the following tokens are
+   * specially handled:
+   *
+   * <ul>
+   *   <li><code>switch</code> labels are indented relative to the switch block
+   *   <li>opening curly braces are aligned correctly with the introducing code
+   *   <li>closing curly braces are aligned properly with the introducing code of the matching
+   *       opening brace
+   *   <li>closing parenthesis' are aligned with their opening peer
+   *   <li>the <code>else</code> keyword is aligned with its <code>if</code>, anything else is
+   *       aligned normally (i.e. with the base of any introducing statements).
+   *   <li>if there is no token on the same line after <code>offset</code>, the indentation is the
+   *       same as for an <code>else</code> keyword
+   * </ul>
+   *
+   * @param offset the offset for which the reference is computed
+   * @param nextToken the next token to assume in the document
+   * @return the reference statement relative to which <code>offset</code> should be indented, or
+   *     {@link JavaHeuristicScanner#NOT_FOUND}
+   */
+  public int findReferencePosition(int offset, int nextToken) {
+    boolean danglingElse = false;
+    boolean unindent = false;
+    boolean indent = false;
+    boolean matchBrace = false;
+    boolean matchParen = false;
+    boolean matchCase = false;
+    boolean throwsClause = false;
 
-		// account for un-indentation characters already typed in, but after position
-		// if they are on a line by themselves, the indentation gets adjusted
-		// accordingly
-		//
-		// also account for a dangling else
-		if (offset < fDocument.getLength()) {
-			try {
-				IRegion line= fDocument.getLineInformationOfOffset(offset);
-				int lineOffset= line.getOffset();
-				int prevPos= Math.max(offset - 1, 0);
-				boolean isFirstTokenOnLine= fDocument.get(lineOffset, prevPos + 1 - lineOffset).trim().length() == 0;
-				int prevToken= fScanner.previousToken(prevPos, JavaHeuristicScanner.UNBOUND);
-				boolean bracelessBlockStart= fScanner.isBracelessBlockStart(prevPos, JavaHeuristicScanner.UNBOUND);
+    // account for un-indentation characters already typed in, but after position
+    // if they are on a line by themselves, the indentation gets adjusted
+    // accordingly
+    //
+    // also account for a dangling else
+    if (offset < fDocument.getLength()) {
+      try {
+        IRegion line = fDocument.getLineInformationOfOffset(offset);
+        int lineOffset = line.getOffset();
+        int prevPos = Math.max(offset - 1, 0);
+        boolean isFirstTokenOnLine =
+            fDocument.get(lineOffset, prevPos + 1 - lineOffset).trim().length() == 0;
+        int prevToken = fScanner.previousToken(prevPos, JavaHeuristicScanner.UNBOUND);
+        boolean bracelessBlockStart =
+            fScanner.isBracelessBlockStart(prevPos, JavaHeuristicScanner.UNBOUND);
 
-				switch (nextToken) {
-					case Symbols.TokenELSE:
-						danglingElse= true;
-						break;
-					case Symbols.TokenDEFAULT:
-						fScanner.nextToken(offset, lineOffset + line.getLength());
-						int next= fScanner.nextToken(fScanner.getPosition(), JavaHeuristicScanner.UNBOUND);
-						if (next != Symbols.TokenCOLON) {
-							break;
-						}
-						//$FALL-THROUGH$
-					case Symbols.TokenCASE:
-						if (isFirstTokenOnLine)
-							matchCase= true;
-						break;
-					case Symbols.TokenLBRACE: // for opening-brace-on-new-line style
-						if (bracelessBlockStart && !fPrefs.prefIndentBracesForBlocks)
-							unindent= true;
-						else if ((prevToken == Symbols.TokenCOLON || prevToken == Symbols.TokenEQUAL) && !fPrefs.prefIndentBracesForArrays)
-							unindent= true;
-						else if (!bracelessBlockStart && fPrefs.prefIndentBracesForMethods)
-							indent= true;
-						break;
-					case Symbols.TokenRBRACE: // closing braces get unindented
-						if (isFirstTokenOnLine)
-							matchBrace= true;
-						break;
-					case Symbols.TokenRPAREN:
-						if (isFirstTokenOnLine)
-							matchParen= true;
-						break;
-					case Symbols.TokenTHROWS:
-						throwsClause= true;
-						break;
-					case Symbols.TokenPLUS:
-						if (isStringContinuation(offset)) {
-							if (isSecondLineOfStringContinuation(offset)) {
-								fAlign= JavaHeuristicScanner.NOT_FOUND;
-								fIndent= fPrefs.prefContinuationIndent;
-							} else {
-								int previousLineOffset= fDocument.getLineOffset(fDocument.getLineOfOffset(offset) - 1);
-								fAlign= fScanner.findNonWhitespaceForwardInAnyPartition(previousLineOffset, JavaHeuristicScanner.UNBOUND);
-							}
-							return fPosition;
-						}
-						break;
-				}
-			} catch (BadLocationException e) {
-			}
-		} else {
-			// don't assume an else could come if we are at the end of file
-			danglingElse= false;
-		}
+        switch (nextToken) {
+          case Symbols.TokenELSE:
+            danglingElse = true;
+            break;
+          case Symbols.TokenDEFAULT:
+            fScanner.nextToken(offset, lineOffset + line.getLength());
+            int next = fScanner.nextToken(fScanner.getPosition(), JavaHeuristicScanner.UNBOUND);
+            if (next != Symbols.TokenCOLON) {
+              break;
+            }
+            //$FALL-THROUGH$
+          case Symbols.TokenCASE:
+            if (isFirstTokenOnLine) matchCase = true;
+            break;
+          case Symbols.TokenLBRACE: // for opening-brace-on-new-line style
+            if (bracelessBlockStart && !fPrefs.prefIndentBracesForBlocks) unindent = true;
+            else if ((prevToken == Symbols.TokenCOLON || prevToken == Symbols.TokenEQUAL)
+                && !fPrefs.prefIndentBracesForArrays) unindent = true;
+            else if (!bracelessBlockStart && fPrefs.prefIndentBracesForMethods) indent = true;
+            break;
+          case Symbols.TokenRBRACE: // closing braces get unindented
+            if (isFirstTokenOnLine) matchBrace = true;
+            break;
+          case Symbols.TokenRPAREN:
+            if (isFirstTokenOnLine) matchParen = true;
+            break;
+          case Symbols.TokenTHROWS:
+            throwsClause = true;
+            break;
+          case Symbols.TokenPLUS:
+            if (isStringContinuation(offset)) {
+              if (isSecondLineOfStringContinuation(offset)) {
+                fAlign = JavaHeuristicScanner.NOT_FOUND;
+                fIndent = fPrefs.prefContinuationIndent;
+              } else {
+                int previousLineOffset =
+                    fDocument.getLineOffset(fDocument.getLineOfOffset(offset) - 1);
+                fAlign =
+                    fScanner.findNonWhitespaceForwardInAnyPartition(
+                        previousLineOffset, JavaHeuristicScanner.UNBOUND);
+              }
+              return fPosition;
+            }
+            break;
+        }
+      } catch (BadLocationException e) {
+      }
+    } else {
+      // don't assume an else could come if we are at the end of file
+      danglingElse = false;
+    }
 
-		int ref= findReferencePosition(offset, danglingElse, matchBrace, matchParen, matchCase, throwsClause);
-		if (unindent)
-			fIndent--;
-		if (indent)
-			fIndent++;
-		return ref;
-	}
+    int ref =
+        findReferencePosition(
+            offset, danglingElse, matchBrace, matchParen, matchCase, throwsClause);
+    if (unindent) fIndent--;
+    if (indent) fIndent++;
+    return ref;
+  }
 

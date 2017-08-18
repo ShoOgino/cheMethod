@@ -1,32 +1,33 @@
-    public void testConcurrentExclusiveLocks() throws Throwable {
-        final AtomicInteger acquired = new AtomicInteger(0);
-        final CountDownLatch waiter = new CountDownLatch(3);
-        final List<Throwable> errors = new ArrayList<>(3);
-        Runnable task = new Runnable() {
-            @Override
-            public void run() {
-                PathLockFactory.PathLock exclusiveLock = pathLockFactory.getLock(path, true);
-                try {
-                    exclusiveLock.acquire();
-                    // Only one thread has exclusive access
-                    assertEquals(0, acquired.getAndIncrement());
-                    Thread.sleep(100);
-                } catch (Throwable e) {
-                    errors.add(e);
-                } finally {
-                    acquired.getAndDecrement();
-                    exclusiveLock.release();
-                    waiter.countDown();
-                }
+  public void testConcurrentExclusiveLocks() throws Throwable {
+    final AtomicInteger acquired = new AtomicInteger(0);
+    final CountDownLatch waiter = new CountDownLatch(3);
+    final List<Throwable> errors = new ArrayList<>(3);
+    Runnable task =
+        new Runnable() {
+          @Override
+          public void run() {
+            PathLockFactory.PathLock exclusiveLock = pathLockFactory.getLock(path, true);
+            try {
+              exclusiveLock.acquire();
+              // Only one thread has exclusive access
+              assertEquals(0, acquired.getAndIncrement());
+              Thread.sleep(100);
+            } catch (Throwable e) {
+              errors.add(e);
+            } finally {
+              acquired.getAndDecrement();
+              exclusiveLock.release();
+              waiter.countDown();
             }
+          }
         };
-        new Thread(task).start();
-        new Thread(task).start();
-        new Thread(task).start();
-        waiter.await();
-        assertEquals(0, acquired.get()); // all locks must be released
-        if (!errors.isEmpty()) {
-            throw errors.get(0);
-        }
+    new Thread(task).start();
+    new Thread(task).start();
+    new Thread(task).start();
+    waiter.await();
+    assertEquals(0, acquired.get()); // all locks must be released
+    if (!errors.isEmpty()) {
+      throw errors.get(0);
     }
+  }
 

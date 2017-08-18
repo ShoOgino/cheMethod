@@ -1,55 +1,54 @@
-    /**
-     * Builds Docker image for container creation.
-     *
-     * @param containerConfig
-     *         configuration of container
-     * @param machineImageName
-     *         name of image that should be applied to built image
-     * @param doForcePullOnBuild
-     *         whether re-pulling of base image should be performed when it exists locally
-     * @param progressMonitor
-     *         consumer of build logs
-     * @throws InternalInfrastructureException
-     *         when any error occurs
-     */
-    protected void buildImage(DockerContainerConfig containerConfig,
-                              String machineImageName,
-                              boolean doForcePullOnBuild,
-                              ProgressMonitor progressMonitor)
-            throws InternalInfrastructureException {
+  /**
+   * Builds Docker image for container creation.
+   *
+   * @param containerConfig configuration of container
+   * @param machineImageName name of image that should be applied to built image
+   * @param doForcePullOnBuild whether re-pulling of base image should be performed when it exists
+   *     locally
+   * @param progressMonitor consumer of build logs
+   * @throws InternalInfrastructureException when any error occurs
+   */
+  protected void buildImage(
+      DockerContainerConfig containerConfig,
+      String machineImageName,
+      boolean doForcePullOnBuild,
+      ProgressMonitor progressMonitor)
+      throws InternalInfrastructureException {
 
-        File workDir = null;
-        try {
-            BuildImageParams buildImageParams;
-            if (containerConfig.getBuild() != null &&
-                containerConfig.getBuild().getDockerfileContent() != null) {
+    File workDir = null;
+    try {
+      BuildImageParams buildImageParams;
+      if (containerConfig.getBuild() != null
+          && containerConfig.getBuild().getDockerfileContent() != null) {
 
-                workDir = Files.createTempDirectory(null).toFile();
-                final File dockerfileFile = new File(workDir, "Dockerfile");
-                try (FileWriter output = new FileWriter(dockerfileFile)) {
-                    output.append(containerConfig.getBuild().getDockerfileContent());
-                }
-
-                buildImageParams = BuildImageParams.create(dockerfileFile);
-            } else {
-                buildImageParams = BuildImageParams.create(containerConfig.getBuild().getContext())
-                                                   .withDockerfile(containerConfig.getBuild().getDockerfilePath());
-            }
-            buildImageParams.withForceRemoveIntermediateContainers(true)
-                            .withRepository(machineImageName)
-                            .withAuthConfigs(dockerCredentials.getCredentials())
-                            .withDoForcePull(doForcePullOnBuild)
-                            .withMemoryLimit(containerConfig.getMemLimit())
-                            .withMemorySwapLimit(-1)
-                            .withBuildArgs(containerConfig.getBuild().getArgs());
-
-            docker.buildImage(buildImageParams, progressMonitor);
-        } catch (IOException e) {
-            throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
-        } finally {
-            if (workDir != null) {
-                FileCleaner.addFile(workDir);
-            }
+        workDir = Files.createTempDirectory(null).toFile();
+        final File dockerfileFile = new File(workDir, "Dockerfile");
+        try (FileWriter output = new FileWriter(dockerfileFile)) {
+          output.append(containerConfig.getBuild().getDockerfileContent());
         }
+
+        buildImageParams = BuildImageParams.create(dockerfileFile);
+      } else {
+        buildImageParams =
+            BuildImageParams.create(containerConfig.getBuild().getContext())
+                .withDockerfile(containerConfig.getBuild().getDockerfilePath());
+      }
+      buildImageParams
+          .withForceRemoveIntermediateContainers(true)
+          .withRepository(machineImageName)
+          .withAuthConfigs(dockerCredentials.getCredentials())
+          .withDoForcePull(doForcePullOnBuild)
+          .withMemoryLimit(containerConfig.getMemLimit())
+          .withMemorySwapLimit(-1)
+          .withBuildArgs(containerConfig.getBuild().getArgs());
+
+      docker.buildImage(buildImageParams, progressMonitor);
+    } catch (IOException e) {
+      throw new InternalInfrastructureException(e.getLocalizedMessage(), e);
+    } finally {
+      if (workDir != null) {
+        FileCleaner.addFile(workDir);
+      }
     }
+  }
 

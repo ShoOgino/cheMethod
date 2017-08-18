@@ -1,37 +1,44 @@
-    private HoverDto hover(TextDocumentPositionParams positionParams) {
-        String uri = prefixURI(positionParams.getTextDocument().getUri());
-        positionParams.getTextDocument().setUri(uri);
-        positionParams.setUri(prefixURI(positionParams.getUri()));
-        HoverDto result = new HoverDto();
-        result.setContents(new ArrayList<>());
-        try {
+  private HoverDto hover(TextDocumentPositionParams positionParams) {
+    String uri = prefixURI(positionParams.getTextDocument().getUri());
+    positionParams.getTextDocument().setUri(uri);
+    positionParams.setUri(prefixURI(positionParams.getUri()));
+    HoverDto result = new HoverDto();
+    result.setContents(new ArrayList<>());
+    try {
 
-            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
-                            .flatMap(Collection::stream).collect(Collectors.toList());
-            OperationUtil.doInParallel(servers, new LSOperation<InitializedLanguageServer, Hover>() {
+      List<InitializedLanguageServer> servers =
+          languageServerRegistry
+              .getApplicableLanguageServers(uri)
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      OperationUtil.doInParallel(
+          servers,
+          new LSOperation<InitializedLanguageServer, Hover>() {
 
-                @Override
-                public boolean canDo(InitializedLanguageServer element) {
-                    return truish(element.getInitializeResult().getCapabilities().getHoverProvider());
-                }
+            @Override
+            public boolean canDo(InitializedLanguageServer element) {
+              return truish(element.getInitializeResult().getCapabilities().getHoverProvider());
+            }
 
-                @Override
-                public CompletableFuture<Hover> start(InitializedLanguageServer element) {
-                    return element.getServer().getTextDocumentService().hover(positionParams);
-                }
+            @Override
+            public CompletableFuture<Hover> start(InitializedLanguageServer element) {
+              return element.getServer().getTextDocumentService().hover(positionParams);
+            }
 
-                @Override
-                public boolean handleResult(InitializedLanguageServer element, Hover hover) {
-                    if (hover != null) {
-                        HoverDto hoverDto = new HoverDto(hover);
-                        result.getContents().addAll(hoverDto.getContents());
-                    }
-                    return true;
-                }
-            }, 10000);
-            return result;
-        } catch (LanguageServerException e) {
-            throw new JsonRpcException(-27000, e.getMessage());
-        }
+            @Override
+            public boolean handleResult(InitializedLanguageServer element, Hover hover) {
+              if (hover != null) {
+                HoverDto hoverDto = new HoverDto(hover);
+                result.getContents().addAll(hoverDto.getContents());
+              }
+              return true;
+            }
+          },
+          10000);
+      return result;
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
     }
+  }
 

@@ -1,39 +1,42 @@
-    /**
-     * Starts a previously set up exec instance.
-     *
-     * @param execOutputProcessor
-     *         processor for exec output
-     * @throws ExecNotFoundException
-     *         when exec not found by docker (docker api returns 404)
-     * @throws IOException
-     *          when a problem occurs with docker api calls
-     */
-    public void startExec(final StartExecParams params, @Nullable MessageProcessor<LogMessage> execOutputProcessor) throws IOException {
-        final ExecStart execStart = new ExecStart().withDetach(params.isDetach() == Boolean.TRUE)
-                                                   .withTty(params.isTty() == Boolean.TRUE);
+  /**
+   * Starts a previously set up exec instance.
+   *
+   * @param execOutputProcessor processor for exec output
+   * @throws ExecNotFoundException when exec not found by docker (docker api returns 404)
+   * @throws IOException when a problem occurs with docker api calls
+   */
+  public void startExec(
+      final StartExecParams params, @Nullable MessageProcessor<LogMessage> execOutputProcessor)
+      throws IOException {
+    final ExecStart execStart =
+        new ExecStart()
+            .withDetach(params.isDetach() == Boolean.TRUE)
+            .withTty(params.isTty() == Boolean.TRUE);
 
-        byte[] entityBytesArray = toJson(execStart).getBytes(StandardCharsets.UTF_8);
-        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("POST")
-                                                            .path(apiVersionPathPrefix + "/exec/" + params.getExecId() + "/start")
-                                                            .header("Content-Type", MediaType.APPLICATION_JSON)
-                                                            .header("Content-Length", entityBytesArray.length)
-                                                            .entity(entityBytesArray)) {
-            final DockerResponse response = connection.request();
-            final int status = response.getStatus();
-            if (status == NOT_FOUND.getStatusCode()) {
-                throw new ExecNotFoundException(readAndCloseQuietly(response.getInputStream()));
-            }
-            // According to last doc (https://docs.docker.com/reference/api/docker_remote_api_v1.15/#exec-start) status must be 201 but
-            // in fact docker API returns 200 or 204 status.
-            if (status / 100 != 2) {
-                throw getDockerException(response);
-            }
-            if (status != NO_CONTENT.getStatusCode() && execOutputProcessor != null) {
-                try (InputStream responseStream = response.getInputStream()) {
-                    new LogMessagePumper(responseStream, execOutputProcessor).start();
-                }
-            }
+    byte[] entityBytesArray = toJson(execStart).getBytes(StandardCharsets.UTF_8);
+    try (DockerConnection connection =
+        connectionFactory
+            .openConnection(dockerDaemonUri)
+            .method("POST")
+            .path(apiVersionPathPrefix + "/exec/" + params.getExecId() + "/start")
+            .header("Content-Type", MediaType.APPLICATION_JSON)
+            .header("Content-Length", entityBytesArray.length)
+            .entity(entityBytesArray)) {
+      final DockerResponse response = connection.request();
+      final int status = response.getStatus();
+      if (status == NOT_FOUND.getStatusCode()) {
+        throw new ExecNotFoundException(readAndCloseQuietly(response.getInputStream()));
+      }
+      // According to last doc (https://docs.docker.com/reference/api/docker_remote_api_v1.15/#exec-start) status must be 201 but
+      // in fact docker API returns 200 or 204 status.
+      if (status / 100 != 2) {
+        throw getDockerException(response);
+      }
+      if (status != NO_CONTENT.getStatusCode() && execOutputProcessor != null) {
+        try (InputStream responseStream = response.getInputStream()) {
+          new LogMessagePumper(responseStream, execOutputProcessor).start();
         }
+      }
     }
+  }
 

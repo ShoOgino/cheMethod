@@ -1,64 +1,69 @@
-    /**
-     * Executes PHP unit tests with the use of provided parameters.
-     * 
-     * @param testParameters
-     * @return
-     * @throws Exception
-     */
-    public TestResultRootDto executeTests(Map<String, String> testParameters) throws Exception {
-        String projectPath = testParameters.get("projectPath");
-        String projectAbsolutePath = testParameters.get("absoluteProjectPath");
-        String testTargetRelativePath = testParameters.get("testTarget");
-        File testTargetFile = getTestTargetFile(testTargetRelativePath, projectAbsolutePath);
-        File testTargetWorkingDirectory =
-                                        testTargetFile.isDirectory() ? testTargetFile : testTargetFile.getParentFile();
-        // Get appropriate path to executable
-        String phpUnitExecutable = PHPUNIT_GLOBAL;
-        if (hasComposerRunner(projectPath)) {
-            phpUnitExecutable = projectAbsolutePath + PHPUNIT_COMPOSER;
-        }
-        // Get appropriate logger for PHP unit version
-        final File printerFile = getPrinterFile();
-        final String printerDirAbsolutePath = printerFile.getParentFile().getAbsolutePath();
-        PrinterListener printerListener = new PrinterListener();
-        printerListener.startup();
-        // Reset provider & tests root
-        testResultsProvider = new PHPUnitTestResultsProvider();
-        phpTestsRoot = new PHPUnitTestRoot();
-        // Wait for listener thread to be started
-        try {
-            latchReady.await();
-        } catch (InterruptedException e) {
-            LOG.error(e.getMessage(), e);
-        }
-        final CommandLine cmdRunTests = new CommandLine(phpUnitExecutable,
-                                                        "--include-path",
-                                                        printerDirAbsolutePath,
-                                                        "--printer",
-                                                        PRINTER_NAME,
-                                                        getTestTarget(testTargetFile));
-        ProcessBuilder pb = new ProcessBuilder().redirectErrorStream(true)
-                                                .directory(testTargetWorkingDirectory)
-                                                .command(cmdRunTests.toShellCommand());
-        pb.environment().put("ZEND_PHPUNIT_PORT", String.valueOf(PRINTER_PORT));
-        Process processRunPHPUnitTests = pb.start();
-        final StringBuilder stdErrOut = new StringBuilder();
-        ProcessUtil.process(processRunPHPUnitTests, new AbstractLineConsumer() {
-            @Override
-            public void writeLine(String line) throws IOException {
-                if (!line.isEmpty())
-                    stdErrOut.append(line + "\n");
-            }
-        });
-        int exitValue = processRunPHPUnitTests.waitFor();
-        try {
-            latchDone.await();
-        } catch (InterruptedException e) {
-            LOG.error(e.getMessage(), e);
-        }
-        if (exitValue != 0 && stdErrOut.length() > 0 && phpTestsRoot.getChildren() == null) {
-            throw new TestFrameworkException("PHPUnit Error:\n" + stdErrOut.toString());
-        }
-        return testResultsProvider.getTestResultsRoot(phpTestsRoot);
+  /**
+   * Executes PHP unit tests with the use of provided parameters.
+   *
+   * @param testParameters
+   * @return
+   * @throws Exception
+   */
+  public TestResultRootDto executeTests(Map<String, String> testParameters) throws Exception {
+    String projectPath = testParameters.get("projectPath");
+    String projectAbsolutePath = testParameters.get("absoluteProjectPath");
+    String testTargetRelativePath = testParameters.get("testTarget");
+    File testTargetFile = getTestTargetFile(testTargetRelativePath, projectAbsolutePath);
+    File testTargetWorkingDirectory =
+        testTargetFile.isDirectory() ? testTargetFile : testTargetFile.getParentFile();
+    // Get appropriate path to executable
+    String phpUnitExecutable = PHPUNIT_GLOBAL;
+    if (hasComposerRunner(projectPath)) {
+      phpUnitExecutable = projectAbsolutePath + PHPUNIT_COMPOSER;
     }
+    // Get appropriate logger for PHP unit version
+    final File printerFile = getPrinterFile();
+    final String printerDirAbsolutePath = printerFile.getParentFile().getAbsolutePath();
+    PrinterListener printerListener = new PrinterListener();
+    printerListener.startup();
+    // Reset provider & tests root
+    testResultsProvider = new PHPUnitTestResultsProvider();
+    phpTestsRoot = new PHPUnitTestRoot();
+    // Wait for listener thread to be started
+    try {
+      latchReady.await();
+    } catch (InterruptedException e) {
+      LOG.error(e.getMessage(), e);
+    }
+    final CommandLine cmdRunTests =
+        new CommandLine(
+            phpUnitExecutable,
+            "--include-path",
+            printerDirAbsolutePath,
+            "--printer",
+            PRINTER_NAME,
+            getTestTarget(testTargetFile));
+    ProcessBuilder pb =
+        new ProcessBuilder()
+            .redirectErrorStream(true)
+            .directory(testTargetWorkingDirectory)
+            .command(cmdRunTests.toShellCommand());
+    pb.environment().put("ZEND_PHPUNIT_PORT", String.valueOf(PRINTER_PORT));
+    Process processRunPHPUnitTests = pb.start();
+    final StringBuilder stdErrOut = new StringBuilder();
+    ProcessUtil.process(
+        processRunPHPUnitTests,
+        new AbstractLineConsumer() {
+          @Override
+          public void writeLine(String line) throws IOException {
+            if (!line.isEmpty()) stdErrOut.append(line + "\n");
+          }
+        });
+    int exitValue = processRunPHPUnitTests.waitFor();
+    try {
+      latchDone.await();
+    } catch (InterruptedException e) {
+      LOG.error(e.getMessage(), e);
+    }
+    if (exitValue != 0 && stdErrOut.length() > 0 && phpTestsRoot.getChildren() == null) {
+      throw new TestFrameworkException("PHPUnit Error:\n" + stdErrOut.toString());
+    }
+    return testResultsProvider.getTestResultsRoot(phpTestsRoot);
+  }
 

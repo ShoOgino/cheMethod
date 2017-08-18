@@ -1,52 +1,69 @@
-	private static boolean getPushNegationDownProposals(IInvocationContext context, ASTNode covering, Collection<ICommandAccess> resultingCollections) {
-		PrefixExpression negationExpression= null;
-		ParenthesizedExpression parenthesizedExpression= null;
-		// check for case when cursor is on '!' before parentheses
-		if (covering instanceof PrefixExpression) {
-			PrefixExpression prefixExpression= (PrefixExpression) covering;
-			if (prefixExpression.getOperator() == PrefixExpression.Operator.NOT && prefixExpression.getOperand() instanceof ParenthesizedExpression) {
-				negationExpression= prefixExpression;
-				parenthesizedExpression= (ParenthesizedExpression) prefixExpression.getOperand();
-			}
-		}
-		// check for case when cursor is on parenthesized expression that is negated
-		if (covering instanceof ParenthesizedExpression && covering.getParent() instanceof PrefixExpression && ((PrefixExpression)
-				covering.getParent()).getOperator() == PrefixExpression.Operator.NOT) {
-			negationExpression= (PrefixExpression) covering.getParent();
-			parenthesizedExpression= (ParenthesizedExpression) covering;
-		}
-		if (negationExpression == null || (!(parenthesizedExpression.getExpression() instanceof InfixExpression) && !(parenthesizedExpression.getExpression() instanceof ConditionalExpression))) {
-			return false;
-		}
-		//  we could produce quick assist
-		if (resultingCollections == null) {
-			return true;
-		}
-		//
-		final AST ast= covering.getAST();
-		final ASTRewrite rewrite= ASTRewrite.create(ast);
-		// prepared inverted expression
-		Expression inversedExpression= getInversedExpression(rewrite, parenthesizedExpression.getExpression());
-		// check, may be we should keep parentheses
-		boolean keepParentheses= false;
-		if (negationExpression.getParent() instanceof Expression) {
-			int parentPrecedence= OperatorPrecedence.getExpressionPrecedence(((Expression)negationExpression.getParent()));
-			int inversedExpressionPrecedence= OperatorPrecedence.getExpressionPrecedence(inversedExpression);
-			keepParentheses= parentPrecedence > inversedExpressionPrecedence;
-		}
-		// replace negated expression with inverted one
-		if (keepParentheses) {
-			ParenthesizedExpression pe= ast.newParenthesizedExpression();
-			pe.setExpression(inversedExpression);
-			rewrite.replace(negationExpression, pe, null);
-		} else {
-			rewrite.replace(negationExpression, inversedExpression, null);
-		}
-		// add correction proposal
-		String label= CorrectionMessages.AdvancedQuickAssistProcessor_pushNegationDown;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.PULL_NEGATION_DOWN, image);
-		resultingCollections.add(proposal);
-		return true;
-	}
+  private static boolean getPushNegationDownProposals(
+      IInvocationContext context,
+      ASTNode covering,
+      Collection<ICommandAccess> resultingCollections) {
+    PrefixExpression negationExpression = null;
+    ParenthesizedExpression parenthesizedExpression = null;
+    // check for case when cursor is on '!' before parentheses
+    if (covering instanceof PrefixExpression) {
+      PrefixExpression prefixExpression = (PrefixExpression) covering;
+      if (prefixExpression.getOperator() == PrefixExpression.Operator.NOT
+          && prefixExpression.getOperand() instanceof ParenthesizedExpression) {
+        negationExpression = prefixExpression;
+        parenthesizedExpression = (ParenthesizedExpression) prefixExpression.getOperand();
+      }
+    }
+    // check for case when cursor is on parenthesized expression that is negated
+    if (covering instanceof ParenthesizedExpression
+        && covering.getParent() instanceof PrefixExpression
+        && ((PrefixExpression) covering.getParent()).getOperator()
+            == PrefixExpression.Operator.NOT) {
+      negationExpression = (PrefixExpression) covering.getParent();
+      parenthesizedExpression = (ParenthesizedExpression) covering;
+    }
+    if (negationExpression == null
+        || (!(parenthesizedExpression.getExpression() instanceof InfixExpression)
+            && !(parenthesizedExpression.getExpression() instanceof ConditionalExpression))) {
+      return false;
+    }
+    //  we could produce quick assist
+    if (resultingCollections == null) {
+      return true;
+    }
+    //
+    final AST ast = covering.getAST();
+    final ASTRewrite rewrite = ASTRewrite.create(ast);
+    // prepared inverted expression
+    Expression inversedExpression =
+        getInversedExpression(rewrite, parenthesizedExpression.getExpression());
+    // check, may be we should keep parentheses
+    boolean keepParentheses = false;
+    if (negationExpression.getParent() instanceof Expression) {
+      int parentPrecedence =
+          OperatorPrecedence.getExpressionPrecedence(((Expression) negationExpression.getParent()));
+      int inversedExpressionPrecedence =
+          OperatorPrecedence.getExpressionPrecedence(inversedExpression);
+      keepParentheses = parentPrecedence > inversedExpressionPrecedence;
+    }
+    // replace negated expression with inverted one
+    if (keepParentheses) {
+      ParenthesizedExpression pe = ast.newParenthesizedExpression();
+      pe.setExpression(inversedExpression);
+      rewrite.replace(negationExpression, pe, null);
+    } else {
+      rewrite.replace(negationExpression, inversedExpression, null);
+    }
+    // add correction proposal
+    String label = CorrectionMessages.AdvancedQuickAssistProcessor_pushNegationDown;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    ASTRewriteCorrectionProposal proposal =
+        new ASTRewriteCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.PULL_NEGATION_DOWN,
+            image);
+    resultingCollections.add(proposal);
+    return true;
+  }
 

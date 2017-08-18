@@ -1,49 +1,49 @@
-    @Override
-    public void extract(InputStream tarInput, boolean overwrite, int stripNumber)
-            throws IOException, ForbiddenException, ConflictException, ServerException {
-        try (TarArchiveInputStream tarInputStream = new TarArchiveInputStream(tarInput)) {
-            InputStream notClosableInputStream = new NotClosableInputStream(tarInputStream);
-            TarArchiveEntry tarEntry;
-            while ((tarEntry = tarInputStream.getNextTarEntry()) != null) {
-                VirtualFile extractFolder = folder;
+  @Override
+  public void extract(InputStream tarInput, boolean overwrite, int stripNumber)
+      throws IOException, ForbiddenException, ConflictException, ServerException {
+    try (TarArchiveInputStream tarInputStream = new TarArchiveInputStream(tarInput)) {
+      InputStream notClosableInputStream = new NotClosableInputStream(tarInputStream);
+      TarArchiveEntry tarEntry;
+      while ((tarEntry = tarInputStream.getNextTarEntry()) != null) {
+        VirtualFile extractFolder = folder;
 
-                Path relativePath = Path.of(tarEntry.getName());
+        Path relativePath = Path.of(tarEntry.getName());
 
-                if (stripNumber > 0) {
-                    if (relativePath.length() <= stripNumber) {
-                        continue;
-                    }
-                    relativePath = relativePath.subPath(stripNumber);
-                }
-
-                if (tarEntry.isDirectory()) {
-                    if (!extractFolder.hasChild(relativePath)) {
-                        extractFolder.createFolder(relativePath.toString());
-                    }
-                    continue;
-                }
-
-                if (relativePath.length() > 1) {
-                    Path neededParentPath = relativePath.getParent();
-                    VirtualFile neededParent = extractFolder.getChild(neededParentPath);
-                    if (neededParent == null) {
-                        neededParent = extractFolder.createFolder(neededParentPath.toString());
-                    }
-                    extractFolder = neededParent;
-                }
-
-                String fileName = relativePath.getName();
-                VirtualFile file = extractFolder.getChild(Path.of(fileName));
-                if (file == null) {
-                    extractFolder.createFile(fileName, notClosableInputStream);
-                } else {
-                    if (overwrite) {
-                        file.updateContent(notClosableInputStream);
-                    } else {
-                        throw new ConflictException(String.format("File '%s' already exists", file.getPath()));
-                    }
-                }
-            }
+        if (stripNumber > 0) {
+          if (relativePath.length() <= stripNumber) {
+            continue;
+          }
+          relativePath = relativePath.subPath(stripNumber);
         }
+
+        if (tarEntry.isDirectory()) {
+          if (!extractFolder.hasChild(relativePath)) {
+            extractFolder.createFolder(relativePath.toString());
+          }
+          continue;
+        }
+
+        if (relativePath.length() > 1) {
+          Path neededParentPath = relativePath.getParent();
+          VirtualFile neededParent = extractFolder.getChild(neededParentPath);
+          if (neededParent == null) {
+            neededParent = extractFolder.createFolder(neededParentPath.toString());
+          }
+          extractFolder = neededParent;
+        }
+
+        String fileName = relativePath.getName();
+        VirtualFile file = extractFolder.getChild(Path.of(fileName));
+        if (file == null) {
+          extractFolder.createFile(fileName, notClosableInputStream);
+        } else {
+          if (overwrite) {
+            file.updateContent(notClosableInputStream);
+          } else {
+            throw new ConflictException(String.format("File '%s' already exists", file.getPath()));
+          }
+        }
+      }
     }
+  }
 

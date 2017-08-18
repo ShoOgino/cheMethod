@@ -1,102 +1,108 @@
-    /**
-     * Starts all machines from specified workspace environment,
-     * creates workspace runtime instance based on that environment.
-     * <p>
-     * <p>During the start of the workspace its
-     * runtime is visible with {@link WorkspaceStatus#STARTING} status.
-     *
-     * @param workspace
-     *         workspace which environment should be started
-     * @param envName
-     *         the name of the environment to start
-     * @param options
-     *         whether machines should be recovered(true) or not(false)
-     * @return the workspace runtime instance with machines set.
-     * @throws ConflictException
-     *         when workspace is already running
-     * @throws ConflictException
-     *         when start is interrupted
-     * @throws NotFoundException
-     *         when any not found exception occurs during environment start
-     * @throws ServerException
-     *         other error occurs during environment start
-     * @see WorkspaceStatus#STARTING
-     * @see WorkspaceStatus#RUNNING
-     */
-    public CompletableFuture<Void> startAsync(Workspace workspace,
-                                              String envName,
-                                              Map<String, String> options)
-            throws ConflictException, NotFoundException, ServerException {
+  /**
+   * Starts all machines from specified workspace environment, creates workspace runtime instance
+   * based on that environment.
+   *
+   * <p>
+   *
+   * <p>During the start of the workspace its runtime is visible with {@link
+   * WorkspaceStatus#STARTING} status.
+   *
+   * @param workspace workspace which environment should be started
+   * @param envName the name of the environment to start
+   * @param options whether machines should be recovered(true) or not(false)
+   * @return the workspace runtime instance with machines set.
+   * @throws ConflictException when workspace is already running
+   * @throws ConflictException when start is interrupted
+   * @throws NotFoundException when any not found exception occurs during environment start
+   * @throws ServerException other error occurs during environment start
+   * @see WorkspaceStatus#STARTING
+   * @see WorkspaceStatus#RUNNING
+   */
+  public CompletableFuture<Void> startAsync(
+      Workspace workspace, String envName, Map<String, String> options)
+      throws ConflictException, NotFoundException, ServerException {
 
-        final EnvironmentImpl environment = copyEnv(workspace, envName);
-        final String workspaceId = workspace.getId();
+    final EnvironmentImpl environment = copyEnv(workspace, envName);
+    final String workspaceId = workspace.getId();
 
+    requireNonNull(environment, "Environment should not be null " + workspaceId);
+    requireNonNull(environment.getRecipe(), "OldRecipe should not be null " + workspaceId);
+    requireNonNull(
+        environment.getRecipe().getType(), "OldRecipe type should not be null " + workspaceId);
 
-        requireNonNull(environment, "Environment should not be null " + workspaceId);
-        requireNonNull(environment.getRecipe(), "OldRecipe should not be null " + workspaceId);
-        requireNonNull(environment.getRecipe().getType(), "OldRecipe type should not be null " + workspaceId);
-
-        RuntimeInfrastructure infra = infraByRecipe.get(environment.getRecipe().getType());
-        if (infra == null) {
-            throw new NotFoundException("No infrastructure found of type: " + environment.getRecipe().getType() +
-                                        " for workspace: " + workspaceId);
-        }
-
-        RuntimeState existingState = runtimes.get(workspaceId);
-        if (existingState != null) {
-            throw new ConflictException(
-                    format("Could not start workspace '%s' because its state is '%s'",
-                           workspaceId, existingState.status));
-        }
-
-        Subject subject = EnvironmentContext.getCurrent().getSubject();
-        RuntimeIdentity runtimeId = new RuntimeIdentityImpl(workspaceId, envName, subject.getUserName());
-        try {
-            RuntimeContext runtimeContext = infra.prepare(runtimeId, environment);
-
-            InternalRuntime runtime = runtimeContext.getRuntime();
-            if (runtime == null) {
-                throw new IllegalStateException(
-                        "SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
-                        + RuntimeInfrastructure.class);
-            }
-            RuntimeState state = new RuntimeState(runtime, STARTING);
-            if (isStartRefused.get()) {
-                throw new ConflictException(format("Start of the workspace '%s' is rejected by the system, " +
-                                                   "no more workspaces are allowed to start",
-                                                   workspace.getConfig().getName()));
-            }
-            if (runtimes.putIfAbsent(workspaceId, state) != null) {
-                throw new ConflictException("Could not start workspace '" + workspaceId +
-                                            "' because it is not in 'STOPPED' state");
-            }
-            eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                           .withWorkspaceId(workspaceId)
-                                           .withStatus(STARTING)
-                                           .withPrevStatus(STOPPED));
-            return CompletableFuture.runAsync(ThreadLocalPropagateContext.wrap(() -> {
-                try {
-                    runtime.start(options);
-                    runtimes.replace(workspaceId, new RuntimeState(runtime, RUNNING));
-                    eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                                   .withWorkspaceId(workspaceId)
-                                                   .withStatus(RUNNING)
-                                                   .withPrevStatus(STARTING));
-                } catch (InfrastructureException e) {
-                    runtimes.remove(workspaceId);
-                    if (!(e instanceof RuntimeStartInterruptedException)) {
-                        publishWorkspaceStoppedEvent(workspaceId, STARTING, e.getMessage());
-                    }
-                    throw new RuntimeException(e);
-                }
-            }), sharedPool.getExecutor());
-            //TODO made complete rework of exceptions.
-        } catch (ValidationException e) {
-            LOG.error(e.getLocalizedMessage(), e);
-            throw new ConflictException(e.getLocalizedMessage());
-        } catch (InfrastructureException e) {
-            LOG.error(e.getLocalizedMessage(), e);
-            throw new ServerException(e.getLocalizedMessage(), e);
-        }
+    RuntimeInfrastructure infra = infraByRecipe.get(environment.getRecipe().getType());
+    if (infra == null) {
+      throw new NotFoundException(
+          "No infrastructure found of type: "
+              + environment.getRecipe().getType()
+              + " for workspace: "
+              + workspaceId);
     }
+
+    RuntimeState existingState = runtimes.get(workspaceId);
+    if (existingState != null) {
+      throw new ConflictException(
+          format(
+              "Could not start workspace '%s' because its state is '%s'",
+              workspaceId, existingState.status));
+    }
+
+    Subject subject = EnvironmentContext.getCurrent().getSubject();
+    RuntimeIdentity runtimeId =
+        new RuntimeIdentityImpl(workspaceId, envName, subject.getUserName());
+    try {
+      RuntimeContext runtimeContext = infra.prepare(runtimeId, environment);
+
+      InternalRuntime runtime = runtimeContext.getRuntime();
+      if (runtime == null) {
+        throw new IllegalStateException(
+            "SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
+                + RuntimeInfrastructure.class);
+      }
+      RuntimeState state = new RuntimeState(runtime, STARTING);
+      if (isStartRefused.get()) {
+        throw new ConflictException(
+            format(
+                "Start of the workspace '%s' is rejected by the system, "
+                    + "no more workspaces are allowed to start",
+                workspace.getConfig().getName()));
+      }
+      if (runtimes.putIfAbsent(workspaceId, state) != null) {
+        throw new ConflictException(
+            "Could not start workspace '" + workspaceId + "' because it is not in 'STOPPED' state");
+      }
+      eventService.publish(
+          DtoFactory.newDto(WorkspaceStatusEvent.class)
+              .withWorkspaceId(workspaceId)
+              .withStatus(STARTING)
+              .withPrevStatus(STOPPED));
+      return CompletableFuture.runAsync(
+          ThreadLocalPropagateContext.wrap(
+              () -> {
+                try {
+                  runtime.start(options);
+                  runtimes.replace(workspaceId, new RuntimeState(runtime, RUNNING));
+                  eventService.publish(
+                      DtoFactory.newDto(WorkspaceStatusEvent.class)
+                          .withWorkspaceId(workspaceId)
+                          .withStatus(RUNNING)
+                          .withPrevStatus(STARTING));
+                } catch (InfrastructureException e) {
+                  runtimes.remove(workspaceId);
+                  if (!(e instanceof RuntimeStartInterruptedException)) {
+                    publishWorkspaceStoppedEvent(workspaceId, STARTING, e.getMessage());
+                  }
+                  throw new RuntimeException(e);
+                }
+              }),
+          sharedPool.getExecutor());
+      //TODO made complete rework of exceptions.
+    } catch (ValidationException e) {
+      LOG.error(e.getLocalizedMessage(), e);
+      throw new ConflictException(e.getLocalizedMessage());
+    } catch (InfrastructureException e) {
+      LOG.error(e.getLocalizedMessage(), e);
+      throw new ServerException(e.getLocalizedMessage(), e);
+    }
+  }
 

@@ -1,80 +1,87 @@
-    /** {@inheritDoc} */
-    @Override
-    public void addPart(@NotNull PartPresenter part) {
-        checkArgument(part instanceof AbstractEditorPresenter, "Can not add part " + part.getTitle() + " to editor part stack");
+  /** {@inheritDoc} */
+  @Override
+  public void addPart(@NotNull PartPresenter part) {
+    checkArgument(
+        part instanceof AbstractEditorPresenter,
+        "Can not add part " + part.getTitle() + " to editor part stack");
 
-        EditorPartPresenter editorPart = (AbstractEditorPresenter)part;
-        if (containsPart(editorPart)) {
-            setActivePart(editorPart);
-            return;
-        }
+    EditorPartPresenter editorPart = (AbstractEditorPresenter) part;
+    if (containsPart(editorPart)) {
+      setActivePart(editorPart);
+      return;
+    }
 
-        VirtualFile file = editorPart.getEditorInput().getFile();
-        checkArgument(file != null, "File doesn't provided");
+    VirtualFile file = editorPart.getEditorInput().getFile();
+    checkArgument(file != null, "File doesn't provided");
 
-        addHandlers();
-        updateListClosedParts(file);
+    addHandlers();
+    updateListClosedParts(file);
 
-        editorPart.addPropertyListener(propertyListener);
+    editorPart.addPropertyListener(propertyListener);
 
-        final EditorTab editorTab = tabItemFactory.createEditorPartButton(editorPart, this);
+    final EditorTab editorTab = tabItemFactory.createEditorPartButton(editorPart, this);
 
-        appContext.getWorkspaceRoot()
-                  .getFile(file.getLocation())
-                  .then(optional -> {
-                      if (optional.isPresent()) {
-                          editorTab.setTitleColor(optional.get().getVcsStatus().getColor());
-                      }
-                  });
+    appContext
+        .getWorkspaceRoot()
+        .getFile(file.getLocation())
+        .then(
+            optional -> {
+              if (optional.isPresent()) {
+                editorTab.setTitleColor(optional.get().getVcsStatus().getColor());
+              }
+            });
 
-        editorPart.addPropertyListener(new PropertyListener() {
-            @Override
-            public void propertyChanged(PartPresenter source, int propId) {
-                if (!(source instanceof EditorPartPresenter)) {
-                    return;
-                }
-
-                boolean isReadOnly = ((EditorPartPresenter)source).getEditorInput().getFile().isReadOnly();
-                if (propId == EditorPartPresenter.PROP_INPUT) {
-                    editorTab.setReadOnlyMark(isReadOnly);
-                    return;
-                }
-
-                if (!isReadOnly && propId == EditorPartPresenter.PROP_DIRTY) {
-                    editorTab.setUnsavedDataMark(((EditorPartPresenter)source).isDirty());
-                }
+    editorPart.addPropertyListener(
+        new PropertyListener() {
+          @Override
+          public void propertyChanged(PartPresenter source, int propId) {
+            if (!(source instanceof EditorPartPresenter)) {
+              return;
             }
+
+            boolean isReadOnly =
+                ((EditorPartPresenter) source).getEditorInput().getFile().isReadOnly();
+            if (propId == EditorPartPresenter.PROP_INPUT) {
+              editorTab.setReadOnlyMark(isReadOnly);
+              return;
+            }
+
+            if (!isReadOnly && propId == EditorPartPresenter.PROP_DIRTY) {
+              editorTab.setUnsavedDataMark(((EditorPartPresenter) source).isDirty());
+            }
+          }
         });
 
-        editorTab.setDelegate(this);
+    editorTab.setDelegate(this);
 
-        parts.put(editorTab, editorPart);
-        partsOrder.add(editorPart);
+    parts.put(editorTab, editorPart);
+    partsOrder.add(editorPart);
 
-        view.addTab(editorTab, editorPart);
+    view.addTab(editorTab, editorPart);
 
-        TabItem tabItem = getTabByPart(editorPart);
+    TabItem tabItem = getTabByPart(editorPart);
 
-        if (tabItem != null) {
-            final EditorPaneMenuItem<TabItem> item = editorPaneMenuItemFactory.createMenuItem(tabItem);
-            item.setDelegate(paneMenuTabItemHandler);
-            editorPaneMenu.addItem(item);
-            items.put(item, tabItem);
-        }
-
-        if (editorPart instanceof EditorWithErrors) {
-            final EditorWithErrors presenter = ((EditorWithErrors)editorPart);
-
-            editorPart.addPropertyListener(new PropertyListener() {
-                @Override
-                public void propertyChanged(PartPresenter source, int propId) {
-                    EditorState editorState = presenter.getErrorState();
-
-                    editorTab.setErrorMark(ERROR.equals(editorState));
-                    editorTab.setWarningMark(WARNING.equals(editorState));
-                }
-            });
-        }
-        view.selectTab(editorPart);
+    if (tabItem != null) {
+      final EditorPaneMenuItem<TabItem> item = editorPaneMenuItemFactory.createMenuItem(tabItem);
+      item.setDelegate(paneMenuTabItemHandler);
+      editorPaneMenu.addItem(item);
+      items.put(item, tabItem);
     }
+
+    if (editorPart instanceof EditorWithErrors) {
+      final EditorWithErrors presenter = ((EditorWithErrors) editorPart);
+
+      editorPart.addPropertyListener(
+          new PropertyListener() {
+            @Override
+            public void propertyChanged(PartPresenter source, int propId) {
+              EditorState editorState = presenter.getErrorState();
+
+              editorTab.setErrorMark(ERROR.equals(editorState));
+              editorTab.setWarningMark(WARNING.equals(editorState));
+            }
+          });
+    }
+    view.selectTab(editorPart);
+  }
 

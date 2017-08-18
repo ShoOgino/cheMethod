@@ -1,88 +1,141 @@
-    @Before
-    public void initMocks() {
-        MockitoAnnotations.initMocks(this);
+  @Before
+  public void initMocks() {
+    MockitoAnnotations.initMocks(this);
 
-        testServiceClient = spy(new TestServiceClient(appContext, asyncRequestFactory, dtoUnmarshallerFactory, dtoFactory, commandManager,
-                                                      execAgentCommandManager, promiseProvider, macroProcessor, commandConsoleFactory,
-                processesPanelPresenter, testGoal, requestTransmitter));
+    testServiceClient =
+        spy(
+            new TestServiceClient(
+                appContext,
+                asyncRequestFactory,
+                dtoUnmarshallerFactory,
+                dtoFactory,
+                commandManager,
+                execAgentCommandManager,
+                promiseProvider,
+                macroProcessor,
+                commandConsoleFactory,
+                processesPanelPresenter,
+                testGoal,
+                requestTransmitter));
 
-        doReturn(new PromiseMocker<TestResult>().getPromise()).when(testServiceClient).sendTests(anyString(), anyString(),
-                                                                                                 anyMapOf(String.class, String.class));
-        doAnswer(new FunctionAnswer<Executor.ExecutorBody<TestResult>, Promise<TestResult>>(executorBody -> {
-            ExecutorPromiseMocker<TestResult> mocker = new ExecutorPromiseMocker<TestResult>(executorBody,
-                                                                                             (testResult, thisMocker) -> {
-                                                                                                 thisMocker.applyOnThenOperation(testResult);
-                                                                                                 return null;
-                                                                                             },
-                                                                                             (promiseError, thisMocker) -> {
-                                                                                                 thisMocker.applyOnCatchErrorOperation(promiseError);
-                                                                                                 return null;
-                                                                                             });
+    doReturn(new PromiseMocker<TestResult>().getPromise())
+        .when(testServiceClient)
+        .sendTests(anyString(), anyString(), anyMapOf(String.class, String.class));
+    doAnswer(
+            new FunctionAnswer<Executor.ExecutorBody<TestResult>, Promise<TestResult>>(
+                executorBody -> {
+                  ExecutorPromiseMocker<TestResult> mocker =
+                      new ExecutorPromiseMocker<TestResult>(
+                          executorBody,
+                          (testResult, thisMocker) -> {
+                            thisMocker.applyOnThenOperation(testResult);
+                            return null;
+                          },
+                          (promiseError, thisMocker) -> {
+                            thisMocker.applyOnCatchErrorOperation(promiseError);
+                            return null;
+                          });
 
-            executorBody.apply(mocker.getResolveFunction(), mocker.getRejectFunction());
+                  executorBody.apply(mocker.getResolveFunction(), mocker.getRejectFunction());
 
-            return mocker.getPromise();
-        })).when(testServiceClient).promiseFromExecutorBody(Matchers.<Executor.ExecutorBody<TestResult>> any());
+                  return mocker.getPromise();
+                }))
+        .when(testServiceClient)
+        .promiseFromExecutorBody(Matchers.<Executor.ExecutorBody<TestResult>>any());
 
-        doAnswer(new FunctionAnswer<Throwable, PromiseError>(throwable -> {
-            PromiseError promiseError = mock(PromiseError.class);
-            when(promiseError.getCause()).thenReturn(throwable);
-            return promiseError;
-        })).when(testServiceClient).promiseFromThrowable(any(Throwable.class));
+    doAnswer(
+            new FunctionAnswer<Throwable, PromiseError>(
+                throwable -> {
+                  PromiseError promiseError = mock(PromiseError.class);
+                  when(promiseError.getCause()).thenReturn(throwable);
+                  return promiseError;
+                }))
+        .when(testServiceClient)
+        .promiseFromThrowable(any(Throwable.class));
 
-        when(appContext.getWorkspace()).thenReturn(workspace);
-        when(workspace.getDevMachine()).thenReturn(Optional.of(devMachine));
-        when(machine.getName()).thenReturn("DevMachineId");
+    when(appContext.getWorkspace()).thenReturn(workspace);
+    when(workspace.getDevMachine()).thenReturn(Optional.of(devMachine));
+    when(machine.getName()).thenReturn("DevMachineId");
 
-        doAnswer(new FunctionAnswer<String, Promise<String>>(commandLine -> {
-            String processedCommandLine = commandLine.replace("${current.project.path}", rootOfProjects + "/" + projectPath);
-            return new PromiseMocker<String>().applyOnThenOperation(processedCommandLine).getPromise();
-        })).when(macroProcessor).expandMacros(anyString());
+    doAnswer(
+            new FunctionAnswer<String, Promise<String>>(
+                commandLine -> {
+                  String processedCommandLine =
+                      commandLine.replace(
+                          "${current.project.path}", rootOfProjects + "/" + projectPath);
+                  return new PromiseMocker<String>()
+                      .applyOnThenOperation(processedCommandLine)
+                      .getPromise();
+                }))
+        .when(macroProcessor)
+        .expandMacros(anyString());
 
-        when(commandConsoleFactory.create(any(CommandImpl.class), anyString())).then(createCall -> {
-            CommandOutputConsole commandOutputConsole = mock(CommandOutputConsole.class);
-            when(commandOutputConsole.getProcessStartedConsumer()).thenReturn(processStartedEvent -> {
-                consoleEvents.add(processStartedEvent);
+    when(commandConsoleFactory.create(any(CommandImpl.class), anyString()))
+        .then(
+            createCall -> {
+              CommandOutputConsole commandOutputConsole = mock(CommandOutputConsole.class);
+              when(commandOutputConsole.getProcessStartedConsumer())
+                  .thenReturn(
+                      processStartedEvent -> {
+                        consoleEvents.add(processStartedEvent);
+                      });
+              when(commandOutputConsole.getProcessDiedConsumer())
+                  .thenReturn(
+                      processDiedEvent -> {
+                        consoleEvents.add(processDiedEvent);
+                      });
+              when(commandOutputConsole.getStdErrConsumer())
+                  .thenReturn(
+                      processStdErrEvent -> {
+                        consoleEvents.add(processStdErrEvent);
+                      });
+              when(commandOutputConsole.getStdOutConsumer())
+                  .thenReturn(
+                      processStdOutEvent -> {
+                        consoleEvents.add(processStdOutEvent);
+                      });
+              return commandOutputConsole;
             });
-            when(commandOutputConsole.getProcessDiedConsumer()).thenReturn(processDiedEvent -> {
-                consoleEvents.add(processDiedEvent);
-            });
-            when(commandOutputConsole.getStdErrConsumer()).thenReturn(processStdErrEvent -> {
-                consoleEvents.add(processStdErrEvent);
-            });
-            when(commandOutputConsole.getStdOutConsumer()).thenReturn(processStdOutEvent -> {
-                consoleEvents.add(processStdOutEvent);
-            });
-            return commandOutputConsole;
-        });
-        consoleEvents.clear();
+    consoleEvents.clear();
 
-        when(execAgentCommandManager.startProcess(anyString(), any(Command.class))).then(startProcessCall -> {
-            @SuppressWarnings("unchecked")
-            ExecAgentConsumer<ProcessStartResponseDto> execAgentConsumer =
-                                                                       (ExecAgentConsumer<ProcessStartResponseDto>)mock(ExecAgentConsumer.class);
-            class ProcessEventForward<DtoType> extends FunctionAnswer<Operation<DtoType>, ExecAgentConsumer<ProcessStartResponseDto>> {
+    when(execAgentCommandManager.startProcess(anyString(), any(Command.class)))
+        .then(
+            startProcessCall -> {
+              @SuppressWarnings("unchecked")
+              ExecAgentConsumer<ProcessStartResponseDto> execAgentConsumer =
+                  (ExecAgentConsumer<ProcessStartResponseDto>) mock(ExecAgentConsumer.class);
+              class ProcessEventForward<DtoType>
+                  extends FunctionAnswer<
+                      Operation<DtoType>, ExecAgentConsumer<ProcessStartResponseDto>> {
                 public ProcessEventForward(Class<DtoType> dtoClass) {
-                    super(new java.util.function.Function<Operation<DtoType>, ExecAgentConsumer<ProcessStartResponseDto>>() {
+                  super(
+                      new java.util.function.Function<
+                          Operation<DtoType>, ExecAgentConsumer<ProcessStartResponseDto>>() {
                         @Override
-                        public ExecAgentConsumer<ProcessStartResponseDto> apply(Operation<DtoType> op) {
-                            operationsOnProcessEvents.put(dtoClass, op);
-                            return execAgentConsumer;
+                        public ExecAgentConsumer<ProcessStartResponseDto> apply(
+                            Operation<DtoType> op) {
+                          operationsOnProcessEvents.put(dtoClass, op);
+                          return execAgentConsumer;
                         }
-                    });
+                      });
                 }
-            }
+              }
 
-            when(execAgentConsumer.then(any())).then(new ProcessEventForward<>(ProcessStartResponseDto.class));
-            when(execAgentConsumer.thenIfProcessStartedEvent(any())).then(new ProcessEventForward<>(ProcessStartedEventDto.class));
-            when(execAgentConsumer.thenIfProcessDiedEvent(any())).then(new ProcessEventForward<>(ProcessDiedEventDto.class));
-            when(execAgentConsumer.thenIfProcessStdErrEvent(any())).then(new ProcessEventForward<>(ProcessStdErrEventDto.class));
-            when(execAgentConsumer.thenIfProcessStdOutEvent(any())).then(new ProcessEventForward<>(ProcessStdOutEventDto.class));
+              when(execAgentConsumer.then(any()))
+                  .then(new ProcessEventForward<>(ProcessStartResponseDto.class));
+              when(execAgentConsumer.thenIfProcessStartedEvent(any()))
+                  .then(new ProcessEventForward<>(ProcessStartedEventDto.class));
+              when(execAgentConsumer.thenIfProcessDiedEvent(any()))
+                  .then(new ProcessEventForward<>(ProcessDiedEventDto.class));
+              when(execAgentConsumer.thenIfProcessStdErrEvent(any()))
+                  .then(new ProcessEventForward<>(ProcessStdErrEventDto.class));
+              when(execAgentConsumer.thenIfProcessStdOutEvent(any()))
+                  .then(new ProcessEventForward<>(ProcessStdOutEventDto.class));
 
-            return execAgentConsumer;
-        });
-        operationsOnProcessEvents.clear();
+              return execAgentConsumer;
+            });
+    operationsOnProcessEvents.clear();
 
-        when(testGoal.getId()).thenReturn("Test");
-    }
+    when(testGoal.getId()).thenReturn("Test");
+  }
 

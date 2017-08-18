@@ -1,54 +1,57 @@
-	/**
-	 * Add all changes necessary on the <code>ICompilationUnit</code> in the given
-	 * <code>SearchResultGroup</code> to implement the refactoring transformation
-	 * to the given <code>CompilationUnitChange</code>.
-	 * @param rg the <code>SearchResultGroup</code> for which changes should be created
-	 * @param unitHandle
-	 * @param unitChange the CompilationUnitChange object for the compilation unit in question
-	 * @return <code>true</code> iff a change has been added
-	 * @throws CoreException
-	 */
-	private boolean addAllChangesFor(SearchResultGroup rg, ICompilationUnit unitHandle, CompilationUnitChange unitChange) throws
-																														  CoreException {
-//		ICompilationUnit	unitHandle= rg.getCompilationUnit();
-		Assert.isTrue(rg == null || rg.getCompilationUnit() == unitHandle);
-		CompilationUnit unit= getASTFor(unitHandle);
-		ASTRewrite unitRewriter= ASTRewrite.create(unit.getAST());
-		MultiTextEdit root= new MultiTextEdit();
-		boolean				someChange= false;
+  /**
+   * Add all changes necessary on the <code>ICompilationUnit</code> in the given <code>
+   * SearchResultGroup</code> to implement the refactoring transformation to the given <code>
+   * CompilationUnitChange</code>.
+   *
+   * @param rg the <code>SearchResultGroup</code> for which changes should be created
+   * @param unitHandle
+   * @param unitChange the CompilationUnitChange object for the compilation unit in question
+   * @return <code>true</code> iff a change has been added
+   * @throws CoreException
+   */
+  private boolean addAllChangesFor(
+      SearchResultGroup rg, ICompilationUnit unitHandle, CompilationUnitChange unitChange)
+      throws CoreException {
+    //		ICompilationUnit	unitHandle= rg.getCompilationUnit();
+    Assert.isTrue(rg == null || rg.getCompilationUnit() == unitHandle);
+    CompilationUnit unit = getASTFor(unitHandle);
+    ASTRewrite unitRewriter = ASTRewrite.create(unit.getAST());
+    MultiTextEdit root = new MultiTextEdit();
+    boolean someChange = false;
 
-		unitChange.setEdit(root);
-		fImportRewriter= StubUtility.createImportRewrite(unit, true);
+    unitChange.setEdit(root);
+    fImportRewriter = StubUtility.createImportRewrite(unit, true);
 
-		// First create the factory method
-		if (unitHandle.equals(fFactoryUnitHandle)) {
-			TextEditGroup factoryGD= new TextEditGroup(RefactoringCoreMessages.IntroduceFactory_addFactoryMethod);
+    // First create the factory method
+    if (unitHandle.equals(fFactoryUnitHandle)) {
+      TextEditGroup factoryGD =
+          new TextEditGroup(RefactoringCoreMessages.IntroduceFactory_addFactoryMethod);
 
-			createFactoryChange(unitRewriter, unit, factoryGD);
-			unitChange.addTextEditGroup(factoryGD);
-			someChange= true;
-		}
+      createFactoryChange(unitRewriter, unit, factoryGD);
+      unitChange.addTextEditGroup(factoryGD);
+      someChange = true;
+    }
 
-		// Now rewrite all the constructor calls to use the factory method
-		if (rg != null)
-			if (replaceConstructorCalls(rg, unit, unitRewriter, unitChange))
-				someChange= true;
+    // Now rewrite all the constructor calls to use the factory method
+    if (rg != null)
+      if (replaceConstructorCalls(rg, unit, unitRewriter, unitChange)) someChange = true;
 
-		// Finally, make the constructor private, if requested.
-		if (shouldProtectConstructor() && isConstructorUnit(unitHandle)) {
-			TextEditGroup declGD= new TextEditGroup(RefactoringCoreMessages.IntroduceFactory_protectConstructor);
+    // Finally, make the constructor private, if requested.
+    if (shouldProtectConstructor() && isConstructorUnit(unitHandle)) {
+      TextEditGroup declGD =
+          new TextEditGroup(RefactoringCoreMessages.IntroduceFactory_protectConstructor);
 
-			if (protectConstructor(unit, unitRewriter, declGD)) {
-				unitChange.addTextEditGroup(declGD);
-				someChange= true;
-			}
-		}
+      if (protectConstructor(unit, unitRewriter, declGD)) {
+        unitChange.addTextEditGroup(declGD);
+        someChange = true;
+      }
+    }
 
-		if (someChange) {
-			root.addChild(unitRewriter.rewriteAST());
-			root.addChild(fImportRewriter.rewriteImports(null));
-		}
+    if (someChange) {
+      root.addChild(unitRewriter.rewriteAST());
+      root.addChild(fImportRewriter.rewriteImports(null));
+    }
 
-		return someChange;
-	}
+    return someChange;
+  }
 

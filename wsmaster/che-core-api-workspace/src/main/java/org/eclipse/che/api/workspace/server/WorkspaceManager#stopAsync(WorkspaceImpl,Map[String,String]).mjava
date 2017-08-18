@@ -1,34 +1,35 @@
-    private CompletableFuture<Void> stopAsync(WorkspaceImpl workspace,
-                                              Map<String, String> options) throws ConflictException,
-                                                                                  NotFoundException,
-                                                                                  ServerException {
-        if (!workspace.isTemporary()) {
-            workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
-            workspaceDao.update(workspace);
-        }
-        String stoppedBy = sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY));
-        LOG.info("Workspace '{}/{}' with id '{}' is being stopped by user '{}'",
-                 workspace.getNamespace(),
-                 workspace.getConfig().getName(),
-                 workspace.getId(),
-                 firstNonNull(stoppedBy, "undefined"));
-
-        return sharedPool.runAsync(() -> {
-            try {
-                runtimes.stop(workspace.getId(), options);
-
-                LOG.info("Workspace '{}/{}' with id '{}' stopped by user '{}'",
-                         workspace.getNamespace(),
-                         workspace.getConfig().getName(),
-                         workspace.getId(),
-                         firstNonNull(stoppedBy, "undefined"));
-            } catch (Exception ex) {
-                LOG.error(ex.getLocalizedMessage(), ex);
-            } finally {
-                if (workspace.isTemporary()) {
-                    removeWorkspaceQuietly(workspace);
-                }
-            }
-        });
+  private CompletableFuture<Void> stopAsync(WorkspaceImpl workspace, Map<String, String> options)
+      throws ConflictException, NotFoundException, ServerException {
+    if (!workspace.isTemporary()) {
+      workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
+      workspaceDao.update(workspace);
     }
+    String stoppedBy = sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY));
+    LOG.info(
+        "Workspace '{}/{}' with id '{}' is being stopped by user '{}'",
+        workspace.getNamespace(),
+        workspace.getConfig().getName(),
+        workspace.getId(),
+        firstNonNull(stoppedBy, "undefined"));
+
+    return sharedPool.runAsync(
+        () -> {
+          try {
+            runtimes.stop(workspace.getId(), options);
+
+            LOG.info(
+                "Workspace '{}/{}' with id '{}' stopped by user '{}'",
+                workspace.getNamespace(),
+                workspace.getConfig().getName(),
+                workspace.getId(),
+                firstNonNull(stoppedBy, "undefined"));
+          } catch (Exception ex) {
+            LOG.error(ex.getLocalizedMessage(), ex);
+          } finally {
+            if (workspace.isTemporary()) {
+              removeWorkspaceQuietly(workspace);
+            }
+          }
+        });
+  }
 

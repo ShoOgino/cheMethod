@@ -1,51 +1,59 @@
-        public boolean process(IProgressMonitor monitor) throws JavaModelException {
-            try {
-                int nUnresolved = fUnresolvedTypes.size();
-                if (nUnresolved == 0) {
-                    return false;
-                }
-                char[][] allTypes = new char[nUnresolved][];
-                int i = 0;
-                for (Iterator<String> iter = fUnresolvedTypes.keySet().iterator(); iter.hasNext(); ) {
-                    allTypes[i++] = iter.next().toCharArray();
-                }
-                final ArrayList<TypeNameMatch> typesFound = new ArrayList<TypeNameMatch>();
-                final IJavaProject project = fCurrPackage.getJavaProject();
-                IJavaSearchScope scope = SearchEngine.createJavaSearchScope(new IJavaElement[]{project});
-                TypeNameMatchCollector collector = new TypeNameMatchCollector(typesFound);
-                new SearchEngine()
-                        .searchAllTypeNames(null, allTypes, scope, collector, IJavaSearchConstants.WAIT_UNTIL_READY_TO_SEARCH, monitor);
-
-                boolean is50OrHigher = JavaModelUtil.is50OrHigher(project);
-
-                for (i = 0; i < typesFound.size(); i++) {
-                    TypeNameMatch curr = typesFound.get(i);
-                    UnresolvedTypeData data = fUnresolvedTypes.get(curr.getSimpleTypeName());
-                    if (data != null && isVisible(curr) && isOfKind(curr, data.typeKinds, is50OrHigher)) {
-                        if (fAllowDefaultPackageImports || curr.getPackageName().length() > 0) {
-                            data.addInfo(curr);
-                        }
-                    }
-                }
-
-                ArrayList<TypeNameMatch[]> openChoices = new ArrayList<TypeNameMatch[]>(nUnresolved);
-                ArrayList<SourceRange> sourceRanges = new ArrayList<SourceRange>(nUnresolved);
-                for (Iterator<UnresolvedTypeData> iter = fUnresolvedTypes.values().iterator(); iter.hasNext(); ) {
-                    UnresolvedTypeData data = iter.next();
-                    TypeNameMatch[] openChoice = processTypeInfo(data.foundInfos);
-                    if (openChoice != null) {
-                        openChoices.add(openChoice);
-                        sourceRanges.add(new SourceRange(data.ref.getStartPosition(), data.ref.getLength()));
-                    }
-                }
-                if (openChoices.isEmpty()) {
-                    return false;
-                }
-                fOpenChoices = openChoices.toArray(new TypeNameMatch[openChoices.size()][]);
-                fSourceRanges = sourceRanges.toArray(new SourceRange[sourceRanges.size()]);
-                return true;
-            } finally {
-                monitor.done();
-            }
+    public boolean process(IProgressMonitor monitor) throws JavaModelException {
+      try {
+        int nUnresolved = fUnresolvedTypes.size();
+        if (nUnresolved == 0) {
+          return false;
         }
+        char[][] allTypes = new char[nUnresolved][];
+        int i = 0;
+        for (Iterator<String> iter = fUnresolvedTypes.keySet().iterator(); iter.hasNext(); ) {
+          allTypes[i++] = iter.next().toCharArray();
+        }
+        final ArrayList<TypeNameMatch> typesFound = new ArrayList<TypeNameMatch>();
+        final IJavaProject project = fCurrPackage.getJavaProject();
+        IJavaSearchScope scope = SearchEngine.createJavaSearchScope(new IJavaElement[] {project});
+        TypeNameMatchCollector collector = new TypeNameMatchCollector(typesFound);
+        new SearchEngine()
+            .searchAllTypeNames(
+                null,
+                allTypes,
+                scope,
+                collector,
+                IJavaSearchConstants.WAIT_UNTIL_READY_TO_SEARCH,
+                monitor);
+
+        boolean is50OrHigher = JavaModelUtil.is50OrHigher(project);
+
+        for (i = 0; i < typesFound.size(); i++) {
+          TypeNameMatch curr = typesFound.get(i);
+          UnresolvedTypeData data = fUnresolvedTypes.get(curr.getSimpleTypeName());
+          if (data != null && isVisible(curr) && isOfKind(curr, data.typeKinds, is50OrHigher)) {
+            if (fAllowDefaultPackageImports || curr.getPackageName().length() > 0) {
+              data.addInfo(curr);
+            }
+          }
+        }
+
+        ArrayList<TypeNameMatch[]> openChoices = new ArrayList<TypeNameMatch[]>(nUnresolved);
+        ArrayList<SourceRange> sourceRanges = new ArrayList<SourceRange>(nUnresolved);
+        for (Iterator<UnresolvedTypeData> iter = fUnresolvedTypes.values().iterator();
+            iter.hasNext();
+            ) {
+          UnresolvedTypeData data = iter.next();
+          TypeNameMatch[] openChoice = processTypeInfo(data.foundInfos);
+          if (openChoice != null) {
+            openChoices.add(openChoice);
+            sourceRanges.add(new SourceRange(data.ref.getStartPosition(), data.ref.getLength()));
+          }
+        }
+        if (openChoices.isEmpty()) {
+          return false;
+        }
+        fOpenChoices = openChoices.toArray(new TypeNameMatch[openChoices.size()][]);
+        fSourceRanges = sourceRanges.toArray(new SourceRange[sourceRanges.size()]);
+        return true;
+      } finally {
+        monitor.done();
+      }
+    }
 

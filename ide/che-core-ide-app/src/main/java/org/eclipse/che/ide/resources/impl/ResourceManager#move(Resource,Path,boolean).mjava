@@ -1,61 +1,106 @@
-    protected Promise<Resource> move(final Resource source, final Path destination, final boolean force) {
-        checkArgument(!source.getLocation().isRoot(), "Workspace root is not allowed to be moved");
+  protected Promise<Resource> move(
+      final Resource source, final Path destination, final boolean force) {
+    checkArgument(!source.getLocation().isRoot(), "Workspace root is not allowed to be moved");
 
-        return findResource(destination, true).thenPromise(resource -> {
-            checkState(!resource.isPresent() || force, "Cannot create '" + destination.toString() + "'. Resource already exists.");
+    return findResource(destination, true)
+        .thenPromise(
+            resource -> {
+              checkState(
+                  !resource.isPresent() || force,
+                  "Cannot create '" + destination.toString() + "'. Resource already exists.");
 
-            if (isResourceOpened(source)) {
+              if (isResourceOpened(source)) {
                 deletedFilesController.add(source.getLocation().toString());
-            }
+              }
 
-            return clientServerEventService.sendFileTrackingSuspendEvent().thenPromise(success -> {
-                store.dispose(source.getLocation(), !source.isFile()); //TODO: need to be tested
+              return clientServerEventService
+                  .sendFileTrackingSuspendEvent()
+                  .thenPromise(
+                      success -> {
+                        store.dispose(
+                            source.getLocation(), !source.isFile()); //TODO: need to be tested
 
-                return ps.move(source.getLocation(), destination.parent(), destination.lastSegment(), force)
-                         .thenPromise(ignored -> {
-                             if (source.isProject() && source.getLocation().segmentCount() == 1) {
-                                 return ps.getProjects().then((Function<List<ProjectConfigDto>, Resource>)updatedConfigs -> {
-                                     clientServerEventService.sendFileTrackingResumeEvent();
+                        return ps.move(
+                                source.getLocation(),
+                                destination.parent(),
+                                destination.lastSegment(),
+                                force)
+                            .thenPromise(
+                                ignored -> {
+                                  if (source.isProject()
+                                      && source.getLocation().segmentCount() == 1) {
+                                    return ps.getProjects()
+                                        .then(
+                                            (Function<List<ProjectConfigDto>, Resource>)
+                                                updatedConfigs -> {
+                                                  clientServerEventService
+                                                      .sendFileTrackingResumeEvent();
 
-                                     //cache new configs
-                                     cachedConfigs = updatedConfigs.toArray(new ProjectConfigDto[updatedConfigs.size()]);
-                                     store.dispose(source.getLocation(), true);
+                                                  //cache new configs
+                                                  cachedConfigs =
+                                                      updatedConfigs.toArray(
+                                                          new ProjectConfigDto
+                                                              [updatedConfigs.size()]);
+                                                  store.dispose(source.getLocation(), true);
 
-                                     for (ProjectConfigDto projectConfigDto : cachedConfigs) {
-                                         if (projectConfigDto.getPath().equals(destination.toString())) {
-                                             final Project newResource =
-                                                     resourceFactory.newProjectImpl(projectConfigDto, ResourceManager.this);
-                                             store.register(newResource);
-                                             eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(newResource, source,
-                                                                                                               ADDED | MOVED_FROM |
-                                                                                                               MOVED_TO |
-                                                                                                               DERIVED)));
+                                                  for (ProjectConfigDto projectConfigDto :
+                                                      cachedConfigs) {
+                                                    if (projectConfigDto
+                                                        .getPath()
+                                                        .equals(destination.toString())) {
+                                                      final Project newResource =
+                                                          resourceFactory.newProjectImpl(
+                                                              projectConfigDto,
+                                                              ResourceManager.this);
+                                                      store.register(newResource);
+                                                      eventBus.fireEvent(
+                                                          new ResourceChangedEvent(
+                                                              new ResourceDeltaImpl(
+                                                                  newResource,
+                                                                  source,
+                                                                  ADDED
+                                                                      | MOVED_FROM
+                                                                      | MOVED_TO
+                                                                      | DERIVED)));
 
-                                             return newResource;
-                                         }
-                                     }
+                                                      return newResource;
+                                                    }
+                                                  }
 
-                                     throw new IllegalStateException("Resource not found");
-                                 });
-                             }
+                                                  throw new IllegalStateException(
+                                                      "Resource not found");
+                                                });
+                                  }
 
-                             return findResource(destination, false).then((Function<Optional<Resource>, Resource>)movedResource -> {
-                                 if (movedResource.isPresent()) {
-                                     eventBus.fireEvent(new ResourceChangedEvent(new ResourceDeltaImpl(movedResource.get(), source,
-                                                                                                       ADDED | MOVED_FROM |
-                                                                                                       MOVED_TO | DERIVED)));
+                                  return findResource(destination, false)
+                                      .then(
+                                          (Function<Optional<Resource>, Resource>)
+                                              movedResource -> {
+                                                if (movedResource.isPresent()) {
+                                                  eventBus.fireEvent(
+                                                      new ResourceChangedEvent(
+                                                          new ResourceDeltaImpl(
+                                                              movedResource.get(),
+                                                              source,
+                                                              ADDED
+                                                                  | MOVED_FROM
+                                                                  | MOVED_TO
+                                                                  | DERIVED)));
 
-                                     clientServerEventService.sendFileTrackingResumeEvent();
+                                                  clientServerEventService
+                                                      .sendFileTrackingResumeEvent();
 
-                                     return movedResource.get();
-                                 }
+                                                  return movedResource.get();
+                                                }
 
-                                 clientServerEventService.sendFileTrackingResumeEvent();
+                                                clientServerEventService
+                                                    .sendFileTrackingResumeEvent();
 
-                                 throw new IllegalStateException("Resource not found");
-                             });
-                         });
+                                                throw new IllegalStateException(
+                                                    "Resource not found");
+                                              });
+                                });
+                      });
             });
-        });
-    }
+  }
 

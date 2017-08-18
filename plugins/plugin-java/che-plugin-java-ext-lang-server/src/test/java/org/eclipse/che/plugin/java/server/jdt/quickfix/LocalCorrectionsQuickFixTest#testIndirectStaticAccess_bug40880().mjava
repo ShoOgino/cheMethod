@@ -1,57 +1,57 @@
-    @Test
-	public void testIndirectStaticAccess_bug40880() throws Exception {
+  @Test
+  public void testIndirectStaticAccess_bug40880() throws Exception {
 
-		Hashtable hashtable= JavaCore.getOptions();
-		hashtable.put(JavaCore.COMPILER_PB_INDIRECT_STATIC_ACCESS, JavaCore.ERROR);
-		JavaCore.setOptions(hashtable);
+    Hashtable hashtable = JavaCore.getOptions();
+    hashtable.put(JavaCore.COMPILER_PB_INDIRECT_STATIC_ACCESS, JavaCore.ERROR);
+    JavaCore.setOptions(hashtable);
 
-		IPackageFragment pack1= fSourceFolder.createPackageFragment("test1", false, null);
-		StringBuffer buf= new StringBuffer();
-		buf.append("package test1;\n");
-		buf.append("class FileType {\n");
-		buf.append("    public String extension;\n");
-		buf.append("}\n");
-		pack1.createCompilationUnit("FileType.java", buf.toString(), false, null);
+    IPackageFragment pack1 = fSourceFolder.createPackageFragment("test1", false, null);
+    StringBuffer buf = new StringBuffer();
+    buf.append("package test1;\n");
+    buf.append("class FileType {\n");
+    buf.append("    public String extension;\n");
+    buf.append("}\n");
+    pack1.createCompilationUnit("FileType.java", buf.toString(), false, null);
 
-		buf= new StringBuffer();
-		buf.append("package test1;\n");
-		buf.append("interface ToolConfigurationSettingsConstants {\n");
-		buf.append("     FileType FILE_TYPE = null;\n");
-		buf.append("}\n");
-		pack1.createCompilationUnit("ToolConfigurationSettingsConstants.java", buf.toString(), false, null);
+    buf = new StringBuffer();
+    buf.append("package test1;\n");
+    buf.append("interface ToolConfigurationSettingsConstants {\n");
+    buf.append("     FileType FILE_TYPE = null;\n");
+    buf.append("}\n");
+    pack1.createCompilationUnit(
+        "ToolConfigurationSettingsConstants.java", buf.toString(), false, null);
 
+    buf = new StringBuffer();
+    buf.append("package test1;\n");
+    buf.append(
+        "interface ToolUserSettingsConstants extends ToolConfigurationSettingsConstants {\n");
+    buf.append("}\n");
+    pack1.createCompilationUnit("ToolUserSettingsConstants.java", buf.toString(), false, null);
 
-		buf= new StringBuffer();
-		buf.append("package test1;\n");
-		buf.append("interface ToolUserSettingsConstants extends ToolConfigurationSettingsConstants {\n");
-		buf.append("}\n");
-		pack1.createCompilationUnit("ToolUserSettingsConstants.java", buf.toString(), false, null);
+    buf = new StringBuffer();
+    buf.append("package test1;\n");
+    buf.append("public class E {\n");
+    buf.append("    public void foo() {\n");
+    buf.append("        ToolUserSettingsConstants.FILE_TYPE.extension.toLowerCase();\n");
+    buf.append("    }\n");
+    buf.append("}\n");
+    ICompilationUnit cu = pack1.createCompilationUnit("E.java", buf.toString(), false, null);
 
-		buf= new StringBuffer();
-		buf.append("package test1;\n");
-		buf.append("public class E {\n");
-		buf.append("    public void foo() {\n");
-		buf.append("        ToolUserSettingsConstants.FILE_TYPE.extension.toLowerCase();\n");
-		buf.append("    }\n");
-		buf.append("}\n");
-		ICompilationUnit cu= pack1.createCompilationUnit("E.java", buf.toString(), false, null);
+    CompilationUnit astRoot = getASTRoot(cu);
+    ArrayList proposals = collectCorrections(cu, astRoot);
+    assertNumberOfProposals(proposals, 1);
+    assertCorrectLabels(proposals);
 
+    CUCorrectionProposal proposal = (CUCorrectionProposal) proposals.get(0);
+    String preview = getPreviewContent(proposal);
 
-		CompilationUnit astRoot= getASTRoot(cu);
-		ArrayList proposals= collectCorrections(cu, astRoot);
-		assertNumberOfProposals(proposals, 1);
-		assertCorrectLabels(proposals);
-
-		CUCorrectionProposal proposal= (CUCorrectionProposal) proposals.get(0);
-		String preview= getPreviewContent(proposal);
-
-		buf= new StringBuffer();
-		buf.append("package test1;\n");
-		buf.append("public class E {\n");
-		buf.append("    public void foo() {\n");
-		buf.append("        ToolConfigurationSettingsConstants.FILE_TYPE.extension.toLowerCase();\n");
-		buf.append("    }\n");
-		buf.append("}\n");
-		assertEqualString(preview, buf.toString());
-	}
+    buf = new StringBuffer();
+    buf.append("package test1;\n");
+    buf.append("public class E {\n");
+    buf.append("    public void foo() {\n");
+    buf.append("        ToolConfigurationSettingsConstants.FILE_TYPE.extension.toLowerCase();\n");
+    buf.append("    }\n");
+    buf.append("}\n");
+    assertEqualString(preview, buf.toString());
+  }
 

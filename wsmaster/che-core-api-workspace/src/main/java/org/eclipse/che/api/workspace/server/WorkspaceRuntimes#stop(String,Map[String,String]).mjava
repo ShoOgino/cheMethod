@@ -1,51 +1,55 @@
-    /**
-     * Stops running workspace runtime.
-     * <p>
-     * <p>Stops environment in an implementation specific way.
-     * During the stop of the workspace its runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status.
-     * Workspace may be stopped only if its status is {@link WorkspaceStatus#RUNNING}.
-     *
-     * @param workspaceId
-     *         identifier of workspace which should be stopped
-     * @throws NotFoundException
-     *         when workspace with specified identifier does not have runtime
-     * @throws ConflictException
-     *         when running workspace status is different from {@link WorkspaceStatus#RUNNING}
-     * @see WorkspaceStatus#STOPPING
-     */
-    public void stop(String workspaceId, Map<String, String> options) throws NotFoundException,
-                                                                             ConflictException {
-        RuntimeState state = runtimes.get(workspaceId);
-        if (state == null) {
-            throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
-        }
-        if (state.status != RUNNING && state.status != STARTING) {
-            throw new ConflictException(
-                    format("Could not stop workspace '%s' because its state is '%s'", workspaceId, state.status));
-        }
-        if (!runtimes.replace(workspaceId, state, new RuntimeState(state.runtime, STOPPING))) {
-            RuntimeState newState = runtimes.get(workspaceId);
-            WorkspaceStatus status = newState != null ? newState.status : STOPPED;
-            throw new ConflictException(
-                    format("Could not stop workspace '%s' because its state is '%s'", workspaceId, status));
-        }
-        eventService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                       .withWorkspaceId(workspaceId)
-                                       .withPrevStatus(state.status)
-                                       .withStatus(STOPPING));
-
-        try {
-            state.runtime.stop(options);
-
-            // remove before firing an event to have consistency between state and the event
-            runtimes.remove(workspaceId);
-            publishWorkspaceStoppedEvent(workspaceId, STOPPING, null);
-        } catch (InfrastructureException e) {
-            // remove before firing an event to have consistency between state and the event
-            runtimes.remove(workspaceId);
-            publishWorkspaceStoppedEvent(workspaceId,
-                                         STOPPING,
-                                         "Error occurs on workspace runtime stop. Error: " + e.getMessage());
-        }
+  /**
+   * Stops running workspace runtime.
+   *
+   * <p>
+   *
+   * <p>Stops environment in an implementation specific way. During the stop of the workspace its
+   * runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status. Workspace may be
+   * stopped only if its status is {@link WorkspaceStatus#RUNNING}.
+   *
+   * @param workspaceId identifier of workspace which should be stopped
+   * @throws NotFoundException when workspace with specified identifier does not have runtime
+   * @throws ConflictException when running workspace status is different from {@link
+   *     WorkspaceStatus#RUNNING}
+   * @see WorkspaceStatus#STOPPING
+   */
+  public void stop(String workspaceId, Map<String, String> options)
+      throws NotFoundException, ConflictException {
+    RuntimeState state = runtimes.get(workspaceId);
+    if (state == null) {
+      throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
     }
+    if (state.status != RUNNING && state.status != STARTING) {
+      throw new ConflictException(
+          format(
+              "Could not stop workspace '%s' because its state is '%s'",
+              workspaceId, state.status));
+    }
+    if (!runtimes.replace(workspaceId, state, new RuntimeState(state.runtime, STOPPING))) {
+      RuntimeState newState = runtimes.get(workspaceId);
+      WorkspaceStatus status = newState != null ? newState.status : STOPPED;
+      throw new ConflictException(
+          format("Could not stop workspace '%s' because its state is '%s'", workspaceId, status));
+    }
+    eventService.publish(
+        DtoFactory.newDto(WorkspaceStatusEvent.class)
+            .withWorkspaceId(workspaceId)
+            .withPrevStatus(state.status)
+            .withStatus(STOPPING));
+
+    try {
+      state.runtime.stop(options);
+
+      // remove before firing an event to have consistency between state and the event
+      runtimes.remove(workspaceId);
+      publishWorkspaceStoppedEvent(workspaceId, STOPPING, null);
+    } catch (InfrastructureException e) {
+      // remove before firing an event to have consistency between state and the event
+      runtimes.remove(workspaceId);
+      publishWorkspaceStoppedEvent(
+          workspaceId,
+          STOPPING,
+          "Error occurs on workspace runtime stop. Error: " + e.getMessage());
+    }
+  }
 

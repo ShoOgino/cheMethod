@@ -1,55 +1,62 @@
-    /**
-     * Computes the replacement string.
-     *
-     * @return the replacement string
-     */
-    private String computeReplacementString() {
-        int proposalKind = fProposal.getKind();
-        String qualifiedTypeName = null;
-        char[] qualifiedType = null;
-        if (proposalKind == CompletionProposal.TYPE_IMPORT) {
-            qualifiedType = fProposal.getSignature();
-            qualifiedTypeName = String.valueOf(Signature.toCharArray(qualifiedType));
-        } else if (proposalKind == CompletionProposal.METHOD_IMPORT || proposalKind == CompletionProposal.FIELD_IMPORT) {
-            qualifiedType = Signature.getTypeErasure(fProposal.getDeclarationSignature());
-            qualifiedTypeName = String.valueOf(Signature.toCharArray(qualifiedType));
-        } else {
-			/*
-			 * In 3.3 we only support the above import proposals, see
-			 * CompletionProposal#getRequiredProposals()
-			 */
-            Assert.isTrue(false);
+  /**
+   * Computes the replacement string.
+   *
+   * @return the replacement string
+   */
+  private String computeReplacementString() {
+    int proposalKind = fProposal.getKind();
+    String qualifiedTypeName = null;
+    char[] qualifiedType = null;
+    if (proposalKind == CompletionProposal.TYPE_IMPORT) {
+      qualifiedType = fProposal.getSignature();
+      qualifiedTypeName = String.valueOf(Signature.toCharArray(qualifiedType));
+    } else if (proposalKind == CompletionProposal.METHOD_IMPORT
+        || proposalKind == CompletionProposal.FIELD_IMPORT) {
+      qualifiedType = Signature.getTypeErasure(fProposal.getDeclarationSignature());
+      qualifiedTypeName = String.valueOf(Signature.toCharArray(qualifiedType));
+    } else {
+      /*
+       * In 3.3 we only support the above import proposals, see
+       * CompletionProposal#getRequiredProposals()
+       */
+      Assert.isTrue(false);
+    }
+
+    /* Add imports if the preference is on. */
+    fImportRewrite = createImportRewrite();
+    if (fImportRewrite != null) {
+      if (proposalKind == CompletionProposal.TYPE_IMPORT) {
+        String simpleType = fImportRewrite.addImport(qualifiedTypeName, fImportContext);
+        if (fParentProposalKind == CompletionProposal.METHOD_REF)
+          return simpleType + "."; //$NON-NLS-1$
+      } else {
+        String res =
+            fImportRewrite.addStaticImport(
+                qualifiedTypeName,
+                String.valueOf(fProposal.getName()),
+                proposalKind == CompletionProposal.FIELD_IMPORT,
+                fImportContext);
+        int dot = res.lastIndexOf('.');
+        if (dot != -1) {
+          String typeName = fImportRewrite.addImport(res.substring(0, dot), fImportContext);
+          return typeName + '.';
         }
+      }
+      return ""; //$NON-NLS-1$
+    }
 
- 		/* Add imports if the preference is on. */
-        fImportRewrite = createImportRewrite();
-        if (fImportRewrite != null) {
-            if (proposalKind == CompletionProposal.TYPE_IMPORT) {
-                String simpleType = fImportRewrite.addImport(qualifiedTypeName, fImportContext);
-                if (fParentProposalKind == CompletionProposal.METHOD_REF)
-                    return simpleType + "."; //$NON-NLS-1$
-            } else {
-                String res = fImportRewrite.addStaticImport(qualifiedTypeName, String.valueOf(fProposal.getName()),
-                                                            proposalKind == CompletionProposal.FIELD_IMPORT, fImportContext);
-                int dot = res.lastIndexOf('.');
-                if (dot != -1) {
-                    String typeName= fImportRewrite.addImport(res.substring(0, dot), fImportContext);
-					return typeName + '.';
-				}
-			}
-	 		return ""; //$NON-NLS-1$
-	 	}
+    // Case where we don't have an import rewrite (see allowAddingImports)
 
-		// Case where we don't have an import rewrite (see allowAddingImports)
+    if (fCompilationUnit != null
+        && JavaModelUtil.isImplicitImport(
+            Signature.getQualifier(qualifiedTypeName), fCompilationUnit)) {
+      /* No imports for implicit imports. */
 
-		if (fCompilationUnit != null && JavaModelUtil.isImplicitImport(Signature.getQualifier(qualifiedTypeName), fCompilationUnit)) {
-			/* No imports for implicit imports. */
+      if (fProposal.getKind() == CompletionProposal.TYPE_IMPORT
+          && fParentProposalKind == CompletionProposal.FIELD_REF) return ""; //$NON-NLS-1$
+      qualifiedTypeName = String.valueOf(Signature.getSignatureSimpleName(qualifiedType));
+    }
 
-			if (fProposal.getKind() == CompletionProposal.TYPE_IMPORT && fParentProposalKind == CompletionProposal.FIELD_REF)
-				return ""; //$NON-NLS-1$
-			qualifiedTypeName= String.valueOf(Signature.getSignatureSimpleName(qualifiedType));
-		}
-
-		return qualifiedTypeName + "."; //$NON-NLS-1$
-	}
+    return qualifiedTypeName + "."; //$NON-NLS-1$
+  }
 

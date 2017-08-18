@@ -1,65 +1,68 @@
-	public String[] getCodeBlocks(CallContext context, ImportRewrite importRewrite) throws CoreException {
-		final ASTRewrite rewriter = ASTRewrite.create(fDeclaration.getAST());
-		replaceParameterWithExpression(rewriter, context, importRewrite);
-		updateImplicitReceivers(rewriter, context);
-		makeNamesUnique(rewriter, context.scope);
-		updateTypeReferences(rewriter, context);
-		updateStaticReferences(rewriter, context);
-		updateTypeVariables(rewriter, context);
-		updateMethodTypeVariable(rewriter, context);
+  public String[] getCodeBlocks(CallContext context, ImportRewrite importRewrite)
+      throws CoreException {
+    final ASTRewrite rewriter = ASTRewrite.create(fDeclaration.getAST());
+    replaceParameterWithExpression(rewriter, context, importRewrite);
+    updateImplicitReceivers(rewriter, context);
+    makeNamesUnique(rewriter, context.scope);
+    updateTypeReferences(rewriter, context);
+    updateStaticReferences(rewriter, context);
+    updateTypeVariables(rewriter, context);
+    updateMethodTypeVariable(rewriter, context);
 
-		List<IRegion> ranges = null;
-		if (hasReturnValue()) {
-			if (context.callMode == ASTNode.RETURN_STATEMENT) {
-				ranges = getStatementRanges();
-			} else {
-				ranges = getExpressionRanges();
-			}
-		} else {
-			ASTNode last = getLastStatement();
-			if (last != null && last.getNodeType() == ASTNode.RETURN_STATEMENT) {
-				ranges = getReturnStatementRanges();
-			} else {
-				ranges = getStatementRanges();
-			}
-		}
+    List<IRegion> ranges = null;
+    if (hasReturnValue()) {
+      if (context.callMode == ASTNode.RETURN_STATEMENT) {
+        ranges = getStatementRanges();
+      } else {
+        ranges = getExpressionRanges();
+      }
+    } else {
+      ASTNode last = getLastStatement();
+      if (last != null && last.getNodeType() == ASTNode.RETURN_STATEMENT) {
+        ranges = getReturnStatementRanges();
+      } else {
+        ranges = getStatementRanges();
+      }
+    }
 
-		final TextEdit dummy = rewriter.rewriteAST(fDocument, fTypeRoot.getJavaProject().getOptions(true));
-		int size = ranges.size();
-		RangeMarker[] markers = new RangeMarker[size];
-		for (int i = 0; i < markers.length; i++) {
-			IRegion range = ranges.get(i);
-			markers[i] = new RangeMarker(range.getOffset(), range.getLength());
-		}
-		int split;
-		if (size <= 1) {
-			split = Integer.MAX_VALUE;
-		} else {
-			IRegion region = ranges.get(0);
-			split = region.getOffset() + region.getLength();
-		}
-		TextEdit[] edits = dummy.removeChildren();
-		for (int i = 0; i < edits.length; i++) {
-			TextEdit edit = edits[i];
-			int pos = edit.getOffset() >= split ? 1 : 0;
-			markers[pos].addChild(edit);
-		}
-		MultiTextEdit root = new MultiTextEdit(0, fDocument.getLength());
-		root.addChildren(markers);
+    final TextEdit dummy =
+        rewriter.rewriteAST(fDocument, fTypeRoot.getJavaProject().getOptions(true));
+    int size = ranges.size();
+    RangeMarker[] markers = new RangeMarker[size];
+    for (int i = 0; i < markers.length; i++) {
+      IRegion range = ranges.get(i);
+      markers[i] = new RangeMarker(range.getOffset(), range.getLength());
+    }
+    int split;
+    if (size <= 1) {
+      split = Integer.MAX_VALUE;
+    } else {
+      IRegion region = ranges.get(0);
+      split = region.getOffset() + region.getLength();
+    }
+    TextEdit[] edits = dummy.removeChildren();
+    for (int i = 0; i < edits.length; i++) {
+      TextEdit edit = edits[i];
+      int pos = edit.getOffset() >= split ? 1 : 0;
+      markers[pos].addChild(edit);
+    }
+    MultiTextEdit root = new MultiTextEdit(0, fDocument.getLength());
+    root.addChildren(markers);
 
-		try {
-			TextEditProcessor processor = new TextEditProcessor(fDocument, root, TextEdit.CREATE_UNDO | TextEdit.UPDATE_REGIONS);
-			UndoEdit undo = processor.performEdits();
-			String[] result = getBlocks(markers);
-			// It is faster to undo the changes than coping the buffer over and over again.
-			processor = new TextEditProcessor(fDocument, undo, TextEdit.UPDATE_REGIONS);
-			processor.performEdits();
-			return result;
-		} catch (MalformedTreeException exception) {
-			JavaPlugin.log(exception);
-		} catch (BadLocationException exception) {
-			JavaPlugin.log(exception);
-		}
-		return new String[] {};
-	}
+    try {
+      TextEditProcessor processor =
+          new TextEditProcessor(fDocument, root, TextEdit.CREATE_UNDO | TextEdit.UPDATE_REGIONS);
+      UndoEdit undo = processor.performEdits();
+      String[] result = getBlocks(markers);
+      // It is faster to undo the changes than coping the buffer over and over again.
+      processor = new TextEditProcessor(fDocument, undo, TextEdit.UPDATE_REGIONS);
+      processor.performEdits();
+      return result;
+    } catch (MalformedTreeException exception) {
+      JavaPlugin.log(exception);
+    } catch (BadLocationException exception) {
+      JavaPlugin.log(exception);
+    }
+    return new String[] {};
+  }
 

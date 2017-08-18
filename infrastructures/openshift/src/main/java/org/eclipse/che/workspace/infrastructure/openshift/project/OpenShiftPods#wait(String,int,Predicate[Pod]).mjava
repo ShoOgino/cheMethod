@@ -1,66 +1,63 @@
-    /**
-     * Waits until pod state will suit for specified predicate.
-     *
-     * @param name
-     *         name of pod that should be watched
-     * @param timeoutMin
-     *         waiting timeout in minutes
-     * @param predicate
-     *         predicate to perform state check
-     * @return pod that suit for specified predicate
-     * @throws InfrastructureException
-     *         when specified timeout is reached
-     * @throws InfrastructureException
-     *         when {@link Thread} is interrupted while waiting
-     * @throws InfrastructureException
-     *         when any other exception occurs
-     */
-    public Pod wait(String name, int timeoutMin, Predicate<Pod> predicate) throws InfrastructureException {
-        CompletableFuture<Pod> future = new CompletableFuture<>();
-        Watch watch = null;
-        try (OpenShiftClient client = clientFactory.create()) {
-            PodResource<Pod, DoneablePod> podResource = client.pods()
-                                                              .inNamespace(namespace)
-                                                              .withName(name);
+  /**
+   * Waits until pod state will suit for specified predicate.
+   *
+   * @param name name of pod that should be watched
+   * @param timeoutMin waiting timeout in minutes
+   * @param predicate predicate to perform state check
+   * @return pod that suit for specified predicate
+   * @throws InfrastructureException when specified timeout is reached
+   * @throws InfrastructureException when {@link Thread} is interrupted while waiting
+   * @throws InfrastructureException when any other exception occurs
+   */
+  public Pod wait(String name, int timeoutMin, Predicate<Pod> predicate)
+      throws InfrastructureException {
+    CompletableFuture<Pod> future = new CompletableFuture<>();
+    Watch watch = null;
+    try (OpenShiftClient client = clientFactory.create()) {
+      PodResource<Pod, DoneablePod> podResource =
+          client.pods().inNamespace(namespace).withName(name);
 
-            watch = podResource.watch(new Watcher<Pod>() {
-                                          @Override
-                                          public void eventReceived(Action action, Pod pod) {
-                                              if (predicate.test(pod)) {
-                                                  future.complete(pod);
-                                              }
-                                          }
+      watch =
+          podResource.watch(
+              new Watcher<Pod>() {
+                @Override
+                public void eventReceived(Action action, Pod pod) {
+                  if (predicate.test(pod)) {
+                    future.complete(pod);
+                  }
+                }
 
-                                          @Override
-                                          public void onClose(KubernetesClientException cause) {
-                                              future.completeExceptionally(new InfrastructureException("Waiting for pod '" + name + "' was interrupted"));
-                                          }
-                                      }
-            );
+                @Override
+                public void onClose(KubernetesClientException cause) {
+                  future.completeExceptionally(
+                      new InfrastructureException(
+                          "Waiting for pod '" + name + "' was interrupted"));
+                }
+              });
 
-            Pod actualPod = podResource.get();
-            if (actualPod == null) {
-                throw new InfrastructureException("Specified pod " + name + " doesn't exist");
-            }
-            if (predicate.test(actualPod)) {
-                return actualPod;
-            }
-            try {
-                return future.get(timeoutMin, TimeUnit.MINUTES);
-            } catch (ExecutionException e) {
-                throw new InfrastructureException(e.getCause().getMessage(), e);
-            } catch (TimeoutException e) {
-                throw new InfrastructureException("Waiting for pod '" + name + "' reached timeout");
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new InfrastructureException("Waiting for pod '" + name + "' was interrupted");
-            }
-        } catch (KubernetesClientException e) {
-            throw new InfrastructureException(e.getMessage(), e);
-        } finally {
-            if (watch != null) {
-                watch.close();
-            }
-        }
+      Pod actualPod = podResource.get();
+      if (actualPod == null) {
+        throw new InfrastructureException("Specified pod " + name + " doesn't exist");
+      }
+      if (predicate.test(actualPod)) {
+        return actualPod;
+      }
+      try {
+        return future.get(timeoutMin, TimeUnit.MINUTES);
+      } catch (ExecutionException e) {
+        throw new InfrastructureException(e.getCause().getMessage(), e);
+      } catch (TimeoutException e) {
+        throw new InfrastructureException("Waiting for pod '" + name + "' reached timeout");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new InfrastructureException("Waiting for pod '" + name + "' was interrupted");
+      }
+    } catch (KubernetesClientException e) {
+      throw new InfrastructureException(e.getMessage(), e);
+    } finally {
+      if (watch != null) {
+        watch.close();
+      }
     }
+  }
 

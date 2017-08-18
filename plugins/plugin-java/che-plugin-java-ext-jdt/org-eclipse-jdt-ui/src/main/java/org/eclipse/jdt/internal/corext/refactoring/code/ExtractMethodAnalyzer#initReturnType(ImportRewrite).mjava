@@ -1,61 +1,72 @@
-	private void initReturnType(ImportRewrite rewriter) {
-		AST ast = fEnclosingBodyDeclaration.getAST();
-		fReturnType = null;
-		fReturnTypeBinding = null;
-		switch (fReturnKind) {
-			case ACCESS_TO_LOCAL:
-				VariableDeclaration declaration = ASTNodes.findVariableDeclaration(fReturnValue, fEnclosingBodyDeclaration);
-				fReturnType =
-						ASTNodeFactory.newType(ast, declaration, rewriter, new ContextSensitiveImportRewriteContext(declaration,
-																													rewriter));
-				if (declaration.resolveBinding() != null) {
-					fReturnTypeBinding = declaration.resolveBinding().getType();
-				}
-				break;
-			case EXPRESSION:
-				Expression expression = (Expression)getFirstSelectedNode();
-				if (expression.getNodeType() == ASTNode.CLASS_INSTANCE_CREATION) {
-					fExpressionBinding = ((ClassInstanceCreation)expression).getType().resolveBinding();
-				} else {
-					fExpressionBinding = expression.resolveTypeBinding();
-				}
-				if (fExpressionBinding != null) {
-					if (fExpressionBinding.isNullType()) {
-						getStatus().addFatalError(RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_extract_null_type,
-												  JavaStatusContext.create(fCUnit, expression));
-					} else {
-						ITypeBinding normalizedBinding = Bindings.normalizeForDeclarationUse(fExpressionBinding, ast);
-						if (normalizedBinding != null) {
-							ImportRewriteContext context = new ContextSensitiveImportRewriteContext(fEnclosingBodyDeclaration, rewriter);
-							fReturnType = rewriter.addImport(normalizedBinding, ast, context);
-							fReturnTypeBinding = normalizedBinding;
-						}
-					}
-				} else {
-					fReturnType = ast.newPrimitiveType(PrimitiveType.VOID);
-					fReturnTypeBinding = ast.resolveWellKnownType("void"); //$NON-NLS-1$
-					getStatus().addError(RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_determine_return_type,
-										 JavaStatusContext.create(fCUnit, expression));
-				}
-				break;
-			case RETURN_STATEMENT_VALUE:
-				LambdaExpression enclosingLambdaExpr = ASTResolving.findEnclosingLambdaExpression(getFirstSelectedNode());
-				if (enclosingLambdaExpr != null) {
-					fReturnType = ASTNodeFactory.newReturnType(enclosingLambdaExpr, ast, rewriter, null);
-					IMethodBinding methodBinding = enclosingLambdaExpr.resolveMethodBinding();
-					fReturnTypeBinding = methodBinding != null ? methodBinding.getReturnType() : null;
-				} else if (fEnclosingBodyDeclaration.getNodeType() == ASTNode.METHOD_DECLARATION) {
-					fReturnType = ((MethodDeclaration)fEnclosingBodyDeclaration).getReturnType2();
-					fReturnTypeBinding = fReturnType != null ? fReturnType.resolveBinding() : null;
-				}
-				break;
-			default:
-				fReturnType= ast.newPrimitiveType(PrimitiveType.VOID);
-				fReturnTypeBinding= ast.resolveWellKnownType("void"); //$NON-NLS-1$
-		}
-		if (fReturnType == null) {
-			fReturnType= ast.newPrimitiveType(PrimitiveType.VOID);
-			fReturnTypeBinding= ast.resolveWellKnownType("void"); //$NON-NLS-1$
-		}
-	}
+  private void initReturnType(ImportRewrite rewriter) {
+    AST ast = fEnclosingBodyDeclaration.getAST();
+    fReturnType = null;
+    fReturnTypeBinding = null;
+    switch (fReturnKind) {
+      case ACCESS_TO_LOCAL:
+        VariableDeclaration declaration =
+            ASTNodes.findVariableDeclaration(fReturnValue, fEnclosingBodyDeclaration);
+        fReturnType =
+            ASTNodeFactory.newType(
+                ast,
+                declaration,
+                rewriter,
+                new ContextSensitiveImportRewriteContext(declaration, rewriter));
+        if (declaration.resolveBinding() != null) {
+          fReturnTypeBinding = declaration.resolveBinding().getType();
+        }
+        break;
+      case EXPRESSION:
+        Expression expression = (Expression) getFirstSelectedNode();
+        if (expression.getNodeType() == ASTNode.CLASS_INSTANCE_CREATION) {
+          fExpressionBinding = ((ClassInstanceCreation) expression).getType().resolveBinding();
+        } else {
+          fExpressionBinding = expression.resolveTypeBinding();
+        }
+        if (fExpressionBinding != null) {
+          if (fExpressionBinding.isNullType()) {
+            getStatus()
+                .addFatalError(
+                    RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_extract_null_type,
+                    JavaStatusContext.create(fCUnit, expression));
+          } else {
+            ITypeBinding normalizedBinding =
+                Bindings.normalizeForDeclarationUse(fExpressionBinding, ast);
+            if (normalizedBinding != null) {
+              ImportRewriteContext context =
+                  new ContextSensitiveImportRewriteContext(fEnclosingBodyDeclaration, rewriter);
+              fReturnType = rewriter.addImport(normalizedBinding, ast, context);
+              fReturnTypeBinding = normalizedBinding;
+            }
+          }
+        } else {
+          fReturnType = ast.newPrimitiveType(PrimitiveType.VOID);
+          fReturnTypeBinding = ast.resolveWellKnownType("void"); //$NON-NLS-1$
+          getStatus()
+              .addError(
+                  RefactoringCoreMessages.ExtractMethodAnalyzer_cannot_determine_return_type,
+                  JavaStatusContext.create(fCUnit, expression));
+        }
+        break;
+      case RETURN_STATEMENT_VALUE:
+        LambdaExpression enclosingLambdaExpr =
+            ASTResolving.findEnclosingLambdaExpression(getFirstSelectedNode());
+        if (enclosingLambdaExpr != null) {
+          fReturnType = ASTNodeFactory.newReturnType(enclosingLambdaExpr, ast, rewriter, null);
+          IMethodBinding methodBinding = enclosingLambdaExpr.resolveMethodBinding();
+          fReturnTypeBinding = methodBinding != null ? methodBinding.getReturnType() : null;
+        } else if (fEnclosingBodyDeclaration.getNodeType() == ASTNode.METHOD_DECLARATION) {
+          fReturnType = ((MethodDeclaration) fEnclosingBodyDeclaration).getReturnType2();
+          fReturnTypeBinding = fReturnType != null ? fReturnType.resolveBinding() : null;
+        }
+        break;
+      default:
+        fReturnType = ast.newPrimitiveType(PrimitiveType.VOID);
+        fReturnTypeBinding = ast.resolveWellKnownType("void"); //$NON-NLS-1$
+    }
+    if (fReturnType == null) {
+      fReturnType = ast.newPrimitiveType(PrimitiveType.VOID);
+      fReturnTypeBinding = ast.resolveWellKnownType("void"); //$NON-NLS-1$
+    }
+  }
 

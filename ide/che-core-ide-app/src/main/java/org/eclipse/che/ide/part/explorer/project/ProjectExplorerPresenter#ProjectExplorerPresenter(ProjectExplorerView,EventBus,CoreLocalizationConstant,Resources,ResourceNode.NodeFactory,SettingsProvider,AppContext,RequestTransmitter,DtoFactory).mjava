@@ -1,56 +1,69 @@
-    @Inject
-    public ProjectExplorerPresenter(final ProjectExplorerView view,
-                                    final EventBus eventBus,
-                                    final CoreLocalizationConstant locale,
-                                    final Resources resources,
-                                    final ResourceNode.NodeFactory nodeFactory,
-                                    final SettingsProvider settingsProvider,
-                                    final AppContext appContext,
-                                    final RequestTransmitter requestTransmitter,
-                                    final DtoFactory dtoFactory) {
-        this.view = view;
-        this.eventBus = eventBus;
-        this.nodeFactory = nodeFactory;
-        this.settingsProvider = settingsProvider;
-        this.locale = locale;
-        this.resources = resources;
-        this.appContext = appContext;
-        this.requestTransmitter = requestTransmitter;
-        this.dtoFactory = dtoFactory;
-        this.view.setDelegate(this);
+  @Inject
+  public ProjectExplorerPresenter(
+      final ProjectExplorerView view,
+      final EventBus eventBus,
+      final CoreLocalizationConstant locale,
+      final Resources resources,
+      final ResourceNode.NodeFactory nodeFactory,
+      final SettingsProvider settingsProvider,
+      final AppContext appContext,
+      final RequestTransmitter requestTransmitter,
+      final DtoFactory dtoFactory) {
+    this.view = view;
+    this.eventBus = eventBus;
+    this.nodeFactory = nodeFactory;
+    this.settingsProvider = settingsProvider;
+    this.locale = locale;
+    this.resources = resources;
+    this.appContext = appContext;
+    this.requestTransmitter = requestTransmitter;
+    this.dtoFactory = dtoFactory;
+    this.view.setDelegate(this);
 
-        eventBus.addHandler(ResourceChangedEvent.getType(), this);
-        eventBus.addHandler(MarkerChangedEvent.getType(), this);
-        eventBus.addHandler(SyntheticNodeUpdateEvent.getType(), this);
-        eventBus.addHandler(WorkspaceStoppedEvent.TYPE, event -> getTree().getNodeStorage().clear());
+    eventBus.addHandler(ResourceChangedEvent.getType(), this);
+    eventBus.addHandler(MarkerChangedEvent.getType(), this);
+    eventBus.addHandler(SyntheticNodeUpdateEvent.getType(), this);
+    eventBus.addHandler(WorkspaceStoppedEvent.TYPE, event -> getTree().getNodeStorage().clear());
 
-        view.getTree().getSelectionModel().addSelectionChangedHandler(event -> setSelection(new Selection<>(event.getSelection())));
+    view.getTree()
+        .getSelectionModel()
+        .addSelectionChangedHandler(event -> setSelection(new Selection<>(event.getSelection())));
 
-        view.getTree().addBeforeExpandHandler(event -> {
-            NodeDescriptor nodeDescriptor = view.getTree().getNodeDescriptor(event.getNode());
+    view.getTree()
+        .addBeforeExpandHandler(
+            event -> {
+              NodeDescriptor nodeDescriptor = view.getTree().getNodeDescriptor(event.getNode());
 
-            if (event.getNode() instanceof SyntheticNode && nodeDescriptor != null && nodeDescriptor.isExpandDeep()) {
+              if (event.getNode() instanceof SyntheticNode
+                  && nodeDescriptor != null
+                  && nodeDescriptor.isExpandDeep()) {
                 event.setCancelled(true);
-            }
-        });
+              }
+            });
 
-        view.getTree().getNodeLoader().addPostLoadHandler(event -> {
-            for (Node node : event.getReceivedNodes()) {
-                if (node instanceof ResourceNode && expandQueue.remove(((ResourceNode)node).getData().getLocation())) {
-                    view.getTree().setExpanded(node, true);
+    view.getTree()
+        .getNodeLoader()
+        .addPostLoadHandler(
+            event -> {
+              for (Node node : event.getReceivedNodes()) {
+                if (node instanceof ResourceNode
+                    && expandQueue.remove(((ResourceNode) node).getData().getLocation())) {
+                  view.getTree().setExpanded(node, true);
                 }
-            }
+              }
+            });
+
+    treeExpander = new ProjectExplorerTreeExpander(view.getTree(), appContext);
+
+    registerNative();
+
+    // when ide has already initialized, then we force set focus to the current part
+    eventBus.addHandler(
+        ExtensionsInitializedEvent.getType(),
+        event -> {
+          if (partStack != null) {
+            partStack.setActivePart(ProjectExplorerPresenter.this);
+          }
         });
-
-        treeExpander = new ProjectExplorerTreeExpander(view.getTree(), appContext);
-
-        registerNative();
-
-        // when ide has already initialized, then we force set focus to the current part
-        eventBus.addHandler(ExtensionsInitializedEvent.getType(), event -> {
-            if (partStack != null) {
-                partStack.setActivePart(ProjectExplorerPresenter.this);
-            }
-        });
-    }
+  }
 

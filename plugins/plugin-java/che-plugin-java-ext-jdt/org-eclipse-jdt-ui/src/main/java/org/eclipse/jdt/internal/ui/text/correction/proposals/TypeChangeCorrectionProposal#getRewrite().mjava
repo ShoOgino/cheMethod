@@ -1,107 +1,123 @@
-	@Override
-	protected ASTRewrite getRewrite() throws CoreException {
-		ASTNode boundNode = fAstRoot.findDeclaringNode(fBinding);
-		ASTNode declNode = null;
-		CompilationUnit newRoot = fAstRoot;
-		if (boundNode != null) {
-			declNode = boundNode; // is same CU
-		} else {
-			newRoot = ASTResolving.createQuickFixAST(getCompilationUnit(), null);
-			declNode = newRoot.findDeclaringNode(fBinding.getKey());
-		}
-		if (declNode != null) {
-			AST ast = declNode.getAST();
-			ASTRewrite rewrite = ASTRewrite.create(ast);
-			ImportRewrite imports = createImportRewrite(newRoot);
+  @Override
+  protected ASTRewrite getRewrite() throws CoreException {
+    ASTNode boundNode = fAstRoot.findDeclaringNode(fBinding);
+    ASTNode declNode = null;
+    CompilationUnit newRoot = fAstRoot;
+    if (boundNode != null) {
+      declNode = boundNode; // is same CU
+    } else {
+      newRoot = ASTResolving.createQuickFixAST(getCompilationUnit(), null);
+      declNode = newRoot.findDeclaringNode(fBinding.getKey());
+    }
+    if (declNode != null) {
+      AST ast = declNode.getAST();
+      ASTRewrite rewrite = ASTRewrite.create(ast);
+      ImportRewrite imports = createImportRewrite(newRoot);
 
-			ImportRewriteContext context = new ContextSensitiveImportRewriteContext(newRoot, declNode.getStartPosition(), imports);
-			Type type = imports.addImport(fNewType, ast, context);
+      ImportRewriteContext context =
+          new ContextSensitiveImportRewriteContext(newRoot, declNode.getStartPosition(), imports);
+      Type type = imports.addImport(fNewType, ast, context);
 
-			if (declNode instanceof MethodDeclaration) {
-				MethodDeclaration methodDecl = (MethodDeclaration)declNode;
-				Type origReturnType = methodDecl.getReturnType2();
-				rewrite.set(methodDecl, MethodDeclaration.RETURN_TYPE2_PROPERTY, type, null);
-				DimensionRewrite.removeAllChildren(methodDecl, MethodDeclaration.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
-				// add javadoc tag
-				Javadoc javadoc = methodDecl.getJavadoc();
-				if (javadoc != null && origReturnType != null && origReturnType.isPrimitiveType()
-						&& ((PrimitiveType) origReturnType).getPrimitiveTypeCode() == PrimitiveType.VOID) {
-					
-					TagElement returnTag= JavadocTagsSubProcessor.findTag(javadoc, TagElement.TAG_RETURN, null);
-					if (returnTag == null) {
-						returnTag= ast.newTagElement();
-						returnTag.setTagName(TagElement.TAG_RETURN);
-						TextElement commentStart= ast.newTextElement();
-						returnTag.fragments().add(commentStart);
-						addLinkedPosition(rewrite.track(commentStart), false, "comment_start"); //$NON-NLS-1$
-						
-						ListRewrite tagsRewriter= rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY);
-						JavadocTagsSubProcessor.insertTag(tagsRewriter, returnTag, null);
-					}
-				}
+      if (declNode instanceof MethodDeclaration) {
+        MethodDeclaration methodDecl = (MethodDeclaration) declNode;
+        Type origReturnType = methodDecl.getReturnType2();
+        rewrite.set(methodDecl, MethodDeclaration.RETURN_TYPE2_PROPERTY, type, null);
+        DimensionRewrite.removeAllChildren(
+            methodDecl, MethodDeclaration.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
+        // add javadoc tag
+        Javadoc javadoc = methodDecl.getJavadoc();
+        if (javadoc != null
+            && origReturnType != null
+            && origReturnType.isPrimitiveType()
+            && ((PrimitiveType) origReturnType).getPrimitiveTypeCode() == PrimitiveType.VOID) {
 
-			} else if (declNode instanceof AnnotationTypeMemberDeclaration) {
-				AnnotationTypeMemberDeclaration methodDecl= (AnnotationTypeMemberDeclaration) declNode;
-				rewrite.set(methodDecl, AnnotationTypeMemberDeclaration.TYPE_PROPERTY, type, null);
-			} else if (declNode instanceof VariableDeclarationFragment) {
-				ASTNode parent= declNode.getParent();
-				if (parent instanceof FieldDeclaration) {
-					FieldDeclaration fieldDecl= (FieldDeclaration) parent;
-					if (fieldDecl.fragments().size() > 1 && (fieldDecl.getParent() instanceof AbstractTypeDeclaration)) { // split
-						VariableDeclarationFragment placeholder= (VariableDeclarationFragment) rewrite.createMoveTarget(declNode);
-						FieldDeclaration newField= ast.newFieldDeclaration(placeholder);
-						newField.setType(type);
-						AbstractTypeDeclaration typeDecl= (AbstractTypeDeclaration) fieldDecl.getParent();
+          TagElement returnTag =
+              JavadocTagsSubProcessor.findTag(javadoc, TagElement.TAG_RETURN, null);
+          if (returnTag == null) {
+            returnTag = ast.newTagElement();
+            returnTag.setTagName(TagElement.TAG_RETURN);
+            TextElement commentStart = ast.newTextElement();
+            returnTag.fragments().add(commentStart);
+            addLinkedPosition(rewrite.track(commentStart), false, "comment_start"); //$NON-NLS-1$
 
-						ListRewrite listRewrite= rewrite.getListRewrite(typeDecl, typeDecl.getBodyDeclarationsProperty());
-						if (fieldDecl.fragments().indexOf(declNode) == 0) { // if it as the first in the list-> insert before
-							listRewrite.insertBefore(newField, parent, null);
-						} else {
-							listRewrite.insertAfter(newField, parent, null);
-						}
-					} else {
-						rewrite.set(fieldDecl, FieldDeclaration.TYPE_PROPERTY, type, null);
-						DimensionRewrite.removeAllChildren(declNode, VariableDeclarationFragment.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
-					}
-				} else if (parent instanceof VariableDeclarationStatement) {
-					VariableDeclarationStatement varDecl= (VariableDeclarationStatement) parent;
-					if (varDecl.fragments().size() > 1 && (varDecl.getParent() instanceof Block)) { // split
-						VariableDeclarationFragment placeholder= (VariableDeclarationFragment) rewrite.createMoveTarget(declNode);
-						VariableDeclarationStatement newStat= ast.newVariableDeclarationStatement(placeholder);
-						newStat.setType(type);
+            ListRewrite tagsRewriter = rewrite.getListRewrite(javadoc, Javadoc.TAGS_PROPERTY);
+            JavadocTagsSubProcessor.insertTag(tagsRewriter, returnTag, null);
+          }
+        }
 
-						ListRewrite listRewrite= rewrite.getListRewrite(varDecl.getParent(), Block.STATEMENTS_PROPERTY);
-						if (varDecl.fragments().indexOf(declNode) == 0) { // if it as the first in the list-> insert before
-							listRewrite.insertBefore(newStat, parent, null);
-						} else {
-							listRewrite.insertAfter(newStat, parent, null);
-						}
-					} else {
-						rewrite.set(varDecl, VariableDeclarationStatement.TYPE_PROPERTY, type, null);
-						DimensionRewrite.removeAllChildren(declNode, VariableDeclarationFragment.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
-					}
-				} else if (parent instanceof VariableDeclarationExpression) {
-					VariableDeclarationExpression varDecl= (VariableDeclarationExpression) parent;
+      } else if (declNode instanceof AnnotationTypeMemberDeclaration) {
+        AnnotationTypeMemberDeclaration methodDecl = (AnnotationTypeMemberDeclaration) declNode;
+        rewrite.set(methodDecl, AnnotationTypeMemberDeclaration.TYPE_PROPERTY, type, null);
+      } else if (declNode instanceof VariableDeclarationFragment) {
+        ASTNode parent = declNode.getParent();
+        if (parent instanceof FieldDeclaration) {
+          FieldDeclaration fieldDecl = (FieldDeclaration) parent;
+          if (fieldDecl.fragments().size() > 1
+              && (fieldDecl.getParent() instanceof AbstractTypeDeclaration)) { // split
+            VariableDeclarationFragment placeholder =
+                (VariableDeclarationFragment) rewrite.createMoveTarget(declNode);
+            FieldDeclaration newField = ast.newFieldDeclaration(placeholder);
+            newField.setType(type);
+            AbstractTypeDeclaration typeDecl = (AbstractTypeDeclaration) fieldDecl.getParent();
 
-					rewrite.set(varDecl, VariableDeclarationExpression.TYPE_PROPERTY, type, null);
-					DimensionRewrite.removeAllChildren(declNode, VariableDeclarationFragment.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
-				}
-			} else if (declNode instanceof SingleVariableDeclaration) {
-				SingleVariableDeclaration variableDeclaration= (SingleVariableDeclaration) declNode;
-				rewrite.set(variableDeclaration, SingleVariableDeclaration.TYPE_PROPERTY, type, null);
-				DimensionRewrite.removeAllChildren(declNode, SingleVariableDeclaration.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
-			}
+            ListRewrite listRewrite =
+                rewrite.getListRewrite(typeDecl, typeDecl.getBodyDeclarationsProperty());
+            if (fieldDecl.fragments().indexOf(declNode)
+                == 0) { // if it as the first in the list-> insert before
+              listRewrite.insertBefore(newField, parent, null);
+            } else {
+              listRewrite.insertAfter(newField, parent, null);
+            }
+          } else {
+            rewrite.set(fieldDecl, FieldDeclaration.TYPE_PROPERTY, type, null);
+            DimensionRewrite.removeAllChildren(
+                declNode, VariableDeclarationFragment.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
+          }
+        } else if (parent instanceof VariableDeclarationStatement) {
+          VariableDeclarationStatement varDecl = (VariableDeclarationStatement) parent;
+          if (varDecl.fragments().size() > 1 && (varDecl.getParent() instanceof Block)) { // split
+            VariableDeclarationFragment placeholder =
+                (VariableDeclarationFragment) rewrite.createMoveTarget(declNode);
+            VariableDeclarationStatement newStat = ast.newVariableDeclarationStatement(placeholder);
+            newStat.setType(type);
 
-			// set up linked mode
-			final String KEY_TYPE= "type"; //$NON-NLS-1$
-			addLinkedPosition(rewrite.track(type), true, KEY_TYPE);
-			if (fTypeProposals != null) {
-				for (int i= 0; i < fTypeProposals.length; i++) {
-					addLinkedPositionProposal(KEY_TYPE, fTypeProposals[i]);
-				}
-			}
-			return rewrite;
-		}
-		return null;
-	}
+            ListRewrite listRewrite =
+                rewrite.getListRewrite(varDecl.getParent(), Block.STATEMENTS_PROPERTY);
+            if (varDecl.fragments().indexOf(declNode)
+                == 0) { // if it as the first in the list-> insert before
+              listRewrite.insertBefore(newStat, parent, null);
+            } else {
+              listRewrite.insertAfter(newStat, parent, null);
+            }
+          } else {
+            rewrite.set(varDecl, VariableDeclarationStatement.TYPE_PROPERTY, type, null);
+            DimensionRewrite.removeAllChildren(
+                declNode, VariableDeclarationFragment.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
+          }
+        } else if (parent instanceof VariableDeclarationExpression) {
+          VariableDeclarationExpression varDecl = (VariableDeclarationExpression) parent;
+
+          rewrite.set(varDecl, VariableDeclarationExpression.TYPE_PROPERTY, type, null);
+          DimensionRewrite.removeAllChildren(
+              declNode, VariableDeclarationFragment.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
+        }
+      } else if (declNode instanceof SingleVariableDeclaration) {
+        SingleVariableDeclaration variableDeclaration = (SingleVariableDeclaration) declNode;
+        rewrite.set(variableDeclaration, SingleVariableDeclaration.TYPE_PROPERTY, type, null);
+        DimensionRewrite.removeAllChildren(
+            declNode, SingleVariableDeclaration.EXTRA_DIMENSIONS2_PROPERTY, rewrite, null);
+      }
+
+      // set up linked mode
+      final String KEY_TYPE = "type"; //$NON-NLS-1$
+      addLinkedPosition(rewrite.track(type), true, KEY_TYPE);
+      if (fTypeProposals != null) {
+        for (int i = 0; i < fTypeProposals.length; i++) {
+          addLinkedPositionProposal(KEY_TYPE, fTypeProposals[i]);
+        }
+      }
+      return rewrite;
+    }
+    return null;
+  }
 

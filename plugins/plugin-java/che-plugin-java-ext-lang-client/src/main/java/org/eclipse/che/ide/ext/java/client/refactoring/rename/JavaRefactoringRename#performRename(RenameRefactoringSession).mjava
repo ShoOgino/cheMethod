@@ -1,57 +1,78 @@
-    private void performRename(RenameRefactoringSession session) {
-        final LinkedRenameRefactoringApply dto = createLinkedRenameRefactoringApplyDto(newName, session.getSessionId());
-        Promise<RefactoringResult> applyModelPromise = refactoringServiceClient.applyLinkedModeRename(dto);
-        applyModelPromise.then(new Operation<RefactoringResult>() {
-            @Override
-            public void apply(RefactoringResult result) throws OperationException {
+  private void performRename(RenameRefactoringSession session) {
+    final LinkedRenameRefactoringApply dto =
+        createLinkedRenameRefactoringApplyDto(newName, session.getSessionId());
+    Promise<RefactoringResult> applyModelPromise =
+        refactoringServiceClient.applyLinkedModeRename(dto);
+    applyModelPromise
+        .then(
+            new Operation<RefactoringResult>() {
+              @Override
+              public void apply(RefactoringResult result) throws OperationException {
                 switch (result.getSeverity()) {
-                    case OK:
-                    case INFO:
-                        List<ChangeInfo> changes = result.getChanges();
-                        refactoringUpdater.updateAfterRefactoring(changes).then(arg -> {
-                            final VirtualFile file = textEditor.getDocument().getFile();
+                  case OK:
+                  case INFO:
+                    List<ChangeInfo> changes = result.getChanges();
+                    refactoringUpdater
+                        .updateAfterRefactoring(changes)
+                        .then(
+                            arg -> {
+                              final VirtualFile file = textEditor.getDocument().getFile();
 
-                            if (file instanceof Resource) {
-                                final Optional<Project> project = ((Resource)file).getRelatedProject();
+                              if (file instanceof Resource) {
+                                final Optional<Project> project =
+                                    ((Resource) file).getRelatedProject();
 
-                                refactoringServiceClient.reindexProject(project.get().getLocation().toString());
-                            }
+                                refactoringServiceClient.reindexProject(
+                                    project.get().getLocation().toString());
+                              }
 
-                            enableAutoSave();
-                            refactoringUpdater.handleMovingFiles(changes).then(clientServerEventService.sendFileTrackingResumeEvent());
-                        });
+                              enableAutoSave();
+                              refactoringUpdater
+                                  .handleMovingFiles(changes)
+                                  .then(clientServerEventService.sendFileTrackingResumeEvent());
+                            });
 
-                        break;
-                    case WARNING:
-                    case ERROR:
-                        enableAutoSave();
+                    break;
+                  case WARNING:
+                  case ERROR:
+                    enableAutoSave();
 
-                        undoChanges();
+                    undoChanges();
 
-                        showWarningDialog();
-                        break;
-                    case FATAL:
-                        undoChanges();
+                    showWarningDialog();
+                    break;
+                  case FATAL:
+                    undoChanges();
 
-                        clientServerEventService.sendFileTrackingResumeEvent();
+                    clientServerEventService.sendFileTrackingResumeEvent();
 
-                        notificationManager.notify(locale.failedToRename(), result.getEntries().get(0).getMessage(), FAIL, FLOAT_MODE);
-                        break;
-                    default:
-                        break;
+                    notificationManager.notify(
+                        locale.failedToRename(),
+                        result.getEntries().get(0).getMessage(),
+                        FAIL,
+                        FLOAT_MODE);
+                    break;
+                  default:
+                    break;
                 }
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError arg) throws OperationException {
+              }
+            })
+        .catchError(
+            new Operation<PromiseError>() {
+              @Override
+              public void apply(PromiseError arg) throws OperationException {
                 undoChanges();
 
-                clientServerEventService.sendFileTrackingResumeEvent().then(success -> {
-                    enableAutoSave();
-                });
+                clientServerEventService
+                    .sendFileTrackingResumeEvent()
+                    .then(
+                        success -> {
+                          enableAutoSave();
+                        });
 
-                notificationManager.notify(locale.failedToRename(), arg.getMessage(), FAIL, FLOAT_MODE);
-            }
-        });
-    }
+                notificationManager.notify(
+                    locale.failedToRename(), arg.getMessage(), FAIL, FLOAT_MODE);
+              }
+            });
+  }
 

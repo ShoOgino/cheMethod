@@ -1,39 +1,39 @@
-    /**
-     * Deletes all existing pods.
-     *
-     * <p>Note that this method will mark OpenShift pods as interrupted
-     * and then will wait until all pods will be killed.
-     *
-     * @throws InfrastructureException
-     *         when {@link Thread} is interrupted while command executing
-     * @throws InfrastructureException
-     *         when any other exception occurs
-     */
-    public void delete() throws InfrastructureException {
-        try (OpenShiftClient client = clientFactory.create()) {
-            //pods are removed with some delay related to stopping of containers. It is need to wait them
-            List<Pod> pods = client.pods().inNamespace(namespace).list().getItems();
-            List<CompletableFuture> deleteFutures = new ArrayList<>();
-            for (Pod pod : pods) {
-                PodResource<Pod, DoneablePod> podResource = client.pods()
-                                                                  .inNamespace(namespace)
-                                                                  .withName(pod.getMetadata().getName());
-                CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
-                deleteFutures.add(deleteFuture);
-                podResource.watch(new DeleteWatcher(deleteFuture));
-                podResource.delete();
-            }
-            CompletableFuture<Void> allRemoved = allOf(deleteFutures.toArray(new CompletableFuture[deleteFutures.size()]));
-            try {
-                allRemoved.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new InfrastructureException("Interrupted while waiting for workspace stop. " + e.getMessage());
-            } catch (ExecutionException e) {
-                throw new InfrastructureException("Error occurred while waiting for pod removing. " + e.getMessage());
-            }
-        } catch (KubernetesClientException e) {
-            throw new InfrastructureException(e.getMessage(), e);
-        }
+  /**
+   * Deletes all existing pods.
+   *
+   * <p>Note that this method will mark OpenShift pods as interrupted and then will wait until all
+   * pods will be killed.
+   *
+   * @throws InfrastructureException when {@link Thread} is interrupted while command executing
+   * @throws InfrastructureException when any other exception occurs
+   */
+  public void delete() throws InfrastructureException {
+    try (OpenShiftClient client = clientFactory.create()) {
+      //pods are removed with some delay related to stopping of containers. It is need to wait them
+      List<Pod> pods = client.pods().inNamespace(namespace).list().getItems();
+      List<CompletableFuture> deleteFutures = new ArrayList<>();
+      for (Pod pod : pods) {
+        PodResource<Pod, DoneablePod> podResource =
+            client.pods().inNamespace(namespace).withName(pod.getMetadata().getName());
+        CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
+        deleteFutures.add(deleteFuture);
+        podResource.watch(new DeleteWatcher(deleteFuture));
+        podResource.delete();
+      }
+      CompletableFuture<Void> allRemoved =
+          allOf(deleteFutures.toArray(new CompletableFuture[deleteFutures.size()]));
+      try {
+        allRemoved.get();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new InfrastructureException(
+            "Interrupted while waiting for workspace stop. " + e.getMessage());
+      } catch (ExecutionException e) {
+        throw new InfrastructureException(
+            "Error occurred while waiting for pod removing. " + e.getMessage());
+      }
+    } catch (KubernetesClientException e) {
+      throw new InfrastructureException(e.getMessage(), e);
     }
+  }
 

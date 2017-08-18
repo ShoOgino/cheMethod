@@ -1,41 +1,41 @@
-        private void read() {
-            isConnected = true;
-            while (true) {
-                try {
-                    // Reads the message length
-                    int length = inputStream.readInt();
-                    if (length < 0) {
-                        ZendDebugger.LOG.error(
-                                "Zend debugger engine is probably using SSL, please check 'Use SSL encryption' option.");
-                        purge();
-                        break;
-                    }
-                    // Engine message arrived. read its type identifier.
-                    int messageType = inputStream.readShort();
-                    IDbgEngineMessage engineMessage = ZendDbgEngineMessages.create(messageType);
-                    engineMessage.deserialize(inputStream);
-                    if (engineMessage instanceof IDbgEngineResponse) {
-                        // Engine response has arrived...
-                        IDbgEngineResponse response = (IDbgEngineResponse) engineMessage;
-                        EngineSyncResponse<IDbgEngineResponse> syncResponse = engineSyncResponses
-                                .remove(response.getID());
-                        if (syncResponse != null) {
-                            // Release waiting request provider
-                            syncResponse.set(response);
-                            continue;
-                        }
-                    } else {
-                        // Notification or request from engine arrived...
-                        engineMessageRunnable.queue(engineMessage);
-                    }
-                } catch (EOFException e) {
-                    // Engine closed the session
-                    break;
-                } catch (Exception e) {
-                    ZendDebugger.LOG.error(e.getMessage(), e);
-                    break;
-                }
+    private void read() {
+      isConnected = true;
+      while (true) {
+        try {
+          // Reads the message length
+          int length = inputStream.readInt();
+          if (length < 0) {
+            ZendDebugger.LOG.error(
+                "Zend debugger engine is probably using SSL, please check 'Use SSL encryption' option.");
+            purge();
+            break;
+          }
+          // Engine message arrived. read its type identifier.
+          int messageType = inputStream.readShort();
+          IDbgEngineMessage engineMessage = ZendDbgEngineMessages.create(messageType);
+          engineMessage.deserialize(inputStream);
+          if (engineMessage instanceof IDbgEngineResponse) {
+            // Engine response has arrived...
+            IDbgEngineResponse response = (IDbgEngineResponse) engineMessage;
+            EngineSyncResponse<IDbgEngineResponse> syncResponse =
+                engineSyncResponses.remove(response.getID());
+            if (syncResponse != null) {
+              // Release waiting request provider
+              syncResponse.set(response);
+              continue;
             }
-            isConnected = false;
+          } else {
+            // Notification or request from engine arrived...
+            engineMessageRunnable.queue(engineMessage);
+          }
+        } catch (EOFException e) {
+          // Engine closed the session
+          break;
+        } catch (Exception e) {
+          ZendDebugger.LOG.error(e.getMessage(), e);
+          break;
         }
+      }
+      isConnected = false;
+    }
 

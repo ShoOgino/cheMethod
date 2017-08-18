@@ -1,94 +1,111 @@
-	private static Expression getInversedExpression(ASTRewrite rewrite, Expression expression, SimpleNameRenameProvider provider) {
-		AST ast= rewrite.getAST();
-		//
-		if (expression instanceof BooleanLiteral) {
-			return ast.newBooleanLiteral(!((BooleanLiteral) expression).booleanValue());
-		}
-		if (expression instanceof InfixExpression) {
-			InfixExpression infixExpression= (InfixExpression) expression;
-			InfixExpression.Operator operator= infixExpression.getOperator();
-			if (operator == InfixExpression.Operator.LESS) {
-				return getInversedInfixExpression(rewrite, infixExpression, InfixExpression.Operator.GREATER_EQUALS, provider);
-			}
-			if (operator == InfixExpression.Operator.GREATER) {
-				return getInversedInfixExpression(rewrite, infixExpression, InfixExpression.Operator.LESS_EQUALS, provider);
-			}
-			if (operator == InfixExpression.Operator.LESS_EQUALS) {
-				return getInversedInfixExpression(rewrite, infixExpression, InfixExpression.Operator.GREATER, provider);
-			}
-			if (operator == InfixExpression.Operator.GREATER_EQUALS) {
-				return getInversedInfixExpression(rewrite, infixExpression, InfixExpression.Operator.LESS, provider);
-			}
-			if (operator == InfixExpression.Operator.EQUALS) {
-				return getInversedInfixExpression(rewrite, infixExpression, InfixExpression.Operator.NOT_EQUALS, provider);
-			}
-			if (operator == InfixExpression.Operator.NOT_EQUALS) {
-				return getInversedInfixExpression(rewrite, infixExpression, InfixExpression.Operator.EQUALS, provider);
-			}
-			if (operator == InfixExpression.Operator.CONDITIONAL_AND) {
-				return getInversedAndOrExpression(rewrite, infixExpression, InfixExpression.Operator.CONDITIONAL_OR, provider);
-			}
-			if (operator == InfixExpression.Operator.CONDITIONAL_OR) {
-				return getInversedAndOrExpression(rewrite, infixExpression, InfixExpression.Operator.CONDITIONAL_AND, provider);
-			}
-			if (operator == InfixExpression.Operator.AND) {
-				return getInversedAndOrExpression(rewrite, infixExpression, InfixExpression.Operator.OR, provider);
-			}
-			if (operator == InfixExpression.Operator.OR) {
-				return getInversedAndOrExpression(rewrite, infixExpression, InfixExpression.Operator.AND, provider);
-			}
-			if (operator == InfixExpression.Operator.XOR) {
-				return getInversedNotExpression(rewrite, expression, ast);
-			}
-		}
-		if (expression instanceof PrefixExpression) {
-			PrefixExpression prefixExpression= (PrefixExpression) expression;
-			if (prefixExpression.getOperator() == PrefixExpression.Operator.NOT) {
-				Expression operand= prefixExpression.getOperand();
-				if ((operand instanceof ParenthesizedExpression)
-						&& NecessaryParenthesesChecker
-							.canRemoveParentheses(operand, expression.getParent(), expression.getLocationInParent())) {
-					operand= ((ParenthesizedExpression)operand).getExpression();
-				}
-				Expression renamedNameCopy= getRenamedNameCopy(provider, rewrite, operand);
-				if (renamedNameCopy instanceof InfixExpression) {
-					InfixExpression infixExpression= (InfixExpression) renamedNameCopy;
-					infixExpression.setOperator(((InfixExpression) operand).getOperator());
-				}
-				return renamedNameCopy;
-			}
-		}
-		if (expression instanceof InstanceofExpression) {
-			return getInversedNotExpression(rewrite, expression, ast);
-		}
-		if (expression instanceof ParenthesizedExpression) {
-			ParenthesizedExpression parenthesizedExpression= (ParenthesizedExpression) expression;
-			Expression innerExpression= parenthesizedExpression.getExpression();
-			while (innerExpression instanceof ParenthesizedExpression) {
-				innerExpression= ((ParenthesizedExpression) innerExpression).getExpression();
-			}
-			if (innerExpression instanceof InstanceofExpression) {
-				return getInversedExpression(rewrite, innerExpression, provider);
-			}
-			parenthesizedExpression= getParenthesizedExpression(ast, getInversedExpression(rewrite, innerExpression, provider));
-			return parenthesizedExpression;
-		}
-		if (expression instanceof ConditionalExpression) {
-			ConditionalExpression conditionalExpression= (ConditionalExpression)expression;
-			ConditionalExpression newExpression= ast.newConditionalExpression();
-			newExpression.setExpression((Expression)rewrite.createCopyTarget(conditionalExpression.getExpression()));
-			newExpression.setThenExpression(getInversedExpression(rewrite, conditionalExpression.getThenExpression()));
-			newExpression.setElseExpression(getInversedExpression(rewrite, conditionalExpression.getElseExpression()));
-			return newExpression;
-		}
+  private static Expression getInversedExpression(
+      ASTRewrite rewrite, Expression expression, SimpleNameRenameProvider provider) {
+    AST ast = rewrite.getAST();
+    //
+    if (expression instanceof BooleanLiteral) {
+      return ast.newBooleanLiteral(!((BooleanLiteral) expression).booleanValue());
+    }
+    if (expression instanceof InfixExpression) {
+      InfixExpression infixExpression = (InfixExpression) expression;
+      InfixExpression.Operator operator = infixExpression.getOperator();
+      if (operator == InfixExpression.Operator.LESS) {
+        return getInversedInfixExpression(
+            rewrite, infixExpression, InfixExpression.Operator.GREATER_EQUALS, provider);
+      }
+      if (operator == InfixExpression.Operator.GREATER) {
+        return getInversedInfixExpression(
+            rewrite, infixExpression, InfixExpression.Operator.LESS_EQUALS, provider);
+      }
+      if (operator == InfixExpression.Operator.LESS_EQUALS) {
+        return getInversedInfixExpression(
+            rewrite, infixExpression, InfixExpression.Operator.GREATER, provider);
+      }
+      if (operator == InfixExpression.Operator.GREATER_EQUALS) {
+        return getInversedInfixExpression(
+            rewrite, infixExpression, InfixExpression.Operator.LESS, provider);
+      }
+      if (operator == InfixExpression.Operator.EQUALS) {
+        return getInversedInfixExpression(
+            rewrite, infixExpression, InfixExpression.Operator.NOT_EQUALS, provider);
+      }
+      if (operator == InfixExpression.Operator.NOT_EQUALS) {
+        return getInversedInfixExpression(
+            rewrite, infixExpression, InfixExpression.Operator.EQUALS, provider);
+      }
+      if (operator == InfixExpression.Operator.CONDITIONAL_AND) {
+        return getInversedAndOrExpression(
+            rewrite, infixExpression, InfixExpression.Operator.CONDITIONAL_OR, provider);
+      }
+      if (operator == InfixExpression.Operator.CONDITIONAL_OR) {
+        return getInversedAndOrExpression(
+            rewrite, infixExpression, InfixExpression.Operator.CONDITIONAL_AND, provider);
+      }
+      if (operator == InfixExpression.Operator.AND) {
+        return getInversedAndOrExpression(
+            rewrite, infixExpression, InfixExpression.Operator.OR, provider);
+      }
+      if (operator == InfixExpression.Operator.OR) {
+        return getInversedAndOrExpression(
+            rewrite, infixExpression, InfixExpression.Operator.AND, provider);
+      }
+      if (operator == InfixExpression.Operator.XOR) {
+        return getInversedNotExpression(rewrite, expression, ast);
+      }
+    }
+    if (expression instanceof PrefixExpression) {
+      PrefixExpression prefixExpression = (PrefixExpression) expression;
+      if (prefixExpression.getOperator() == PrefixExpression.Operator.NOT) {
+        Expression operand = prefixExpression.getOperand();
+        if ((operand instanceof ParenthesizedExpression)
+            && NecessaryParenthesesChecker.canRemoveParentheses(
+                operand, expression.getParent(), expression.getLocationInParent())) {
+          operand = ((ParenthesizedExpression) operand).getExpression();
+        }
+        Expression renamedNameCopy = getRenamedNameCopy(provider, rewrite, operand);
+        if (renamedNameCopy instanceof InfixExpression) {
+          InfixExpression infixExpression = (InfixExpression) renamedNameCopy;
+          infixExpression.setOperator(((InfixExpression) operand).getOperator());
+        }
+        return renamedNameCopy;
+      }
+    }
+    if (expression instanceof InstanceofExpression) {
+      return getInversedNotExpression(rewrite, expression, ast);
+    }
+    if (expression instanceof ParenthesizedExpression) {
+      ParenthesizedExpression parenthesizedExpression = (ParenthesizedExpression) expression;
+      Expression innerExpression = parenthesizedExpression.getExpression();
+      while (innerExpression instanceof ParenthesizedExpression) {
+        innerExpression = ((ParenthesizedExpression) innerExpression).getExpression();
+      }
+      if (innerExpression instanceof InstanceofExpression) {
+        return getInversedExpression(rewrite, innerExpression, provider);
+      }
+      parenthesizedExpression =
+          getParenthesizedExpression(
+              ast, getInversedExpression(rewrite, innerExpression, provider));
+      return parenthesizedExpression;
+    }
+    if (expression instanceof ConditionalExpression) {
+      ConditionalExpression conditionalExpression = (ConditionalExpression) expression;
+      ConditionalExpression newExpression = ast.newConditionalExpression();
+      newExpression.setExpression(
+          (Expression) rewrite.createCopyTarget(conditionalExpression.getExpression()));
+      newExpression.setThenExpression(
+          getInversedExpression(rewrite, conditionalExpression.getThenExpression()));
+      newExpression.setElseExpression(
+          getInversedExpression(rewrite, conditionalExpression.getElseExpression()));
+      return newExpression;
+    }
 
-		PrefixExpression prefixExpression= ast.newPrefixExpression();
-		prefixExpression.setOperator(PrefixExpression.Operator.NOT);
-		Expression renamedNameCopy= getRenamedNameCopy(provider, rewrite, expression);
-		if (NecessaryParenthesesChecker.needsParentheses(renamedNameCopy, prefixExpression, PrefixExpression.OPERAND_PROPERTY)) {
-			renamedNameCopy= getParenthesizedExpression(ast, renamedNameCopy);
-		}
-		prefixExpression.setOperand(renamedNameCopy);
-		return prefixExpression;
-	}
+    PrefixExpression prefixExpression = ast.newPrefixExpression();
+    prefixExpression.setOperator(PrefixExpression.Operator.NOT);
+    Expression renamedNameCopy = getRenamedNameCopy(provider, rewrite, expression);
+    if (NecessaryParenthesesChecker.needsParentheses(
+        renamedNameCopy, prefixExpression, PrefixExpression.OPERAND_PROPERTY)) {
+      renamedNameCopy = getParenthesizedExpression(ast, renamedNameCopy);
+    }
+    prefixExpression.setOperand(renamedNameCopy);
+    return prefixExpression;
+  }
 

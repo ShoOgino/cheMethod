@@ -1,70 +1,85 @@
-	private Block createMethodBody(ASTNode[] selectedNodes, TextEditGroup substitute, int modifiers) {
-		Block result= fAST.newBlock();
-		ListRewrite statements= fRewriter.getListRewrite(result, Block.STATEMENTS_PROPERTY);
+  private Block createMethodBody(ASTNode[] selectedNodes, TextEditGroup substitute, int modifiers) {
+    Block result = fAST.newBlock();
+    ListRewrite statements = fRewriter.getListRewrite(result, Block.STATEMENTS_PROPERTY);
 
-		// Locals that are not passed as an arguments since the extracted method only
-		// writes to them
-		IVariableBinding[] methodLocals= fAnalyzer.getMethodLocals();
-		for (int i= 0; i < methodLocals.length; i++) {
-			if (methodLocals[i] != null) {
-				result.statements().add(createDeclaration(methodLocals[i], null));
-			}
-		}
+    // Locals that are not passed as an arguments since the extracted method only
+    // writes to them
+    IVariableBinding[] methodLocals = fAnalyzer.getMethodLocals();
+    for (int i = 0; i < methodLocals.length; i++) {
+      if (methodLocals[i] != null) {
+        result.statements().add(createDeclaration(methodLocals[i], null));
+      }
+    }
 
-		for (Iterator<ParameterInfo> iter= fParameterInfos.iterator(); iter.hasNext();) {
-			ParameterInfo parameter= iter.next();
-			if (parameter.isRenamed()) {
-				for (int n= 0; n < selectedNodes.length; n++) {
-					SimpleName[] oldNames= LinkedNodeFinder.findByBinding(selectedNodes[n], parameter.getOldBinding());
-					for (int i= 0; i < oldNames.length; i++) {
-						fRewriter.replace(oldNames[i], fAST.newSimpleName(parameter.getNewName()), null);
-					}
-				}
-			}
-		}
+    for (Iterator<ParameterInfo> iter = fParameterInfos.iterator(); iter.hasNext(); ) {
+      ParameterInfo parameter = iter.next();
+      if (parameter.isRenamed()) {
+        for (int n = 0; n < selectedNodes.length; n++) {
+          SimpleName[] oldNames =
+              LinkedNodeFinder.findByBinding(selectedNodes[n], parameter.getOldBinding());
+          for (int i = 0; i < oldNames.length; i++) {
+            fRewriter.replace(oldNames[i], fAST.newSimpleName(parameter.getNewName()), null);
+          }
+        }
+      }
+    }
 
-		boolean extractsExpression= fAnalyzer.isExpressionSelected();
-		ASTNode[] callNodes= createCallNodes(null, modifiers);
-		ASTNode replacementNode;
-		if (callNodes.length == 1) {
-			replacementNode= callNodes[0];
-		} else {
-			replacementNode= fRewriter.createGroupNode(callNodes);
-		}
-		if (extractsExpression) {
-			// if we have an expression then only one node is selected.
-			ITypeBinding binding= fAnalyzer.getExpressionBinding();
-			if (binding != null && (!binding.isPrimitive() || !"void".equals(binding.getName()))) { //$NON-NLS-1$
-				ReturnStatement rs= fAST.newReturnStatement();
-				rs.setExpression((Expression)fRewriter.createMoveTarget(selectedNodes[0] instanceof ParenthesizedExpression
-						? ((ParenthesizedExpression)selectedNodes[0]).getExpression()
-						: selectedNodes[0]));
-				statements.insertLast(rs, null);
-			} else {
-				ExpressionStatement st= fAST.newExpressionStatement((Expression)fRewriter.createMoveTarget(selectedNodes[0]));
-				statements.insertLast(st, null);
-			}
-			fRewriter.replace(selectedNodes[0].getParent() instanceof ParenthesizedExpression ? selectedNodes[0].getParent() : selectedNodes[0], replacementNode, substitute);
-		} else {
-			if (selectedNodes.length == 1) {
-				statements.insertLast(fRewriter.createMoveTarget(selectedNodes[0]), substitute);
-				fRewriter.replace(selectedNodes[0], replacementNode, substitute);
-			} else {
-				ListRewrite source= fRewriter.getListRewrite(
-					selectedNodes[0].getParent(),
-					(ChildListPropertyDescriptor)selectedNodes[0].getLocationInParent());
-				ASTNode toMove= source.createMoveTarget(
-					selectedNodes[0], selectedNodes[selectedNodes.length - 1],
-					replacementNode, substitute);
-				statements.insertLast(toMove, substitute);
-			}
-			IVariableBinding returnValue= fAnalyzer.getReturnValue();
-			if (returnValue != null) {
-				ReturnStatement rs= fAST.newReturnStatement();
-				rs.setExpression(fAST.newSimpleName(getName(returnValue)));
-				statements.insertLast(rs, null);
-			}
-		}
-		return result;
-	}
+    boolean extractsExpression = fAnalyzer.isExpressionSelected();
+    ASTNode[] callNodes = createCallNodes(null, modifiers);
+    ASTNode replacementNode;
+    if (callNodes.length == 1) {
+      replacementNode = callNodes[0];
+    } else {
+      replacementNode = fRewriter.createGroupNode(callNodes);
+    }
+    if (extractsExpression) {
+      // if we have an expression then only one node is selected.
+      ITypeBinding binding = fAnalyzer.getExpressionBinding();
+      if (binding != null
+          && (!binding.isPrimitive() || !"void".equals(binding.getName()))) { //$NON-NLS-1$
+        ReturnStatement rs = fAST.newReturnStatement();
+        rs.setExpression(
+            (Expression)
+                fRewriter.createMoveTarget(
+                    selectedNodes[0] instanceof ParenthesizedExpression
+                        ? ((ParenthesizedExpression) selectedNodes[0]).getExpression()
+                        : selectedNodes[0]));
+        statements.insertLast(rs, null);
+      } else {
+        ExpressionStatement st =
+            fAST.newExpressionStatement((Expression) fRewriter.createMoveTarget(selectedNodes[0]));
+        statements.insertLast(st, null);
+      }
+      fRewriter.replace(
+          selectedNodes[0].getParent() instanceof ParenthesizedExpression
+              ? selectedNodes[0].getParent()
+              : selectedNodes[0],
+          replacementNode,
+          substitute);
+    } else {
+      if (selectedNodes.length == 1) {
+        statements.insertLast(fRewriter.createMoveTarget(selectedNodes[0]), substitute);
+        fRewriter.replace(selectedNodes[0], replacementNode, substitute);
+      } else {
+        ListRewrite source =
+            fRewriter.getListRewrite(
+                selectedNodes[0].getParent(),
+                (ChildListPropertyDescriptor) selectedNodes[0].getLocationInParent());
+        ASTNode toMove =
+            source.createMoveTarget(
+                selectedNodes[0],
+                selectedNodes[selectedNodes.length - 1],
+                replacementNode,
+                substitute);
+        statements.insertLast(toMove, substitute);
+      }
+      IVariableBinding returnValue = fAnalyzer.getReturnValue();
+      if (returnValue != null) {
+        ReturnStatement rs = fAST.newReturnStatement();
+        rs.setExpression(fAST.newSimpleName(getName(returnValue)));
+        statements.insertLast(rs, null);
+      }
+    }
+    return result;
+  }
 
