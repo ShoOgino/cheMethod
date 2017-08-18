@@ -1,101 +1,94 @@
-    @Override
-    public Instance startService(String ownerName,
-                                 String workspaceId,
-                                 String envName,
-                                 String machineName,
-                                 boolean isDev,
-                                 String networkName,
-                                 CheServiceImpl service,
-                                 LineConsumer machineLogger) throws ServerException {
+  @Override
+  public Instance startService(
+      String ownerName,
+      String workspaceId,
+      String envName,
+      String machineName,
+      boolean isDev,
+      String networkName,
+      CheServiceImpl service,
+      LineConsumer machineLogger)
+      throws ServerException {
 
-        // copy to not affect/be affected by changes in origin
-        service = new CheServiceImpl(service);
+    // copy to not affect/be affected by changes in origin
+    service = new CheServiceImpl(service);
 
-        JsonRpcMessageConsumer<MachineLogMessage> messageConsumer =
-                new JsonRpcMessageConsumer<>("event:environment-output:message",
-                                             transmitter,
-                                             () -> jsonRpcEndpointToMachineNameHolder
-                                                     .getEndpointIdsByWorkspaceIdPlusMachineName(workspaceId + "::" + machineName));
-        LineConsumer logger = new CompositeLineConsumer(machineLogger, new AbstractLineConsumer() {
-            @Override
-            public void writeLine(String line) throws IOException {
+    JsonRpcMessageConsumer<MachineLogMessage> messageConsumer =
+        new JsonRpcMessageConsumer<>(
+            "event:environment-output:message",
+            transmitter,
+            () ->
+                jsonRpcEndpointToMachineNameHolder.getEndpointIdsByWorkspaceIdPlusMachineName(
+                    workspaceId + "::" + machineName));
+    LineConsumer logger =
+        new CompositeLineConsumer(
+            machineLogger,
+            new AbstractLineConsumer() {
+              @Override
+              public void writeLine(String line) throws IOException {
                 messageConsumer.consume(new MachineLogMessageImpl(machineName, line));
-            }
-        });
+              }
+            });
 
-        ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
-        ProgressMonitor progressMonitor = currentProgressStatus -> {
-            try {
-                logger.writeLine(progressLineFormatter.format(currentProgressStatus));
-            } catch (IOException e) {
-                LOG.error(e.getLocalizedMessage(), e);
-            }
+    ProgressLineFormatterImpl progressLineFormatter = new ProgressLineFormatterImpl();
+    ProgressMonitor progressMonitor =
+        currentProgressStatus -> {
+          try {
+            logger.writeLine(progressLineFormatter.format(currentProgressStatus));
+          } catch (IOException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+          }
         };
 
-        String container = null;
-        try {
-            String image = prepareImage(machineName,
-                                        service,
-                                        progressMonitor);
+    String container = null;
+    try {
+      String image = prepareImage(machineName, service, progressMonitor);
 
-            container = createContainer(workspaceId,
-                                        machineName,
-                                        isDev,
-                                        image,
-                                        networkName,
-                                        service);
+      container = createContainer(workspaceId, machineName, isDev, image, networkName, service);
 
-            connectContainerToAdditionalNetworks(container,
-                                                 service);
+      connectContainerToAdditionalNetworks(container, service);
 
-            docker.startContainer(StartContainerParams.create(container));
+      docker.startContainer(StartContainerParams.create(container));
 
-            checkContainerIsRunning(container);
+      checkContainerIsRunning(container);
 
-            readContainerLogsInSeparateThread(container,
-                                              workspaceId,
-                                              service.getId(),
-                                              logger);
+      readContainerLogsInSeparateThread(container, workspaceId, service.getId(), logger);
 
-            DockerNode node = dockerMachineFactory.createNode(workspaceId, container);
+      DockerNode node = dockerMachineFactory.createNode(workspaceId, container);
 
-            dockerInstanceStopDetector.startDetection(container,
-                                                      service.getId(),
-                                                      workspaceId);
+      dockerInstanceStopDetector.startDetection(container, service.getId(), workspaceId);
 
-            final String userId = EnvironmentContext.getCurrent().getSubject().getUserId();
-            MachineImpl machine = new MachineImpl(MachineConfigImpl.builder()
-                                                                   .setDev(isDev)
-                                                                   .setName(machineName)
-                                                                   .setType("docker")
-                                                                   // casting considered as safe because more than int of megabytes is a lot!
-                                                                   .setLimits(new MachineLimitsImpl((int)Size
-                                                                           .parseSizeToMegabytes(
-                                                                                   service.getMemLimit() + "b")))
-                                                                   .setSource(new MachineSourceImpl(service.getBuild() != null ?
-                                                                                                    "context" :
-                                                                                                    "image")
-                                                                                      .setLocation(service.getBuild() != null ?
-                                                                                                   service.getBuild().getContext() :
-                                                                                                   service.getImage()))
-                                                                   .build(),
-                                                  service.getId(),
-                                                  workspaceId,
-                                                  envName,
-                                                  userId,
-                                                  MachineStatus.RUNNING,
-                                                  null);
+      final String userId = EnvironmentContext.getCurrent().getSubject().getUserId();
+      MachineImpl machine =
+          new MachineImpl(
+              MachineConfigImpl.builder()
+                  .setDev(isDev)
+                  .setName(machineName)
+                  .setType("docker")
+                  // casting considered as safe because more than int of megabytes is a lot!
+                  .setLimits(
+                      new MachineLimitsImpl(
+                          (int) Size.parseSizeToMegabytes(service.getMemLimit() + "b")))
+                  .setSource(
+                      new MachineSourceImpl(service.getBuild() != null ? "context" : "image")
+                          .setLocation(
+                              service.getBuild() != null
+                                  ? service.getBuild().getContext()
+                                  : service.getImage()))
+                  .build(),
+              service.getId(),
+              workspaceId,
+              envName,
+              userId,
+              MachineStatus.RUNNING,
+              null);
 
-            return dockerMachineFactory.createInstance(machine,
-                                                       container,
-                                                       image,
-                                                       node,
-                                                       logger);
-        } catch (SourceNotFoundException e) {
-            throw e;
-        } catch (RuntimeException | ServerException | NotFoundException | IOException e) {
-            cleanUpContainer(container);
-            throw new ServerException(e.getLocalizedMessage(), e);
-        }
+      return dockerMachineFactory.createInstance(machine, container, image, node, logger);
+    } catch (SourceNotFoundException e) {
+      throw e;
+    } catch (RuntimeException | ServerException | NotFoundException | IOException e) {
+      cleanUpContainer(container);
+      throw new ServerException(e.getLocalizedMessage(), e);
     }
+  }
 

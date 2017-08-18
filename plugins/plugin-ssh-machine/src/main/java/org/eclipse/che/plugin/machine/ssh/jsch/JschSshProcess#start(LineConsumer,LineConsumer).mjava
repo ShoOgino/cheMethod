@@ -1,36 +1,40 @@
-    @Override
-    public void start(LineConsumer out, LineConsumer err) throws MachineException {
-        try (BufferedReader outReader = new BufferedReader(new InputStreamReader(exec.getInputStream()));
-             BufferedReader errReader = new BufferedReader(new InputStreamReader(exec.getErrStream()))) {
+  @Override
+  public void start(LineConsumer out, LineConsumer err) throws MachineException {
+    try (BufferedReader outReader =
+            new BufferedReader(new InputStreamReader(exec.getInputStream()));
+        BufferedReader errReader = new BufferedReader(new InputStreamReader(exec.getErrStream()))) {
 
-            exec.connect();
+      exec.connect();
 
-            // read stderr in separate thread
-            CompletableFuture<Optional<IOException>> future = CompletableFuture.supplyAsync(() -> {
+      // read stderr in separate thread
+      CompletableFuture<Optional<IOException>> future =
+          CompletableFuture.supplyAsync(
+              () -> {
                 try {
-                    String line;
-                    while ((line = errReader.readLine()) != null) {
-                        err.writeLine(line);
-                    }
-                    return Optional.empty();
+                  String line;
+                  while ((line = errReader.readLine()) != null) {
+                    err.writeLine(line);
+                  }
+                  return Optional.empty();
                 } catch (IOException e) {
-                    return Optional.of(e);
+                  return Optional.of(e);
                 }
-            });
+              });
 
-            String line;
-            while ((line = outReader.readLine()) != null) {
-                out.writeLine(line);
-            }
+      String line;
+      while ((line = outReader.readLine()) != null) {
+        out.writeLine(line);
+      }
 
-            final Optional<IOException> excOptional = future.get();
-            if (excOptional.isPresent()) {
-                throw new MachineException("Ssh machine command execution error:" + excOptional.get().getLocalizedMessage());
-            }
-        } catch (IOException | JSchException | ExecutionException | InterruptedException e) {
-            throw new MachineException("Ssh machine command execution error:" + e.getLocalizedMessage());
-        } finally {
-            exec.disconnect();
-        }
+      final Optional<IOException> excOptional = future.get();
+      if (excOptional.isPresent()) {
+        throw new MachineException(
+            "Ssh machine command execution error:" + excOptional.get().getLocalizedMessage());
+      }
+    } catch (IOException | JSchException | ExecutionException | InterruptedException e) {
+      throw new MachineException("Ssh machine command execution error:" + e.getLocalizedMessage());
+    } finally {
+      exec.disconnect();
     }
+  }
 

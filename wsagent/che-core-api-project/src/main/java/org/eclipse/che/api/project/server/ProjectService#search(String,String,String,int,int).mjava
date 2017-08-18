@@ -1,50 +1,56 @@
-    @GET
-    @Path("/search/{path:.*}")
-    @Produces(MediaType.APPLICATION_JSON)
-    @ApiOperation(value = "Search for resources",
-                  notes = "Search for resources applying a number of search filters as query parameters",
-                  response = SearchResult.class,
-                  responseContainer = "List")
-    @ApiResponses({@ApiResponse(code = 200, message = "OK"),
-                   @ApiResponse(code = 403, message = "User not authorized to call this operation"),
-                   @ApiResponse(code = 404, message = "Not found"),
-                   @ApiResponse(code = 409, message = "Conflict error"),
-                   @ApiResponse(code = 500, message = "Internal Server Error")})
-    public List<SearchResultDto> search(@ApiParam(value = "Path to resource, i.e. where to search?", required = true)
-                                      @PathParam("path") String path,
-                                        @ApiParam(value = "Resource name")
-                                      @QueryParam("name") String name,
-                                        @ApiParam(value = "Search keywords")
-                                      @QueryParam("text") String text,
-                                        @ApiParam(value = "Maximum items to display. If this parameter is dropped, there are no limits")
-                                      @QueryParam("maxItems") @DefaultValue("-1") int maxItems,
-                                        @ApiParam(value = "Skip count")
-                                      @QueryParam("skipCount") int skipCount) throws NotFoundException,
-                                                                                     ForbiddenException,
-                                                                                     ConflictException,
-                                                                                     ServerException {
-        final Searcher searcher;
-        try {
-            searcher = projectManager.getSearcher();
-        } catch (NotFoundException e) {
-            LOG.warn(e.getLocalizedMessage());
-            return Collections.emptyList();
-        }
-
-        if (skipCount < 0) {
-            throw new ConflictException(String.format("Invalid 'skipCount' parameter: %d.", skipCount));
-        }
-
-        final QueryExpression expr = new QueryExpression()
-                .setPath(path.startsWith("/") ? path : ('/' + path))
-                .setName(name)
-                .setText(text)
-                .setMaxItems(maxItems)
-                .setSkipCount(skipCount)
-                .setIncludePositions(true);
-
-        final SearchResult result = searcher.search(expr);
-        final List<SearchResultEntry> searchResultEntries = result.getResults();
-        return prepareResults(searchResultEntries);
+  @GET
+  @Path("/search/{path:.*}")
+  @Produces(MediaType.APPLICATION_JSON)
+  @ApiOperation(
+    value = "Search for resources",
+    notes = "Search for resources applying a number of search filters as query parameters",
+    response = SearchResult.class,
+    responseContainer = "List"
+  )
+  @ApiResponses({
+    @ApiResponse(code = 200, message = "OK"),
+    @ApiResponse(code = 403, message = "User not authorized to call this operation"),
+    @ApiResponse(code = 404, message = "Not found"),
+    @ApiResponse(code = 409, message = "Conflict error"),
+    @ApiResponse(code = 500, message = "Internal Server Error")
+  })
+  public List<SearchResultDto> search(
+      @ApiParam(value = "Path to resource, i.e. where to search?", required = true)
+          @PathParam("path")
+          String path,
+      @ApiParam(value = "Resource name") @QueryParam("name") String name,
+      @ApiParam(value = "Search keywords") @QueryParam("text") String text,
+      @ApiParam(
+            value = "Maximum items to display. If this parameter is dropped, there are no limits"
+          )
+          @QueryParam("maxItems")
+          @DefaultValue("-1")
+          int maxItems,
+      @ApiParam(value = "Skip count") @QueryParam("skipCount") int skipCount)
+      throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+    final Searcher searcher;
+    try {
+      searcher = projectManager.getSearcher();
+    } catch (NotFoundException e) {
+      LOG.warn(e.getLocalizedMessage());
+      return Collections.emptyList();
     }
+
+    if (skipCount < 0) {
+      throw new ConflictException(String.format("Invalid 'skipCount' parameter: %d.", skipCount));
+    }
+
+    final QueryExpression expr =
+        new QueryExpression()
+            .setPath(path.startsWith("/") ? path : ('/' + path))
+            .setName(name)
+            .setText(text)
+            .setMaxItems(maxItems)
+            .setSkipCount(skipCount)
+            .setIncludePositions(true);
+
+    final SearchResult result = searcher.search(expr);
+    final List<SearchResultEntry> searchResultEntries = result.getResults();
+    return prepareResults(searchResultEntries);
+  }
 

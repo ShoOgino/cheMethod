@@ -1,34 +1,48 @@
-    private List<LocationDto> definition(TextDocumentPositionParams textDocumentPositionParams) {
-        String uri = prefixURI(textDocumentPositionParams.getTextDocument().getUri());
-        textDocumentPositionParams.getTextDocument().setUri(uri);
-        try {
-            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
-                            .flatMap(Collection::stream).collect(Collectors.toList());
-            List<LocationDto> result = new ArrayList<>();
-            OperationUtil.doInParallel(servers, new LSOperation<InitializedLanguageServer, List<? extends Location>>() {
+  private List<LocationDto> definition(TextDocumentPositionParams textDocumentPositionParams) {
+    String uri = prefixURI(textDocumentPositionParams.getTextDocument().getUri());
+    textDocumentPositionParams.getTextDocument().setUri(uri);
+    try {
+      List<InitializedLanguageServer> servers =
+          languageServerRegistry
+              .getApplicableLanguageServers(uri)
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      List<LocationDto> result = new ArrayList<>();
+      OperationUtil.doInParallel(
+          servers,
+          new LSOperation<InitializedLanguageServer, List<? extends Location>>() {
 
-                @Override
-                public boolean canDo(InitializedLanguageServer element) {
-                    return truish(element.getInitializeResult().getCapabilities().getDefinitionProvider());
-                }
+            @Override
+            public boolean canDo(InitializedLanguageServer element) {
+              return truish(
+                  element.getInitializeResult().getCapabilities().getDefinitionProvider());
+            }
 
-                @Override
-                public CompletableFuture<List<? extends Location>> start(InitializedLanguageServer element) {
-                    return element.getServer().getTextDocumentService().definition(textDocumentPositionParams);
-                }
+            @Override
+            public CompletableFuture<List<? extends Location>> start(
+                InitializedLanguageServer element) {
+              return element
+                  .getServer()
+                  .getTextDocumentService()
+                  .definition(textDocumentPositionParams);
+            }
 
-                @Override
-                public boolean handleResult(InitializedLanguageServer element, List<? extends Location> locations) {
-                    locations.forEach(o -> {
-                        o.setUri(removePrefixUri(o.getUri()));
-                        result.add(new LocationDto(o));
-                    });
-                    return true;
-                }
-            }, 30000);
-            return result;
-        } catch (LanguageServerException e) {
-            throw new JsonRpcException(-27000, e.getMessage());
-        }
+            @Override
+            public boolean handleResult(
+                InitializedLanguageServer element, List<? extends Location> locations) {
+              locations.forEach(
+                  o -> {
+                    o.setUri(removePrefixUri(o.getUri()));
+                    result.add(new LocationDto(o));
+                  });
+              return true;
+            }
+          },
+          30000);
+      return result;
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
     }
+  }
 

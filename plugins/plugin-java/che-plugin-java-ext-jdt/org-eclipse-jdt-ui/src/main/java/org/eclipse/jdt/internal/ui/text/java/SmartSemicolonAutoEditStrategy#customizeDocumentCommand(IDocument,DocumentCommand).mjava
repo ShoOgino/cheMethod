@@ -1,103 +1,95 @@
-	/*
-	 * @see org.eclipse.jface.text.IAutoEditStrategy#customizeDocumentCommand(org.eclipse.jface.text.IDocument, org.eclipse.jface.text.DocumentCommand)
-	 */
-	public void customizeDocumentCommand(IDocument document, DocumentCommand command) {
-		// 0: early pruning
-		// also customize if <code>doit</code> is false (so it works in code completion situations)
-		//		if (!command.doit)
-		//			return;
+  /*
+   * @see org.eclipse.jface.text.IAutoEditStrategy#customizeDocumentCommand(org.eclipse.jface.text.IDocument, org.eclipse.jface.text.DocumentCommand)
+   */
+  public void customizeDocumentCommand(IDocument document, DocumentCommand command) {
+    // 0: early pruning
+    // also customize if <code>doit</code> is false (so it works in code completion situations)
+    //		if (!command.doit)
+    //			return;
 
-		if (command.text == null)
-			return;
+    if (command.text == null) return;
 
-		if (command.text.equals(SEMICOLON))
-			fCharacter= SEMICHAR;
-		else if (command.text.equals(BRACE))
-			fCharacter= BRACECHAR;
-		else
-			return;
+    if (command.text.equals(SEMICOLON)) fCharacter = SEMICHAR;
+    else if (command.text.equals(BRACE)) fCharacter = BRACECHAR;
+    else return;
 
-//		IPreferenceStore store= JavaPlugin.getDefault().getPreferenceStore();
-//		if (fCharacter == SEMICHAR && !store.getBoolean(PreferenceConstants.EDITOR_SMART_SEMICOLON))
-//			return;
-//		if (fCharacter == BRACECHAR && !store.getBoolean(PreferenceConstants.EDITOR_SMART_OPENING_BRACE))
-//			return;
-//
-//		IWorkbenchPage page= JavaPlugin.getActivePage();
-//		if (page == null)
-//			return;
-//		IEditorPart part= page.getActiveEditor();
-//		if (!(part instanceof CompilationUnitEditor))
-//			return;
-//		CompilationUnitEditor editor= (CompilationUnitEditor)part;
-//		if (editor.getInsertMode() != ITextEditorExtension3.SMART_INSERT || !editor.isEditable())
-//			return;
-//		ITextEditorExtension2 extension= (ITextEditorExtension2)editor.getAdapter(ITextEditorExtension2.class);
-//		if (extension != null && !extension.validateEditorInputState())
-//			return;
-//		if (isMultilineSelection(document, command))
-//			return;
+    //		IPreferenceStore store= JavaPlugin.getDefault().getPreferenceStore();
+    //		if (fCharacter == SEMICHAR && !store.getBoolean(PreferenceConstants.EDITOR_SMART_SEMICOLON))
+    //			return;
+    //		if (fCharacter == BRACECHAR && !store.getBoolean(PreferenceConstants.EDITOR_SMART_OPENING_BRACE))
+    //			return;
+    //
+    //		IWorkbenchPage page= JavaPlugin.getActivePage();
+    //		if (page == null)
+    //			return;
+    //		IEditorPart part= page.getActiveEditor();
+    //		if (!(part instanceof CompilationUnitEditor))
+    //			return;
+    //		CompilationUnitEditor editor= (CompilationUnitEditor)part;
+    //		if (editor.getInsertMode() != ITextEditorExtension3.SMART_INSERT || !editor.isEditable())
+    //			return;
+    //		ITextEditorExtension2 extension= (ITextEditorExtension2)editor.getAdapter(ITextEditorExtension2.class);
+    //		if (extension != null && !extension.validateEditorInputState())
+    //			return;
+    //		if (isMultilineSelection(document, command))
+    //			return;
 
-		// 1: find concerned line / position in java code, location in statement
-		int pos= command.offset;
-		ITextSelection line;
-		try {
-			IRegion l= document.getLineInformationOfOffset(pos);
-			line= new TextSelection(document, l.getOffset(), l.getLength());
-		} catch (BadLocationException e) {
-			return;
-		}
+    // 1: find concerned line / position in java code, location in statement
+    int pos = command.offset;
+    ITextSelection line;
+    try {
+      IRegion l = document.getLineInformationOfOffset(pos);
+      line = new TextSelection(document, l.getOffset(), l.getLength());
+    } catch (BadLocationException e) {
+      return;
+    }
 
-		// 2: choose action based on findings (is for-Statement?)
-		// for now: compute the best position to insert the new character
-		int positionInLine= computeCharacterPosition(document, line, pos - line.getOffset(), fCharacter, fPartitioning);
-		int position= positionInLine + line.getOffset();
+    // 2: choose action based on findings (is for-Statement?)
+    // for now: compute the best position to insert the new character
+    int positionInLine =
+        computeCharacterPosition(document, line, pos - line.getOffset(), fCharacter, fPartitioning);
+    int position = positionInLine + line.getOffset();
 
-		// never position before the current position!
-		if (position < pos)
-			return;
+    // never position before the current position!
+    if (position < pos) return;
 
-		// never double already existing content
-		if (alreadyPresent(document, fCharacter, position))
-			return;
+    // never double already existing content
+    if (alreadyPresent(document, fCharacter, position)) return;
 
-		// don't do special processing if what we do is actually the normal behaviour
-		String insertion= adjustSpacing(document, position, fCharacter);
-		if (command.offset == position && insertion.equals(command.text))
-			return;
+    // don't do special processing if what we do is actually the normal behaviour
+    String insertion = adjustSpacing(document, position, fCharacter);
+    if (command.offset == position && insertion.equals(command.text)) return;
 
-		try {
+    try {
 
-//			final SmartBackspaceManager manager= (SmartBackspaceManager) editor.getAdapter(SmartBackspaceManager.class);
-//			if (manager != null && JavaPlugin.getDefault().getPreferenceStore().getBoolean(PreferenceConstants.EDITOR_SMART_BACKSPACE)) {
-//				TextEdit e1= new ReplaceEdit(command.offset, command.text.length(), document.get(command.offset, command.length));
-//				UndoSpec s1= new UndoSpec(command.offset + command.text.length(),
-//						new Region(command.offset, 0),
-//						new TextEdit[] {e1},
-//						0,
-//						null);
-//
-//				DeleteEdit smart= new DeleteEdit(position, insertion.length());
-//				ReplaceEdit raw= new ReplaceEdit(command.offset, command.length, command.text);
-//				UndoSpec s2= new UndoSpec(position + insertion.length(),
-//						new Region(command.offset + command.text.length(), 0),
-//						new TextEdit[] {smart, raw},
-//						2,
-//						s1);
-//				manager.register(s2);
-//			}
+      //			final SmartBackspaceManager manager= (SmartBackspaceManager) editor.getAdapter(SmartBackspaceManager.class);
+      //			if (manager != null && JavaPlugin.getDefault().getPreferenceStore().getBoolean(PreferenceConstants.EDITOR_SMART_BACKSPACE)) {
+      //				TextEdit e1= new ReplaceEdit(command.offset, command.text.length(), document.get(command.offset, command.length));
+      //				UndoSpec s1= new UndoSpec(command.offset + command.text.length(),
+      //						new Region(command.offset, 0),
+      //						new TextEdit[] {e1},
+      //						0,
+      //						null);
+      //
+      //				DeleteEdit smart= new DeleteEdit(position, insertion.length());
+      //				ReplaceEdit raw= new ReplaceEdit(command.offset, command.length, command.text);
+      //				UndoSpec s2= new UndoSpec(position + insertion.length(),
+      //						new Region(command.offset + command.text.length(), 0),
+      //						new TextEdit[] {smart, raw},
+      //						2,
+      //						s1);
+      //				manager.register(s2);
+      //			}
 
-			// 3: modify command
-			command.offset= position;
-			command.length= 0;
-			command.caretOffset= position;
-			command.text= insertion;
-			command.doit= true;
-			command.owner= null;
-		} catch (MalformedTreeException e) {
-			JavaPlugin.log(e);
-		}
-
-
-	}
+      // 3: modify command
+      command.offset = position;
+      command.length = 0;
+      command.caretOffset = position;
+      command.text = insertion;
+      command.doit = true;
+      command.owner = null;
+    } catch (MalformedTreeException e) {
+      JavaPlugin.log(e);
+    }
+  }
 

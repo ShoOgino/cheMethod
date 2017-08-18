@@ -1,85 +1,85 @@
-    /* (non-Javadoc)
-     * @see org.eclipse.jface.text.contentassist.ICompletionProposalExtension2#apply(org.eclipse.jface.text.ITextViewer, char, int, int)
-     */
-    public void apply(ITextViewer viewer, char trigger, int stateMask, int offset) {
-        try {
-            Point seletion = viewer.getSelectedRange();
+  /* (non-Javadoc)
+   * @see org.eclipse.jface.text.contentassist.ICompletionProposalExtension2#apply(org.eclipse.jface.text.ITextViewer, char, int, int)
+   */
+  public void apply(ITextViewer viewer, char trigger, int stateMask, int offset) {
+    try {
+      Point seletion = viewer.getSelectedRange();
 
-            // get full ast
-            CompilationUnit root = SharedASTProvider.getAST(fContext.getCompilationUnit(), SharedASTProvider.WAIT_YES, null);
+      // get full ast
+      CompilationUnit root =
+          SharedASTProvider.getAST(fContext.getCompilationUnit(), SharedASTProvider.WAIT_YES, null);
 
-            ASTNode nameNode = NodeFinder.perform(root, fNode.getStartPosition(), fNode.getLength());
-            final int pos = fNode.getStartPosition();
+      ASTNode nameNode = NodeFinder.perform(root, fNode.getStartPosition(), fNode.getLength());
+      final int pos = fNode.getStartPosition();
 
-            ASTNode[] sameNodes;
-            if (nameNode instanceof SimpleName) {
-                sameNodes = LinkedNodeFinder.findByNode(root, (SimpleName)nameNode);
-            } else {
-                sameNodes = new ASTNode[]{nameNode};
+      ASTNode[] sameNodes;
+      if (nameNode instanceof SimpleName) {
+        sameNodes = LinkedNodeFinder.findByNode(root, (SimpleName) nameNode);
+      } else {
+        sameNodes = new ASTNode[] {nameNode};
+      }
+
+      // sort for iteration order, starting with the node @ offset
+      Arrays.sort(
+          sameNodes,
+          new Comparator<ASTNode>() {
+
+            public int compare(ASTNode o1, ASTNode o2) {
+              return rank(o1) - rank(o2);
             }
 
-            // sort for iteration order, starting with the node @ offset
-            Arrays.sort(sameNodes, new Comparator<ASTNode>() {
-
-                public int compare(ASTNode o1, ASTNode o2) {
-                    return rank(o1) - rank(o2);
-                }
-
-                /**
-                 * Returns the absolute rank of an <code>ASTNode</code>. Nodes
-                 * preceding <code>offset</code> are ranked last.
-                 *
-                 * @param node the node to compute the rank for
-                 * @return the rank of the node with respect to the invocation offset
-                 */
-                private int rank(ASTNode node) {
-                    int relativeRank = node.getStartPosition() + node.getLength() - pos;
-                    if (relativeRank < 0)
-                        return Integer.MAX_VALUE + relativeRank;
-                    else
-                        return relativeRank;
-                }
-
-            });
-
-            IDocument document = viewer.getDocument();
-            LinkedPositionGroupImpl group = new LinkedPositionGroupImpl();
-            for (int i = 0; i < sameNodes.length; i++) {
-                ASTNode elem = sameNodes[i];
-                RegionImpl region = new RegionImpl();
-                region.setOffset(elem.getStartPosition());
-                region.setLength(elem.getLength());
-                group.addPositions(region);
-//				group.addPosition(new LinkedPosition(document, elem.getStartPosition(), elem.getLength(), i));
+            /**
+             * Returns the absolute rank of an <code>ASTNode</code>. Nodes preceding <code>offset
+             * </code> are ranked last.
+             *
+             * @param node the node to compute the rank for
+             * @return the rank of the node with respect to the invocation offset
+             */
+            private int rank(ASTNode node) {
+              int relativeRank = node.getStartPosition() + node.getLength() - pos;
+              if (relativeRank < 0) return Integer.MAX_VALUE + relativeRank;
+              else return relativeRank;
             }
+          });
 
-            LinkedModeModelImpl model = new LinkedModeModelImpl();
-            model.addGroups(group);
-//			model.forceInstall();
-            model.setEscapePosition(offset);
-            this.linkedModel = model;
-            if (fContext instanceof AssistContext) {
-//				IEditorPart editor = ((AssistContext)fContext).getEditor();
-//				if (editor instanceof JavaEditor) {
-//					model.addLinkingListener(new EditorHighlightingSynchronizer((JavaEditor)editor));
-//				}
-            }
+      IDocument document = viewer.getDocument();
+      LinkedPositionGroupImpl group = new LinkedPositionGroupImpl();
+      for (int i = 0; i < sameNodes.length; i++) {
+        ASTNode elem = sameNodes[i];
+        RegionImpl region = new RegionImpl();
+        region.setOffset(elem.getStartPosition());
+        region.setLength(elem.getLength());
+        group.addPositions(region);
+        //				group.addPosition(new LinkedPosition(document, elem.getStartPosition(), elem.getLength(), i));
+      }
 
-//			LinkedModeUI ui = new EditorLinkedModeUI(model, viewer);
-//			ui.setExitPolicy(new DeleteBlockingExitPolicy(document));
-//			ui.setExitPosition(viewer, offset, 0, LinkedPositionGroup.NO_STOP);
-//			ui.enter();
+      LinkedModeModelImpl model = new LinkedModeModelImpl();
+      model.addGroups(group);
+      //			model.forceInstall();
+      model.setEscapePosition(offset);
+      this.linkedModel = model;
+      if (fContext instanceof AssistContext) {
+        //				IEditorPart editor = ((AssistContext)fContext).getEditor();
+        //				if (editor instanceof JavaEditor) {
+        //					model.addLinkingListener(new EditorHighlightingSynchronizer((JavaEditor)editor));
+        //				}
+      }
 
-            if (fValueSuggestion != null) {
-                document.replace(nameNode.getStartPosition(), nameNode.getLength(), fValueSuggestion);
-//				IRegion selectedRegion = ui.getSelectedRegion();
-//				seletion = new Point(selectedRegion.getOffset(), fValueSuggestion.length());
-            }
+      //			LinkedModeUI ui = new EditorLinkedModeUI(model, viewer);
+      //			ui.setExitPolicy(new DeleteBlockingExitPolicy(document));
+      //			ui.setExitPosition(viewer, offset, 0, LinkedPositionGroup.NO_STOP);
+      //			ui.enter();
 
-//			viewer.setSelectedRange(seletion.x, seletion.y); // by default full word is selected, restore original selection
+      if (fValueSuggestion != null) {
+        document.replace(nameNode.getStartPosition(), nameNode.getLength(), fValueSuggestion);
+        //				IRegion selectedRegion = ui.getSelectedRegion();
+        //				seletion = new Point(selectedRegion.getOffset(), fValueSuggestion.length());
+      }
 
-        } catch (BadLocationException e) {
-            JavaPlugin.log(e);
-        }
+      //			viewer.setSelectedRange(seletion.x, seletion.y); // by default full word is selected, restore original selection
+
+    } catch (BadLocationException e) {
+      JavaPlugin.log(e);
     }
+  }
 

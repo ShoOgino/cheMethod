@@ -1,61 +1,77 @@
-    @Test
-    public void testEstimateProject() throws Exception {
-        VirtualFile root = pm.getProjectsRoot().getVirtualFile();
+  @Test
+  public void testEstimateProject() throws Exception {
+    VirtualFile root = pm.getProjectsRoot().getVirtualFile();
 
-        //getVirtualFileSystemRegistry().getProvider("my_ws").getMountPoint(false).getRoot();
-        root.createFolder("testEstimateProjectGood").createFolder("check");
-        root.createFolder("testEstimateProjectBad");
+    //getVirtualFileSystemRegistry().getProvider("my_ws").getMountPoint(false).getRoot();
+    root.createFolder("testEstimateProjectGood").createFolder("check");
+    root.createFolder("testEstimateProjectBad");
 
-        String errMessage = "File /check not found";
+    String errMessage = "File /check not found";
 
-        final ValueProviderFactory vpf1 = projectFolder -> new ReadonlyValueProvider() {
-            @Override
-            public List<String> getValues(String attributeName) throws ValueStorageException {
+    final ValueProviderFactory vpf1 =
+        projectFolder ->
+            new ReadonlyValueProvider() {
+              @Override
+              public List<String> getValues(String attributeName) throws ValueStorageException {
 
                 VirtualFileEntry file;
                 try {
-                    file = projectFolder.getChild("check");
+                  file = projectFolder.getChild("check");
                 } catch (ServerException e) {
-                    throw new ValueStorageException(e.getMessage());
+                  throw new ValueStorageException(e.getMessage());
                 }
 
                 if (file == null) {
-                    throw new ValueStorageException(errMessage);
+                  throw new ValueStorageException(errMessage);
                 }
-                return (List<String>)singletonList("checked");
-            }
+                return (List<String>) singletonList("checked");
+              }
+            };
 
+    ProjectTypeDef pt =
+        new ProjectTypeDef("testEstimateProjectPT", "my testEstimateProject type", true, false) {
+          {
+            addVariableDefinition("calculated_attribute", "attr description", true, vpf1);
+            addVariableDefinition("my_property_1", "attr description", true);
+            addVariableDefinition("my_property_2", "attr description", false);
+          }
         };
 
-        ProjectTypeDef pt = new ProjectTypeDef("testEstimateProjectPT", "my testEstimateProject type", true, false) {
-            {
-                addVariableDefinition("calculated_attribute", "attr description", true, vpf1);
-                addVariableDefinition("my_property_1", "attr description", true);
-                addVariableDefinition("my_property_2", "attr description", false);
-            }
-        };
+    ptRegistry.registerProjectType(pt);
 
-        ptRegistry.registerProjectType(pt);
+    ContainerResponse response =
+        launcher.service(
+            GET,
+            format(
+                "http://localhost:8080/api/project/estimate/%s?type=%s",
+                "testEstimateProjectGood", "testEstimateProjectPT"),
+            "http://localhost:8080/api",
+            null,
+            null,
+            null);
+    assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+    //noinspection unchecked
+    SourceEstimation result = (SourceEstimation) response.getEntity();
+    assertTrue(result.isMatched());
+    assertEquals(result.getAttributes().size(), 1);
+    assertEquals(result.getAttributes().get("calculated_attribute").get(0), "checked");
 
-        ContainerResponse response = launcher.service(GET, format("http://localhost:8080/api/project/estimate/%s?type=%s",
-                                                                  "testEstimateProjectGood", "testEstimateProjectPT"),
-                                                      "http://localhost:8080/api", null, null, null);
-        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
-        //noinspection unchecked
-        SourceEstimation result = (SourceEstimation)response.getEntity();
-        assertTrue(result.isMatched());
-        assertEquals(result.getAttributes().size(), 1);
-        assertEquals(result.getAttributes().get("calculated_attribute").get(0), "checked");
+    // if project not matched
+    response =
+        launcher.service(
+            GET,
+            format(
+                "http://localhost:8080/api/project/estimate/%s?type=%s",
+                "testEstimateProjectBad", "testEstimateProjectPT"),
+            "http://localhost:8080/api",
+            null,
+            null,
+            null);
 
-        // if project not matched
-        response = launcher.service(GET, format("http://localhost:8080/api/project/estimate/%s?type=%s",
-                                                "testEstimateProjectBad", "testEstimateProjectPT"),
-                                    "http://localhost:8080/api", null, null, null);
-
-        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
-        //noinspection unchecked
-        result = (SourceEstimation)response.getEntity();
-        assertFalse(result.isMatched());
-        assertEquals(result.getAttributes().size(), 0);
-    }
+    assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+    //noinspection unchecked
+    result = (SourceEstimation) response.getEntity();
+    assertFalse(result.isMatched());
+    assertEquals(result.getAttributes().size(), 0);
+  }
 

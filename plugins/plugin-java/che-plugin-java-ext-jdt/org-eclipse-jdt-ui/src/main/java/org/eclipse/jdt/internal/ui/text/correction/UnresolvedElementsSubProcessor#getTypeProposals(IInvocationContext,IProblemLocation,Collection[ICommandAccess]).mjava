@@ -1,57 +1,61 @@
-	public static void getTypeProposals(IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals) throws
-																																	CoreException {
-		ICompilationUnit cu= context.getCompilationUnit();
+  public static void getTypeProposals(
+      IInvocationContext context, IProblemLocation problem, Collection<ICommandAccess> proposals)
+      throws CoreException {
+    ICompilationUnit cu = context.getCompilationUnit();
 
-		ASTNode selectedNode= problem.getCoveringNode(context.getASTRoot());
-		if (selectedNode == null) {
-			return;
-		}
+    ASTNode selectedNode = problem.getCoveringNode(context.getASTRoot());
+    if (selectedNode == null) {
+      return;
+    }
 
-		int kind= evauateTypeKind(selectedNode, cu.getJavaProject());
-		
-		if (kind == SimilarElementsRequestor.REF_TYPES) {
-			addEnhancedForWithoutTypeProposals(cu, selectedNode, proposals);
-		}
+    int kind = evauateTypeKind(selectedNode, cu.getJavaProject());
 
-		while (selectedNode.getLocationInParent() == QualifiedName.NAME_PROPERTY) {
-			selectedNode= selectedNode.getParent();
-		}
+    if (kind == SimilarElementsRequestor.REF_TYPES) {
+      addEnhancedForWithoutTypeProposals(cu, selectedNode, proposals);
+    }
 
-		Name node= null;
-		if (selectedNode instanceof SimpleType) {
-			node= ((SimpleType) selectedNode).getName();
-		} else if (selectedNode instanceof NameQualifiedType) {
-			node= ((NameQualifiedType) selectedNode).getName();
-		} else if (selectedNode instanceof ArrayType) {
-			Type elementType= ((ArrayType) selectedNode).getElementType();
-			if (elementType.isSimpleType()) {
-				node= ((SimpleType) elementType).getName();
-			} else if (elementType.isNameQualifiedType()) {
-				node= ((NameQualifiedType) elementType).getName();
-			} else {
-				return;
-			}
-		} else if (selectedNode instanceof Name) {
-			node= (Name) selectedNode;
-		} else {
-			return;
-		}
+    while (selectedNode.getLocationInParent() == QualifiedName.NAME_PROPERTY) {
+      selectedNode = selectedNode.getParent();
+    }
 
-		// change to similar type proposals
-		addSimilarTypeProposals(kind, cu, node, IProposalRelevance.SIMILAR_TYPE, proposals);
+    Name node = null;
+    if (selectedNode instanceof SimpleType) {
+      node = ((SimpleType) selectedNode).getName();
+    } else if (selectedNode instanceof NameQualifiedType) {
+      node = ((NameQualifiedType) selectedNode).getName();
+    } else if (selectedNode instanceof ArrayType) {
+      Type elementType = ((ArrayType) selectedNode).getElementType();
+      if (elementType.isSimpleType()) {
+        node = ((SimpleType) elementType).getName();
+      } else if (elementType.isNameQualifiedType()) {
+        node = ((NameQualifiedType) elementType).getName();
+      } else {
+        return;
+      }
+    } else if (selectedNode instanceof Name) {
+      node = (Name) selectedNode;
+    } else {
+      return;
+    }
 
-		while (node.getParent() instanceof QualifiedName) {
-			node= (Name) node.getParent();
-		}
+    // change to similar type proposals
+    addSimilarTypeProposals(kind, cu, node, IProposalRelevance.SIMILAR_TYPE, proposals);
 
-		if (selectedNode != node) {
-			kind= evauateTypeKind(node, cu.getJavaProject());
-		}
-		if ((kind & (SimilarElementsRequestor.CLASSES | SimilarElementsRequestor.INTERFACES)) != 0) {
-			kind &= ~SimilarElementsRequestor.ANNOTATIONS; // only propose annotations when there are no other suggestions
-		}
-		addNewTypeProposals(cu, node, kind, IProposalRelevance.NEW_TYPE, proposals);
-		
-		ReorgCorrectionsSubProcessor.addProjectSetupFixProposal(context, problem, node.getFullyQualifiedName(), proposals);
-	}
+    while (node.getParent() instanceof QualifiedName) {
+      node = (Name) node.getParent();
+    }
+
+    if (selectedNode != node) {
+      kind = evauateTypeKind(node, cu.getJavaProject());
+    }
+    if ((kind & (SimilarElementsRequestor.CLASSES | SimilarElementsRequestor.INTERFACES)) != 0) {
+      kind &=
+          ~SimilarElementsRequestor
+              .ANNOTATIONS; // only propose annotations when there are no other suggestions
+    }
+    addNewTypeProposals(cu, node, kind, IProposalRelevance.NEW_TYPE, proposals);
+
+    ReorgCorrectionsSubProcessor.addProjectSetupFixProposal(
+        context, problem, node.getFullyQualifiedName(), proposals);
+  }
 

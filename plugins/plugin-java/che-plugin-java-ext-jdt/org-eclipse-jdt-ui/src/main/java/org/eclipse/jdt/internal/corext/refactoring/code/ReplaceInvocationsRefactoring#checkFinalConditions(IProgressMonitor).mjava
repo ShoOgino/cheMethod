@@ -1,100 +1,111 @@
-	@Override
-	public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
-		pm.beginTask("", 20); //$NON-NLS-1$
-		fChangeManager= new TextChangeManager();
-		RefactoringStatus result= new RefactoringStatus();
+  @Override
+  public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
+    pm.beginTask("", 20); //$NON-NLS-1$
+    fChangeManager = new TextChangeManager();
+    RefactoringStatus result = new RefactoringStatus();
 
-		fSourceProvider= resolveSourceProvider(fMethodBinding, result);
-		if (result.hasFatalError())
-			return result;
+    fSourceProvider = resolveSourceProvider(fMethodBinding, result);
+    if (result.hasFatalError()) return result;
 
-		result.merge(fSourceProvider.checkActivation());
-		if (result.hasFatalError())
-			return result;
+    result.merge(fSourceProvider.checkActivation());
+    if (result.hasFatalError()) return result;
 
-		fSourceProvider.initialize();
-		fTargetProvider.initialize();
+    fSourceProvider.initialize();
+    fTargetProvider.initialize();
 
-		pm.setTaskName(RefactoringCoreMessages.InlineMethodRefactoring_searching);
-		RefactoringStatus searchStatus= new RefactoringStatus();
-		String binaryRefsDescription= Messages.format(RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description,
-													  BasicElementLabels.getJavaElementName(fSourceProvider.getMethodName()));
-		ReferencesInBinaryContext binaryRefs= new ReferencesInBinaryContext(binaryRefsDescription);
-		ICompilationUnit[] units= fTargetProvider.getAffectedCompilationUnits(searchStatus, binaryRefs, new SubProgressMonitor(pm, 1));
-		binaryRefs.addErrorIfNecessary(searchStatus);
+    pm.setTaskName(RefactoringCoreMessages.InlineMethodRefactoring_searching);
+    RefactoringStatus searchStatus = new RefactoringStatus();
+    String binaryRefsDescription =
+        Messages.format(
+            RefactoringCoreMessages.ReferencesInBinaryContext_ref_in_binaries_description,
+            BasicElementLabels.getJavaElementName(fSourceProvider.getMethodName()));
+    ReferencesInBinaryContext binaryRefs = new ReferencesInBinaryContext(binaryRefsDescription);
+    ICompilationUnit[] units =
+        fTargetProvider.getAffectedCompilationUnits(
+            searchStatus, binaryRefs, new SubProgressMonitor(pm, 1));
+    binaryRefs.addErrorIfNecessary(searchStatus);
 
-		if (searchStatus.hasFatalError()) {
-			result.merge(searchStatus);
-			return result;
-		}
-		IFile[] filesToBeModified= getFilesToBeModified(units);
-		result.merge(Checks.validateModifiesFiles(filesToBeModified, getValidationContext()));
-		if (result.hasFatalError())
-			return result;
-		result.merge(ResourceChangeChecker.checkFilesToBeChanged(filesToBeModified, new SubProgressMonitor(pm, 1)));
-		checkOverridden(result, new SubProgressMonitor(pm, 4));
-		IProgressMonitor sub= new SubProgressMonitor(pm, 15);
-		sub.beginTask("", units.length * 3); //$NON-NLS-1$
-		for (int c= 0; c < units.length; c++) {
-			ICompilationUnit unit= units[c];
-			sub.subTask(Messages.format(RefactoringCoreMessages.InlineMethodRefactoring_processing, BasicElementLabels.getFileName(unit)));
-			CallInliner inliner= null;
-			try {
-				boolean added= false;
-				MultiTextEdit root= new MultiTextEdit();
-				CompilationUnitChange change= (CompilationUnitChange)fChangeManager.get(unit);
-				change.setEdit(root);
-				BodyDeclaration[] bodies= fTargetProvider.getAffectedBodyDeclarations(unit, new SubProgressMonitor(pm, 1));
-				if (bodies.length == 0)
-					continue;
-				inliner= new CallInliner(unit, (CompilationUnit) bodies[0].getRoot(), fSourceProvider);
-				for (int b= 0; b < bodies.length; b++) {
-					BodyDeclaration body= bodies[b];
-					inliner.initialize(body);
-					RefactoringStatus nestedInvocations= new RefactoringStatus();
-					ASTNode[] invocations= removeNestedCalls(nestedInvocations, unit,
-						fTargetProvider.getInvocations(body, new SubProgressMonitor(sub, 2)));
-					for (int i= 0; i < invocations.length; i++) {
-						ASTNode invocation= invocations[i];
-						result.merge(inliner.initialize(invocation, fTargetProvider.getStatusSeverity()));
-						if (result.hasFatalError())
-							break;
-						if (result.getSeverity() < fTargetProvider.getStatusSeverity()) {
-							added= true;
-							TextEditGroup group= new TextEditGroup(RefactoringCoreMessages.InlineMethodRefactoring_edit_inline);
-							change.addTextEditGroup(group);
-							result.merge(inliner.perform(group));
-						}
-					}
-					// do this after we have inlined the method calls. We still want
-					// to generate the modifications.
-					result.merge(nestedInvocations);
-				}
-				if (!added) {
-					fChangeManager.remove(unit);
-				} else {
-					root.addChild(inliner.getModifications());
-					ImportRewrite rewrite= inliner.getImportEdit();
-					if (rewrite.hasRecordedChanges()) {
-						TextEdit edit= rewrite.rewriteImports(null);
-						if (edit instanceof MultiTextEdit ? ((MultiTextEdit)edit).getChildrenSize() > 0 : true) {
-							root.addChild(edit);
-							change.addTextEditGroup(
-								new TextEditGroup(RefactoringCoreMessages.InlineMethodRefactoring_edit_import, new TextEdit[] {edit}));
-						}
-					}
-				}
-			} finally {
-				if (inliner != null)
-					inliner.dispose();
-			}
-			sub.worked(1);
-			if (sub.isCanceled())
-				throw new OperationCanceledException();
-		}
-		result.merge(searchStatus);
-		sub.done();
-		pm.done();
-		return result;
-	}
+    if (searchStatus.hasFatalError()) {
+      result.merge(searchStatus);
+      return result;
+    }
+    IFile[] filesToBeModified = getFilesToBeModified(units);
+    result.merge(Checks.validateModifiesFiles(filesToBeModified, getValidationContext()));
+    if (result.hasFatalError()) return result;
+    result.merge(
+        ResourceChangeChecker.checkFilesToBeChanged(
+            filesToBeModified, new SubProgressMonitor(pm, 1)));
+    checkOverridden(result, new SubProgressMonitor(pm, 4));
+    IProgressMonitor sub = new SubProgressMonitor(pm, 15);
+    sub.beginTask("", units.length * 3); //$NON-NLS-1$
+    for (int c = 0; c < units.length; c++) {
+      ICompilationUnit unit = units[c];
+      sub.subTask(
+          Messages.format(
+              RefactoringCoreMessages.InlineMethodRefactoring_processing,
+              BasicElementLabels.getFileName(unit)));
+      CallInliner inliner = null;
+      try {
+        boolean added = false;
+        MultiTextEdit root = new MultiTextEdit();
+        CompilationUnitChange change = (CompilationUnitChange) fChangeManager.get(unit);
+        change.setEdit(root);
+        BodyDeclaration[] bodies =
+            fTargetProvider.getAffectedBodyDeclarations(unit, new SubProgressMonitor(pm, 1));
+        if (bodies.length == 0) continue;
+        inliner = new CallInliner(unit, (CompilationUnit) bodies[0].getRoot(), fSourceProvider);
+        for (int b = 0; b < bodies.length; b++) {
+          BodyDeclaration body = bodies[b];
+          inliner.initialize(body);
+          RefactoringStatus nestedInvocations = new RefactoringStatus();
+          ASTNode[] invocations =
+              removeNestedCalls(
+                  nestedInvocations,
+                  unit,
+                  fTargetProvider.getInvocations(body, new SubProgressMonitor(sub, 2)));
+          for (int i = 0; i < invocations.length; i++) {
+            ASTNode invocation = invocations[i];
+            result.merge(inliner.initialize(invocation, fTargetProvider.getStatusSeverity()));
+            if (result.hasFatalError()) break;
+            if (result.getSeverity() < fTargetProvider.getStatusSeverity()) {
+              added = true;
+              TextEditGroup group =
+                  new TextEditGroup(RefactoringCoreMessages.InlineMethodRefactoring_edit_inline);
+              change.addTextEditGroup(group);
+              result.merge(inliner.perform(group));
+            }
+          }
+          // do this after we have inlined the method calls. We still want
+          // to generate the modifications.
+          result.merge(nestedInvocations);
+        }
+        if (!added) {
+          fChangeManager.remove(unit);
+        } else {
+          root.addChild(inliner.getModifications());
+          ImportRewrite rewrite = inliner.getImportEdit();
+          if (rewrite.hasRecordedChanges()) {
+            TextEdit edit = rewrite.rewriteImports(null);
+            if (edit instanceof MultiTextEdit
+                ? ((MultiTextEdit) edit).getChildrenSize() > 0
+                : true) {
+              root.addChild(edit);
+              change.addTextEditGroup(
+                  new TextEditGroup(
+                      RefactoringCoreMessages.InlineMethodRefactoring_edit_import,
+                      new TextEdit[] {edit}));
+            }
+          }
+        }
+      } finally {
+        if (inliner != null) inliner.dispose();
+      }
+      sub.worked(1);
+      if (sub.isCanceled()) throw new OperationCanceledException();
+    }
+    result.merge(searchStatus);
+    sub.done();
+    pm.done();
+    return result;
+  }
 

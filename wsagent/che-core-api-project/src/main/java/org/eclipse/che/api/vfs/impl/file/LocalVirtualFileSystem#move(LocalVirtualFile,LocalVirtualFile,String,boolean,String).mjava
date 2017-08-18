@@ -1,54 +1,63 @@
-    LocalVirtualFile move(LocalVirtualFile virtualFile, LocalVirtualFile parent, String name,
-                          boolean overwrite, String lockToken)
-            throws ForbiddenException, ConflictException, ServerException {
-        if (virtualFile.isRoot()) {
-            throw new ForbiddenException("Unable move root folder");
-        }
-        if (virtualFile.getPath().equals(parent.getPath())) {
-            throw new ForbiddenException("Item cannot be moved to itself");
-        }
-        if (!parent.isFolder()) {
-            throw new ForbiddenException("Unable move. Item specified as parent is not a folder");
-        }
-        final Path sourcePath = virtualFile.getPath();
-        final Path parentPath = parent.getPath();
-        if (virtualFile.isFolder() && parent.getPath().isChild(virtualFile.getPath())) {
-            throw new ForbiddenException(String.format("Unable move item '%s' to '%s'. Item may not have itself as parent",
-                                                       sourcePath, parentPath));
-        }
-
-        if (virtualFile.isFile()) {
-            if (fileIsLockedAndLockTokenIsInvalid(virtualFile, lockToken)) {
-                throw new ForbiddenException(String.format("Unable move file '%s'. File is locked", sourcePath));
-            }
-        } else {
-            final List<VirtualFile> lockedFiles = new LockedFileFinder(virtualFile).findLockedFiles();
-            if (!lockedFiles.isEmpty()) {
-                throw new ForbiddenException(
-                        String.format("Unable move folder '%s'. Child items '%s' are locked", virtualFile, lockedFiles));
-            }
-        }
-
-        String newName = isNullOrEmpty(name) ? virtualFile.getName() : name;
-        final Path newPath = parent.getPath().newPath(newName);
-        LocalVirtualFile newVirtualFile = new LocalVirtualFile(new File(ioRoot, toIoPath(newPath)), newPath, this);
-
-        if (newVirtualFile.exists()) {
-            if (overwrite) {
-                delete(newVirtualFile, null);
-            } else {
-                throw new ConflictException(String.format("Item '%s' already exists", newPath));
-            }
-        }
-
-        doCopy(virtualFile, newVirtualFile);
-        addInSearcher(newVirtualFile);
-
-        final Path path = virtualFile.getPath();
-        final boolean isFile = virtualFile.isFile();
-        doDelete(virtualFile, lockToken);
-        deleteInSearcher(path, isFile);
-
-        return newVirtualFile;
+  LocalVirtualFile move(
+      LocalVirtualFile virtualFile,
+      LocalVirtualFile parent,
+      String name,
+      boolean overwrite,
+      String lockToken)
+      throws ForbiddenException, ConflictException, ServerException {
+    if (virtualFile.isRoot()) {
+      throw new ForbiddenException("Unable move root folder");
     }
+    if (virtualFile.getPath().equals(parent.getPath())) {
+      throw new ForbiddenException("Item cannot be moved to itself");
+    }
+    if (!parent.isFolder()) {
+      throw new ForbiddenException("Unable move. Item specified as parent is not a folder");
+    }
+    final Path sourcePath = virtualFile.getPath();
+    final Path parentPath = parent.getPath();
+    if (virtualFile.isFolder() && parent.getPath().isChild(virtualFile.getPath())) {
+      throw new ForbiddenException(
+          String.format(
+              "Unable move item '%s' to '%s'. Item may not have itself as parent",
+              sourcePath, parentPath));
+    }
+
+    if (virtualFile.isFile()) {
+      if (fileIsLockedAndLockTokenIsInvalid(virtualFile, lockToken)) {
+        throw new ForbiddenException(
+            String.format("Unable move file '%s'. File is locked", sourcePath));
+      }
+    } else {
+      final List<VirtualFile> lockedFiles = new LockedFileFinder(virtualFile).findLockedFiles();
+      if (!lockedFiles.isEmpty()) {
+        throw new ForbiddenException(
+            String.format(
+                "Unable move folder '%s'. Child items '%s' are locked", virtualFile, lockedFiles));
+      }
+    }
+
+    String newName = isNullOrEmpty(name) ? virtualFile.getName() : name;
+    final Path newPath = parent.getPath().newPath(newName);
+    LocalVirtualFile newVirtualFile =
+        new LocalVirtualFile(new File(ioRoot, toIoPath(newPath)), newPath, this);
+
+    if (newVirtualFile.exists()) {
+      if (overwrite) {
+        delete(newVirtualFile, null);
+      } else {
+        throw new ConflictException(String.format("Item '%s' already exists", newPath));
+      }
+    }
+
+    doCopy(virtualFile, newVirtualFile);
+    addInSearcher(newVirtualFile);
+
+    final Path path = virtualFile.getPath();
+    final boolean isFile = virtualFile.isFile();
+    doDelete(virtualFile, lockToken);
+    deleteInSearcher(path, isFile);
+
+    return newVirtualFile;
+  }
 

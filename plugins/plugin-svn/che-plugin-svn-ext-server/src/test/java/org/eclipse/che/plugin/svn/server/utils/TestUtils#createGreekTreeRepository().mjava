@@ -1,77 +1,87 @@
-    /**
-     * Creates a new Subversion repository in a temporary location with the Greek Tree structure within it.
-     *
-     * @return the path to the repository root
-     * @throws Exception
-     *         if anything goes wrong
-     */
-    public static File createGreekTreeRepository() throws Exception {
-        final File repoRoot = Files.createTempDir();
-        final File wcRoot = Files.createTempDir();
+  /**
+   * Creates a new Subversion repository in a temporary location with the Greek Tree structure
+   * within it.
+   *
+   * @return the path to the repository root
+   * @throws Exception if anything goes wrong
+   */
+  public static File createGreekTreeRepository() throws Exception {
+    final File repoRoot = Files.createTempDir();
+    final File wcRoot = Files.createTempDir();
 
-        // Clean up after execution
-        repoRoot.deleteOnExit();
-        wcRoot.deleteOnExit();
+    // Clean up after execution
+    repoRoot.deleteOnExit();
+    wcRoot.deleteOnExit();
 
-        // Create the repository
-        final CommandLineResult result = UpstreamUtils.executeCommandLine(null, "svnadmin", new String[] {
-                "create",
-                repoRoot.getAbsolutePath()
-        }, -1, repoRoot);
+    // Create the repository
+    final CommandLineResult result =
+        UpstreamUtils.executeCommandLine(
+            null, "svnadmin", new String[] {"create", repoRoot.getAbsolutePath()}, -1, repoRoot);
 
-        // Make sure the result is fine
-        handleCLIResult(result);
+    // Make sure the result is fine
+    handleCLIResult(result);
 
-        // Checkout the repository
-        final CLIOutputWithRevisionResponse coResponse =
-                subversionApi.checkout(dtoFactory.createDto(CheckoutRequest.class)
-                                                 .withProjectPath(wcRoot.getAbsolutePath())
-                                                 .withUrl("file:///" + repoRoot.getAbsolutePath()));
+    // Checkout the repository
+    final CLIOutputWithRevisionResponse coResponse =
+        subversionApi.checkout(
+            dtoFactory
+                .createDto(CheckoutRequest.class)
+                .withProjectPath(wcRoot.getAbsolutePath())
+                .withUrl("file:///" + repoRoot.getAbsolutePath()));
 
-        assertTrue(coResponse.getRevision() > -1);
+    assertTrue(coResponse.getRevision() > -1);
 
-        final List<String> pathsToAdd = new ArrayList<>();
+    final List<String> pathsToAdd = new ArrayList<>();
 
-        // Create the directory structure
-        for (final String path : GREEK_TREE) {
-            final File fileForPath = new File(wcRoot, path);
-            final String[] pathParts = path.split("/");
+    // Create the directory structure
+    for (final String path : GREEK_TREE) {
+      final File fileForPath = new File(wcRoot, path);
+      final String[] pathParts = path.split("/");
 
-            // Create parent directories (Probably not necessary)
-            Files.createParentDirs(fileForPath);
+      // Create parent directories (Probably not necessary)
+      Files.createParentDirs(fileForPath);
 
-            if (!path.endsWith("/") && fileForPath.createNewFile()) {
-                Files.write(("This is the file '" + pathParts[pathParts.length - 1] + "'.").getBytes(), fileForPath);
+      if (!path.endsWith("/") && fileForPath.createNewFile()) {
+        Files.write(
+            ("This is the file '" + pathParts[pathParts.length - 1] + "'.").getBytes(),
+            fileForPath);
 
-                pathsToAdd.add(path.substring(1));
-            }
-        }
-
-        // Add the files in the working copy to version control
-        subversionApi.add(dtoFactory.createDto(AddRequest.class).withProjectPath(wcRoot.getAbsolutePath())
-                                    .withPaths(pathsToAdd)
-                                    .withAddParents(true));
-
-        //Add properties
-        final CLIOutputResponse propResponse =
-                subversionApi.propset(dtoFactory.createDto(PropertySetRequest.class)
-                                                .withValue("user")
-                                                .withProjectPath(wcRoot.getAbsolutePath())
-                                                .withPath(".")
-                                                .withForce(true)
-                                                .withDepth(Depth.FULLY_RECURSIVE)
-                                                .withName("owner"));
-
-        assertTrue(propResponse.getOutput().size() > 0);
-
-        // Commit the changes
-        final CLIOutputWithRevisionResponse cResponse =
-                subversionApi.commit(dtoFactory.createDto(CommitRequest.class)
-                                               .withProjectPath(wcRoot.getAbsolutePath())
-                                               .withMessage("Initial commit."));
-
-        assertEquals(1L, cResponse.getRevision());
-
-        return repoRoot;
+        pathsToAdd.add(path.substring(1));
+      }
     }
+
+    // Add the files in the working copy to version control
+    subversionApi.add(
+        dtoFactory
+            .createDto(AddRequest.class)
+            .withProjectPath(wcRoot.getAbsolutePath())
+            .withPaths(pathsToAdd)
+            .withAddParents(true));
+
+    //Add properties
+    final CLIOutputResponse propResponse =
+        subversionApi.propset(
+            dtoFactory
+                .createDto(PropertySetRequest.class)
+                .withValue("user")
+                .withProjectPath(wcRoot.getAbsolutePath())
+                .withPath(".")
+                .withForce(true)
+                .withDepth(Depth.FULLY_RECURSIVE)
+                .withName("owner"));
+
+    assertTrue(propResponse.getOutput().size() > 0);
+
+    // Commit the changes
+    final CLIOutputWithRevisionResponse cResponse =
+        subversionApi.commit(
+            dtoFactory
+                .createDto(CommitRequest.class)
+                .withProjectPath(wcRoot.getAbsolutePath())
+                .withMessage("Initial commit."));
+
+    assertEquals(1L, cResponse.getRevision());
+
+    return repoRoot;
+  }
 

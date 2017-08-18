@@ -1,104 +1,117 @@
-	private static boolean getSplitVariableProposals(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
-		VariableDeclarationFragment fragment;
-		if (node instanceof VariableDeclarationFragment) {
-			fragment= (VariableDeclarationFragment) node;
-		} else if (node.getLocationInParent() == VariableDeclarationFragment.NAME_PROPERTY) {
-			fragment= (VariableDeclarationFragment) node.getParent();
-		} else {
-			return false;
-		}
+  private static boolean getSplitVariableProposals(
+      IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+    VariableDeclarationFragment fragment;
+    if (node instanceof VariableDeclarationFragment) {
+      fragment = (VariableDeclarationFragment) node;
+    } else if (node.getLocationInParent() == VariableDeclarationFragment.NAME_PROPERTY) {
+      fragment = (VariableDeclarationFragment) node.getParent();
+    } else {
+      return false;
+    }
 
-		if (fragment.getInitializer() == null) {
-			return false;
-		}
+    if (fragment.getInitializer() == null) {
+      return false;
+    }
 
-		Statement statement;
-		ASTNode fragParent= fragment.getParent();
-		if (fragParent instanceof VariableDeclarationStatement) {
-			statement= (VariableDeclarationStatement) fragParent;
-		} else if (fragParent instanceof VariableDeclarationExpression) {
-			if (fragParent.getLocationInParent() == TryStatement.RESOURCES_PROPERTY) {
-				return false;
-			}
-			statement= (Statement) fragParent.getParent();
-		} else {
-			return false;
-		}
-		// statement is ForStatement or VariableDeclarationStatement
+    Statement statement;
+    ASTNode fragParent = fragment.getParent();
+    if (fragParent instanceof VariableDeclarationStatement) {
+      statement = (VariableDeclarationStatement) fragParent;
+    } else if (fragParent instanceof VariableDeclarationExpression) {
+      if (fragParent.getLocationInParent() == TryStatement.RESOURCES_PROPERTY) {
+        return false;
+      }
+      statement = (Statement) fragParent.getParent();
+    } else {
+      return false;
+    }
+    // statement is ForStatement or VariableDeclarationStatement
 
-		ASTNode statementParent= statement.getParent();
-		StructuralPropertyDescriptor property= statement.getLocationInParent();
-		if (!property.isChildListProperty()) {
-			return false;
-		}
+    ASTNode statementParent = statement.getParent();
+    StructuralPropertyDescriptor property = statement.getLocationInParent();
+    if (!property.isChildListProperty()) {
+      return false;
+    }
 
-		List<? extends ASTNode> list= ASTNodes.getChildListProperty(statementParent, (ChildListPropertyDescriptor)property);
+    List<? extends ASTNode> list =
+        ASTNodes.getChildListProperty(statementParent, (ChildListPropertyDescriptor) property);
 
-		if (resultingCollections == null) {
-			return true;
-		}
+    if (resultingCollections == null) {
+      return true;
+    }
 
-		AST ast= statement.getAST();
-		ASTRewrite rewrite= ASTRewrite.create(ast);
+    AST ast = statement.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
 
-		String label= CorrectionMessages.QuickAssistProcessor_splitdeclaration_description;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_LOCAL);
-		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.SPLIT_VARIABLE_DECLARATION, image);
-		boolean commandConflict= false;
-		for (Iterator<ICommandAccess> iterator= resultingCollections.iterator(); iterator.hasNext();) {
-			Object completionProposal= iterator.next();
-			if (completionProposal instanceof ChangeCorrectionProposal) {
-				if (SPLIT_JOIN_VARIABLE_DECLARATION_ID.equals(((ChangeCorrectionProposal)completionProposal).getCommandId())) {
-					commandConflict= true;
-				}
-			}
-		}
-		if (!commandConflict) {
-			proposal.setCommandId(SPLIT_JOIN_VARIABLE_DECLARATION_ID);
-		}
+    String label = CorrectionMessages.QuickAssistProcessor_splitdeclaration_description;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_LOCAL);
+    ASTRewriteCorrectionProposal proposal =
+        new ASTRewriteCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.SPLIT_VARIABLE_DECLARATION,
+            image);
+    boolean commandConflict = false;
+    for (Iterator<ICommandAccess> iterator = resultingCollections.iterator();
+        iterator.hasNext();
+        ) {
+      Object completionProposal = iterator.next();
+      if (completionProposal instanceof ChangeCorrectionProposal) {
+        if (SPLIT_JOIN_VARIABLE_DECLARATION_ID.equals(
+            ((ChangeCorrectionProposal) completionProposal).getCommandId())) {
+          commandConflict = true;
+        }
+      }
+    }
+    if (!commandConflict) {
+      proposal.setCommandId(SPLIT_JOIN_VARIABLE_DECLARATION_ID);
+    }
 
-		Statement newStatement;
-		int insertIndex= list.indexOf(statement);
+    Statement newStatement;
+    int insertIndex = list.indexOf(statement);
 
-		Expression placeholder= (Expression) rewrite.createMoveTarget(fragment.getInitializer());
-		ITypeBinding binding= fragment.getInitializer().resolveTypeBinding();
-		if (placeholder instanceof ArrayInitializer && binding != null && binding.isArray()) {
-			ArrayCreation creation= ast.newArrayCreation();
-			creation.setInitializer((ArrayInitializer) placeholder);
-			final ITypeBinding componentType= binding.getElementType();
-			Type type= null;
-			if (componentType.isPrimitive())
-				type= ast.newPrimitiveType(PrimitiveType.toCode(componentType.getName()));
-			else
-				type= ast.newSimpleType(ast.newSimpleName(componentType.getName()));
-			creation.setType(ast.newArrayType(type, binding.getDimensions()));
-			placeholder= creation;
-		}
-		Assignment assignment= ast.newAssignment();
-		assignment.setRightHandSide(placeholder);
-		assignment.setLeftHandSide(ast.newSimpleName(fragment.getName().getIdentifier()));
+    Expression placeholder = (Expression) rewrite.createMoveTarget(fragment.getInitializer());
+    ITypeBinding binding = fragment.getInitializer().resolveTypeBinding();
+    if (placeholder instanceof ArrayInitializer && binding != null && binding.isArray()) {
+      ArrayCreation creation = ast.newArrayCreation();
+      creation.setInitializer((ArrayInitializer) placeholder);
+      final ITypeBinding componentType = binding.getElementType();
+      Type type = null;
+      if (componentType.isPrimitive())
+        type = ast.newPrimitiveType(PrimitiveType.toCode(componentType.getName()));
+      else type = ast.newSimpleType(ast.newSimpleName(componentType.getName()));
+      creation.setType(ast.newArrayType(type, binding.getDimensions()));
+      placeholder = creation;
+    }
+    Assignment assignment = ast.newAssignment();
+    assignment.setRightHandSide(placeholder);
+    assignment.setLeftHandSide(ast.newSimpleName(fragment.getName().getIdentifier()));
 
-		if (statement instanceof VariableDeclarationStatement) {
-			newStatement= ast.newExpressionStatement(assignment);
-			insertIndex+= 1; // add after declaration
-		} else {
-			rewrite.replace(fragment.getParent(), assignment, null);
-			VariableDeclarationFragment newFrag= ast.newVariableDeclarationFragment();
-			newFrag.setName(ast.newSimpleName(fragment.getName().getIdentifier()));
-			newFrag.extraDimensions().addAll(DimensionRewrite.copyDimensions(fragment.extraDimensions(), rewrite));
+    if (statement instanceof VariableDeclarationStatement) {
+      newStatement = ast.newExpressionStatement(assignment);
+      insertIndex += 1; // add after declaration
+    } else {
+      rewrite.replace(fragment.getParent(), assignment, null);
+      VariableDeclarationFragment newFrag = ast.newVariableDeclarationFragment();
+      newFrag.setName(ast.newSimpleName(fragment.getName().getIdentifier()));
+      newFrag
+          .extraDimensions()
+          .addAll(DimensionRewrite.copyDimensions(fragment.extraDimensions(), rewrite));
 
-			VariableDeclarationExpression oldVarDecl= (VariableDeclarationExpression) fragParent;
+      VariableDeclarationExpression oldVarDecl = (VariableDeclarationExpression) fragParent;
 
-			VariableDeclarationStatement newVarDec= ast.newVariableDeclarationStatement(newFrag);
-			newVarDec.setType((Type) rewrite.createCopyTarget(oldVarDecl.getType()));
-			newVarDec.modifiers().addAll(ASTNodeFactory.newModifiers(ast, oldVarDecl.getModifiers()));
-			newStatement= newVarDec;
-		}
+      VariableDeclarationStatement newVarDec = ast.newVariableDeclarationStatement(newFrag);
+      newVarDec.setType((Type) rewrite.createCopyTarget(oldVarDecl.getType()));
+      newVarDec.modifiers().addAll(ASTNodeFactory.newModifiers(ast, oldVarDecl.getModifiers()));
+      newStatement = newVarDec;
+    }
 
-		ListRewrite listRewriter= rewrite.getListRewrite(statementParent, (ChildListPropertyDescriptor) property);
-		listRewriter.insertAt(newStatement, insertIndex, null);
+    ListRewrite listRewriter =
+        rewrite.getListRewrite(statementParent, (ChildListPropertyDescriptor) property);
+    listRewriter.insertAt(newStatement, insertIndex, null);
 
-		resultingCollections.add(proposal);
-		return true;
-	}
+    resultingCollections.add(proposal);
+    return true;
+  }
 

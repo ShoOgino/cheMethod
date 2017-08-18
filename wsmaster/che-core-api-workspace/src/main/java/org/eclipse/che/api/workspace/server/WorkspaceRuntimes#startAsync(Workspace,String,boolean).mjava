@@ -1,90 +1,81 @@
-    /**
-     * Asynchronously starts the environment of the workspace.
-     * Before executing start task checks whether all conditions
-     * are met and throws appropriate exceptions if not, so
-     * there is no way to start the same workspace twice.
-     *
-     * <p>Note that cancellation of resulting future won't
-     * interrupt workspace start, call {@link #stop(String)} directly instead.
-     *
-     * <p>If starting process is interrupted let's say within call
-     * to {@link #stop(String)} method, resulting future will
-     * be exceptionally completed(eventually) with an instance of
-     * {@link EnvironmentStartInterruptedException}. Note that clients
-     * don't have to cleanup runtime resources, the component
-     * will do necessary cleanup when interrupted.
-     *
-     * <p>Implementation notes:
-     * if thread which executes the task is interrupted, then the
-     * task is also eventually(depends on the environment engine implementation)
-     * interrupted as if {@link #stop(String)} is called directly.
-     * That helps to shutdown gracefully when thread pool is asked
-     * to {@link ExecutorService#shutdownNow()} and also reduces
-     * shutdown time when there are starting workspaces.
-     *
-     * @param workspace
-     *         workspace containing target environment
-     * @param envName
-     *         the name of the environment to start
-     * @param recover
-     *         whether to recover from the snapshot
-     * @return completable future describing the instance of running environment
-     * @throws ConflictException
-     *         when the workspace is already started
-     * @throws ConflictException
-     *         when workspaces start refused {@link #refuseWorkspacesStart()} was called
-     * @throws ServerException
-     *         when any other error occurs
-     * @throws IllegalArgumentException
-     *         when the workspace doesn't contain the environment
-     * @throws NullPointerException
-     *         when either {@code workspace} or {@code envName} is null
-     */
-    public CompletableFuture<WorkspaceRuntimeImpl> startAsync(Workspace workspace,
-                                                              String envName,
-                                                              boolean recover) throws ConflictException, ServerException {
-        requireNonNull(workspace, "Non-null workspace required");
-        requireNonNull(envName, "Non-null environment name required");
-        EnvironmentImpl environment = copyEnv(workspace, envName);
-        String workspaceId = workspace.getId();
-        CompletableFuture<WorkspaceRuntimeImpl> cmpFuture;
-        StartTask startTask;
-        try (@SuppressWarnings("unused") Unlocker u = locks.writeLock(workspaceId)) {
-            checkIsNotTerminated("start the workspace");
-            if (isStartRefused.get()) {
-                throw new ConflictException(format("Start of the workspace '%s' is rejected by the system, " +
-                                                   "no more workspaces are allowed to start",
-                                                   workspace.getConfig().getName()));
-            }
-            RuntimeState state = states.get(workspaceId);
-            if (state != null) {
-                throw new ConflictException(format("Could not start workspace '%s' because its status is '%s'",
-                                                   workspace.getConfig().getName(),
-                                                   state.status));
-            }
-            startTask = new StartTask(workspaceId,
-                                      envName,
-                                      environment,
-                                      recover,
-                                      cmpFuture = new CompletableFuture<>());
-            states.put(workspaceId, new RuntimeState(WorkspaceStatus.STARTING,
-                                                     envName,
-                                                     startTask,
-                                                     sharedPool.submit(startTask)));
-        }
-
-        // publish event synchronously as the task may not be executed by
-        // executors service(due to legal cancellation), clients still have
-        // to receive STOPPED -> STARTING event
-        eventsService.publish(DtoFactory.newDto(WorkspaceStatusEvent.class)
-                                        .withWorkspaceId(workspaceId)
-                                        .withStatus(WorkspaceStatus.STARTING)
-                                        .withEventType(EventType.STARTING)
-                                        .withPrevStatus(WorkspaceStatus.STOPPED));
-
-        // so the start thread is free to go and start the environment
-        startTask.unlockStart();
-
-        return cmpFuture;
+  /**
+   * Asynchronously starts the environment of the workspace. Before executing start task checks
+   * whether all conditions are met and throws appropriate exceptions if not, so there is no way to
+   * start the same workspace twice.
+   *
+   * <p>Note that cancellation of resulting future won't interrupt workspace start, call {@link
+   * #stop(String)} directly instead.
+   *
+   * <p>If starting process is interrupted let's say within call to {@link #stop(String)} method,
+   * resulting future will be exceptionally completed(eventually) with an instance of {@link
+   * EnvironmentStartInterruptedException}. Note that clients don't have to cleanup runtime
+   * resources, the component will do necessary cleanup when interrupted.
+   *
+   * <p>Implementation notes: if thread which executes the task is interrupted, then the task is
+   * also eventually(depends on the environment engine implementation) interrupted as if {@link
+   * #stop(String)} is called directly. That helps to shutdown gracefully when thread pool is asked
+   * to {@link ExecutorService#shutdownNow()} and also reduces shutdown time when there are starting
+   * workspaces.
+   *
+   * @param workspace workspace containing target environment
+   * @param envName the name of the environment to start
+   * @param recover whether to recover from the snapshot
+   * @return completable future describing the instance of running environment
+   * @throws ConflictException when the workspace is already started
+   * @throws ConflictException when workspaces start refused {@link #refuseWorkspacesStart()} was
+   *     called
+   * @throws ServerException when any other error occurs
+   * @throws IllegalArgumentException when the workspace doesn't contain the environment
+   * @throws NullPointerException when either {@code workspace} or {@code envName} is null
+   */
+  public CompletableFuture<WorkspaceRuntimeImpl> startAsync(
+      Workspace workspace, String envName, boolean recover)
+      throws ConflictException, ServerException {
+    requireNonNull(workspace, "Non-null workspace required");
+    requireNonNull(envName, "Non-null environment name required");
+    EnvironmentImpl environment = copyEnv(workspace, envName);
+    String workspaceId = workspace.getId();
+    CompletableFuture<WorkspaceRuntimeImpl> cmpFuture;
+    StartTask startTask;
+    try (@SuppressWarnings("unused")
+        Unlocker u = locks.writeLock(workspaceId)) {
+      checkIsNotTerminated("start the workspace");
+      if (isStartRefused.get()) {
+        throw new ConflictException(
+            format(
+                "Start of the workspace '%s' is rejected by the system, "
+                    + "no more workspaces are allowed to start",
+                workspace.getConfig().getName()));
+      }
+      RuntimeState state = states.get(workspaceId);
+      if (state != null) {
+        throw new ConflictException(
+            format(
+                "Could not start workspace '%s' because its status is '%s'",
+                workspace.getConfig().getName(), state.status));
+      }
+      startTask =
+          new StartTask(
+              workspaceId, envName, environment, recover, cmpFuture = new CompletableFuture<>());
+      states.put(
+          workspaceId,
+          new RuntimeState(
+              WorkspaceStatus.STARTING, envName, startTask, sharedPool.submit(startTask)));
     }
+
+    // publish event synchronously as the task may not be executed by
+    // executors service(due to legal cancellation), clients still have
+    // to receive STOPPED -> STARTING event
+    eventsService.publish(
+        DtoFactory.newDto(WorkspaceStatusEvent.class)
+            .withWorkspaceId(workspaceId)
+            .withStatus(WorkspaceStatus.STARTING)
+            .withEventType(EventType.STARTING)
+            .withPrevStatus(WorkspaceStatus.STOPPED));
+
+    // so the start thread is free to go and start the environment
+    startTask.unlockStart();
+
+    return cmpFuture;
+  }
 

@@ -1,124 +1,130 @@
-    /*
-     * Creates the openables corresponding to this resource.
-     * Returns null if none was found.
-     */
-    private Openable createElement(IResource resource, int elementType, RootInfo rootInfo) {
-        if (resource == null) return null;
+  /*
+   * Creates the openables corresponding to this resource.
+   * Returns null if none was found.
+   */
+  private Openable createElement(IResource resource, int elementType, RootInfo rootInfo) {
+    if (resource == null) return null;
 
-        IPath path = resource.getFullPath();
-        IJavaElement element = null;
-        switch (elementType) {
+    IPath path = resource.getFullPath();
+    IJavaElement element = null;
+    switch (elementType) {
+      case IJavaElement.JAVA_PROJECT:
 
-			case IJavaElement.JAVA_PROJECT:
+        // note that non-java resources rooted at the project level will also enter this code with
+        // an elementType JAVA_PROJECT (see #elementType(...)).
+        if (resource instanceof IProject) {
 
-				// note that non-java resources rooted at the project level will also enter this code with
-				// an elementType JAVA_PROJECT (see #elementType(...)).
-				if (resource instanceof IProject){
+          popUntilPrefixOf(path);
 
-					popUntilPrefixOf(path);
+          if (this.currentElement != null
+              && this.currentElement.getElementType() == IJavaElement.JAVA_PROJECT
+              && ((IJavaProject) this.currentElement).getProject().equals(resource)) {
+            return this.currentElement;
+          }
+          if (rootInfo != null && rootInfo.project.getProject().equals(resource)) {
+            element = rootInfo.project;
+            break;
+          }
+          IProject proj = (IProject) resource;
+          if (JavaProject.hasJavaNature(proj)) {
+            element = JavaCore.create(proj);
+          } else {
+            // java project may have been been closed or removed (look for
+            // element amongst old java project s list).
+            element = this.state.findJavaProject(proj.getName());
+          }
+        }
+        break;
+      case IJavaElement.PACKAGE_FRAGMENT_ROOT:
+        element =
+            rootInfo == null
+                ? JavaCore.create(resource)
+                : rootInfo.getPackageFragmentRoot(resource);
+        break;
+      case IJavaElement.PACKAGE_FRAGMENT:
+        if (rootInfo != null) {
+          if (rootInfo.project.contains(resource)) {
+            PackageFragmentRoot root = (PackageFragmentRoot) rootInfo.getPackageFragmentRoot(null);
+            // create package handle
+            IPath pkgPath = path.removeFirstSegments(root.resource().getFullPath().segmentCount());
+            String[] pkgName = pkgPath.segments();
+            element = root.getPackageFragment(pkgName);
+          }
+        } else {
+          // find the element that encloses the resource
+          popUntilPrefixOf(path);
 
-					if (this.currentElement != null
-						&& this.currentElement.getElementType() == IJavaElement.JAVA_PROJECT
-						&& ((IJavaProject)this.currentElement).getProject().equals(resource)) {
-						return this.currentElement;
-					}
-					if  (rootInfo != null && rootInfo.project.getProject().equals(resource)){
-						element = rootInfo.project;
-						break;
-					}
-					IProject proj = (IProject)resource;
-					if (JavaProject.hasJavaNature(proj)) {
-						element = JavaCore.create(proj);
-					} else {
-						// java project may have been been closed or removed (look for
-						// element amongst old java project s list).
-						element =  this.state.findJavaProject(proj.getName());
-					}
-				}
-				break;
+          if (this.currentElement == null) {
+            element = JavaCore.create(resource);
+          } else {
+            // find the root
+            PackageFragmentRoot root = this.currentElement.getPackageFragmentRoot();
+            if (root == null) {
+              element = JavaCore.create(resource);
+            } else if (((JavaProject) root.getJavaProject()).contains(resource)) {
+              // create package handle
+              IPath pkgPath = path.removeFirstSegments(root.getPath().segmentCount());
+              String[] pkgName = pkgPath.segments();
+              element = root.getPackageFragment(pkgName);
+            }
+          }
+        }
+        break;
+      case IJavaElement.COMPILATION_UNIT:
+      case IJavaElement.CLASS_FILE:
+        // find the element that encloses the resource
+        popUntilPrefixOf(path);
+
+        if (this.currentElement == null) {
+          element =
+              rootInfo == null
+                  ? JavaCore.create(resource)
+                  : JavaModelManager.create(resource, rootInfo.project);
+        } else {
+          // find the package
+          IPackageFragment pkgFragment = null;
+          switch (this.currentElement.getElementType()) {
             case IJavaElement.PACKAGE_FRAGMENT_ROOT:
-                element = rootInfo == null ? JavaCore.create(resource)
-                                           : rootInfo.getPackageFragmentRoot(resource);
-                break;
+              PackageFragmentRoot root = (PackageFragmentRoot) this.currentElement;
+              IPath rootPath = root.getPath();
+              IPath pkgPath = path.removeLastSegments(1);
+              String[] pkgName = pkgPath.removeFirstSegments(rootPath.segmentCount()).segments();
+              pkgFragment = root.getPackageFragment(pkgName);
+              break;
             case IJavaElement.PACKAGE_FRAGMENT:
-                if (rootInfo != null) {
-                    if (rootInfo.project.contains(resource)) {
-                        PackageFragmentRoot root = (PackageFragmentRoot)rootInfo.getPackageFragmentRoot(null);
-                        // create package handle
-                        IPath pkgPath = path.removeFirstSegments(root.resource().getFullPath().segmentCount());
-                        String[] pkgName = pkgPath.segments();
-                        element = root.getPackageFragment(pkgName);
-                    }
-                } else {
-                    // find the element that encloses the resource
-                    popUntilPrefixOf(path);
-
-                    if (this.currentElement == null) {
-                        element = JavaCore.create(resource);
-                    } else {
-                        // find the root
-                        PackageFragmentRoot root = this.currentElement.getPackageFragmentRoot();
-                        if (root == null) {
-                            element = JavaCore.create(resource);
-                        } else if (((JavaProject)root.getJavaProject()).contains(resource)) {
-                            // create package handle
-                            IPath pkgPath = path.removeFirstSegments(root.getPath().segmentCount());
-                            String[] pkgName = pkgPath.segments();
-                            element = root.getPackageFragment(pkgName);
-                        }
-                    }
-                }
-                break;
+              Openable pkg = this.currentElement;
+              if (pkg.getPath().equals(path.removeLastSegments(1))) {
+                pkgFragment = (IPackageFragment) pkg;
+              } // else case of package x which is a prefix of x.y
+              break;
             case IJavaElement.COMPILATION_UNIT:
             case IJavaElement.CLASS_FILE:
-                // find the element that encloses the resource
-                popUntilPrefixOf(path);
-
-                if (this.currentElement == null) {
-                    element = rootInfo == null ? JavaCore.create(resource)
-                                               : JavaModelManager.create(resource, rootInfo.project);
-                } else {
-                    // find the package
-                    IPackageFragment pkgFragment = null;
-                    switch (this.currentElement.getElementType()) {
-                        case IJavaElement.PACKAGE_FRAGMENT_ROOT:
-                            PackageFragmentRoot root = (PackageFragmentRoot)this.currentElement;
-                            IPath rootPath = root.getPath();
-                            IPath pkgPath = path.removeLastSegments(1);
-                            String[] pkgName = pkgPath.removeFirstSegments(rootPath.segmentCount()).segments();
-                            pkgFragment = root.getPackageFragment(pkgName);
-                            break;
-                        case IJavaElement.PACKAGE_FRAGMENT:
-                            Openable pkg = this.currentElement;
-                            if (pkg.getPath().equals(path.removeLastSegments(1))) {
-                                pkgFragment = (IPackageFragment)pkg;
-                            } // else case of package x which is a prefix of x.y
-                            break;
-                        case IJavaElement.COMPILATION_UNIT:
-                        case IJavaElement.CLASS_FILE:
-                            pkgFragment = (IPackageFragment)this.currentElement.getParent();
-                            break;
-                    }
-                    if (pkgFragment == null) {
-                        element = rootInfo == null ? JavaCore.create(resource) : JavaModelManager.create(resource, rootInfo.project);
-                    } else {
-                        if (elementType == IJavaElement.COMPILATION_UNIT) {
-                            // create compilation unit handle
-                            // fileName validation has been done in elementType(IResourceDelta, int, boolean)
-                            String fileName = path.lastSegment();
-                            element = pkgFragment.getCompilationUnit(fileName);
-                        } else {
-                            // create class file handle
-                            // fileName validation has been done in elementType(IResourceDelta, int, boolean)
-                            String fileName = path.lastSegment();
-                            element = pkgFragment.getClassFile(fileName);
-                        }
-                    }
-                }
-                break;
+              pkgFragment = (IPackageFragment) this.currentElement.getParent();
+              break;
+          }
+          if (pkgFragment == null) {
+            element =
+                rootInfo == null
+                    ? JavaCore.create(resource)
+                    : JavaModelManager.create(resource, rootInfo.project);
+          } else {
+            if (elementType == IJavaElement.COMPILATION_UNIT) {
+              // create compilation unit handle
+              // fileName validation has been done in elementType(IResourceDelta, int, boolean)
+              String fileName = path.lastSegment();
+              element = pkgFragment.getCompilationUnit(fileName);
+            } else {
+              // create class file handle
+              // fileName validation has been done in elementType(IResourceDelta, int, boolean)
+              String fileName = path.lastSegment();
+              element = pkgFragment.getClassFile(fileName);
+            }
+          }
         }
-        if (element == null) return null;
-        this.currentElement = (Openable)element;
-        return this.currentElement;
+        break;
     }
+    if (element == null) return null;
+    this.currentElement = (Openable) element;
+    return this.currentElement;
+  }
 

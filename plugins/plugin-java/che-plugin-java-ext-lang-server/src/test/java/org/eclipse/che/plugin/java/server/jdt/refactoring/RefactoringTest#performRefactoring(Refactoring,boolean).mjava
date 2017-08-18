@@ -1,75 +1,84 @@
-	protected final RefactoringStatus performRefactoring(Refactoring ref, boolean providesUndo) throws Exception {
-		performDummySearch();
-		IUndoManager undoManager= getUndoManager();
-		if (DESCRIPTOR_TEST){
-			final CreateChangeOperation create= new CreateChangeOperation(
-					new CheckConditionsOperation(ref, CheckConditionsOperation.ALL_CONDITIONS),
-					RefactoringStatus.FATAL);
-			create.run(new NullProgressMonitor());
-			RefactoringStatus checkingStatus= create.getConditionCheckingStatus();
-			if (!checkingStatus.isOK())
-				return checkingStatus;
-			Change change= create.getChange();
-			ChangeDescriptor descriptor= change.getDescriptor();
-			if (descriptor instanceof RefactoringChangeDescriptor) {
-				RefactoringChangeDescriptor rcd= (RefactoringChangeDescriptor) descriptor;
-				RefactoringDescriptor refactoringDescriptor= rcd.getRefactoringDescriptor();
-				if (refactoringDescriptor instanceof JavaRefactoringDescriptor) {
-					JavaRefactoringDescriptor jrd= (JavaRefactoringDescriptor) refactoringDescriptor;
-					RefactoringStatus validation= jrd.validateDescriptor();
-					if (!validation.isOK())
-						return validation;
-					RefactoringStatus refactoringStatus= new RefactoringStatus();
-					Class expected= jrd.getClass();
-					RefactoringContribution contribution= RefactoringCore.getRefactoringContribution(jrd.getID());
-					jrd= (JavaRefactoringDescriptor) contribution.createDescriptor(jrd.getID(), jrd.getProject(), jrd.getDescription(), jrd.getComment(), contribution.retrieveArgumentMap(jrd), jrd.getFlags());
-					assertEquals(expected, jrd.getClass());
-					ref= jrd.createRefactoring(refactoringStatus);
-					if (!refactoringStatus.isOK())
-						return refactoringStatus;
-					TestRenameParticipantSingle.reset();
-					TestCreateParticipantSingle.reset();
-					TestMoveParticipantSingle.reset();
-					TestDeleteParticipantSingle.reset();
-				}
-			}
-		}
-		final CreateChangeOperation create= new CreateChangeOperation(
-			new CheckConditionsOperation(ref, CheckConditionsOperation.ALL_CONDITIONS),
-			RefactoringStatus.FATAL);
-		final PerformChangeOperation perform= new PerformChangeOperation(create);
-		perform.setUndoManager(undoManager, ref.getName());
-		IWorkspace workspace= ResourcesPlugin.getWorkspace();
-		if (fIsPreDeltaTest) {
-			IResourceChangeListener listener= new IResourceChangeListener() {
-				public void resourceChanged(IResourceChangeEvent event) {
-					if (create.getConditionCheckingStatus().isOK() &&  perform.changeExecuted()) {
-						TestModelProvider.assertTrue(event.getDelta());
-					}
-				}
-			};
-			try {
-				TestModelProvider.clearDelta();
-				workspace.checkpoint(false);
-				workspace.addResourceChangeListener(listener);
-				executePerformOperation(perform, workspace);
-			} finally {
-				workspace.removeResourceChangeListener(listener);
-			}
-		} else {
-			executePerformOperation(perform, workspace);
-		}
-		RefactoringStatus status= create.getConditionCheckingStatus();
-		if (!status.isOK())
-			return status;
-		assertTrue("Change wasn't executed", perform.changeExecuted());
-		Change undo= perform.getUndoChange();
-		if (providesUndo) {
-			assertNotNull("Undo doesn't exist", undo);
-			assertTrue("Undo manager is empty", undoManager.anythingToUndo());
-		} else {
-			assertNull("Undo manager contains undo but shouldn't", undo);
-		}
-		return null;
-	}
+  protected final RefactoringStatus performRefactoring(Refactoring ref, boolean providesUndo)
+      throws Exception {
+    performDummySearch();
+    IUndoManager undoManager = getUndoManager();
+    if (DESCRIPTOR_TEST) {
+      final CreateChangeOperation create =
+          new CreateChangeOperation(
+              new CheckConditionsOperation(ref, CheckConditionsOperation.ALL_CONDITIONS),
+              RefactoringStatus.FATAL);
+      create.run(new NullProgressMonitor());
+      RefactoringStatus checkingStatus = create.getConditionCheckingStatus();
+      if (!checkingStatus.isOK()) return checkingStatus;
+      Change change = create.getChange();
+      ChangeDescriptor descriptor = change.getDescriptor();
+      if (descriptor instanceof RefactoringChangeDescriptor) {
+        RefactoringChangeDescriptor rcd = (RefactoringChangeDescriptor) descriptor;
+        RefactoringDescriptor refactoringDescriptor = rcd.getRefactoringDescriptor();
+        if (refactoringDescriptor instanceof JavaRefactoringDescriptor) {
+          JavaRefactoringDescriptor jrd = (JavaRefactoringDescriptor) refactoringDescriptor;
+          RefactoringStatus validation = jrd.validateDescriptor();
+          if (!validation.isOK()) return validation;
+          RefactoringStatus refactoringStatus = new RefactoringStatus();
+          Class expected = jrd.getClass();
+          RefactoringContribution contribution =
+              RefactoringCore.getRefactoringContribution(jrd.getID());
+          jrd =
+              (JavaRefactoringDescriptor)
+                  contribution.createDescriptor(
+                      jrd.getID(),
+                      jrd.getProject(),
+                      jrd.getDescription(),
+                      jrd.getComment(),
+                      contribution.retrieveArgumentMap(jrd),
+                      jrd.getFlags());
+          assertEquals(expected, jrd.getClass());
+          ref = jrd.createRefactoring(refactoringStatus);
+          if (!refactoringStatus.isOK()) return refactoringStatus;
+          TestRenameParticipantSingle.reset();
+          TestCreateParticipantSingle.reset();
+          TestMoveParticipantSingle.reset();
+          TestDeleteParticipantSingle.reset();
+        }
+      }
+    }
+    final CreateChangeOperation create =
+        new CreateChangeOperation(
+            new CheckConditionsOperation(ref, CheckConditionsOperation.ALL_CONDITIONS),
+            RefactoringStatus.FATAL);
+    final PerformChangeOperation perform = new PerformChangeOperation(create);
+    perform.setUndoManager(undoManager, ref.getName());
+    IWorkspace workspace = ResourcesPlugin.getWorkspace();
+    if (fIsPreDeltaTest) {
+      IResourceChangeListener listener =
+          new IResourceChangeListener() {
+            public void resourceChanged(IResourceChangeEvent event) {
+              if (create.getConditionCheckingStatus().isOK() && perform.changeExecuted()) {
+                TestModelProvider.assertTrue(event.getDelta());
+              }
+            }
+          };
+      try {
+        TestModelProvider.clearDelta();
+        workspace.checkpoint(false);
+        workspace.addResourceChangeListener(listener);
+        executePerformOperation(perform, workspace);
+      } finally {
+        workspace.removeResourceChangeListener(listener);
+      }
+    } else {
+      executePerformOperation(perform, workspace);
+    }
+    RefactoringStatus status = create.getConditionCheckingStatus();
+    if (!status.isOK()) return status;
+    assertTrue("Change wasn't executed", perform.changeExecuted());
+    Change undo = perform.getUndoChange();
+    if (providesUndo) {
+      assertNotNull("Undo doesn't exist", undo);
+      assertTrue("Undo manager is empty", undoManager.anythingToUndo());
+    } else {
+      assertNull("Undo manager contains undo but shouldn't", undo);
+    }
+    return null;
+  }
 

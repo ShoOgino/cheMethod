@@ -1,126 +1,142 @@
-    @BeforeMethod
-    public void setUp() throws Exception {
+  @BeforeMethod
+  public void setUp() throws Exception {
 
-        WorkspaceProjectsSyncer workspaceHolder = new WsAgentTestBase.TestWorkspaceHolder();
+    WorkspaceProjectsSyncer workspaceHolder = new WsAgentTestBase.TestWorkspaceHolder();
 
-        File root = new File(FS_PATH);
+    File root = new File(FS_PATH);
 
-        if (root.exists()) {
-            IoUtil.deleteRecursive(root);
-        }
-        root.mkdir();
+    if (root.exists()) {
+      IoUtil.deleteRecursive(root);
+    }
+    root.mkdir();
 
+    File indexDir = new File(INDEX_PATH);
 
-        File indexDir = new File(INDEX_PATH);
+    if (indexDir.exists()) {
+      IoUtil.deleteRecursive(indexDir);
+    }
+    indexDir.mkdir();
 
-        if (indexDir.exists()) {
-            IoUtil.deleteRecursive(indexDir);
-        }
-        indexDir.mkdir();
-
-        Set<PathMatcher> filters = new HashSet<>();
-        filters.add(path -> {
-            for (java.nio.file.Path pathElement : path) {
-                if (pathElement == null || EXCLUDE_SEARCH_PATH.equals(pathElement.toString())) {
-                    return true;
-                }
+    Set<PathMatcher> filters = new HashSet<>();
+    filters.add(
+        path -> {
+          for (java.nio.file.Path pathElement : path) {
+            if (pathElement == null || EXCLUDE_SEARCH_PATH.equals(pathElement.toString())) {
+              return true;
             }
-            return false;
+          }
+          return false;
         });
 
-        FSLuceneSearcherProvider sProvider = new FSLuceneSearcherProvider(indexDir, filters);
+    FSLuceneSearcherProvider sProvider = new FSLuceneSearcherProvider(indexDir, filters);
 
-        vfsProvider = new LocalVirtualFileSystemProvider(root, sProvider);
+    vfsProvider = new LocalVirtualFileSystemProvider(root, sProvider);
 
-        final EventService eventService = new EventService();
+    final EventService eventService = new EventService();
 
-        // PTs for test
-        ProjectTypeDef chuck = new ProjectTypeDef("chuck_project_type", "chuck_project_type", true, false) {
-            {
-                addConstantDefinition("x", "attr description", new AttributeValue(Arrays.asList("a", "b")));
-            }
+    // PTs for test
+    ProjectTypeDef chuck =
+        new ProjectTypeDef("chuck_project_type", "chuck_project_type", true, false) {
+          {
+            addConstantDefinition(
+                "x", "attr description", new AttributeValue(Arrays.asList("a", "b")));
+          }
         };
 
-        Set<ProjectTypeDef> projectTypes = new HashSet<>();
-        final LocalProjectType myProjectType = new LocalProjectType("my_project_type", "my project type");
-        projectTypes.add(myProjectType);
-        projectTypes.add(new LocalProjectType("module_type", "module type"));
-        projectTypes.add(chuck);
+    Set<ProjectTypeDef> projectTypes = new HashSet<>();
+    final LocalProjectType myProjectType =
+        new LocalProjectType("my_project_type", "my project type");
+    projectTypes.add(myProjectType);
+    projectTypes.add(new LocalProjectType("module_type", "module type"));
+    projectTypes.add(chuck);
 
-        ptRegistry = new ProjectTypeRegistry(projectTypes);
+    ptRegistry = new ProjectTypeRegistry(projectTypes);
 
-        phRegistry = new ProjectHandlerRegistry(new HashSet<>());
+    phRegistry = new ProjectHandlerRegistry(new HashSet<>());
 
-        importerRegistry = new ProjectImporterRegistry(Collections.<ProjectImporter>emptySet());
+    importerRegistry = new ProjectImporterRegistry(Collections.<ProjectImporter>emptySet());
 
-        projectServiceLinksInjector = new ProjectServiceLinksInjector();
-        vcsStatusInjector = new ProjectServiceVcsStatusInjector(pm, emptySet());
+    projectServiceLinksInjector = new ProjectServiceLinksInjector();
+    vcsStatusInjector = new ProjectServiceVcsStatusInjector(pm, emptySet());
 
-        projectRegistry = new ProjectRegistry(workspaceHolder, vfsProvider, ptRegistry, phRegistry, eventService);
-        projectRegistry.initProjects();
+    projectRegistry =
+        new ProjectRegistry(workspaceHolder, vfsProvider, ptRegistry, phRegistry, eventService);
+    projectRegistry.initProjects();
 
-        FileWatcherNotificationHandler fileWatcherNotificationHandler = new DefaultFileWatcherNotificationHandler(vfsProvider);
-        FileTreeWatcher fileTreeWatcher = new FileTreeWatcher(root, new HashSet<>(), fileWatcherNotificationHandler);
+    FileWatcherNotificationHandler fileWatcherNotificationHandler =
+        new DefaultFileWatcherNotificationHandler(vfsProvider);
+    FileTreeWatcher fileTreeWatcher =
+        new FileTreeWatcher(root, new HashSet<>(), fileWatcherNotificationHandler);
 
-        pm = new ProjectManager(vfsProvider, ptRegistry, projectRegistry, phRegistry,
-                                importerRegistry, fileWatcherNotificationHandler, fileTreeWatcher, workspaceHolder,
-                                fileWatcherManager);
-        pm.initWatcher();
+    pm =
+        new ProjectManager(
+            vfsProvider,
+            ptRegistry,
+            projectRegistry,
+            phRegistry,
+            importerRegistry,
+            fileWatcherNotificationHandler,
+            fileTreeWatcher,
+            workspaceHolder,
+            fileWatcherManager);
+    pm.initWatcher();
 
-        HttpJsonRequest httpJsonRequest = mock(HttpJsonRequest.class, new SelfReturningAnswer());
+    HttpJsonRequest httpJsonRequest = mock(HttpJsonRequest.class, new SelfReturningAnswer());
 
-        //List<ProjectConfigDto> modules = new ArrayList<>();
+    //List<ProjectConfigDto> modules = new ArrayList<>();
 
-        projects = new ArrayList<>();
-        addMockedProjectConfigDto(myProjectType, "my_project");
+    projects = new ArrayList<>();
+    addMockedProjectConfigDto(myProjectType, "my_project");
 
-        when(httpJsonRequestFactory.fromLink(any())).thenReturn(httpJsonRequest);
-        when(httpJsonRequest.request()).thenReturn(httpJsonResponse);
-        when(httpJsonResponse.asDto(WorkspaceDto.class)).thenReturn(usersWorkspaceMock);
-        when(usersWorkspaceMock.getConfig()).thenReturn(workspaceConfigMock);
-        when(workspaceConfigMock.getProjects()).thenReturn(projects);
+    when(httpJsonRequestFactory.fromLink(any())).thenReturn(httpJsonRequest);
+    when(httpJsonRequest.request()).thenReturn(httpJsonResponse);
+    when(httpJsonResponse.asDto(WorkspaceDto.class)).thenReturn(usersWorkspaceMock);
+    when(usersWorkspaceMock.getConfig()).thenReturn(workspaceConfigMock);
+    when(workspaceConfigMock.getProjects()).thenReturn(projects);
 
-//        verify(httpJsonRequestFactory).fromLink(eq(DtoFactory.newDto(Link.class)
-//                                                             .withHref(apiEndpoint + "/workspace/" + workspace + "/project")
-//                                                             .withMethod(PUT)));
+    //        verify(httpJsonRequestFactory).fromLink(eq(DtoFactory.newDto(Link.class)
+    //                                                             .withHref(apiEndpoint + "/workspace/" + workspace + "/project")
+    //                                                             .withMethod(PUT)));
 
-        DependencySupplierImpl dependencies = new DependencySupplierImpl();
+    DependencySupplierImpl dependencies = new DependencySupplierImpl();
 
+    dependencies.addInstance(ProjectTypeRegistry.class, ptRegistry);
+    dependencies.addInstance(UserDao.class, userDao);
+    dependencies.addInstance(ProjectManager.class, pm);
+    dependencies.addInstance(ProjectImporterRegistry.class, importerRegistry);
+    dependencies.addInstance(ProjectHandlerRegistry.class, phRegistry);
+    dependencies.addInstance(EventService.class, eventService);
+    dependencies.addInstance(ProjectServiceLinksInjector.class, projectServiceLinksInjector);
+    dependencies.addInstance(ProjectServiceVcsStatusInjector.class, vcsStatusInjector);
+    dependencies.addInstance(RequestTransmitter.class, mock(RequestTransmitter.class));
+    dependencies.addInstance(
+        ProjectImportOutputJsonRpcRegistrar.class, new ProjectImportOutputJsonRpcRegistrar());
 
-        dependencies.addInstance(ProjectTypeRegistry.class, ptRegistry);
-        dependencies.addInstance(UserDao.class, userDao);
-        dependencies.addInstance(ProjectManager.class, pm);
-        dependencies.addInstance(ProjectImporterRegistry.class, importerRegistry);
-        dependencies.addInstance(ProjectHandlerRegistry.class, phRegistry);
-        dependencies.addInstance(EventService.class, eventService);
-        dependencies.addInstance(ProjectServiceLinksInjector.class, projectServiceLinksInjector);
-        dependencies.addInstance(ProjectServiceVcsStatusInjector.class, vcsStatusInjector);
-        dependencies.addInstance(RequestTransmitter.class, mock(RequestTransmitter.class));
-        dependencies.addInstance(ProjectImportOutputJsonRpcRegistrar.class, new ProjectImportOutputJsonRpcRegistrar());
+    ResourceBinder resources = new ResourceBinderImpl();
+    ProviderBinder providers = ProviderBinder.getInstance();
+    EverrestProcessor processor =
+        new EverrestProcessor(
+            new EverrestConfiguration(),
+            dependencies,
+            new RequestHandlerImpl(new RequestDispatcher(resources), providers),
+            null);
+    launcher = new ResourceLauncher(processor);
 
-        ResourceBinder resources = new ResourceBinderImpl();
-        ProviderBinder providers = ProviderBinder.getInstance();
-        EverrestProcessor processor = new EverrestProcessor(new EverrestConfiguration(),
-                                                            dependencies,
-                                                            new RequestHandlerImpl(new RequestDispatcher(resources), providers),
-                                                            null);
-        launcher = new ResourceLauncher(processor);
+    processor.addApplication(
+        new Application() {
+          @Override
+          public Set<Class<?>> getClasses() {
+            return java.util.Collections.<Class<?>>singleton(ProjectService.class);
+          }
 
-        processor.addApplication(new Application() {
-            @Override
-            public Set<Class<?>> getClasses() {
-                return java.util.Collections.<Class<?>>singleton(ProjectService.class);
-            }
-
-            @Override
-            public Set<Object> getSingletons() {
-                return new HashSet<>(Arrays.asList(new ApiExceptionMapper()));
-            }
+          @Override
+          public Set<Object> getSingletons() {
+            return new HashSet<>(Arrays.asList(new ApiExceptionMapper()));
+          }
         });
 
-        ApplicationContext.setCurrent(anApplicationContext().withProviders(providers).build());
+    ApplicationContext.setCurrent(anApplicationContext().withProviders(providers).build());
 
-        env = org.eclipse.che.commons.env.EnvironmentContext.getCurrent();
-
-    }
+    env = org.eclipse.che.commons.env.EnvironmentContext.getCurrent();
+  }
 

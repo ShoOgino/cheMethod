@@ -1,59 +1,74 @@
-	private RefactoringStatus updateMethodInvocation(MethodInvocation originalInvocation, IMember enclosing, CompilationUnitRewrite unitRewriter) throws
-																																				  JavaModelException {
+  private RefactoringStatus updateMethodInvocation(
+      MethodInvocation originalInvocation, IMember enclosing, CompilationUnitRewrite unitRewriter)
+      throws JavaModelException {
 
-		RefactoringStatus status= new RefactoringStatus();
+    RefactoringStatus status = new RefactoringStatus();
 
-		// If the method invocation utilizes type arguments, skip this
-		// call as the new target method may have additional parameters
-		if (originalInvocation.typeArguments().size() > 0)
-			return createWarningAboutCall(enclosing, originalInvocation, RefactoringCoreMessages.IntroduceIndirectionRefactoring_call_warning_type_arguments);
+    // If the method invocation utilizes type arguments, skip this
+    // call as the new target method may have additional parameters
+    if (originalInvocation.typeArguments().size() > 0)
+      return createWarningAboutCall(
+          enclosing,
+          originalInvocation,
+          RefactoringCoreMessages.IntroduceIndirectionRefactoring_call_warning_type_arguments);
 
-		MethodInvocation newInvocation= unitRewriter.getAST().newMethodInvocation();
-		List<Expression> newInvocationArgs= newInvocation.arguments();
-		List<Expression> originalInvocationArgs= originalInvocation.arguments();
+    MethodInvocation newInvocation = unitRewriter.getAST().newMethodInvocation();
+    List<Expression> newInvocationArgs = newInvocation.arguments();
+    List<Expression> originalInvocationArgs = originalInvocation.arguments();
 
-		// static call => always use a qualifier
-		String qualifier= unitRewriter.getImportRewrite().addImport(fIntermediaryTypeBinding);
-		newInvocation.setExpression(ASTNodeFactory.newName(unitRewriter.getAST(), qualifier));
-		newInvocation.setName(unitRewriter.getAST().newSimpleName(getIntermediaryMethodName()));
+    // static call => always use a qualifier
+    String qualifier = unitRewriter.getImportRewrite().addImport(fIntermediaryTypeBinding);
+    newInvocation.setExpression(ASTNodeFactory.newName(unitRewriter.getAST(), qualifier));
+    newInvocation.setName(unitRewriter.getAST().newSimpleName(getIntermediaryMethodName()));
 
-		final Expression expression= originalInvocation.getExpression();
+    final Expression expression = originalInvocation.getExpression();
 
-		if (!isStaticTarget()) {
-			// Add the expression as the first parameter
-			if (expression == null) {
-				// There is no expression for this call. Use a (possibly qualified) "this" expression.
-				ThisExpression expr= unitRewriter.getAST().newThisExpression();
-				RefactoringStatus qualifierStatus= qualifyThisExpression(expr, originalInvocation, enclosing, unitRewriter);
-				status.merge(qualifierStatus);
-				if (qualifierStatus.hasEntries())
-					// warning means don't include this invocation
-					return status;
-				newInvocationArgs.add(expr);
-			} else {
-				Expression expressionAsParam= (Expression) unitRewriter.getASTRewrite().createMoveTarget(expression);
-				newInvocationArgs.add(expressionAsParam);
-			}
-		} else {
-			if (expression != null) {
-				// Check if expression is the type name. If not, there may
-				// be side effects (e.g. inside methods) -> don't update
-				if (! (expression instanceof Name) || ASTNodes.getTypeBinding((Name)expression) == null)
-					return createWarningAboutCall(enclosing, originalInvocation, RefactoringCoreMessages.IntroduceIndirectionRefactoring_call_warning_static_expression_access);
+    if (!isStaticTarget()) {
+      // Add the expression as the first parameter
+      if (expression == null) {
+        // There is no expression for this call. Use a (possibly qualified) "this" expression.
+        ThisExpression expr = unitRewriter.getAST().newThisExpression();
+        RefactoringStatus qualifierStatus =
+            qualifyThisExpression(expr, originalInvocation, enclosing, unitRewriter);
+        status.merge(qualifierStatus);
+        if (qualifierStatus.hasEntries())
+          // warning means don't include this invocation
+          return status;
+        newInvocationArgs.add(expr);
+      } else {
+        Expression expressionAsParam =
+            (Expression) unitRewriter.getASTRewrite().createMoveTarget(expression);
+        newInvocationArgs.add(expressionAsParam);
+      }
+    } else {
+      if (expression != null) {
+        // Check if expression is the type name. If not, there may
+        // be side effects (e.g. inside methods) -> don't update
+        if (!(expression instanceof Name) || ASTNodes.getTypeBinding((Name) expression) == null)
+          return createWarningAboutCall(
+              enclosing,
+              originalInvocation,
+              RefactoringCoreMessages
+                  .IntroduceIndirectionRefactoring_call_warning_static_expression_access);
+      }
+    }
 
+    for (int i = 0; i < originalInvocationArgs.size(); i++) {
+      Expression originalInvocationArg = originalInvocationArgs.get(i);
+      Expression movedArg =
+          (Expression) unitRewriter.getASTRewrite().createMoveTarget(originalInvocationArg);
+      newInvocationArgs.add(movedArg);
+    }
 
-			}
-		}
+    unitRewriter
+        .getASTRewrite()
+        .replace(
+            originalInvocation,
+            newInvocation,
+            unitRewriter.createGroupDescription(
+                RefactoringCoreMessages
+                    .IntroduceIndirectionRefactoring_group_description_replace_call));
 
-		for (int i= 0; i < originalInvocationArgs.size(); i++) {
-			Expression originalInvocationArg= originalInvocationArgs.get(i);
-			Expression movedArg= (Expression) unitRewriter.getASTRewrite().createMoveTarget(originalInvocationArg);
-			newInvocationArgs.add(movedArg);
-		}
-
-		unitRewriter.getASTRewrite().replace(originalInvocation, newInvocation,
-				unitRewriter.createGroupDescription(RefactoringCoreMessages.IntroduceIndirectionRefactoring_group_description_replace_call));
-
-		return status;
-	}
+    return status;
+  }
 

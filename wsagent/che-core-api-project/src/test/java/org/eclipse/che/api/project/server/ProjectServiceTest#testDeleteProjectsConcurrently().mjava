@@ -1,46 +1,52 @@
-    @Test
-    public void testDeleteProjectsConcurrently() throws Exception {
-        int threadNumber = 5 * (Runtime.getRuntime().availableProcessors() + 1);
-        ExecutorService executor = Executors.newFixedThreadPool(threadNumber);
-        CountDownLatch countDownLatch = new CountDownLatch(threadNumber);
-        List<Future<ContainerResponse>> futures = new LinkedList<>();
+  @Test
+  public void testDeleteProjectsConcurrently() throws Exception {
+    int threadNumber = 5 * (Runtime.getRuntime().availableProcessors() + 1);
+    ExecutorService executor = Executors.newFixedThreadPool(threadNumber);
+    CountDownLatch countDownLatch = new CountDownLatch(threadNumber);
+    List<Future<ContainerResponse>> futures = new LinkedList<>();
 
+    for (int i = 0; i < threadNumber; i++) {
+      addMockedProjectConfigDto(
+          ptRegistry.getProjectType("my_project_type"), "my_project_name" + i);
+    }
 
-        for (int i = 0; i < threadNumber; i++) {
-            addMockedProjectConfigDto(ptRegistry.getProjectType("my_project_type"), "my_project_name" + i);
-        }
-
-        IntStream.range(0, threadNumber).forEach(
-                i -> {
-                    futures.add(executor.submit(() -> {
+    IntStream.range(0, threadNumber)
+        .forEach(
+            i -> {
+              futures.add(
+                  executor.submit(
+                      () -> {
                         countDownLatch.countDown();
                         countDownLatch.await();
 
                         try {
-                            return launcher.service(DELETE,
-                                                    "http://localhost:8080/api/project/my_project_name" + i,
-                                                    "http://localhost:8080/api", null, null, null);
+                          return launcher.service(
+                              DELETE,
+                              "http://localhost:8080/api/project/my_project_name" + i,
+                              "http://localhost:8080/api",
+                              null,
+                              null,
+                              null);
                         } catch (Exception e) {
-                            throw new IllegalStateException(e);
+                          throw new IllegalStateException(e);
                         }
-                    }));
-                }
-                                                );
+                      }));
+            });
 
-        boolean isNotDone;
-        do {
-            isNotDone = false;
-            for (Future<ContainerResponse> future : futures) {
-                if (!future.isDone()) {
-                    isNotDone = true;
-                }
-            }
-        } while (isNotDone);
-
-        for (Future<ContainerResponse> future : futures) {
-            assertEquals(future.get().getStatus(), 204, "Error: " + future.get().getEntity());
+    boolean isNotDone;
+    do {
+      isNotDone = false;
+      for (Future<ContainerResponse> future : futures) {
+        if (!future.isDone()) {
+          isNotDone = true;
         }
+      }
+    } while (isNotDone);
 
-        executor.shutdown();
+    for (Future<ContainerResponse> future : futures) {
+      assertEquals(future.get().getStatus(), 204, "Error: " + future.get().getEntity());
     }
+
+    executor.shutdown();
+  }
 

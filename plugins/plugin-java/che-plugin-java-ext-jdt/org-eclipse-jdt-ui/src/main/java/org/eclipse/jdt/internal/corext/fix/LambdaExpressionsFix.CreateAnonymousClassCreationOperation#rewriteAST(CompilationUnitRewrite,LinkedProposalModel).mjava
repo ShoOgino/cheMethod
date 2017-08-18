@@ -1,70 +1,82 @@
-		/**
-		 * {@inheritDoc}
-		 */
-		@Override
-		public void rewriteAST(CompilationUnitRewrite cuRewrite, LinkedProposalModel model) throws CoreException {
+    /** {@inheritDoc} */
+    @Override
+    public void rewriteAST(CompilationUnitRewrite cuRewrite, LinkedProposalModel model)
+        throws CoreException {
 
-			ASTRewrite rewrite = cuRewrite.getASTRewrite();
-			AST ast = rewrite.getAST();
+      ASTRewrite rewrite = cuRewrite.getASTRewrite();
+      AST ast = rewrite.getAST();
 
-			for (Iterator<LambdaExpression> iterator = fExpressions.iterator(); iterator.hasNext(); ) {
-				LambdaExpression lambdaExpression = iterator.next();
-				TextEditGroup group = createTextEditGroup(FixMessages.LambdaExpressionsFix_convert_to_anonymous_class_creation, cuRewrite);
+      for (Iterator<LambdaExpression> iterator = fExpressions.iterator(); iterator.hasNext(); ) {
+        LambdaExpression lambdaExpression = iterator.next();
+        TextEditGroup group =
+            createTextEditGroup(
+                FixMessages.LambdaExpressionsFix_convert_to_anonymous_class_creation, cuRewrite);
 
-				ITypeBinding lambdaTypeBinding = lambdaExpression.resolveTypeBinding();
-				IMethodBinding methodBinding = lambdaTypeBinding.getFunctionalInterfaceMethod();
-				List<VariableDeclaration> parameters = lambdaExpression.parameters();
-				String[] parameterNames = new String[parameters.size()];
-				for (int i = 0; i < parameterNames.length; i++) {
-					parameterNames[i] = parameters.get(i).getName().getIdentifier();
-				}
+        ITypeBinding lambdaTypeBinding = lambdaExpression.resolveTypeBinding();
+        IMethodBinding methodBinding = lambdaTypeBinding.getFunctionalInterfaceMethod();
+        List<VariableDeclaration> parameters = lambdaExpression.parameters();
+        String[] parameterNames = new String[parameters.size()];
+        for (int i = 0; i < parameterNames.length; i++) {
+          parameterNames[i] = parameters.get(i).getName().getIdentifier();
+        }
 
-				final CodeGenerationSettings settings =
-						JavaPreferencesSettings.getCodeGenerationSettings(cuRewrite.getCu().getJavaProject());
-				ImportRewrite importRewrite = cuRewrite.getImportRewrite();
-				ImportRewriteContext importContext = new ContextSensitiveImportRewriteContext(lambdaExpression, importRewrite);
+        final CodeGenerationSettings settings =
+            JavaPreferencesSettings.getCodeGenerationSettings(cuRewrite.getCu().getJavaProject());
+        ImportRewrite importRewrite = cuRewrite.getImportRewrite();
+        ImportRewriteContext importContext =
+            new ContextSensitiveImportRewriteContext(lambdaExpression, importRewrite);
 
-				MethodDeclaration methodDeclaration =
-						StubUtility2.createImplementationStub(cuRewrite.getCu(), rewrite, importRewrite, importContext,
-															  methodBinding, parameterNames, lambdaTypeBinding.getName(), settings, false);
+        MethodDeclaration methodDeclaration =
+            StubUtility2.createImplementationStub(
+                cuRewrite.getCu(),
+                rewrite,
+                importRewrite,
+                importContext,
+                methodBinding,
+                parameterNames,
+                lambdaTypeBinding.getName(),
+                settings,
+                false);
 
-				Block block;
-				ASTNode lambdaBody = lambdaExpression.getBody();
-				if (lambdaBody instanceof Block) {
-					block = (Block)rewrite.createCopyTarget(lambdaBody);
-				} else {
-					block = ast.newBlock();
-					List<Statement> statements = block.statements();
-					ITypeBinding returnType = methodBinding.getReturnType();
-					Expression copyTarget = (Expression)rewrite.createCopyTarget(lambdaBody);
-					if (Bindings.isVoidType(returnType)) {
-						ExpressionStatement newExpressionStatement = ast.newExpressionStatement(copyTarget);
-						statements.add(newExpressionStatement);
-					} else {
-						ReturnStatement returnStatement = ast.newReturnStatement();
-						returnStatement.setExpression(copyTarget);
-						statements.add(returnStatement);
-					}
-				}
-				methodDeclaration.setBody(block);
+        Block block;
+        ASTNode lambdaBody = lambdaExpression.getBody();
+        if (lambdaBody instanceof Block) {
+          block = (Block) rewrite.createCopyTarget(lambdaBody);
+        } else {
+          block = ast.newBlock();
+          List<Statement> statements = block.statements();
+          ITypeBinding returnType = methodBinding.getReturnType();
+          Expression copyTarget = (Expression) rewrite.createCopyTarget(lambdaBody);
+          if (Bindings.isVoidType(returnType)) {
+            ExpressionStatement newExpressionStatement = ast.newExpressionStatement(copyTarget);
+            statements.add(newExpressionStatement);
+          } else {
+            ReturnStatement returnStatement = ast.newReturnStatement();
+            returnStatement.setExpression(copyTarget);
+            statements.add(returnStatement);
+          }
+        }
+        methodDeclaration.setBody(block);
 
-				AnonymousClassDeclaration anonymousClassDeclaration = ast.newAnonymousClassDeclaration();
-				List<BodyDeclaration> bodyDeclarations = anonymousClassDeclaration.bodyDeclarations();
-				bodyDeclarations.add(methodDeclaration);
+        AnonymousClassDeclaration anonymousClassDeclaration = ast.newAnonymousClassDeclaration();
+        List<BodyDeclaration> bodyDeclarations = anonymousClassDeclaration.bodyDeclarations();
+        bodyDeclarations.add(methodDeclaration);
 
-				Type creationType = ASTNodeFactory.newCreationType(ast, lambdaTypeBinding, importRewrite, importContext);
+        Type creationType =
+            ASTNodeFactory.newCreationType(ast, lambdaTypeBinding, importRewrite, importContext);
 
-				ClassInstanceCreation classInstanceCreation = ast.newClassInstanceCreation();
-				classInstanceCreation.setType(creationType);
-				classInstanceCreation.setAnonymousClassDeclaration(anonymousClassDeclaration);
+        ClassInstanceCreation classInstanceCreation = ast.newClassInstanceCreation();
+        classInstanceCreation.setType(creationType);
+        classInstanceCreation.setAnonymousClassDeclaration(anonymousClassDeclaration);
 
-				ASTNode toReplace = lambdaExpression;
-				if (lambdaExpression.getLocationInParent() == CastExpression.EXPRESSION_PROPERTY
-					&& lambdaTypeBinding.isEqualTo(((CastExpression)lambdaExpression.getParent()).resolveTypeBinding())) {
-					// remove cast to same type as the anonymous will use
-					toReplace = lambdaExpression.getParent();
-				}
-				rewrite.replace(toReplace, classInstanceCreation, group);
-			}
-		}
+        ASTNode toReplace = lambdaExpression;
+        if (lambdaExpression.getLocationInParent() == CastExpression.EXPRESSION_PROPERTY
+            && lambdaTypeBinding.isEqualTo(
+                ((CastExpression) lambdaExpression.getParent()).resolveTypeBinding())) {
+          // remove cast to same type as the anonymous will use
+          toReplace = lambdaExpression.getParent();
+        }
+        rewrite.replace(toReplace, classInstanceCreation, group);
+      }
+    }
 

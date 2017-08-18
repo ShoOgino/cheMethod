@@ -1,85 +1,105 @@
-    public void clone(CloneParams params) throws GitException, UnauthorizedException {
-        String remoteUri = params.getRemoteUrl();
-        boolean removeIfFailed = false;
+  public void clone(CloneParams params) throws GitException, UnauthorizedException {
+    String remoteUri = params.getRemoteUrl();
+    boolean removeIfFailed = false;
+    try {
+      if (params.getRemoteName() == null) {
+        params.setRemoteName(Constants.DEFAULT_REMOTE_NAME);
+      }
+      if (params.getWorkingDir() == null) {
+        params.setWorkingDir(repository.getWorkTree().getCanonicalPath());
+      }
+
+      // If clone fails and the .git folder didn't exist we want to remove it.
+      // We have to do this here because the clone command doesn't revert its own changes in case of failure.
+      removeIfFailed = !repository.getDirectory().exists();
+
+      CloneCommand cloneCommand =
+          Git.cloneRepository()
+              .setDirectory(new File(params.getWorkingDir()))
+              .setRemote(params.getRemoteName())
+              .setCloneSubmodules(params.isRecursive())
+              .setURI(remoteUri);
+      if (params.getBranchesToFetch().isEmpty()) {
+        cloneCommand.setCloneAllBranches(true);
+      } else {
+        cloneCommand.setBranchesToClone(params.getBranchesToFetch());
+      }
+
+      LineConsumer lineConsumer = lineConsumerFactory.newLineConsumer();
+      cloneCommand.setProgressMonitor(
+          new BatchingProgressMonitor() {
+            @Override
+            protected void onUpdate(String taskName, int workCurr) {
+              try {
+                lineConsumer.writeLine(taskName + ": " + workCurr + " completed");
+              } catch (IOException exception) {
+                LOG.error(exception.getMessage(), exception);
+              }
+            }
+
+            @Override
+            protected void onEndTask(String taskName, int workCurr) {}
+
+            @Override
+            protected void onUpdate(String taskName, int workCurr, int workTotal, int percentDone) {
+              try {
+                lineConsumer.writeLine(
+                    taskName
+                        + ": "
+                        + workCurr
+                        + " of "
+                        + workTotal
+                        + " completed, "
+                        + percentDone
+                        + "% done");
+              } catch (IOException exception) {
+                LOG.error(exception.getMessage(), exception);
+              }
+            }
+
+            @Override
+            protected void onEndTask(
+                String taskName, int workCurr, int workTotal, int percentDone) {}
+          });
+
+      ((Git)
+              executeRemoteCommand(
+                  remoteUri, cloneCommand, params.getUsername(), params.getPassword()))
+          .close();
+
+      StoredConfig repositoryConfig = getRepository().getConfig();
+      GitUser gitUser = getUser();
+      if (gitUser != null) {
+        repositoryConfig.setString(
+            ConfigConstants.CONFIG_USER_SECTION,
+            null,
+            ConfigConstants.CONFIG_KEY_NAME,
+            gitUser.getName());
+        repositoryConfig.setString(
+            ConfigConstants.CONFIG_USER_SECTION,
+            null,
+            ConfigConstants.CONFIG_KEY_EMAIL,
+            gitUser.getEmail());
+      }
+      repositoryConfig.save();
+    } catch (IOException | GitAPIException exception) {
+      // Delete .git directory in case it was created
+      if (removeIfFailed) {
+        deleteRepositoryFolder();
+      }
+      //TODO remove this when JGit will support HTTP 301 redirects, https://bugs.eclipse.org/bugs/show_bug.cgi?id=465167
+      //try to clone repository by replacing http to https in the url if HTTP 301 redirect happened
+      if (exception.getMessage().contains(": 301 Moved Permanently")) {
+        remoteUri = "https" + remoteUri.substring(4);
         try {
-            if (params.getRemoteName() == null) {
-                params.setRemoteName(Constants.DEFAULT_REMOTE_NAME);
-            }
-            if (params.getWorkingDir() == null) {
-                params.setWorkingDir(repository.getWorkTree().getCanonicalPath());
-            }
-
-            // If clone fails and the .git folder didn't exist we want to remove it.
-            // We have to do this here because the clone command doesn't revert its own changes in case of failure.
-            removeIfFailed = !repository.getDirectory().exists();
-
-            CloneCommand cloneCommand = Git.cloneRepository()
-                                           .setDirectory(new File(params.getWorkingDir()))
-                                           .setRemote(params.getRemoteName())
-                                           .setCloneSubmodules(params.isRecursive())
-                                           .setURI(remoteUri);
-            if (params.getBranchesToFetch().isEmpty()) {
-                cloneCommand.setCloneAllBranches(true);
-            } else {
-                cloneCommand.setBranchesToClone(params.getBranchesToFetch());
-            }
-
-            LineConsumer lineConsumer = lineConsumerFactory.newLineConsumer();
-            cloneCommand.setProgressMonitor(new BatchingProgressMonitor() {
-                @Override
-                protected void onUpdate(String taskName, int workCurr) {
-                    try {
-                        lineConsumer.writeLine(taskName + ": " + workCurr + " completed");
-                    } catch (IOException exception) {
-                        LOG.error(exception.getMessage(), exception);
-                    }
-                }
-
-                @Override
-                protected void onEndTask(String taskName, int workCurr) {
-                }
-
-                @Override
-                protected void onUpdate(String taskName, int workCurr, int workTotal, int percentDone) {
-                    try {
-                        lineConsumer.writeLine(taskName + ": " + workCurr + " of " + workTotal + " completed, " + percentDone + "% done");
-                    } catch (IOException exception) {
-                        LOG.error(exception.getMessage(), exception);
-                    }
-                }
-
-                @Override
-                protected void onEndTask(String taskName, int workCurr, int workTotal, int percentDone) {
-                }
-            });
-
-            ((Git)executeRemoteCommand(remoteUri, cloneCommand, params.getUsername(), params.getPassword())).close();
-
-            StoredConfig repositoryConfig = getRepository().getConfig();
-            GitUser gitUser = getUser();
-            if (gitUser != null) {
-                repositoryConfig.setString(ConfigConstants.CONFIG_USER_SECTION, null, ConfigConstants.CONFIG_KEY_NAME, gitUser.getName());
-                repositoryConfig.setString(ConfigConstants.CONFIG_USER_SECTION, null, ConfigConstants.CONFIG_KEY_EMAIL, gitUser.getEmail());
-            }
-            repositoryConfig.save();
-        } catch (IOException | GitAPIException exception) {
-            // Delete .git directory in case it was created
-            if (removeIfFailed) {
-                deleteRepositoryFolder();
-            }
-            //TODO remove this when JGit will support HTTP 301 redirects, https://bugs.eclipse.org/bugs/show_bug.cgi?id=465167
-            //try to clone repository by replacing http to https in the url if HTTP 301 redirect happened
-            if (exception.getMessage().contains(": 301 Moved Permanently")) {
-                remoteUri = "https" + remoteUri.substring(4);
-                try {
-                    clone(params.withRemoteUrl(remoteUri));
-                } catch (UnauthorizedException | GitException e) {
-                    throw new GitException("Failed to clone the repository", e);
-                }
-                return;
-            }
-            String message = generateExceptionMessage(exception);
-            throw new GitException(message, exception);
+          clone(params.withRemoteUrl(remoteUri));
+        } catch (UnauthorizedException | GitException e) {
+          throw new GitException("Failed to clone the repository", e);
         }
+        return;
+      }
+      String message = generateExceptionMessage(exception);
+      throw new GitException(message, exception);
     }
+  }
 

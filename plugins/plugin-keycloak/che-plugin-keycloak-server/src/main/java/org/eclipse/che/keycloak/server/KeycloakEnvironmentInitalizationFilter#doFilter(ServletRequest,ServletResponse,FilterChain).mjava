@@ -1,34 +1,40 @@
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
-            throws IOException, ServletException {
+  @Override
+  public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
+      throws IOException, ServletException {
 
-        final HttpServletRequest httpRequest = (HttpServletRequest)request;
-        final String token = tokenExtractor.getToken(httpRequest);
-        if (request.getScheme().startsWith("ws") || (token != null && token.startsWith("machine"))) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        final HttpSession session = httpRequest.getSession();
-        Subject subject = (Subject)session.getAttribute("che_subject");
-        if (subject == null || !subject.getToken().equals(token)) {
-            Jwt jwtToken = (Jwt)httpRequest.getAttribute("token");
-            if (jwtToken == null) {
-                throw new ServletException("Cannot detect or instantiate user.");
-            }
-            Claims claims = (Claims)jwtToken.getBody();
-            User user = getOrCreateUser(claims.getSubject(), claims.get("email", String.class), claims.get("preferred_username", String.class));
-            getOrCreateAccount(claims.get("preferred_username", String.class), claims.get("preferred_username", String.class));
-
-            subject = new SubjectImpl(user.getName(), user.getId(), token, false);
-            session.setAttribute("che_subject", subject);
-        }
-
-        try {
-            EnvironmentContext.getCurrent().setSubject(subject);
-            filterChain.doFilter(addUserInRequest(httpRequest, subject), response);
-        } finally {
-            EnvironmentContext.reset();
-        }
+    final HttpServletRequest httpRequest = (HttpServletRequest) request;
+    final String token = tokenExtractor.getToken(httpRequest);
+    if (request.getScheme().startsWith("ws") || (token != null && token.startsWith("machine"))) {
+      filterChain.doFilter(request, response);
+      return;
     }
+
+    final HttpSession session = httpRequest.getSession();
+    Subject subject = (Subject) session.getAttribute("che_subject");
+    if (subject == null || !subject.getToken().equals(token)) {
+      Jwt jwtToken = (Jwt) httpRequest.getAttribute("token");
+      if (jwtToken == null) {
+        throw new ServletException("Cannot detect or instantiate user.");
+      }
+      Claims claims = (Claims) jwtToken.getBody();
+      User user =
+          getOrCreateUser(
+              claims.getSubject(),
+              claims.get("email", String.class),
+              claims.get("preferred_username", String.class));
+      getOrCreateAccount(
+          claims.get("preferred_username", String.class),
+          claims.get("preferred_username", String.class));
+
+      subject = new SubjectImpl(user.getName(), user.getId(), token, false);
+      session.setAttribute("che_subject", subject);
+    }
+
+    try {
+      EnvironmentContext.getCurrent().setSubject(subject);
+      filterChain.doFilter(addUserInRequest(httpRequest, subject), response);
+    } finally {
+      EnvironmentContext.reset();
+    }
+  }
 

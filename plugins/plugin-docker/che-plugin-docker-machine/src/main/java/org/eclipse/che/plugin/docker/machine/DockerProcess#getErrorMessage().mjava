@@ -1,25 +1,35 @@
-    private String getErrorMessage() {
-        final StringBuilder errorMessage = new StringBuilder("Command output read timeout is reached.");
-        try {
-            // check if process is alive
-            final Exec checkProcessExec = docker.createExec(
-                    CreateExecParams.create(container,
-                                            new String[] {"/bin/sh",
-                                                          "-c",
-                                                          format("if kill -0 $(cat %1$s 2>/dev/null) 2>/dev/null; then cat %1$s; fi",
-                                                                 pidFilePath)})
-                                    .withDetach(false));
-            ValueHolder<String> pidHolder = new ValueHolder<>();
-            docker.startExec(StartExecParams.create(checkProcessExec.getId()), message -> {
-                if (message.getType() == LogMessage.Type.STDOUT) {
-                    pidHolder.set(message.getContent());
-                }
-            });
-            if (pidHolder.get() != null) {
-                errorMessage.append(" Process is still running and has id ").append(pidHolder.get()).append(" inside machine");
+  private String getErrorMessage() {
+    final StringBuilder errorMessage = new StringBuilder("Command output read timeout is reached.");
+    try {
+      // check if process is alive
+      final Exec checkProcessExec =
+          docker.createExec(
+              CreateExecParams.create(
+                      container,
+                      new String[] {
+                        "/bin/sh",
+                        "-c",
+                        format(
+                            "if kill -0 $(cat %1$s 2>/dev/null) 2>/dev/null; then cat %1$s; fi",
+                            pidFilePath)
+                      })
+                  .withDetach(false));
+      ValueHolder<String> pidHolder = new ValueHolder<>();
+      docker.startExec(
+          StartExecParams.create(checkProcessExec.getId()),
+          message -> {
+            if (message.getType() == LogMessage.Type.STDOUT) {
+              pidHolder.set(message.getContent());
             }
-        } catch (IOException ignore) {
-        }
-        return errorMessage.toString();
+          });
+      if (pidHolder.get() != null) {
+        errorMessage
+            .append(" Process is still running and has id ")
+            .append(pidHolder.get())
+            .append(" inside machine");
+      }
+    } catch (IOException ignore) {
     }
+    return errorMessage.toString();
+  }
 

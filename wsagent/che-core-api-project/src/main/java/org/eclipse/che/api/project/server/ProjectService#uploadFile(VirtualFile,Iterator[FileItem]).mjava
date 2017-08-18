@@ -1,51 +1,53 @@
-    private static Response uploadFile(VirtualFile parent, Iterator<FileItem> formData) throws ForbiddenException,
-                                                                                               ConflictException,
-                                                                                               ServerException {
-        try {
-            FileItem contentItem = null;
-            String name = null;
-            boolean overwrite = false;
+  private static Response uploadFile(VirtualFile parent, Iterator<FileItem> formData)
+      throws ForbiddenException, ConflictException, ServerException {
+    try {
+      FileItem contentItem = null;
+      String name = null;
+      boolean overwrite = false;
 
-            while (formData.hasNext()) {
-                FileItem item = formData.next();
-                if (!item.isFormField()) {
-                    if (contentItem == null) {
-                        contentItem = item;
-                    } else {
-                        throw new ServerException("More then one upload file is found but only one should be. ");
-                    }
-                } else if ("name".equals(item.getFieldName())) {
-                    name = item.getString().trim();
-                } else if ("overwrite".equals(item.getFieldName())) {
-                    overwrite = Boolean.parseBoolean(item.getString().trim());
-                }
-            }
-
-            if (contentItem == null) {
-                throw new ServerException("Cannot find file for upload. ");
-            }
-            if (name == null || name.isEmpty()) {
-                name = contentItem.getName();
-            }
-
-            try {
-                try {
-                    parent.createFile(name, contentItem.getInputStream());
-                } catch (ConflictException e) {
-                    if (!overwrite) {
-                        throw new ConflictException("Unable upload file. Item with the same name exists. ");
-                    }
-                    parent.getChild(org.eclipse.che.api.vfs.Path.of(name)).updateContent(contentItem.getInputStream(), null);
-                }
-            } catch (IOException ioe) {
-                throw new ServerException(ioe.getMessage(), ioe);
-            }
-
-            return Response.ok("", MediaType.TEXT_HTML).build();
-        } catch (ForbiddenException | ConflictException | ServerException e) {
-            HtmlErrorFormatter.sendErrorAsHTML(e);
-            // never thrown
-            throw e;
+      while (formData.hasNext()) {
+        FileItem item = formData.next();
+        if (!item.isFormField()) {
+          if (contentItem == null) {
+            contentItem = item;
+          } else {
+            throw new ServerException(
+                "More then one upload file is found but only one should be. ");
+          }
+        } else if ("name".equals(item.getFieldName())) {
+          name = item.getString().trim();
+        } else if ("overwrite".equals(item.getFieldName())) {
+          overwrite = Boolean.parseBoolean(item.getString().trim());
         }
+      }
+
+      if (contentItem == null) {
+        throw new ServerException("Cannot find file for upload. ");
+      }
+      if (name == null || name.isEmpty()) {
+        name = contentItem.getName();
+      }
+
+      try {
+        try {
+          parent.createFile(name, contentItem.getInputStream());
+        } catch (ConflictException e) {
+          if (!overwrite) {
+            throw new ConflictException("Unable upload file. Item with the same name exists. ");
+          }
+          parent
+              .getChild(org.eclipse.che.api.vfs.Path.of(name))
+              .updateContent(contentItem.getInputStream(), null);
+        }
+      } catch (IOException ioe) {
+        throw new ServerException(ioe.getMessage(), ioe);
+      }
+
+      return Response.ok("", MediaType.TEXT_HTML).build();
+    } catch (ForbiddenException | ConflictException | ServerException e) {
+      HtmlErrorFormatter.sendErrorAsHTML(e);
+      // never thrown
+      throw e;
     }
+  }
 

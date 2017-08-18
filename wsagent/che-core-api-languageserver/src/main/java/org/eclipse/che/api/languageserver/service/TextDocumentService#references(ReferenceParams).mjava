@@ -1,34 +1,45 @@
-    private List<LocationDto> references(ReferenceParams referenceParams) {
-        String uri = prefixURI(referenceParams.getTextDocument().getUri());
-        referenceParams.getTextDocument().setUri(uri);
-        List<LocationDto> result = new ArrayList<>();
-        try {
-            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
-                            .flatMap(Collection::stream).collect(Collectors.toList());
-            OperationUtil.doInParallel(servers, new LSOperation<InitializedLanguageServer, List<? extends Location>>() {
+  private List<LocationDto> references(ReferenceParams referenceParams) {
+    String uri = prefixURI(referenceParams.getTextDocument().getUri());
+    referenceParams.getTextDocument().setUri(uri);
+    List<LocationDto> result = new ArrayList<>();
+    try {
+      List<InitializedLanguageServer> servers =
+          languageServerRegistry
+              .getApplicableLanguageServers(uri)
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      OperationUtil.doInParallel(
+          servers,
+          new LSOperation<InitializedLanguageServer, List<? extends Location>>() {
 
-                @Override
-                public boolean canDo(InitializedLanguageServer element) {
-                    return truish(element.getInitializeResult().getCapabilities().getReferencesProvider());
-                }
+            @Override
+            public boolean canDo(InitializedLanguageServer element) {
+              return truish(
+                  element.getInitializeResult().getCapabilities().getReferencesProvider());
+            }
 
-                @Override
-                public CompletableFuture<List<? extends Location>> start(InitializedLanguageServer element) {
-                    return element.getServer().getTextDocumentService().references(referenceParams);
-                }
+            @Override
+            public CompletableFuture<List<? extends Location>> start(
+                InitializedLanguageServer element) {
+              return element.getServer().getTextDocumentService().references(referenceParams);
+            }
 
-                @Override
-                public boolean handleResult(InitializedLanguageServer element, List<? extends Location> locations) {
-                    locations.forEach(o -> {
-                        o.setUri(removePrefixUri(o.getUri()));
-                        result.add(new LocationDto(o));
-                    });
-                    return true;
-                }
-            }, 30000);
-            return result;
-        } catch (LanguageServerException e) {
-            throw new JsonRpcException(-27000, e.getMessage());
-        }
+            @Override
+            public boolean handleResult(
+                InitializedLanguageServer element, List<? extends Location> locations) {
+              locations.forEach(
+                  o -> {
+                    o.setUri(removePrefixUri(o.getUri()));
+                    result.add(new LocationDto(o));
+                  });
+              return true;
+            }
+          },
+          30000);
+      return result;
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
     }
+  }
 

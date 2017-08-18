@@ -1,73 +1,79 @@
-    private void onFileOperation(String endpointId, FileTrackingOperationDto operation) {
-        try {
-            FileTrackingOperationDto.Type type = operation.getType();
-            switch (type) {
-                case START: {
-                    String path = operation.getPath();
-                    EditorWorkingCopy workingCopy = workingCopiesStorage.get(path);
-                    if (workingCopy == null) {
-                        createWorkingCopy(path);
-                    }
-                    //TODO At opening file we can have persistent working copy when user has unsaved data
-                    // at this case we need provide ability to recover unsaved data
-                    break;
-                }
-                case STOP: {
-                    String path = operation.getPath();
-                    EditorWorkingCopy workingCopy = workingCopiesStorage.get(path);
-                    if (workingCopy == null) {
-                        return;
-                    }
-
-                    if (isWorkingCopyHasUnsavedData(path)) {
-                        createPersistentWorkingCopy(path);//to have ability to recover unsaved data when the file will be open later
-                    } else {
-                        VirtualFileEntry persistentWorkingCopy = getPersistentWorkingCopy(path, workingCopy.getProjectPath());
-                        if (persistentWorkingCopy != null) {
-                            persistentWorkingCopy.remove();
-                        }
-                    }
-                    workingCopiesStorage.remove(path);
-                    break;
-                }
-
-                case MOVE: {
-                    String oldPath = operation.getOldPath();
-                    String newPath = operation.getPath();
-
-                    EditorWorkingCopy workingCopy = workingCopiesStorage.remove(oldPath);
-                    if (workingCopy == null) {
-                        return;
-                    }
-
-                    String workingCopyNewPath = toWorkingCopyPath(newPath);
-                    workingCopy.setPath(workingCopyNewPath);
-                    workingCopiesStorage.put(newPath, workingCopy);
-
-                    String projectPath = workingCopy.getProjectPath();
-                    VirtualFileEntry persistentWorkingCopy = getPersistentWorkingCopy(oldPath, projectPath);
-                    if (persistentWorkingCopy != null) {
-                        persistentWorkingCopy.remove();
-                    }
-                    break;
-                }
-
-                default: {
-                    break;
-                }
+  private void onFileOperation(String endpointId, FileTrackingOperationDto operation) {
+    try {
+      FileTrackingOperationDto.Type type = operation.getType();
+      switch (type) {
+        case START:
+          {
+            String path = operation.getPath();
+            EditorWorkingCopy workingCopy = workingCopiesStorage.get(path);
+            if (workingCopy == null) {
+              createWorkingCopy(path);
             }
-        } catch (ServerException | IOException | ForbiddenException | ConflictException e) {
-            String errorMessage = "Can not handle file operation: " + e.getMessage();
+            //TODO At opening file we can have persistent working copy when user has unsaved data
+            // at this case we need provide ability to recover unsaved data
+            break;
+          }
+        case STOP:
+          {
+            String path = operation.getPath();
+            EditorWorkingCopy workingCopy = workingCopiesStorage.get(path);
+            if (workingCopy == null) {
+              return;
+            }
 
-            LOG.error(errorMessage);
+            if (isWorkingCopyHasUnsavedData(path)) {
+              createPersistentWorkingCopy(
+                  path); //to have ability to recover unsaved data when the file will be open later
+            } else {
+              VirtualFileEntry persistentWorkingCopy =
+                  getPersistentWorkingCopy(path, workingCopy.getProjectPath());
+              if (persistentWorkingCopy != null) {
+                persistentWorkingCopy.remove();
+              }
+            }
+            workingCopiesStorage.remove(path);
+            break;
+          }
 
-            transmitError(500, errorMessage, endpointId);
-        } catch (NotFoundException e) {
-            String errorMessage = "Can not handle file operation: " + e.getMessage();
+        case MOVE:
+          {
+            String oldPath = operation.getOldPath();
+            String newPath = operation.getPath();
 
-            LOG.error(errorMessage);
+            EditorWorkingCopy workingCopy = workingCopiesStorage.remove(oldPath);
+            if (workingCopy == null) {
+              return;
+            }
 
-            transmitError(400, errorMessage, endpointId);
-        }
+            String workingCopyNewPath = toWorkingCopyPath(newPath);
+            workingCopy.setPath(workingCopyNewPath);
+            workingCopiesStorage.put(newPath, workingCopy);
+
+            String projectPath = workingCopy.getProjectPath();
+            VirtualFileEntry persistentWorkingCopy = getPersistentWorkingCopy(oldPath, projectPath);
+            if (persistentWorkingCopy != null) {
+              persistentWorkingCopy.remove();
+            }
+            break;
+          }
+
+        default:
+          {
+            break;
+          }
+      }
+    } catch (ServerException | IOException | ForbiddenException | ConflictException e) {
+      String errorMessage = "Can not handle file operation: " + e.getMessage();
+
+      LOG.error(errorMessage);
+
+      transmitError(500, errorMessage, endpointId);
+    } catch (NotFoundException e) {
+      String errorMessage = "Can not handle file operation: " + e.getMessage();
+
+      LOG.error(errorMessage);
+
+      transmitError(400, errorMessage, endpointId);
     }
+  }
 

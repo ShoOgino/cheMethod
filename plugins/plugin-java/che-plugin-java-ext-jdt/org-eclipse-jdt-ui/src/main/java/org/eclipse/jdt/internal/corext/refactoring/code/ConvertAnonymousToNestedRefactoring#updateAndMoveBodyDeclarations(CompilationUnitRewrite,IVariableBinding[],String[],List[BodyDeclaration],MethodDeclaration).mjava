@@ -1,54 +1,69 @@
-	private void updateAndMoveBodyDeclarations(CompilationUnitRewrite rewriter, IVariableBinding[] bindings, String[] fieldNames, List<BodyDeclaration> newBodyDeclarations, MethodDeclaration newConstructorDecl) {
-		final ASTRewrite astRewrite= rewriter.getASTRewrite();
-		final AST ast= astRewrite.getAST();
+  private void updateAndMoveBodyDeclarations(
+      CompilationUnitRewrite rewriter,
+      IVariableBinding[] bindings,
+      String[] fieldNames,
+      List<BodyDeclaration> newBodyDeclarations,
+      MethodDeclaration newConstructorDecl) {
+    final ASTRewrite astRewrite = rewriter.getASTRewrite();
+    final AST ast = astRewrite.getAST();
 
-		final boolean useThisAccess= useThisForFieldAccess();
+    final boolean useThisAccess = useThisForFieldAccess();
 
-		int fieldInsertIndex= newConstructorDecl != null ? newBodyDeclarations.lastIndexOf(newConstructorDecl) : newBodyDeclarations
-				.size();
+    int fieldInsertIndex =
+        newConstructorDecl != null
+            ? newBodyDeclarations.lastIndexOf(newConstructorDecl)
+            : newBodyDeclarations.size();
 
-		for (Iterator<BodyDeclaration> iterator= fAnonymousInnerClassNode.bodyDeclarations().iterator(); iterator.hasNext();) {
-			BodyDeclaration body= iterator.next();
+    for (Iterator<BodyDeclaration> iterator =
+            fAnonymousInnerClassNode.bodyDeclarations().iterator();
+        iterator.hasNext();
+        ) {
+      BodyDeclaration body = iterator.next();
 
-			for (int i= 0; i < bindings.length; i++) {
-				SimpleName[] names= LinkedNodeFinder.findByBinding(body, bindings[i]);
-				String fieldName= fieldNames[i];
-				for (int k= 0; k < names.length; k++) {
-					SimpleName newNode= ast.newSimpleName(fieldName);
-					if (useThisAccess) {
-						FieldAccess access= ast.newFieldAccess();
-						access.setExpression(ast.newThisExpression());
-						access.setName(newNode);
-						astRewrite.replace(names[k], access, null);
-					} else {
-						astRewrite.replace(names[k], newNode, null);
-					}
-					addLinkedPosition(KEY_FIELD_NAME_EXT + i, newNode, astRewrite, false);
-				}
-			}
-			if (body instanceof Initializer || body instanceof FieldDeclaration) {
-				newBodyDeclarations.add(fieldInsertIndex++, (BodyDeclaration) astRewrite.createMoveTarget(body));
-			} else {
-				newBodyDeclarations.add((BodyDeclaration) astRewrite.createMoveTarget(body));
-			}
-		}
+      for (int i = 0; i < bindings.length; i++) {
+        SimpleName[] names = LinkedNodeFinder.findByBinding(body, bindings[i]);
+        String fieldName = fieldNames[i];
+        for (int k = 0; k < names.length; k++) {
+          SimpleName newNode = ast.newSimpleName(fieldName);
+          if (useThisAccess) {
+            FieldAccess access = ast.newFieldAccess();
+            access.setExpression(ast.newThisExpression());
+            access.setName(newNode);
+            astRewrite.replace(names[k], access, null);
+          } else {
+            astRewrite.replace(names[k], newNode, null);
+          }
+          addLinkedPosition(KEY_FIELD_NAME_EXT + i, newNode, astRewrite, false);
+        }
+      }
+      if (body instanceof Initializer || body instanceof FieldDeclaration) {
+        newBodyDeclarations.add(
+            fieldInsertIndex++, (BodyDeclaration) astRewrite.createMoveTarget(body));
+      } else {
+        newBodyDeclarations.add((BodyDeclaration) astRewrite.createMoveTarget(body));
+      }
+    }
 
-		if (newConstructorDecl != null) {
-			// move initialization of existing fields to constructor if an outer is referenced
-			List<Statement> bodyStatements= newConstructorDecl.getBody().statements();
+    if (newConstructorDecl != null) {
+      // move initialization of existing fields to constructor if an outer is referenced
+      List<Statement> bodyStatements = newConstructorDecl.getBody().statements();
 
-			List<VariableDeclarationFragment> fieldsToInitializeInConstructor= getFieldsToInitializeInConstructor();
-			for (Iterator<VariableDeclarationFragment> iter= fieldsToInitializeInConstructor.iterator(); iter.hasNext();) {
-				VariableDeclarationFragment fragment= iter.next();
-				Expression initializer= fragment.getInitializer();
-				Expression replacement= (Expression) astRewrite.get(fragment, VariableDeclarationFragment.INITIALIZER_PROPERTY);
-				if (replacement == initializer) {
-					replacement= (Expression) astRewrite.createMoveTarget(initializer);
-				}
-				astRewrite.remove(initializer, null);
-				SimpleName fieldNameNode= ast.newSimpleName(fragment.getName().getIdentifier());
-				bodyStatements.add(newFieldAssignment(ast, fieldNameNode, replacement, useThisAccess));
-			}
-		}
-	}
+      List<VariableDeclarationFragment> fieldsToInitializeInConstructor =
+          getFieldsToInitializeInConstructor();
+      for (Iterator<VariableDeclarationFragment> iter = fieldsToInitializeInConstructor.iterator();
+          iter.hasNext();
+          ) {
+        VariableDeclarationFragment fragment = iter.next();
+        Expression initializer = fragment.getInitializer();
+        Expression replacement =
+            (Expression) astRewrite.get(fragment, VariableDeclarationFragment.INITIALIZER_PROPERTY);
+        if (replacement == initializer) {
+          replacement = (Expression) astRewrite.createMoveTarget(initializer);
+        }
+        astRewrite.remove(initializer, null);
+        SimpleName fieldNameNode = ast.newSimpleName(fragment.getName().getIdentifier());
+        bodyStatements.add(newFieldAssignment(ast, fieldNameNode, replacement, useThisAccess));
+      }
+    }
+  }
 

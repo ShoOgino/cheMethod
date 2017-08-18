@@ -1,57 +1,63 @@
-    /**
-     * Terminates workspace runtimes service, so no more workspaces are allowed to start
-     * or to be stopped directly, all the running workspaces are going to be stopped,
-     * all the starting tasks will be eventually interrupted.
-     *
-     * @throws IllegalStateException
-     *         if component shutdown is already called
-     */
-    public void shutdown() throws InterruptedException {
-        if (!isShutdown.compareAndSet(false, true)) {
-            throw new IllegalStateException("Workspace runtimes service shutdown has been already called");
-        }
-
-        List<String> idsToStop;
-        try (@SuppressWarnings("unused") Unlocker u = locks.writeAllLock()) {
-            idsToStop = states.entrySet()
-                              .stream()
-                              .filter(e -> e.getValue().status != WorkspaceStatus.STOPPING)
-                              .map(Map.Entry::getKey)
-                              .collect(Collectors.toList());
-            states.clear();
-        }
-
-        if (!idsToStop.isEmpty()) {
-            LOG.info("Shutdown running environments, environments to stop: '{}'", idsToStop.size());
-            ExecutorService executor =
-                    Executors.newFixedThreadPool(2 * Runtime.getRuntime().availableProcessors(),
-                                                 new ThreadFactoryBuilder().setNameFormat("StopEnvironmentsPool-%d")
-                                                                           .setDaemon(false)
-                                                                           .build());
-            for (String id : idsToStop) {
-                executor.execute(() -> {
-                    try {
-                        envEngine.stop(id);
-                    } catch (EnvironmentNotRunningException ignored) {
-                        // might be already stopped
-                    } catch (Exception x) {
-                        LOG.error(x.getMessage(), x);
-                    }
-                });
-            }
-
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
-                    executor.shutdownNow();
-                    if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                        LOG.error("Unable to stop runtimes termination pool");
-                    }
-                }
-            } catch (InterruptedException e) {
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
+  /**
+   * Terminates workspace runtimes service, so no more workspaces are allowed to start or to be
+   * stopped directly, all the running workspaces are going to be stopped, all the starting tasks
+   * will be eventually interrupted.
+   *
+   * @throws IllegalStateException if component shutdown is already called
+   */
+  public void shutdown() throws InterruptedException {
+    if (!isShutdown.compareAndSet(false, true)) {
+      throw new IllegalStateException(
+          "Workspace runtimes service shutdown has been already called");
     }
+
+    List<String> idsToStop;
+    try (@SuppressWarnings("unused")
+        Unlocker u = locks.writeAllLock()) {
+      idsToStop =
+          states
+              .entrySet()
+              .stream()
+              .filter(e -> e.getValue().status != WorkspaceStatus.STOPPING)
+              .map(Map.Entry::getKey)
+              .collect(Collectors.toList());
+      states.clear();
+    }
+
+    if (!idsToStop.isEmpty()) {
+      LOG.info("Shutdown running environments, environments to stop: '{}'", idsToStop.size());
+      ExecutorService executor =
+          Executors.newFixedThreadPool(
+              2 * Runtime.getRuntime().availableProcessors(),
+              new ThreadFactoryBuilder()
+                  .setNameFormat("StopEnvironmentsPool-%d")
+                  .setDaemon(false)
+                  .build());
+      for (String id : idsToStop) {
+        executor.execute(
+            () -> {
+              try {
+                envEngine.stop(id);
+              } catch (EnvironmentNotRunningException ignored) {
+                // might be already stopped
+              } catch (Exception x) {
+                LOG.error(x.getMessage(), x);
+              }
+            });
+      }
+
+      executor.shutdown();
+      try {
+        if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+          executor.shutdownNow();
+          if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+            LOG.error("Unable to stop runtimes termination pool");
+          }
+        }
+      } catch (InterruptedException e) {
+        executor.shutdownNow();
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
 

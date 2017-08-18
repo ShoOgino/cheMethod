@@ -1,63 +1,67 @@
-    @Override
-    @SuppressWarnings("unchecked")
-    public void onResourceChanged(ResourceChangedEvent event) {
-        final Tree tree = view.getTree();
-        final ResourceDelta delta = event.getDelta();
-        final Resource resource = delta.getResource();
-        final NodeSettings nodeSettings = settingsProvider.getSettings();
+  @Override
+  @SuppressWarnings("unchecked")
+  public void onResourceChanged(ResourceChangedEvent event) {
+    final Tree tree = view.getTree();
+    final ResourceDelta delta = event.getDelta();
+    final Resource resource = delta.getResource();
+    final NodeSettings nodeSettings = settingsProvider.getSettings();
 
-        // process root projects, they have only one segment in path
-        if (resource.getLocation().segmentCount() == 1) {
-            if (delta.getKind() == ADDED) {
-                if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
-                    Node node = getNode(delta.getFromPath());
-                    if (node != null) {
-                        boolean expanded = tree.isExpanded(node);
+    // process root projects, they have only one segment in path
+    if (resource.getLocation().segmentCount() == 1) {
+      if (delta.getKind() == ADDED) {
+        if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
+          Node node = getNode(delta.getFromPath());
+          if (node != null) {
+            boolean expanded = tree.isExpanded(node);
 
-                        tree.getNodeStorage().remove(node);
+            tree.getNodeStorage().remove(node);
 
-                        node = nodeFactory.newContainerNode((Container)resource, nodeSettings);
-                        tree.getNodeStorage().add(node);
-                        if (expanded) {
-                            tree.setExpanded(node, true);
-                        }
-                    }
-                } else if (getNode(resource.getLocation()) == null) {
-                    tree.getNodeStorage().add(nodeFactory.newContainerNode((Container)resource, nodeSettings));
-                }
-            } else if (delta.getKind() == REMOVED) {
-                Node node = getNode(resource.getLocation());
-
-                if (node != null) {
-                    tree.getNodeStorage().remove(node);
-                }
-            } else if (delta.getKind() == UPDATED) {
-                for (Node node : tree.getNodeStorage().getAll()) {
-                    if (node instanceof ResourceNode &&
-                        ((ResourceNode)node).getData().getLocation().equals(delta.getResource().getLocation())) {
-                        final String oldId = tree.getNodeStorage().getKeyProvider().getKey(node);
-                        ((ResourceNode)node).setData(delta.getResource());
-                        tree.getNodeStorage().reIndexNode(oldId, node);
-                        tree.refresh(node);
-                        updateTask.submit(delta.getResource().getLocation());
-                    }
-                }
+            node = nodeFactory.newContainerNode((Container) resource, nodeSettings);
+            tree.getNodeStorage().add(node);
+            if (expanded) {
+              tree.setExpanded(node, true);
             }
-        } else {
-
-            if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
-                final Node node = getNode(delta.getFromPath());
-
-                if (node != null && tree.isExpanded(node)) {
-                    expandQueue.add(delta.getToPath());
-                }
-            }
-
-            updateTask.submit(resource.getLocation());
-
-            if (delta.getFromPath() != null) {
-                updateTask.submit(delta.getFromPath());
-            }
+          }
+        } else if (getNode(resource.getLocation()) == null) {
+          tree.getNodeStorage()
+              .add(nodeFactory.newContainerNode((Container) resource, nodeSettings));
         }
+      } else if (delta.getKind() == REMOVED) {
+        Node node = getNode(resource.getLocation());
+
+        if (node != null) {
+          tree.getNodeStorage().remove(node);
+        }
+      } else if (delta.getKind() == UPDATED) {
+        for (Node node : tree.getNodeStorage().getAll()) {
+          if (node instanceof ResourceNode
+              && ((ResourceNode) node)
+                  .getData()
+                  .getLocation()
+                  .equals(delta.getResource().getLocation())) {
+            final String oldId = tree.getNodeStorage().getKeyProvider().getKey(node);
+            ((ResourceNode) node).setData(delta.getResource());
+            tree.getNodeStorage().reIndexNode(oldId, node);
+            tree.refresh(node);
+            updateTask.submit(delta.getResource().getLocation());
+          }
+        }
+      }
+    } else {
+
+      if ((delta.getFlags() & (MOVED_FROM | MOVED_TO)) != 0) {
+        final Node node = getNode(delta.getFromPath());
+
+        if (node != null && tree.isExpanded(node)) {
+          expandQueue.add(delta.getToPath());
+        }
+      }
+
+      updateTask.submit(resource.getLocation());
+
+      if (delta.getFromPath() != null) {
+        updateTask.submit(delta.getFromPath());
+      }
     }
+  }
 

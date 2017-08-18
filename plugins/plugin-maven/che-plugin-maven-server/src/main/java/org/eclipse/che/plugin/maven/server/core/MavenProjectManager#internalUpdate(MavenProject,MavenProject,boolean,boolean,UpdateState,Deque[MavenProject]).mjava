@@ -1,88 +1,94 @@
-    private void internalUpdate(MavenProject mavenProject, MavenProject parentProject, boolean isNew, boolean recursive, UpdateState state,
-                                Deque<MavenProject> stack) {
-        if (stack.contains(mavenProject)) {
-            return; //recursion
-        }
-
-        stack.addFirst(mavenProject);
-
-        mavenNotifier.setText("Reading pom: " + mavenProject.getPomPath());
-
-        List<MavenProject> oldModules = findModules(mavenProject);
-        Set<MavenProject> oldChilds = new HashSet<>();
-        if (!isNew) {
-            oldChilds.addAll(findChildProjects(mavenProject));
-        }
-
-        writeLock.lock();
-        try {
-            if (!isNew) {
-                clearMavenKeyMap(mavenProject);
-            }
-        } finally {
-            writeLock.unlock();
-        }
-        MavenProjectModifications modifications = new MavenProjectModifications();
-        //re read maven project meta info from pom.xml
-        modifications = modifications.addChanges(mavenProject.read(serverManager));
-
-        writeLock.lock();
-        try {
-            fillMavenKeyMap(mavenProject);
-            projectToMavenProjectMap.put(mavenProject.getProject(), mavenProject);
-        } finally {
-            writeLock.unlock();
-        }
-
-        if (isNew) {
-            addToChild(parentProject, mavenProject);
-        } else {
-            updateChild(parentProject, mavenProject);
-        }
-
-//        if (hasparent) {
-        state.addUpdate(mavenProject, modifications);
-//        }
-
-        List<IProject> modules = mavenProject.getModulesProjects();
-        List<MavenProject> removedModules =
-                oldModules.stream()
-                          .filter(oldModule -> !modules.contains(oldModule.getProject()))
-                          .collect(Collectors.toList());
-
-        for (MavenProject removedModule : removedModules) {
-            removeModule(mavenProject, removedModule);
-            internalDelete(mavenProject, removedModule, state);
-            oldChilds.removeAll(state.removedProjects);
-        }
-
-        for (IProject module : modules) {
-            MavenProject project = findMavenProject(module);
-            boolean isNewProject = project == null;
-            if (isNewProject) {
-                project = new MavenProject(module, workspaceProvider.get());
-            } else {
-                MavenProject parent = findParentProject(project);
-                if (parent != null && parent != mavenProject) {
-                    //TODO add log
-                    continue;
-                }
-            }
-
-            if (isNewProject || recursive) {
-                internalUpdate(project, mavenProject, isNewProject, recursive, state, stack);
-            } else {
-                if (updateChild(mavenProject, project)) {
-                    state.addUpdate(project, new MavenProjectModifications());
-                }
-            }
-        }
-        oldChilds.addAll(findChildProjects(mavenProject));
-
-        for (MavenProject oldModule : oldChilds) {
-            internalUpdate(oldModule, findParentProject(oldModule), false, false, state, stack);
-        }
-
-        stack.pop();
+  private void internalUpdate(
+      MavenProject mavenProject,
+      MavenProject parentProject,
+      boolean isNew,
+      boolean recursive,
+      UpdateState state,
+      Deque<MavenProject> stack) {
+    if (stack.contains(mavenProject)) {
+      return; //recursion
     }
+
+    stack.addFirst(mavenProject);
+
+    mavenNotifier.setText("Reading pom: " + mavenProject.getPomPath());
+
+    List<MavenProject> oldModules = findModules(mavenProject);
+    Set<MavenProject> oldChilds = new HashSet<>();
+    if (!isNew) {
+      oldChilds.addAll(findChildProjects(mavenProject));
+    }
+
+    writeLock.lock();
+    try {
+      if (!isNew) {
+        clearMavenKeyMap(mavenProject);
+      }
+    } finally {
+      writeLock.unlock();
+    }
+    MavenProjectModifications modifications = new MavenProjectModifications();
+    //re read maven project meta info from pom.xml
+    modifications = modifications.addChanges(mavenProject.read(serverManager));
+
+    writeLock.lock();
+    try {
+      fillMavenKeyMap(mavenProject);
+      projectToMavenProjectMap.put(mavenProject.getProject(), mavenProject);
+    } finally {
+      writeLock.unlock();
+    }
+
+    if (isNew) {
+      addToChild(parentProject, mavenProject);
+    } else {
+      updateChild(parentProject, mavenProject);
+    }
+
+    //        if (hasparent) {
+    state.addUpdate(mavenProject, modifications);
+    //        }
+
+    List<IProject> modules = mavenProject.getModulesProjects();
+    List<MavenProject> removedModules =
+        oldModules
+            .stream()
+            .filter(oldModule -> !modules.contains(oldModule.getProject()))
+            .collect(Collectors.toList());
+
+    for (MavenProject removedModule : removedModules) {
+      removeModule(mavenProject, removedModule);
+      internalDelete(mavenProject, removedModule, state);
+      oldChilds.removeAll(state.removedProjects);
+    }
+
+    for (IProject module : modules) {
+      MavenProject project = findMavenProject(module);
+      boolean isNewProject = project == null;
+      if (isNewProject) {
+        project = new MavenProject(module, workspaceProvider.get());
+      } else {
+        MavenProject parent = findParentProject(project);
+        if (parent != null && parent != mavenProject) {
+          //TODO add log
+          continue;
+        }
+      }
+
+      if (isNewProject || recursive) {
+        internalUpdate(project, mavenProject, isNewProject, recursive, state, stack);
+      } else {
+        if (updateChild(mavenProject, project)) {
+          state.addUpdate(project, new MavenProjectModifications());
+        }
+      }
+    }
+    oldChilds.addAll(findChildProjects(mavenProject));
+
+    for (MavenProject oldModule : oldChilds) {
+      internalUpdate(oldModule, findParentProject(oldModule), false, false, state, stack);
+    }
+
+    stack.pop();
+  }
 

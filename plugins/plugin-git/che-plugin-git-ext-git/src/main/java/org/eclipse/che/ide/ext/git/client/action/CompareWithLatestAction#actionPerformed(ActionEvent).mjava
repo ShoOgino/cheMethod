@@ -1,45 +1,66 @@
-    /** {@inheritDoc} */
-    @Override
-    public void actionPerformed(ActionEvent e) {
+  /** {@inheritDoc} */
+  @Override
+  public void actionPerformed(ActionEvent e) {
 
-        final Project project = appContext.getRootProject();
-        final Resource resource = appContext.getResource();
+    final Project project = appContext.getRootProject();
+    final Resource resource = appContext.getResource();
 
-        checkState(project != null, "Null project occurred");
-        checkState(project.getLocation().isPrefixOf(resource.getLocation()), "Given selected item is not descendant of given project");
+    checkState(project != null, "Null project occurred");
+    checkState(
+        project.getLocation().isPrefixOf(resource.getLocation()),
+        "Given selected item is not descendant of given project");
 
-        final String selectedItemPath = resource.getLocation()
-                                                .removeFirstSegments(project.getLocation().segmentCount())
-                                                .removeTrailingSeparator()
-                                                .toString();
+    final String selectedItemPath =
+        resource
+            .getLocation()
+            .removeFirstSegments(project.getLocation().segmentCount())
+            .removeTrailingSeparator()
+            .toString();
 
-        service.diff(project.getLocation(),
-                     selectedItemPath.isEmpty() ? null : singletonList(selectedItemPath), NAME_STATUS, false, 0, REVISION, false)
-               .then(diff -> {
-                   if (diff.isEmpty()) {
-                       dialogFactory.createMessageDialog(locale.compareMessageIdenticalContentTitle(),
-                                                         locale.compareMessageIdenticalContentText(), null).show();
-                   } else {
-                       final String[] changedFiles = diff.split("\n");
-                       if (changedFiles.length == 1) {
-                           project.getFile(changedFiles[0].substring(2)).then(file -> {
-                               if (file.isPresent()) {
-                                   comparePresenter.showCompareWithLatest(file.get(),
-                                                                          defineStatus(changedFiles[0].substring(0, 1)),
-                                                                          REVISION);
-                               }
-                           });
-                       } else {
-                           Map<String, Status> items = new HashMap<>();
-                           for (String item : changedFiles) {
-                               items.put(item.substring(2, item.length()), defineStatus(item.substring(0, 1)));
-                           }
-                           changesListPresenter.show(items, REVISION, null, project);
-                       }
-                   }
-               })
-               .catchError(arg -> {
-                   notificationManager.notify(locale.diffFailed(), FAIL, NOT_EMERGE_MODE);
-               });
-    }
+    service
+        .diff(
+            project.getLocation(),
+            selectedItemPath.isEmpty() ? null : singletonList(selectedItemPath),
+            NAME_STATUS,
+            false,
+            0,
+            REVISION,
+            false)
+        .then(
+            diff -> {
+              if (diff.isEmpty()) {
+                dialogFactory
+                    .createMessageDialog(
+                        locale.compareMessageIdenticalContentTitle(),
+                        locale.compareMessageIdenticalContentText(),
+                        null)
+                    .show();
+              } else {
+                final String[] changedFiles = diff.split("\n");
+                if (changedFiles.length == 1) {
+                  project
+                      .getFile(changedFiles[0].substring(2))
+                      .then(
+                          file -> {
+                            if (file.isPresent()) {
+                              comparePresenter.showCompareWithLatest(
+                                  file.get(),
+                                  defineStatus(changedFiles[0].substring(0, 1)),
+                                  REVISION);
+                            }
+                          });
+                } else {
+                  Map<String, Status> items = new HashMap<>();
+                  for (String item : changedFiles) {
+                    items.put(item.substring(2, item.length()), defineStatus(item.substring(0, 1)));
+                  }
+                  changesListPresenter.show(items, REVISION, null, project);
+                }
+              }
+            })
+        .catchError(
+            arg -> {
+              notificationManager.notify(locale.diffFailed(), FAIL, NOT_EMERGE_MODE);
+            });
+  }
 

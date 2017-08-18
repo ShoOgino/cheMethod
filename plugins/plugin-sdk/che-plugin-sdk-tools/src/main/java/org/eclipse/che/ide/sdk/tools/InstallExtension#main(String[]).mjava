@@ -1,40 +1,44 @@
-    public static void main(String[] args) throws IOException {
-        for (String arg : args) {
-            if (arg.startsWith(EXT_DIR_PARAMETER)) {
-                extDirPath = Paths.get(arg.substring(EXT_DIR_PARAMETER.length()));
-            } else if (arg.startsWith(EXT_RESOURCES_DIR_PARAMETER)) {
-                final Path extResourcesDirPath = Paths.get(arg.substring(EXT_RESOURCES_DIR_PARAMETER.length()));
-                final String tempDirName = "temp";
-                extResourcesWorkDirPath = extResourcesDirPath.resolve(tempDirName);
-                // delete working directory from previous build if it exist
-                IoUtil.deleteRecursive(extResourcesWorkDirPath.toFile());
-                Files.createDirectory(extResourcesWorkDirPath);
-                IoUtil.copy(extResourcesDirPath.toFile(), extResourcesWorkDirPath.toFile(), new FilenameFilter() {
-                    @Override
-                    public boolean accept(File dir, String name) {
-                        return !(tempDirName.equals(name));
-                    }
-                });
-            } else {
-                System.err.println("Unknown flag: " + arg);
-                System.exit(1);
-            }
-        }
-
-        List<Extension> extensions = findExtensionsByPath(extDirPath);
-        for (Extension extension : extensions) {
-            final File pom = extResourcesWorkDirPath.resolve("pom.xml").toFile();
-            final Model model = Model.readFrom(pom);
-            model.dependencies()
-                 .add(new Dependency(extension.groupId,
-                                     extension.artifactId,
-                                     extension.artifactVersion));
-            model.writeTo(pom);
-            // Add GWT module if there is one
-            if (extension.gwtModuleName != null) {
-                final Path ideGwtXmlPath = IoUtil.findFile(IDE_GWT_XML_FILE_NAME, extResourcesWorkDirPath.toFile()).toPath();
-                GwtXmlUtils.inheritGwtModule(ideGwtXmlPath, extension.gwtModuleName);
-            }
-        }
+  public static void main(String[] args) throws IOException {
+    for (String arg : args) {
+      if (arg.startsWith(EXT_DIR_PARAMETER)) {
+        extDirPath = Paths.get(arg.substring(EXT_DIR_PARAMETER.length()));
+      } else if (arg.startsWith(EXT_RESOURCES_DIR_PARAMETER)) {
+        final Path extResourcesDirPath =
+            Paths.get(arg.substring(EXT_RESOURCES_DIR_PARAMETER.length()));
+        final String tempDirName = "temp";
+        extResourcesWorkDirPath = extResourcesDirPath.resolve(tempDirName);
+        // delete working directory from previous build if it exist
+        IoUtil.deleteRecursive(extResourcesWorkDirPath.toFile());
+        Files.createDirectory(extResourcesWorkDirPath);
+        IoUtil.copy(
+            extResourcesDirPath.toFile(),
+            extResourcesWorkDirPath.toFile(),
+            new FilenameFilter() {
+              @Override
+              public boolean accept(File dir, String name) {
+                return !(tempDirName.equals(name));
+              }
+            });
+      } else {
+        System.err.println("Unknown flag: " + arg);
+        System.exit(1);
+      }
     }
+
+    List<Extension> extensions = findExtensionsByPath(extDirPath);
+    for (Extension extension : extensions) {
+      final File pom = extResourcesWorkDirPath.resolve("pom.xml").toFile();
+      final Model model = Model.readFrom(pom);
+      model
+          .dependencies()
+          .add(new Dependency(extension.groupId, extension.artifactId, extension.artifactVersion));
+      model.writeTo(pom);
+      // Add GWT module if there is one
+      if (extension.gwtModuleName != null) {
+        final Path ideGwtXmlPath =
+            IoUtil.findFile(IDE_GWT_XML_FILE_NAME, extResourcesWorkDirPath.toFile()).toPath();
+        GwtXmlUtils.inheritGwtModule(ideGwtXmlPath, extension.gwtModuleName);
+      }
+    }
+  }
 

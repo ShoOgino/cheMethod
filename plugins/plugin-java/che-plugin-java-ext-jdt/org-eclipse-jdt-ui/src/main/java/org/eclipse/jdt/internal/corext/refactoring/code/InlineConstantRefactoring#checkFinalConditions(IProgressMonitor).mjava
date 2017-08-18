@@ -1,78 +1,84 @@
-	@Override
-	public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
-		RefactoringStatus result = new RefactoringStatus();
-		pm.beginTask("", 3); //$NON-NLS-1$
+  @Override
+  public RefactoringStatus checkFinalConditions(IProgressMonitor pm) throws CoreException {
+    RefactoringStatus result = new RefactoringStatus();
+    pm.beginTask("", 3); //$NON-NLS-1$
 
-		try {
-			fSelectionCuRewrite.clearASTAndImportRewrites();
-			fDeclarationCuRewrite.clearASTAndImportRewrites();
-			List<CompilationUnitChange> changes = new ArrayList<CompilationUnitChange>();
-			HashSet<SimpleName> staticImportsInInitializer = new HashSet<SimpleName>();
-			ImportReferencesCollector
-					.collect(getInitializer(), fField.getJavaProject(), null, new ArrayList<SimpleName>(), staticImportsInInitializer);
+    try {
+      fSelectionCuRewrite.clearASTAndImportRewrites();
+      fDeclarationCuRewrite.clearASTAndImportRewrites();
+      List<CompilationUnitChange> changes = new ArrayList<CompilationUnitChange>();
+      HashSet<SimpleName> staticImportsInInitializer = new HashSet<SimpleName>();
+      ImportReferencesCollector.collect(
+          getInitializer(),
+          fField.getJavaProject(),
+          null,
+          new ArrayList<SimpleName>(),
+          staticImportsInInitializer);
 
-			if (getReplaceAllReferences()) {
-				SearchResultGroup[] searchResultGroups = findReferences(pm, result);
-				for (int i = 0; i < searchResultGroups.length; i++) {
-					if (pm.isCanceled())
-						throw new OperationCanceledException();
-					SearchResultGroup group = searchResultGroups[i];
-					ICompilationUnit cu = group.getCompilationUnit();
+      if (getReplaceAllReferences()) {
+        SearchResultGroup[] searchResultGroups = findReferences(pm, result);
+        for (int i = 0; i < searchResultGroups.length; i++) {
+          if (pm.isCanceled()) throw new OperationCanceledException();
+          SearchResultGroup group = searchResultGroups[i];
+          ICompilationUnit cu = group.getCompilationUnit();
 
-					CompilationUnitRewrite cuRewrite = getCuRewrite(cu);
-					Name[] references = extractReferenceNodes(group.getSearchResults(), cuRewrite.getRoot());
-					InlineTargetCompilationUnit targetCompilationUnit = new InlineTargetCompilationUnit(
-							cuRewrite, references, this, staticImportsInInitializer);
-					CompilationUnitChange change = targetCompilationUnit.getChange();
-					if (change != null)
-						changes.add(change);
-				}
+          CompilationUnitRewrite cuRewrite = getCuRewrite(cu);
+          Name[] references = extractReferenceNodes(group.getSearchResults(), cuRewrite.getRoot());
+          InlineTargetCompilationUnit targetCompilationUnit =
+              new InlineTargetCompilationUnit(
+                  cuRewrite, references, this, staticImportsInInitializer);
+          CompilationUnitChange change = targetCompilationUnit.getChange();
+          if (change != null) changes.add(change);
+        }
 
-			} else {
-				Assert.isTrue(!isDeclarationSelected());
-				InlineTargetCompilationUnit targetForOnlySelectedReference = new InlineTargetCompilationUnit(
-						fSelectionCuRewrite, new Name[]{fSelectedConstantName}, this, staticImportsInInitializer);
-				CompilationUnitChange change = targetForOnlySelectedReference.getChange();
-				if (change != null)
-					changes.add(change);
-			}
+      } else {
+        Assert.isTrue(!isDeclarationSelected());
+        InlineTargetCompilationUnit targetForOnlySelectedReference =
+            new InlineTargetCompilationUnit(
+                fSelectionCuRewrite,
+                new Name[] {fSelectedConstantName},
+                this,
+                staticImportsInInitializer);
+        CompilationUnitChange change = targetForOnlySelectedReference.getChange();
+        if (change != null) changes.add(change);
+      }
 
-			if (result.hasFatalError())
-				return result;
+      if (result.hasFatalError()) return result;
 
-			if (getRemoveDeclaration() && getReplaceAllReferences()) {
-				boolean declarationRemoved = false;
-				for (Iterator<CompilationUnitChange> iter = changes.iterator(); iter.hasNext(); ) {
-					CompilationUnitChange change = iter.next();
-					if (change.getCompilationUnit().equals(fDeclarationCuRewrite.getCu())) {
-						declarationRemoved = true;
-						break;
-					}
-				}
-				if (!declarationRemoved) {
-					InlineTargetCompilationUnit targetForDeclaration =
-							new InlineTargetCompilationUnit(fDeclarationCuRewrite, new Name[0], this, staticImportsInInitializer);
-					CompilationUnitChange change = targetForDeclaration.getChange();
-					if (change != null)
-						changes.add(change);
-				}
-			}
+      if (getRemoveDeclaration() && getReplaceAllReferences()) {
+        boolean declarationRemoved = false;
+        for (Iterator<CompilationUnitChange> iter = changes.iterator(); iter.hasNext(); ) {
+          CompilationUnitChange change = iter.next();
+          if (change.getCompilationUnit().equals(fDeclarationCuRewrite.getCu())) {
+            declarationRemoved = true;
+            break;
+          }
+        }
+        if (!declarationRemoved) {
+          InlineTargetCompilationUnit targetForDeclaration =
+              new InlineTargetCompilationUnit(
+                  fDeclarationCuRewrite, new Name[0], this, staticImportsInInitializer);
+          CompilationUnitChange change = targetForDeclaration.getChange();
+          if (change != null) changes.add(change);
+        }
+      }
 
-			ICompilationUnit[] cus = new ICompilationUnit[changes.size()];
-			for (int i = 0; i < changes.size(); i++) {
-				CompilationUnitChange change = changes.get(i);
-				cus[i] = change.getCompilationUnit();
-			}
-			result.merge(Checks.validateModifiesFiles(ResourceUtil.getFiles(cus), getValidationContext()));
+      ICompilationUnit[] cus = new ICompilationUnit[changes.size()];
+      for (int i = 0; i < changes.size(); i++) {
+        CompilationUnitChange change = changes.get(i);
+        cus[i] = change.getCompilationUnit();
+      }
+      result.merge(
+          Checks.validateModifiesFiles(ResourceUtil.getFiles(cus), getValidationContext()));
 
-			pm.worked(1);
+      pm.worked(1);
 
-			fChanges = changes.toArray(new CompilationUnitChange[changes.size()]);
+      fChanges = changes.toArray(new CompilationUnitChange[changes.size()]);
 
-			return result;
+      return result;
 
-		} finally {
-			pm.done();
-		}
-	}
+    } finally {
+      pm.done();
+    }
+  }
 

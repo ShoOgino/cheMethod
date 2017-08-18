@@ -1,67 +1,78 @@
-        @Override
-        public void initialized(EditorWidget widget) {
-            editorWidget = (OrionEditorWidget)widget;
-            // finish editor initialization
-            editorView.setEditorWidget(editorWidget);
+    @Override
+    public void initialized(EditorWidget widget) {
+      editorWidget = (OrionEditorWidget) widget;
+      // finish editor initialization
+      editorView.setEditorWidget(editorWidget);
 
-            document = editorWidget.getDocument();
-            final VirtualFile file = input.getFile();
-            document.setFile(file);
+      document = editorWidget.getDocument();
+      final VirtualFile file = input.getFile();
+      document.setFile(file);
 
-            if (file instanceof File) {
-                ((File)file).updateModificationStamp(content);
+      if (file instanceof File) {
+        ((File) file).updateModificationStamp(content);
+      }
+
+      cursorModel = new OrionCursorModel(document);
+
+      editorWidget.setTabSize(configuration.getTabWidth());
+
+      // initialize info panel
+      editorView.initInfoPanel(
+          editorWidget.getMode(),
+          editorWidget.getKeymap(),
+          document.getLineCount(),
+          configuration.getTabWidth());
+
+      //TODO: delayed activation
+      // handle delayed focus (initialization editor widget)
+      // should also check if I am visible, but how ?
+      if (delayedFocus) {
+        editorWidget.refresh();
+        editorWidget.setFocus();
+        setSelection(new Selection<>(file));
+        delayedFocus = false;
+      }
+
+      // delayed keybindings creation ?
+      switchHasKeybinding();
+
+      editorWidget.setValue(
+          content,
+          new ContentInitializedHandler() {
+            @Override
+            public void onContentInitialized() {
+              if (isInitialized) {
+                return;
+              }
+              editorInit.init(document);
+              generalEventBus.fireEvent(new DocumentReadyEvent(document));
+              firePropertyChange(PROP_INPUT);
+              setupEventHandlers();
+              setupFileContentUpdateHandler();
+
+              isInitialized = true;
+              openEditorCallback.onEditorOpened(OrionEditorPresenter.this);
             }
+          });
 
-            cursorModel = new OrionCursorModel(document);
-
-            editorWidget.setTabSize(configuration.getTabWidth());
-
-            // initialize info panel
-            editorView.initInfoPanel(editorWidget.getMode(),
-                                     editorWidget.getKeymap(),
-                                     document.getLineCount(),
-                                     configuration.getTabWidth());
-
-            //TODO: delayed activation
-            // handle delayed focus (initialization editor widget)
-            // should also check if I am visible, but how ?
-            if (delayedFocus) {
-                editorWidget.refresh();
-                editorWidget.setFocus();
-                setSelection(new Selection<>(file));
-                delayedFocus = false;
+      editorWidget.addDomHandler(
+          new ContextMenuHandler() {
+            @Override
+            public void onContextMenu(ContextMenuEvent event) {
+              contextMenu.show(
+                  event.getNativeEvent().getClientX(), event.getNativeEvent().getClientY());
             }
+          },
+          ContextMenuEvent.getType());
 
-            // delayed keybindings creation ?
-            switchHasKeybinding();
-
-            editorWidget.setValue(content, new ContentInitializedHandler() {
-                @Override
-                public void onContentInitialized() {
-                    if (isInitialized) {
-                        return;
-                    }
-                    editorInit.init(document);
-                    generalEventBus.fireEvent(new DocumentReadyEvent(document));
-                    firePropertyChange(PROP_INPUT);
-                    setupEventHandlers();
-                    setupFileContentUpdateHandler();
-
-                    isInitialized = true;
-                    openEditorCallback.onEditorOpened(OrionEditorPresenter.this);
-                }
-            });
-
-            editorWidget.addDomHandler(new ContextMenuHandler() {
-                @Override
-                public void onContextMenu(ContextMenuEvent event) {
-                    contextMenu.show(event.getNativeEvent().getClientX(), event.getNativeEvent().getClientY());
-                }
-            }, ContextMenuEvent.getType());
-
-            getUndoRedo().addUndoRedoOperationsListener(() -> Scheduler.get().scheduleDeferred(() -> {
-                editorWidget.markDirty();
-                updateDirtyState(true);
-            }));
-        }
+      getUndoRedo()
+          .addUndoRedoOperationsListener(
+              () ->
+                  Scheduler.get()
+                      .scheduleDeferred(
+                          () -> {
+                            editorWidget.markDirty();
+                            updateDirtyState(true);
+                          }));
+    }
 

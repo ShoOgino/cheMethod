@@ -1,54 +1,66 @@
-    @Test
-    public void testCopyFileWithRenameAndOverwrite() throws Exception {
-        RegisteredProject myProject = pm.getProject("my_project");
-        myProject.getBaseFolder().createFolder("a/b/c");
+  @Test
+  public void testCopyFileWithRenameAndOverwrite() throws Exception {
+    RegisteredProject myProject = pm.getProject("my_project");
+    myProject.getBaseFolder().createFolder("a/b/c");
 
-        // File names
-        String originFileName = "test.txt";
-        String destinationFileName = "overwriteMe.txt";
+    // File names
+    String originFileName = "test.txt";
+    String destinationFileName = "overwriteMe.txt";
 
-        // File contents
-        String originContent = "to be or not no be";
-        String overwrittenContent = "that is the question";
+    // File contents
+    String originContent = "to be or not no be";
+    String overwrittenContent = "that is the question";
 
-        ((FolderEntry)myProject.getBaseFolder().getChild("a/b"))
-                .createFile(originFileName, originContent.getBytes(Charset.defaultCharset()));
-        ((FolderEntry)myProject.getBaseFolder().getChild("a/b/c")).createFile(destinationFileName,
-                                                                              overwrittenContent.getBytes(Charset.defaultCharset()));
+    ((FolderEntry) myProject.getBaseFolder().getChild("a/b"))
+        .createFile(originFileName, originContent.getBytes(Charset.defaultCharset()));
+    ((FolderEntry) myProject.getBaseFolder().getChild("a/b/c"))
+        .createFile(destinationFileName, overwrittenContent.getBytes(Charset.defaultCharset()));
 
-        Map<String, List<String>> headers = new HashMap<>();
-        headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
+    Map<String, List<String>> headers = new HashMap<>();
+    headers.put(CONTENT_TYPE, singletonList(APPLICATION_JSON));
 
-        CopyOptions descriptor = DtoFactory.getInstance().createDto(CopyOptions.class);
-        descriptor.setName(destinationFileName);
-        descriptor.setOverWrite(true);
+    CopyOptions descriptor = DtoFactory.getInstance().createDto(CopyOptions.class);
+    descriptor.setName(destinationFileName);
+    descriptor.setOverWrite(true);
 
-        ContainerResponse response = launcher.service(POST,
-                                                      "http://localhost:8080/api/project/copy/my_project/a/b/" + originFileName +
-                                                      "?to=/my_project/a/b/c",
-                                                      "http://localhost:8080/api", headers,
-                                                      DtoFactory.getInstance().toJson(descriptor).getBytes(Charset.defaultCharset()), null);
-        assertEquals(response.getStatus(), 201, "Error: " + response.getEntity());
-        assertEquals(response.getHttpHeaders().getFirst("Location"),
-                     URI.create("http://localhost:8080/api/project/file/my_project/a/b/c/" + destinationFileName));
-        assertNotNull(myProject.getBaseFolder().getChild("a/b/c/" + destinationFileName)); // new
-        assertNotNull(myProject.getBaseFolder().getChild("a/b/" + originFileName)); // old
+    ContainerResponse response =
+        launcher.service(
+            POST,
+            "http://localhost:8080/api/project/copy/my_project/a/b/"
+                + originFileName
+                + "?to=/my_project/a/b/c",
+            "http://localhost:8080/api",
+            headers,
+            DtoFactory.getInstance().toJson(descriptor).getBytes(Charset.defaultCharset()),
+            null);
+    assertEquals(response.getStatus(), 201, "Error: " + response.getEntity());
+    assertEquals(
+        response.getHttpHeaders().getFirst("Location"),
+        URI.create(
+            "http://localhost:8080/api/project/file/my_project/a/b/c/" + destinationFileName));
+    assertNotNull(myProject.getBaseFolder().getChild("a/b/c/" + destinationFileName)); // new
+    assertNotNull(myProject.getBaseFolder().getChild("a/b/" + originFileName)); // old
 
-        Scanner inputStreamScanner = null;
-        String theFirstLineFromDestinationFile;
+    Scanner inputStreamScanner = null;
+    String theFirstLineFromDestinationFile;
 
-        try {
-            inputStreamScanner = new Scanner(
-                    myProject.getBaseFolder().getChild("a/b/c/" + destinationFileName).getVirtualFile().getContent());
-            theFirstLineFromDestinationFile = inputStreamScanner.nextLine();
-            // destination should contain original file's content
-            assertEquals(theFirstLineFromDestinationFile, originContent);
-        } catch (ForbiddenException | ServerException e) {
-            Assert.fail(e.getMessage());
-        } finally {
-            if (inputStreamScanner != null) {
-                inputStreamScanner.close();
-            }
-        }
+    try {
+      inputStreamScanner =
+          new Scanner(
+              myProject
+                  .getBaseFolder()
+                  .getChild("a/b/c/" + destinationFileName)
+                  .getVirtualFile()
+                  .getContent());
+      theFirstLineFromDestinationFile = inputStreamScanner.nextLine();
+      // destination should contain original file's content
+      assertEquals(theFirstLineFromDestinationFile, originContent);
+    } catch (ForbiddenException | ServerException e) {
+      Assert.fail(e.getMessage());
+    } finally {
+      if (inputStreamScanner != null) {
+        inputStreamScanner.close();
+      }
     }
+  }
 

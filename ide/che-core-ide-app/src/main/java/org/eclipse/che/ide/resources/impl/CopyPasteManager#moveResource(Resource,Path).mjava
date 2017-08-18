@@ -1,60 +1,79 @@
-    private Promise<Void> moveResource(final Resource resource, final Path destination) {
-        //simple move without overwriting
-        return resource.move(destination)
-                       .thenPromise((Function<Resource, Promise<Void>>)ignored -> promises.resolve(null))
-                       .catchErrorPromise(error -> {
+  private Promise<Void> moveResource(final Resource resource, final Path destination) {
+    //simple move without overwriting
+    return resource
+        .move(destination)
+        .thenPromise((Function<Resource, Promise<Void>>) ignored -> promises.resolve(null))
+        .catchErrorPromise(
+            error -> {
 
-                           //resource may already exists
-                           if (error.getMessage().contains("exists")) {
+              //resource may already exists
+              if (error.getMessage().contains("exists")) {
 
-                               //create dialog with overwriting option
-                               return createFromAsyncRequest((RequestCall<Void>)callback -> {
+                //create dialog with overwriting option
+                return createFromAsyncRequest(
+                    (RequestCall<Void>)
+                        callback -> {
 
-                                   //handle overwrite operation
-                                   final ConfirmCallback overwrite = () -> {
+                          //handle overwrite operation
+                          final ConfirmCallback overwrite =
+                              () -> {
 
-                                       //copy with overwriting
-                                       resource.move(destination, true).then(ignored -> {
-                                           callback.onSuccess(null);
-                                       }).catchError(error1 -> {
-                                           callback.onFailure(error1.getCause());
-                                       });
-                                   };
+                                //copy with overwriting
+                                resource
+                                    .move(destination, true)
+                                    .then(
+                                        ignored -> {
+                                          callback.onSuccess(null);
+                                        })
+                                    .catchError(
+                                        error1 -> {
+                                          callback.onFailure(error1.getCause());
+                                        });
+                              };
 
-                                   //skip this resource
-                                   final ConfirmCallback skip = () -> callback.onSuccess(null);
+                          //skip this resource
+                          final ConfirmCallback skip = () -> callback.onSuccess(null);
 
-                                   //change destination name
-                                   final ConfirmCallback rename = () ->
-                                           dialogFactory.createInputDialog("Enter new name", "Enter new name",
-                                                                           value -> {
-                                                                               final Path newPath = destination.parent().append(value);
+                          //change destination name
+                          final ConfirmCallback rename =
+                              () ->
+                                  dialogFactory
+                                      .createInputDialog(
+                                          "Enter new name",
+                                          "Enter new name",
+                                          value -> {
+                                            final Path newPath = destination.parent().append(value);
 
-                                                                               moveResource(resource, newPath)
-                                                                                       .then(callback::onSuccess)
-                                                                                       .catchError(error1 -> {
-                                                                                           callback.onFailure(error1.getCause());
-                                                                                       });
-                                                                           },
-                                                                           null).show();
+                                            moveResource(resource, newPath)
+                                                .then(callback::onSuccess)
+                                                .catchError(
+                                                    error1 -> {
+                                                      callback.onFailure(error1.getCause());
+                                                    });
+                                          },
+                                          null)
+                                      .show();
 
-                                   dialogFactory.createChoiceDialog("Error",
-                                                                    error.getMessage(),
-                                                                    "Overwrite",
-                                                                    "Skip",
-                                                                    "Change Name",
-                                                                    overwrite,
-                                                                    skip,
-                                                                    rename).show();
-                               });
+                          dialogFactory
+                              .createChoiceDialog(
+                                  "Error",
+                                  error.getMessage(),
+                                  "Overwrite",
+                                  "Skip",
+                                  "Change Name",
+                                  overwrite,
+                                  skip,
+                                  rename)
+                              .show();
+                        });
 
-                           } else {
-                               //notify user about failed copying
-                               notificationManager.notify("Error moving resource", error.getMessage(), FAIL, FLOAT_MODE);
+              } else {
+                //notify user about failed copying
+                notificationManager.notify(
+                    "Error moving resource", error.getMessage(), FAIL, FLOAT_MODE);
 
-                               return promises.resolve(null);
-                           }
-
-                       });
-    }
+                return promises.resolve(null);
+              }
+            });
+  }
 

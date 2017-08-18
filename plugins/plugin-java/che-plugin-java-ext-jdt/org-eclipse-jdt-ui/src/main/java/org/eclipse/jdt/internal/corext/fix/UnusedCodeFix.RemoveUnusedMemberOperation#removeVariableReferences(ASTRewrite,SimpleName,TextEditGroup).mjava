@@ -1,100 +1,106 @@
-		/**
-		 * Remove the field or variable declaration including the initializer.
-		 * @param rewrite the AST rewriter to use
-		 * @param reference a reference to the variable to remove
-		 * @param group the text edit group to use
-		 */
-		private void removeVariableReferences(ASTRewrite rewrite, SimpleName reference, TextEditGroup group) {
-			ASTNode parent = reference.getParent();
-			while (parent instanceof QualifiedName) {
-				parent = parent.getParent();
-			}
-			if (parent instanceof FieldAccess) {
-				parent = parent.getParent();
-			}
+    /**
+     * Remove the field or variable declaration including the initializer.
+     *
+     * @param rewrite the AST rewriter to use
+     * @param reference a reference to the variable to remove
+     * @param group the text edit group to use
+     */
+    private void removeVariableReferences(
+        ASTRewrite rewrite, SimpleName reference, TextEditGroup group) {
+      ASTNode parent = reference.getParent();
+      while (parent instanceof QualifiedName) {
+        parent = parent.getParent();
+      }
+      if (parent instanceof FieldAccess) {
+        parent = parent.getParent();
+      }
 
-			int nameParentType = parent.getNodeType();
-			if (nameParentType == ASTNode.ASSIGNMENT) {
-				Assignment assignment = (Assignment)parent;
-				Expression rightHand = assignment.getRightHandSide();
+      int nameParentType = parent.getNodeType();
+      if (nameParentType == ASTNode.ASSIGNMENT) {
+        Assignment assignment = (Assignment) parent;
+        Expression rightHand = assignment.getRightHandSide();
 
-				ASTNode assignParent = assignment.getParent();
-				if (assignParent.getNodeType() == ASTNode.EXPRESSION_STATEMENT && rightHand.getNodeType() != ASTNode.ASSIGNMENT) {
-					removeVariableWithInitializer(rewrite, rightHand, assignParent, group);
-				} else {
-					rewrite.replace(assignment, rewrite.createCopyTarget(rightHand), group);
-				}
-			} else if (nameParentType == ASTNode.SINGLE_VARIABLE_DECLARATION) {
-				rewrite.remove(parent, group);
-			} else if (nameParentType == ASTNode.VARIABLE_DECLARATION_FRAGMENT) {
-				VariableDeclarationFragment frag = (VariableDeclarationFragment)parent;
-				ASTNode varDecl = frag.getParent();
-				List<VariableDeclarationFragment> fragments;
-				if (varDecl instanceof VariableDeclarationExpression) {
-					fragments = ((VariableDeclarationExpression)varDecl).fragments();
-				} else if (varDecl instanceof FieldDeclaration) {
-					fragments = ((FieldDeclaration)varDecl).fragments();
-				} else {
-					fragments = ((VariableDeclarationStatement)varDecl).fragments();
-				}
-				Expression initializer = frag.getInitializer();
-				ArrayList<Expression> sideEffects = new ArrayList<Expression>();
-				if (initializer != null) {
-					initializer.accept(new SideEffectFinder(sideEffects));
-				}
-				boolean sideEffectInitializer = sideEffects.size() > 0;
-				if (fragments.size() == fUnusedNames.length) {
-					if (fForceRemove) {
-						rewrite.remove(varDecl, group);
-						return;
-					}
-					if (parent.getParent() instanceof FieldDeclaration) {
-						rewrite.remove(varDecl, group);
-						return;
-					}
-					if (sideEffectInitializer) {
-						Statement[] wrapped = new Statement[sideEffects.size()];
-						for (int i = 0; i < wrapped.length; i++) {
-							Expression sideEffect = sideEffects.get(i);
-							Expression movedInit = (Expression)rewrite.createMoveTarget(sideEffect);
-							wrapped[i] = rewrite.getAST().newExpressionStatement(movedInit);
-						}
-						StatementRewrite statementRewrite = new StatementRewrite(rewrite, new ASTNode[]{varDecl});
-						statementRewrite.replace(wrapped, group);
-					} else {
-						rewrite.remove(varDecl, group);
-					}
-				} else {
-					if (fForceRemove) {
-						rewrite.remove(frag, group);
-						return;
-					}
-					//multiple declarations in one line
-					ASTNode declaration = parent.getParent();
-					if (declaration instanceof FieldDeclaration) {
-						rewrite.remove(frag, group);
-						return;
-					}
-					if (declaration instanceof VariableDeclarationStatement) {
-						splitUpDeclarations(rewrite, group, frag, (VariableDeclarationStatement) declaration, sideEffects);
-						rewrite.remove(frag, group);
-						return;
-					}
-					if (declaration instanceof VariableDeclarationExpression) {
-						//keep constructors and method invocations
-						if (!sideEffectInitializer){
-							rewrite.remove(frag, group);
-						}
-					}
-				}
-			} else if (nameParentType == ASTNode.POSTFIX_EXPRESSION || nameParentType == ASTNode.PREFIX_EXPRESSION) {
-				Expression expression= (Expression)parent;
-				ASTNode expressionParent= expression.getParent();
-				if (expressionParent.getNodeType() == ASTNode.EXPRESSION_STATEMENT) {
-					removeStatement(rewrite, expressionParent, group);
-				} else {
-					rewrite.remove(expression, group);
-				}
-			}
-		}
+        ASTNode assignParent = assignment.getParent();
+        if (assignParent.getNodeType() == ASTNode.EXPRESSION_STATEMENT
+            && rightHand.getNodeType() != ASTNode.ASSIGNMENT) {
+          removeVariableWithInitializer(rewrite, rightHand, assignParent, group);
+        } else {
+          rewrite.replace(assignment, rewrite.createCopyTarget(rightHand), group);
+        }
+      } else if (nameParentType == ASTNode.SINGLE_VARIABLE_DECLARATION) {
+        rewrite.remove(parent, group);
+      } else if (nameParentType == ASTNode.VARIABLE_DECLARATION_FRAGMENT) {
+        VariableDeclarationFragment frag = (VariableDeclarationFragment) parent;
+        ASTNode varDecl = frag.getParent();
+        List<VariableDeclarationFragment> fragments;
+        if (varDecl instanceof VariableDeclarationExpression) {
+          fragments = ((VariableDeclarationExpression) varDecl).fragments();
+        } else if (varDecl instanceof FieldDeclaration) {
+          fragments = ((FieldDeclaration) varDecl).fragments();
+        } else {
+          fragments = ((VariableDeclarationStatement) varDecl).fragments();
+        }
+        Expression initializer = frag.getInitializer();
+        ArrayList<Expression> sideEffects = new ArrayList<Expression>();
+        if (initializer != null) {
+          initializer.accept(new SideEffectFinder(sideEffects));
+        }
+        boolean sideEffectInitializer = sideEffects.size() > 0;
+        if (fragments.size() == fUnusedNames.length) {
+          if (fForceRemove) {
+            rewrite.remove(varDecl, group);
+            return;
+          }
+          if (parent.getParent() instanceof FieldDeclaration) {
+            rewrite.remove(varDecl, group);
+            return;
+          }
+          if (sideEffectInitializer) {
+            Statement[] wrapped = new Statement[sideEffects.size()];
+            for (int i = 0; i < wrapped.length; i++) {
+              Expression sideEffect = sideEffects.get(i);
+              Expression movedInit = (Expression) rewrite.createMoveTarget(sideEffect);
+              wrapped[i] = rewrite.getAST().newExpressionStatement(movedInit);
+            }
+            StatementRewrite statementRewrite =
+                new StatementRewrite(rewrite, new ASTNode[] {varDecl});
+            statementRewrite.replace(wrapped, group);
+          } else {
+            rewrite.remove(varDecl, group);
+          }
+        } else {
+          if (fForceRemove) {
+            rewrite.remove(frag, group);
+            return;
+          }
+          //multiple declarations in one line
+          ASTNode declaration = parent.getParent();
+          if (declaration instanceof FieldDeclaration) {
+            rewrite.remove(frag, group);
+            return;
+          }
+          if (declaration instanceof VariableDeclarationStatement) {
+            splitUpDeclarations(
+                rewrite, group, frag, (VariableDeclarationStatement) declaration, sideEffects);
+            rewrite.remove(frag, group);
+            return;
+          }
+          if (declaration instanceof VariableDeclarationExpression) {
+            //keep constructors and method invocations
+            if (!sideEffectInitializer) {
+              rewrite.remove(frag, group);
+            }
+          }
+        }
+      } else if (nameParentType == ASTNode.POSTFIX_EXPRESSION
+          || nameParentType == ASTNode.PREFIX_EXPRESSION) {
+        Expression expression = (Expression) parent;
+        ASTNode expressionParent = expression.getParent();
+        if (expressionParent.getNodeType() == ASTNode.EXPRESSION_STATEMENT) {
+          removeStatement(rewrite, expressionParent, group);
+        } else {
+          rewrite.remove(expression, group);
+        }
+      }
+    }
 

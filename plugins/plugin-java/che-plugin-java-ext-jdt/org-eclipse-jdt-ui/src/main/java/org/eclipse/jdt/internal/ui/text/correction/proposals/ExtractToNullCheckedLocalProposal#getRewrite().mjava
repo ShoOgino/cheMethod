@@ -1,84 +1,99 @@
-	@Override
-	protected ASTRewrite getRewrite() throws CoreException {
+  @Override
+  protected ASTRewrite getRewrite() throws CoreException {
 
-		// infrastructure:
-		AST ast = this.compilationUnit.getAST();
-		ASTRewrite rewrite = ASTRewrite.create(ast);
-		ImportRewrite imports = ImportRewrite.create(this.compilationUnit, true);
-		TextEditGroup group = new TextEditGroup(FixMessages.ExtractToNullCheckedLocalProposal_extractCheckedLocal_editName);
-		LinkedProposalPositionGroup localNameGroup = new LinkedProposalPositionGroup(LOCAL_NAME_POSITION_GROUP);
-		getLinkedProposalModel().addPositionGroup(localNameGroup);
+    // infrastructure:
+    AST ast = this.compilationUnit.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
+    ImportRewrite imports = ImportRewrite.create(this.compilationUnit, true);
+    TextEditGroup group =
+        new TextEditGroup(
+            FixMessages.ExtractToNullCheckedLocalProposal_extractCheckedLocal_editName);
+    LinkedProposalPositionGroup localNameGroup =
+        new LinkedProposalPositionGroup(LOCAL_NAME_POSITION_GROUP);
+    getLinkedProposalModel().addPositionGroup(localNameGroup);
 
-		// AST context:
-		Statement origStmt = (Statement)ASTNodes.getParent(this.fieldReference, Statement.class);
-		// determine suitable strategy for rearranging elements towards a new code structure:
-		RearrangeStrategy rearrangeStrategy = RearrangeStrategy.create(origStmt, rewrite, group);
+    // AST context:
+    Statement origStmt = (Statement) ASTNodes.getParent(this.fieldReference, Statement.class);
+    // determine suitable strategy for rearranging elements towards a new code structure:
+    RearrangeStrategy rearrangeStrategy = RearrangeStrategy.create(origStmt, rewrite, group);
 
-		Expression toReplace;
-		ASTNode directParent = this.fieldReference.getParent();
-		if (directParent instanceof FieldAccess) {
-			toReplace = (Expression)directParent;
-		} else if (directParent instanceof QualifiedName && this.fieldReference.getLocationInParent() == QualifiedName.NAME_PROPERTY) {
-			toReplace = (Expression)directParent;
-		} else {
-			toReplace = this.fieldReference;
-		}
+    Expression toReplace;
+    ASTNode directParent = this.fieldReference.getParent();
+    if (directParent instanceof FieldAccess) {
+      toReplace = (Expression) directParent;
+    } else if (directParent instanceof QualifiedName
+        && this.fieldReference.getLocationInParent() == QualifiedName.NAME_PROPERTY) {
+      toReplace = (Expression) directParent;
+    } else {
+      toReplace = this.fieldReference;
+    }
 
-		// new local declaration initialized from the field reference
-		VariableDeclarationFragment localFrag = ast.newVariableDeclarationFragment();
-		VariableDeclarationStatement localDecl = ast.newVariableDeclarationStatement(localFrag);
-		// ... type
-		localDecl.setType(newType(toReplace.resolveTypeBinding(), ast, imports));
-		localDecl.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.FINAL_KEYWORD));
-		// ... name
-		String localName = proposeLocalName(this.fieldReference, this.compilationUnit, getCompilationUnit().getJavaProject());
-		localFrag.setName(ast.newSimpleName(localName));
-		// ... initialization
-		localFrag.setInitializer((Expression)ASTNode.copySubtree(ast, toReplace));
+    // new local declaration initialized from the field reference
+    VariableDeclarationFragment localFrag = ast.newVariableDeclarationFragment();
+    VariableDeclarationStatement localDecl = ast.newVariableDeclarationStatement(localFrag);
+    // ... type
+    localDecl.setType(newType(toReplace.resolveTypeBinding(), ast, imports));
+    localDecl.modifiers().add(ast.newModifier(Modifier.ModifierKeyword.FINAL_KEYWORD));
+    // ... name
+    String localName =
+        proposeLocalName(
+            this.fieldReference, this.compilationUnit, getCompilationUnit().getJavaProject());
+    localFrag.setName(ast.newSimpleName(localName));
+    // ... initialization
+    localFrag.setInitializer((Expression) ASTNode.copySubtree(ast, toReplace));
 
-		rearrangeStrategy.insertLocalDecl(localDecl);
+    rearrangeStrategy.insertLocalDecl(localDecl);
 
-		// if statement:
-		IfStatement ifStmt = ast.newIfStatement();
+    // if statement:
+    IfStatement ifStmt = ast.newIfStatement();
 
-		// condition:
-		InfixExpression nullCheck = ast.newInfixExpression();
-		nullCheck.setLeftOperand(ast.newSimpleName(localName));
-		nullCheck.setRightOperand(ast.newNullLiteral());
-		nullCheck.setOperator(InfixExpression.Operator.NOT_EQUALS);
-		ifStmt.setExpression(nullCheck);
+    // condition:
+    InfixExpression nullCheck = ast.newInfixExpression();
+    nullCheck.setLeftOperand(ast.newSimpleName(localName));
+    nullCheck.setRightOperand(ast.newNullLiteral());
+    nullCheck.setOperator(InfixExpression.Operator.NOT_EQUALS);
+    ifStmt.setExpression(nullCheck);
 
-		// then block: the original statement
-		Block thenBlock = ast.newBlock();
-		thenBlock.statements().add(rearrangeStrategy.createMoveTargetForOrigStmt());
-		ifStmt.setThenStatement(thenBlock);
-		// ... but with the field reference replaced by the new local:
-		SimpleName dereferencedName = ast.newSimpleName(localName);
-		rewrite.replace(toReplace, dereferencedName, group);
+    // then block: the original statement
+    Block thenBlock = ast.newBlock();
+    thenBlock.statements().add(rearrangeStrategy.createMoveTargetForOrigStmt());
+    ifStmt.setThenStatement(thenBlock);
+    // ... but with the field reference replaced by the new local:
+    SimpleName dereferencedName = ast.newSimpleName(localName);
+    rewrite.replace(toReplace, dereferencedName, group);
 
+    // else block: a Todo comment
+    Block elseBlock = ast.newBlock();
+    String elseStatement =
+        "// TODO "
+            + FixMessages.ExtractToNullCheckedLocalProposal_todoHandleNullDescription; //$NON-NLS-1$
+    if (origStmt instanceof ReturnStatement) {
+      Type returnType =
+          newType(((ReturnStatement) origStmt).getExpression().resolveTypeBinding(), ast, imports);
+      ReturnStatement returnStatement = ast.newReturnStatement();
+      returnStatement.setExpression(ASTNodeFactory.newDefaultExpression(ast, returnType, 0));
+      elseStatement +=
+          '\n'
+              + ASTNodes.asFormattedString(
+                  returnStatement,
+                  0,
+                  String.valueOf('\n'),
+                  getCompilationUnit().getJavaProject().getOptions(true));
+    }
 
-		// else block: a Todo comment
-		Block elseBlock = ast.newBlock();
-		String elseStatement = "// TODO " + FixMessages.ExtractToNullCheckedLocalProposal_todoHandleNullDescription; //$NON-NLS-1$
-		if (origStmt instanceof ReturnStatement) {
-			Type returnType = newType(((ReturnStatement)origStmt).getExpression().resolveTypeBinding(), ast, imports);
-			ReturnStatement returnStatement = ast.newReturnStatement();
-			returnStatement.setExpression(ASTNodeFactory.newDefaultExpression(ast, returnType, 0));
-			elseStatement += '\n' + ASTNodes.asFormattedString(returnStatement, 0, String.valueOf('\n'),
-															   getCompilationUnit().getJavaProject().getOptions(true));
-		}
+    EmptyStatement todoNode =
+        (EmptyStatement) rewrite.createStringPlaceholder(elseStatement, ASTNode.EMPTY_STATEMENT);
+    elseBlock.statements().add(todoNode);
+    ifStmt.setElseStatement(elseBlock);
 
-		EmptyStatement todoNode = (EmptyStatement)rewrite.createStringPlaceholder(elseStatement, ASTNode.EMPTY_STATEMENT);
-		elseBlock.statements().add(todoNode);
-		ifStmt.setElseStatement(elseBlock);
+    // link all three occurrences of the new local variable:
+    addLinkedPosition(
+        rewrite.track(localFrag.getName()), true /*first*/, LOCAL_NAME_POSITION_GROUP);
+    addLinkedPosition(rewrite.track(nullCheck.getLeftOperand()), false, LOCAL_NAME_POSITION_GROUP);
+    addLinkedPosition(rewrite.track(dereferencedName), false, LOCAL_NAME_POSITION_GROUP);
 
-		// link all three occurrences of the new local variable:
-		addLinkedPosition(rewrite.track(localFrag.getName()), true/*first*/, LOCAL_NAME_POSITION_GROUP);
-		addLinkedPosition(rewrite.track(nullCheck.getLeftOperand()), false, LOCAL_NAME_POSITION_GROUP);
-		addLinkedPosition(rewrite.track(dereferencedName), false, LOCAL_NAME_POSITION_GROUP);
+    rearrangeStrategy.insertIfStatement(ifStmt, thenBlock);
 
-		rearrangeStrategy.insertIfStatement(ifStmt, thenBlock);
-
-		return rewrite;
-	}
+    return rewrite;
+  }
 

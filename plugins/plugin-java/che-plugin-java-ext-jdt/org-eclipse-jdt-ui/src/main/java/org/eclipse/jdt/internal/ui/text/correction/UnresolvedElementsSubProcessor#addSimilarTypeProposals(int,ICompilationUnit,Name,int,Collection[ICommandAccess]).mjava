@@ -1,49 +1,54 @@
-	private static void addSimilarTypeProposals(int kind, ICompilationUnit cu, Name node, int relevance, Collection<ICommandAccess> proposals) throws
-																																			   CoreException {
-		SimilarElement[] elements= SimilarElementsRequestor.findSimilarElement(cu, node, kind);
+  private static void addSimilarTypeProposals(
+      int kind, ICompilationUnit cu, Name node, int relevance, Collection<ICommandAccess> proposals)
+      throws CoreException {
+    SimilarElement[] elements = SimilarElementsRequestor.findSimilarElement(cu, node, kind);
 
-		// try to resolve type in context -> highest severity
-		String resolvedTypeName= null;
-		ITypeBinding binding= ASTResolving.guessBindingForTypeReference(node);
-		if (binding != null) {
-			ITypeBinding simpleBinding= binding;
-			if (simpleBinding.isArray()) {
-				simpleBinding= simpleBinding.getElementType();
-			}
-			simpleBinding= simpleBinding.getTypeDeclaration();
+    // try to resolve type in context -> highest severity
+    String resolvedTypeName = null;
+    ITypeBinding binding = ASTResolving.guessBindingForTypeReference(node);
+    if (binding != null) {
+      ITypeBinding simpleBinding = binding;
+      if (simpleBinding.isArray()) {
+        simpleBinding = simpleBinding.getElementType();
+      }
+      simpleBinding = simpleBinding.getTypeDeclaration();
 
-			if (!simpleBinding.isRecovered()) {
-				resolvedTypeName= simpleBinding.getQualifiedName();
-				CUCorrectionProposal proposal= createTypeRefChangeProposal(cu, resolvedTypeName, node, relevance + 2, elements.length);
-				proposals.add(proposal);
-				if (proposal instanceof AddImportCorrectionProposal)
-					proposal.setRelevance(relevance + elements.length + 2);
+      if (!simpleBinding.isRecovered()) {
+        resolvedTypeName = simpleBinding.getQualifiedName();
+        CUCorrectionProposal proposal =
+            createTypeRefChangeProposal(cu, resolvedTypeName, node, relevance + 2, elements.length);
+        proposals.add(proposal);
+        if (proposal instanceof AddImportCorrectionProposal)
+          proposal.setRelevance(relevance + elements.length + 2);
 
-				if (binding.isParameterizedType()
-						&& (node.getParent() instanceof SimpleType || node.getParent() instanceof NameQualifiedType)
-						&& !(node.getParent().getParent() instanceof Type)) {
-					proposals.add(createTypeRefChangeFullProposal(cu, binding, node, relevance + 5));
-				}
-			}
-		} else {
-			ASTNode normalizedNode= ASTNodes.getNormalizedNode(node);
-			if (!(normalizedNode.getParent() instanceof Type) && node.getParent() != normalizedNode) {
-				ITypeBinding normBinding= ASTResolving.guessBindingForTypeReference(normalizedNode);
-				if (normBinding != null && !normBinding.isRecovered()) {
-					proposals.add(createTypeRefChangeFullProposal(cu, normBinding, normalizedNode, relevance + 5));
-				}
-			}
-		}
+        if (binding.isParameterizedType()
+            && (node.getParent() instanceof SimpleType
+                || node.getParent() instanceof NameQualifiedType)
+            && !(node.getParent().getParent() instanceof Type)) {
+          proposals.add(createTypeRefChangeFullProposal(cu, binding, node, relevance + 5));
+        }
+      }
+    } else {
+      ASTNode normalizedNode = ASTNodes.getNormalizedNode(node);
+      if (!(normalizedNode.getParent() instanceof Type) && node.getParent() != normalizedNode) {
+        ITypeBinding normBinding = ASTResolving.guessBindingForTypeReference(normalizedNode);
+        if (normBinding != null && !normBinding.isRecovered()) {
+          proposals.add(
+              createTypeRefChangeFullProposal(cu, normBinding, normalizedNode, relevance + 5));
+        }
+      }
+    }
 
-		// add all similar elements
-		for (int i= 0; i < elements.length; i++) {
-			SimilarElement elem= elements[i];
-			if ((elem.getKind() & SimilarElementsRequestor.ALL_TYPES) != 0) {
-				String fullName= elem.getName();
-				if (!fullName.equals(resolvedTypeName)) {
-					proposals.add(createTypeRefChangeProposal(cu, fullName, node, relevance, elements.length));
-				}
-			}
-		}
-	}
+    // add all similar elements
+    for (int i = 0; i < elements.length; i++) {
+      SimilarElement elem = elements[i];
+      if ((elem.getKind() & SimilarElementsRequestor.ALL_TYPES) != 0) {
+        String fullName = elem.getName();
+        if (!fullName.equals(resolvedTypeName)) {
+          proposals.add(
+              createTypeRefChangeProposal(cu, fullName, node, relevance, elements.length));
+        }
+      }
+    }
+  }
 

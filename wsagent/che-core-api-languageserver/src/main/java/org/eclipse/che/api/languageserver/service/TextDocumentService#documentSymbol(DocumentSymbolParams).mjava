@@ -1,36 +1,49 @@
-    private List<SymbolInformationDto> documentSymbol(DocumentSymbolParams documentSymbolParams) {
-        String uri = prefixURI(documentSymbolParams.getTextDocument().getUri());
-        documentSymbolParams.getTextDocument().setUri(uri);
-        List<SymbolInformationDto> result = new ArrayList<>();
-        try {
-            List<InitializedLanguageServer> servers = languageServerRegistry.getApplicableLanguageServers(uri).stream()
-                            .flatMap(Collection::stream).collect(Collectors.toList());
-            OperationUtil.doInParallel(servers, new LSOperation<InitializedLanguageServer, List<? extends SymbolInformation>>() {
+  private List<SymbolInformationDto> documentSymbol(DocumentSymbolParams documentSymbolParams) {
+    String uri = prefixURI(documentSymbolParams.getTextDocument().getUri());
+    documentSymbolParams.getTextDocument().setUri(uri);
+    List<SymbolInformationDto> result = new ArrayList<>();
+    try {
+      List<InitializedLanguageServer> servers =
+          languageServerRegistry
+              .getApplicableLanguageServers(uri)
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      OperationUtil.doInParallel(
+          servers,
+          new LSOperation<InitializedLanguageServer, List<? extends SymbolInformation>>() {
 
-                @Override
-                public boolean canDo(InitializedLanguageServer element) {
-                    return truish(element.getInitializeResult().getCapabilities().getDocumentSymbolProvider());
-                }
+            @Override
+            public boolean canDo(InitializedLanguageServer element) {
+              return truish(
+                  element.getInitializeResult().getCapabilities().getDocumentSymbolProvider());
+            }
 
-                @Override
-                public CompletableFuture<List<? extends SymbolInformation>> start(InitializedLanguageServer element) {
-                    return element.getServer().getTextDocumentService().documentSymbol(documentSymbolParams);
-                }
+            @Override
+            public CompletableFuture<List<? extends SymbolInformation>> start(
+                InitializedLanguageServer element) {
+              return element
+                  .getServer()
+                  .getTextDocumentService()
+                  .documentSymbol(documentSymbolParams);
+            }
 
-                @Override
-                public boolean handleResult(InitializedLanguageServer element, List<? extends SymbolInformation> locations) {
-                    locations.forEach(o -> {
-                        o.getLocation().setUri(removePrefixUri(o.getLocation().getUri()));
-                        result.add(new SymbolInformationDto(o));
-                    });
-                    return true;
-                }
-            }, 10000);
-            return result;
+            @Override
+            public boolean handleResult(
+                InitializedLanguageServer element, List<? extends SymbolInformation> locations) {
+              locations.forEach(
+                  o -> {
+                    o.getLocation().setUri(removePrefixUri(o.getLocation().getUri()));
+                    result.add(new SymbolInformationDto(o));
+                  });
+              return true;
+            }
+          },
+          10000);
+      return result;
 
-        } catch (LanguageServerException e) {
-            throw new JsonRpcException(-27000, e.getMessage());
-
-        }
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
     }
+  }
 

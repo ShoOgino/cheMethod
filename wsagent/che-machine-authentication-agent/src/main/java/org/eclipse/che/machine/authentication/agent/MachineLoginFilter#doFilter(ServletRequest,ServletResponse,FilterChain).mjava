@@ -1,44 +1,49 @@
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException,
-                                                                                                     ServletException {
-        final HttpServletRequest httpRequest = (HttpServletRequest)request;
-        final HttpSession session = httpRequest.getSession(false);
-        if (session != null && session.getAttribute("principal") != null) {
-            try {
-                EnvironmentContext.getCurrent().setSubject((Subject)session.getAttribute("principal"));
-                chain.doFilter(request, response);
-                return;
-            } finally {
-                EnvironmentContext.reset();
-            }
-        }
-        final String machineToken = tokenExtractor.getToken(httpRequest);
-        if (isNullOrEmpty(machineToken)) {
-            ((HttpServletResponse)response).sendError(HttpServletResponse.SC_UNAUTHORIZED,
-                                                      "Authentication on machine failed, token is missed");
-            return;
-        }
-        try {
-            final UserDto userDescriptor = requestFactory.fromUrl(tokenServiceEndpoint + "/user/" + machineToken)
-                                                                .useGetMethod()
-                                                                .setAuthorizationHeader(machineToken)
-                                                                .request()
-                                                                .asDto(UserDto.class);
-            final Subject machineUser = new SubjectImpl(userDescriptor.getName(),
-                                                        userDescriptor.getId(),
-                                                        machineToken,
-                                                        false);
-            EnvironmentContext.getCurrent().setSubject(machineUser);
-            final HttpSession httpSession = httpRequest.getSession(true);
-            httpSession.setAttribute("principal", machineUser);
-            chain.doFilter(request, response);
-        } catch (NotFoundException nfEx) {
-            ((HttpServletResponse)response).sendError(HttpServletResponse.SC_UNAUTHORIZED,
-                                                      "Authentication on machine failed, token " + machineToken + " is invalid");
-        } catch (ApiException apiEx) {
-            ((HttpServletResponse)response).sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, apiEx.getMessage());
-        } finally {
-            EnvironmentContext.reset();
-        }
+  @Override
+  public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+      throws IOException, ServletException {
+    final HttpServletRequest httpRequest = (HttpServletRequest) request;
+    final HttpSession session = httpRequest.getSession(false);
+    if (session != null && session.getAttribute("principal") != null) {
+      try {
+        EnvironmentContext.getCurrent().setSubject((Subject) session.getAttribute("principal"));
+        chain.doFilter(request, response);
+        return;
+      } finally {
+        EnvironmentContext.reset();
+      }
     }
+    final String machineToken = tokenExtractor.getToken(httpRequest);
+    if (isNullOrEmpty(machineToken)) {
+      ((HttpServletResponse) response)
+          .sendError(
+              HttpServletResponse.SC_UNAUTHORIZED,
+              "Authentication on machine failed, token is missed");
+      return;
+    }
+    try {
+      final UserDto userDescriptor =
+          requestFactory
+              .fromUrl(tokenServiceEndpoint + "/user/" + machineToken)
+              .useGetMethod()
+              .setAuthorizationHeader(machineToken)
+              .request()
+              .asDto(UserDto.class);
+      final Subject machineUser =
+          new SubjectImpl(userDescriptor.getName(), userDescriptor.getId(), machineToken, false);
+      EnvironmentContext.getCurrent().setSubject(machineUser);
+      final HttpSession httpSession = httpRequest.getSession(true);
+      httpSession.setAttribute("principal", machineUser);
+      chain.doFilter(request, response);
+    } catch (NotFoundException nfEx) {
+      ((HttpServletResponse) response)
+          .sendError(
+              HttpServletResponse.SC_UNAUTHORIZED,
+              "Authentication on machine failed, token " + machineToken + " is invalid");
+    } catch (ApiException apiEx) {
+      ((HttpServletResponse) response)
+          .sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, apiEx.getMessage());
+    } finally {
+      EnvironmentContext.reset();
+    }
+  }
 

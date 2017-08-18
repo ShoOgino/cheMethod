@@ -1,67 +1,72 @@
-    @Test
-    public void testCreateProject() throws Exception {
-        final String projectName = "new_project";
-        final String projectType = "testCreateProject";
-        phRegistry.register(createProjectHandlerFor(projectName, projectType));
+  @Test
+  public void testCreateProject() throws Exception {
+    final String projectName = "new_project";
+    final String projectType = "testCreateProject";
+    phRegistry.register(createProjectHandlerFor(projectName, projectType));
 
-        Map<String, List<String>> headers = new HashMap<>();
-        headers.put("Content-Type", singletonList(APPLICATION_JSON));
+    Map<String, List<String>> headers = new HashMap<>();
+    headers.put("Content-Type", singletonList(APPLICATION_JSON));
 
-        ProjectTypeDef pt = new ProjectTypeDef("testCreateProject", "my project type", true, false) {
-            {
-                addConstantDefinition("new_project_attribute", "attr description", "to be or not to be");
-            }
+    ProjectTypeDef pt =
+        new ProjectTypeDef("testCreateProject", "my project type", true, false) {
+          {
+            addConstantDefinition(
+                "new_project_attribute", "attr description", "to be or not to be");
+          }
         };
 
-        ptRegistry.registerProjectType(pt);
+    ptRegistry.registerProjectType(pt);
 
-        Map<String, List<String>> attributeValues = new LinkedHashMap<>();
-        attributeValues.put("new_project_attribute", singletonList("to be or not to be"));
+    Map<String, List<String>> attributeValues = new LinkedHashMap<>();
+    attributeValues.put("new_project_attribute", singletonList("to be or not to be"));
 
+    final ProjectConfigDto newProjectConfig =
+        DtoFactory.getInstance()
+            .createDto(ProjectConfigDto.class)
+            .withPath("/new_project")
+            .withName(projectName)
+            .withDescription("new project")
+            .withType(projectType)
+            .withAttributes(attributeValues)
+            .withSource(DtoFactory.getInstance().createDto(SourceStorageDto.class));
+    projects.add(newProjectConfig);
 
-        final ProjectConfigDto newProjectConfig = DtoFactory.getInstance().createDto(ProjectConfigDto.class)
-                                                            .withPath("/new_project")
-                                                            .withName(projectName)
-                                                            .withDescription("new project")
-                                                            .withType(projectType)
-                                                            .withAttributes(attributeValues)
-                                                            .withSource(DtoFactory.getInstance().createDto(SourceStorageDto.class));
-        projects.add(newProjectConfig);
+    ContainerResponse response =
+        launcher.service(
+            POST,
+            "http://localhost:8080/api/project",
+            "http://localhost:8080/api",
+            headers,
+            DtoFactory.getInstance().toJson(newProjectConfig).getBytes(Charset.defaultCharset()),
+            null);
 
-        ContainerResponse response = launcher.service(POST,
-                                                      "http://localhost:8080/api/project",
-                                                      "http://localhost:8080/api",
-                                                      headers,
-                                                      DtoFactory.getInstance().toJson(newProjectConfig).getBytes(Charset.defaultCharset()),
-                                                      null);
+    assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
+    ProjectConfigDto result = (ProjectConfigDto) response.getEntity();
+    assertNotNull(result);
+    assertEquals(result.getName(), projectName);
+    assertEquals(result.getPath(), "/new_project");
+    assertEquals(result.getDescription(), newProjectConfig.getDescription());
+    assertEquals(result.getType(), newProjectConfig.getType());
+    assertEquals(result.getType(), projectType);
+    Map<String, List<String>> attributes = result.getAttributes();
+    assertNotNull(attributes);
+    assertEquals(attributes.size(), 1);
+    assertEquals(attributes.get("new_project_attribute"), singletonList("to be or not to be"));
+    validateProjectLinks(result);
 
-        assertEquals(response.getStatus(), 200, "Error: " + response.getEntity());
-        ProjectConfigDto result = (ProjectConfigDto)response.getEntity();
-        assertNotNull(result);
-        assertEquals(result.getName(), projectName);
-        assertEquals(result.getPath(), "/new_project");
-        assertEquals(result.getDescription(), newProjectConfig.getDescription());
-        assertEquals(result.getType(), newProjectConfig.getType());
-        assertEquals(result.getType(), projectType);
-        Map<String, List<String>> attributes = result.getAttributes();
-        assertNotNull(attributes);
-        assertEquals(attributes.size(), 1);
-        assertEquals(attributes.get("new_project_attribute"), singletonList("to be or not to be"));
-        validateProjectLinks(result);
+    RegisteredProject project = pm.getProject("new_project");
+    assertNotNull(project);
 
-        RegisteredProject project = pm.getProject("new_project");
-        assertNotNull(project);
+    //ProjectConfig config = project.getConfig();
 
-        //ProjectConfig config = project.getConfig();
+    assertEquals(project.getDescription(), newProjectConfig.getDescription());
+    assertEquals(project.getProjectType().getId(), newProjectConfig.getType());
+    String attributeVal = project.getAttributeEntries().get("new_project_attribute").getString();
+    assertNotNull(attributeVal);
+    assertEquals(attributeVal, "to be or not to be");
 
-        assertEquals(project.getDescription(), newProjectConfig.getDescription());
-        assertEquals(project.getProjectType().getId(), newProjectConfig.getType());
-        String attributeVal = project.getAttributeEntries().get("new_project_attribute").getString();
-        assertNotNull(attributeVal);
-        assertEquals(attributeVal, "to be or not to be");
-
-        assertNotNull(project.getBaseFolder().getChild("a"));
-        assertNotNull(project.getBaseFolder().getChild("b"));
-        assertNotNull(project.getBaseFolder().getChild("test.txt"));
-    }
+    assertNotNull(project.getBaseFolder().getChild("a"));
+    assertNotNull(project.getBaseFolder().getChild("b"));
+    assertNotNull(project.getBaseFolder().getChild("test.txt"));
+  }
 

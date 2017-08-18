@@ -1,63 +1,72 @@
-    @Override
-    @Deprecated
-    public void gotoClass(final String packagePath, String className, String methodName, int line) {
-        if (lastTestResult == null) {
-            return;
-        }
-        String projectPath = lastTestResult.getProjectPath();
-        if (projectPath == null) {
-            return;
-        }
+  @Override
+  @Deprecated
+  public void gotoClass(final String packagePath, String className, String methodName, int line) {
+    if (lastTestResult == null) {
+      return;
+    }
+    String projectPath = lastTestResult.getProjectPath();
+    if (projectPath == null) {
+      return;
+    }
 
-        lastWentLine = line;
-        String testSrcPath = projectPath + "/" + DEFAULT_TEST_SOURCE_FOLDER;
-        appContext.getWorkspaceRoot().getFile(testSrcPath + "/" + packagePath).then(new Operation<Optional<File>>() {
-            @Override
-            public void apply(Optional<File> maybeFile) throws OperationException {
+    lastWentLine = line;
+    String testSrcPath = projectPath + "/" + DEFAULT_TEST_SOURCE_FOLDER;
+    appContext
+        .getWorkspaceRoot()
+        .getFile(testSrcPath + "/" + packagePath)
+        .then(
+            new Operation<Optional<File>>() {
+              @Override
+              public void apply(Optional<File> maybeFile) throws OperationException {
                 if (maybeFile.isPresent()) {
-                    File file = maybeFile.get();
-                    editorAgent.openEditor(file);
-                    Timer t = new Timer() {
+                  File file = maybeFile.get();
+                  editorAgent.openEditor(file);
+                  Timer t =
+                      new Timer() {
                         @Override
                         public void run() {
-                            EditorPartPresenter editorPart = editorAgent.getActiveEditor();
-                            final Document doc = ((TextEditor) editorPart).getDocument();
-                            if (line == -1 && className != null && methodName != null) {
-                                Promise<CompilationUnit> cuPromise = javaNavigationService
-                                        .getCompilationUnit(file.getProject().getLocation(), className, true);
-                                cuPromise.then(new Operation<CompilationUnit>() {
-                                    @Override
-                                    public void apply(CompilationUnit cu) throws OperationException {
-                                        for (Type type : cu.getTypes()) {
-                                            if (type.isPrimary()) {
-                                                for (Method m : type.getMethods()) {
-                                                    if (methodName.equals(m.getElementName())) {
-                                                        Region methodRegion = m.getFileRegion();
-                                                        if (methodRegion != null) {
-                                                            lastWentLine = doc
-                                                                    .getLineAtOffset(methodRegion.getOffset());
-                                                            doc.setCursorPosition(
-                                                                    new TextPosition(lastWentLine - 1, 0));
-                                                        }
-                                                    }
-                                                }
+                          EditorPartPresenter editorPart = editorAgent.getActiveEditor();
+                          final Document doc = ((TextEditor) editorPart).getDocument();
+                          if (line == -1 && className != null && methodName != null) {
+                            Promise<CompilationUnit> cuPromise =
+                                javaNavigationService.getCompilationUnit(
+                                    file.getProject().getLocation(), className, true);
+                            cuPromise.then(
+                                new Operation<CompilationUnit>() {
+                                  @Override
+                                  public void apply(CompilationUnit cu) throws OperationException {
+                                    for (Type type : cu.getTypes()) {
+                                      if (type.isPrimary()) {
+                                        for (Method m : type.getMethods()) {
+                                          if (methodName.equals(m.getElementName())) {
+                                            Region methodRegion = m.getFileRegion();
+                                            if (methodRegion != null) {
+                                              lastWentLine =
+                                                  doc.getLineAtOffset(methodRegion.getOffset());
+                                              doc.setCursorPosition(
+                                                  new TextPosition(lastWentLine - 1, 0));
                                             }
+                                          }
                                         }
+                                      }
                                     }
+                                  }
                                 });
-                            } else {
-                                doc.setCursorPosition(new TextPosition(lastWentLine - 1, 0));
-                            }
+                          } else {
+                            doc.setCursorPosition(new TextPosition(lastWentLine - 1, 0));
+                          }
                         }
-                    };
-                    t.schedule(1000);
+                      };
+                  t.schedule(1000);
                 }
-            }
-        }).catchError(new Operation<PromiseError>() {
-            @Override
-            public void apply(PromiseError error) throws OperationException {
+              }
+            })
+        .catchError(
+            new Operation<PromiseError>() {
+              @Override
+              public void apply(PromiseError error) throws OperationException {
                 Log.info(TestResultViewImpl.class, error);
-            }
-        });
-    }
+              }
+            });
+  }
 

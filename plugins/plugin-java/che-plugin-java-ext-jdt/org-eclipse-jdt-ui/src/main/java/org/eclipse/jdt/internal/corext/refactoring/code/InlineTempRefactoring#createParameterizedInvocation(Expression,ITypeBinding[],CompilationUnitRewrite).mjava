@@ -1,44 +1,60 @@
-	private String createParameterizedInvocation(Expression invocation, ITypeBinding[] typeArguments, CompilationUnitRewrite cuRewrite) throws
-																																		JavaModelException {
-		ASTRewrite rewrite= ASTRewrite.create(invocation.getAST());
-		ListRewrite typeArgsRewrite= Invocations.getInferredTypeArgumentsRewrite(rewrite, invocation);
-		
-		for (int i= 0; i < typeArguments.length; i++) {
-			Type typeArgumentNode= cuRewrite.getImportRewrite().addImport(typeArguments[i], cuRewrite.getAST());
-			typeArgsRewrite.insertLast(typeArgumentNode, null);
-		}
-		
-		if (invocation instanceof MethodInvocation) {
-			MethodInvocation methodInvocation= (MethodInvocation) invocation;
-			Expression expression= methodInvocation.getExpression();
-			if (expression == null) {
-				IMethodBinding methodBinding= methodInvocation.resolveMethodBinding();
-				if (methodBinding != null && Modifier.isStatic(methodBinding.getModifiers())) {
-					expression= cuRewrite.getAST().newName(cuRewrite.getImportRewrite().addImport(methodBinding.getDeclaringClass().getTypeDeclaration()));
-				} else {
-					expression= invocation.getAST().newThisExpression();
-				}
-				rewrite.set(invocation, MethodInvocation.EXPRESSION_PROPERTY, expression, null);
-			}
-		}
+  private String createParameterizedInvocation(
+      Expression invocation, ITypeBinding[] typeArguments, CompilationUnitRewrite cuRewrite)
+      throws JavaModelException {
+    ASTRewrite rewrite = ASTRewrite.create(invocation.getAST());
+    ListRewrite typeArgsRewrite = Invocations.getInferredTypeArgumentsRewrite(rewrite, invocation);
 
-		IDocument document= new Document(fCu.getBuffer().getContents());
-		final RangeMarker marker= new RangeMarker(invocation.getStartPosition(), invocation.getLength());
-		IJavaProject project= fCu.getJavaProject();
-		TextEdit[] rewriteEdits= rewrite.rewriteAST(document, project.getOptions(true)).removeChildren();
-		marker.addChildren(rewriteEdits);
-		try {
-			marker.apply(document, TextEdit.UPDATE_REGIONS);
-			String rewrittenInitializer= document.get(marker.getOffset(), marker.getLength());
-			IRegion region= document.getLineInformation(document.getLineOfOffset(marker.getOffset()));
-			int oldIndent= Strings.computeIndentUnits(document.get(region.getOffset(), region.getLength()), project);
-			return Strings.changeIndent(rewrittenInitializer, oldIndent, project, "", TextUtilities.getDefaultLineDelimiter(document)); //$NON-NLS-1$
-		} catch (MalformedTreeException e) {
-			JavaPlugin.log(e);
-		} catch (BadLocationException e) {
-			JavaPlugin.log(e);
-		}
-		//fallback:
-		return fCu.getBuffer().getText(invocation.getStartPosition(), invocation.getLength());
-	}
+    for (int i = 0; i < typeArguments.length; i++) {
+      Type typeArgumentNode =
+          cuRewrite.getImportRewrite().addImport(typeArguments[i], cuRewrite.getAST());
+      typeArgsRewrite.insertLast(typeArgumentNode, null);
+    }
+
+    if (invocation instanceof MethodInvocation) {
+      MethodInvocation methodInvocation = (MethodInvocation) invocation;
+      Expression expression = methodInvocation.getExpression();
+      if (expression == null) {
+        IMethodBinding methodBinding = methodInvocation.resolveMethodBinding();
+        if (methodBinding != null && Modifier.isStatic(methodBinding.getModifiers())) {
+          expression =
+              cuRewrite
+                  .getAST()
+                  .newName(
+                      cuRewrite
+                          .getImportRewrite()
+                          .addImport(methodBinding.getDeclaringClass().getTypeDeclaration()));
+        } else {
+          expression = invocation.getAST().newThisExpression();
+        }
+        rewrite.set(invocation, MethodInvocation.EXPRESSION_PROPERTY, expression, null);
+      }
+    }
+
+    IDocument document = new Document(fCu.getBuffer().getContents());
+    final RangeMarker marker =
+        new RangeMarker(invocation.getStartPosition(), invocation.getLength());
+    IJavaProject project = fCu.getJavaProject();
+    TextEdit[] rewriteEdits =
+        rewrite.rewriteAST(document, project.getOptions(true)).removeChildren();
+    marker.addChildren(rewriteEdits);
+    try {
+      marker.apply(document, TextEdit.UPDATE_REGIONS);
+      String rewrittenInitializer = document.get(marker.getOffset(), marker.getLength());
+      IRegion region = document.getLineInformation(document.getLineOfOffset(marker.getOffset()));
+      int oldIndent =
+          Strings.computeIndentUnits(document.get(region.getOffset(), region.getLength()), project);
+      return Strings.changeIndent(
+          rewrittenInitializer,
+          oldIndent,
+          project,
+          "",
+          TextUtilities.getDefaultLineDelimiter(document)); //$NON-NLS-1$
+    } catch (MalformedTreeException e) {
+      JavaPlugin.log(e);
+    } catch (BadLocationException e) {
+      JavaPlugin.log(e);
+    }
+    //fallback:
+    return fCu.getBuffer().getText(invocation.getStartPosition(), invocation.getLength());
+  }
 

@@ -1,67 +1,74 @@
-	private static boolean getInvertEqualsProposal(IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
-		if (!(node instanceof MethodInvocation)) {
-			node= node.getParent();
-			if (!(node instanceof MethodInvocation)) {
-				return false;
-			}
-		}
-		MethodInvocation method= (MethodInvocation) node;
-		String identifier= method.getName().getIdentifier();
-		if (!"equals".equals(identifier) && !"equalsIgnoreCase".equals(identifier)) { //$NON-NLS-1$ //$NON-NLS-2$
-			return false;
-		}
-		List<Expression> arguments= method.arguments();
-		if (arguments.size() != 1) { //overloaded equals w/ more than 1 argument
-			return false;
-		}
-		Expression right= arguments.get(0);
-		ITypeBinding binding = right.resolveTypeBinding();
-		if (binding != null && !(binding.isClass() || binding.isInterface() || binding.isEnum())) { //overloaded equals w/ non-class/interface argument or null
-			return false;
-		}
-		if (resultingCollections == null) {
-			return true;
-		}
+  private static boolean getInvertEqualsProposal(
+      IInvocationContext context, ASTNode node, Collection<ICommandAccess> resultingCollections) {
+    if (!(node instanceof MethodInvocation)) {
+      node = node.getParent();
+      if (!(node instanceof MethodInvocation)) {
+        return false;
+      }
+    }
+    MethodInvocation method = (MethodInvocation) node;
+    String identifier = method.getName().getIdentifier();
+    if (!"equals".equals(identifier)
+        && !"equalsIgnoreCase".equals(identifier)) { //$NON-NLS-1$ //$NON-NLS-2$
+      return false;
+    }
+    List<Expression> arguments = method.arguments();
+    if (arguments.size() != 1) { //overloaded equals w/ more than 1 argument
+      return false;
+    }
+    Expression right = arguments.get(0);
+    ITypeBinding binding = right.resolveTypeBinding();
+    if (binding != null
+        && !(binding.isClass()
+            || binding.isInterface()
+            || binding.isEnum())) { //overloaded equals w/ non-class/interface argument or null
+      return false;
+    }
+    if (resultingCollections == null) {
+      return true;
+    }
 
-		Expression left= method.getExpression();
+    Expression left = method.getExpression();
 
-		AST ast= method.getAST();
-		ASTRewrite rewrite= ASTRewrite.create(ast);
-		if (left == null) { // equals(x) -> x.equals(this)
-			MethodInvocation replacement= ast.newMethodInvocation();
-			replacement.setName((SimpleName) rewrite.createCopyTarget(method.getName()));
-			replacement.arguments().add(ast.newThisExpression());
-			replacement.setExpression((Expression) rewrite.createCopyTarget(right));
-			rewrite.replace(method, replacement, null);
-		} else if (right instanceof ThisExpression) { // x.equals(this) -> equals(x)
-			MethodInvocation replacement= ast.newMethodInvocation();
-			replacement.setName((SimpleName) rewrite.createCopyTarget(method.getName()));
-			replacement.arguments().add(rewrite.createCopyTarget(left));
-			rewrite.replace(method, replacement, null);
-		} else {
-			ASTNode leftExpression= left;
-			while (leftExpression instanceof ParenthesizedExpression) {
-				leftExpression= ((ParenthesizedExpression) left).getExpression();
-			}
-			rewrite.replace(right, rewrite.createCopyTarget(leftExpression), null);
+    AST ast = method.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
+    if (left == null) { // equals(x) -> x.equals(this)
+      MethodInvocation replacement = ast.newMethodInvocation();
+      replacement.setName((SimpleName) rewrite.createCopyTarget(method.getName()));
+      replacement.arguments().add(ast.newThisExpression());
+      replacement.setExpression((Expression) rewrite.createCopyTarget(right));
+      rewrite.replace(method, replacement, null);
+    } else if (right instanceof ThisExpression) { // x.equals(this) -> equals(x)
+      MethodInvocation replacement = ast.newMethodInvocation();
+      replacement.setName((SimpleName) rewrite.createCopyTarget(method.getName()));
+      replacement.arguments().add(rewrite.createCopyTarget(left));
+      rewrite.replace(method, replacement, null);
+    } else {
+      ASTNode leftExpression = left;
+      while (leftExpression instanceof ParenthesizedExpression) {
+        leftExpression = ((ParenthesizedExpression) left).getExpression();
+      }
+      rewrite.replace(right, rewrite.createCopyTarget(leftExpression), null);
 
-			if (right instanceof CastExpression
-				|| right instanceof Assignment
-				|| right instanceof ConditionalExpression
-				|| right instanceof InfixExpression) {
-				ParenthesizedExpression paren= ast.newParenthesizedExpression();
-				paren.setExpression((Expression) rewrite.createCopyTarget(right));
-				rewrite.replace(left, paren, null);
-			} else {
-				rewrite.replace(left, rewrite.createCopyTarget(right), null);
-			}
-		}
+      if (right instanceof CastExpression
+          || right instanceof Assignment
+          || right instanceof ConditionalExpression
+          || right instanceof InfixExpression) {
+        ParenthesizedExpression paren = ast.newParenthesizedExpression();
+        paren.setExpression((Expression) rewrite.createCopyTarget(right));
+        rewrite.replace(left, paren, null);
+      } else {
+        rewrite.replace(left, rewrite.createCopyTarget(right), null);
+      }
+    }
 
-		String label= CorrectionMessages.QuickAssistProcessor_invertequals_description;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    String label = CorrectionMessages.QuickAssistProcessor_invertequals_description;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
 
-		LinkedCorrectionProposal proposal= new LinkedCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVERT_EQUALS, image);
-		resultingCollections.add(proposal);
-		return true;
-	}
+    LinkedCorrectionProposal proposal =
+        new LinkedCorrectionProposal(
+            label, context.getCompilationUnit(), rewrite, IProposalRelevance.INVERT_EQUALS, image);
+    resultingCollections.add(proposal);
+    return true;
+  }
 

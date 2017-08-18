@@ -1,44 +1,59 @@
-    List<Problem> reconcile(String pomPath, String projectPath, String pomContent) throws ServerException, NotFoundException {
-        List<Problem> result = new ArrayList<>();
+  List<Problem> reconcile(String pomPath, String projectPath, String pomContent)
+      throws ServerException, NotFoundException {
+    List<Problem> result = new ArrayList<>();
 
-        if (isNullOrEmpty(pomContent)) {
-            throw new ServerException(format("Couldn't reconcile pom file '%s' because its content is empty", pomPath));
-        }
-
-        try {
-            Model.readFrom(new ByteArrayInputStream(pomContent.getBytes(defaultCharset())));
-
-            IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectPath);
-            MavenProject mavenProject = mavenProjectManager.findMavenProject(project);
-            if (mavenProject == null) {
-                return result;
-            }
-
-            List<MavenProjectProblem> problems = mavenProject.getProblems();
-
-            int start = pomContent.indexOf("<project ") + 1;
-            int end = start + "<project ".length();
-
-            List<Problem> problemList = problems.stream()
-                            .map(mavenProjectProblem -> DtoFactory.newDto(Problem.class).withError(true).withSourceStart(start)
-                                            .withSourceEnd(end).withMessage(mavenProjectProblem.getDescription()))
-                            .collect(Collectors.toList());
-            result.addAll(problemList);
-        } catch (XMLTreeException exception) {
-            Throwable cause = exception.getCause();
-            if (cause != null && cause instanceof SAXParseException) {
-                result.add(createProblem(pomContent, (SAXParseException) cause));
-
-            } else {
-                String error = format("Couldn't reconcile pom file '%s', the reason is '%s'", pomPath, exception.getLocalizedMessage());
-                LOG.error(error, exception);
-                throw new ServerException(error);
-            }
-        } catch (IOException e) {
-            String error = format("Couldn't reconcile pom file '%s', the reason is '%s'", pomPath, e.getLocalizedMessage());
-            LOG.error(error, e);
-            throw new ServerException(error);
-        }
-        return result;
+    if (isNullOrEmpty(pomContent)) {
+      throw new ServerException(
+          format("Couldn't reconcile pom file '%s' because its content is empty", pomPath));
     }
+
+    try {
+      Model.readFrom(new ByteArrayInputStream(pomContent.getBytes(defaultCharset())));
+
+      IProject project = ResourcesPlugin.getWorkspace().getRoot().getProject(projectPath);
+      MavenProject mavenProject = mavenProjectManager.findMavenProject(project);
+      if (mavenProject == null) {
+        return result;
+      }
+
+      List<MavenProjectProblem> problems = mavenProject.getProblems();
+
+      int start = pomContent.indexOf("<project ") + 1;
+      int end = start + "<project ".length();
+
+      List<Problem> problemList =
+          problems
+              .stream()
+              .map(
+                  mavenProjectProblem ->
+                      DtoFactory.newDto(Problem.class)
+                          .withError(true)
+                          .withSourceStart(start)
+                          .withSourceEnd(end)
+                          .withMessage(mavenProjectProblem.getDescription()))
+              .collect(Collectors.toList());
+      result.addAll(problemList);
+    } catch (XMLTreeException exception) {
+      Throwable cause = exception.getCause();
+      if (cause != null && cause instanceof SAXParseException) {
+        result.add(createProblem(pomContent, (SAXParseException) cause));
+
+      } else {
+        String error =
+            format(
+                "Couldn't reconcile pom file '%s', the reason is '%s'",
+                pomPath, exception.getLocalizedMessage());
+        LOG.error(error, exception);
+        throw new ServerException(error);
+      }
+    } catch (IOException e) {
+      String error =
+          format(
+              "Couldn't reconcile pom file '%s', the reason is '%s'",
+              pomPath, e.getLocalizedMessage());
+      LOG.error(error, e);
+      throw new ServerException(error);
+    }
+    return result;
+  }
 

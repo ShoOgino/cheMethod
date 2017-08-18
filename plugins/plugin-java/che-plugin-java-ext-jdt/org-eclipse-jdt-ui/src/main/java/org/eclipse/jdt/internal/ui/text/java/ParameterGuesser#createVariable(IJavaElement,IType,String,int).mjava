@@ -1,56 +1,68 @@
-    public Variable createVariable(IJavaElement element, IType enclosingType, String expectedType, int positionScore)
-            throws JavaModelException {
-        int variableType;
-        int elementType = element.getElementType();
-        String elementName = element.getElementName();
+  public Variable createVariable(
+      IJavaElement element, IType enclosingType, String expectedType, int positionScore)
+      throws JavaModelException {
+    int variableType;
+    int elementType = element.getElementType();
+    String elementName = element.getElementName();
 
-        String typeSignature;
-        switch (elementType) {
-            case IJavaElement.FIELD: {
-                IField field = (IField)element;
-                if (field.getDeclaringType().equals(enclosingType)) {
-                    variableType = Variable.FIELD;
-                } else {
-                    variableType = Variable.INHERITED_FIELD;
-                }
-                if (field.isResolved()) {
-                    typeSignature = new BindingKey(field.getKey()).toSignature();
-                } else {
-                    typeSignature = field.getTypeSignature();
-                }
-                break;
+    String typeSignature;
+    switch (elementType) {
+      case IJavaElement.FIELD:
+        {
+          IField field = (IField) element;
+          if (field.getDeclaringType().equals(enclosingType)) {
+            variableType = Variable.FIELD;
+          } else {
+            variableType = Variable.INHERITED_FIELD;
+          }
+          if (field.isResolved()) {
+            typeSignature = new BindingKey(field.getKey()).toSignature();
+          } else {
+            typeSignature = field.getTypeSignature();
+          }
+          break;
+        }
+      case IJavaElement.LOCAL_VARIABLE:
+        {
+          ILocalVariable locVar = (ILocalVariable) element;
+          variableType = Variable.LOCAL;
+          typeSignature = locVar.getTypeSignature();
+          break;
+        }
+      case IJavaElement.METHOD:
+        {
+          IMethod method = (IMethod) element;
+          if (isMethodToSuggest(method)) {
+            if (method.getDeclaringType().equals(enclosingType)) {
+              variableType = Variable.METHOD;
+            } else {
+              variableType = Variable.INHERITED_METHOD;
             }
-            case IJavaElement.LOCAL_VARIABLE: {
-                ILocalVariable locVar = (ILocalVariable)element;
-                variableType = Variable.LOCAL;
-                typeSignature = locVar.getTypeSignature();
-                break;
+            if (method.isResolved()) {
+              typeSignature =
+                  Signature.getReturnType(new BindingKey(method.getKey()).toSignature());
+            } else {
+              typeSignature = method.getReturnType();
             }
-            case IJavaElement.METHOD: {
-                IMethod method = (IMethod)element;
-                if (isMethodToSuggest(method)) {
-                    if (method.getDeclaringType().equals(enclosingType)) {
-                        variableType = Variable.METHOD;
-                    } else {
-                        variableType = Variable.INHERITED_METHOD;
-                    }
-                    if (method.isResolved()) {
-                        typeSignature= Signature.getReturnType(new BindingKey(method.getKey()).toSignature());
-					} else {
-						typeSignature= method.getReturnType();
-					}
-					elementName= elementName + "()";  //$NON-NLS-1$
-				} else {
-					return null;
-				}
-				break;
-			}
-			default:
-				return null;
-		}
-		String type= Signature.toString(typeSignature);
+            elementName = elementName + "()"; //$NON-NLS-1$
+          } else {
+            return null;
+          }
+          break;
+        }
+      default:
+        return null;
+    }
+    String type = Signature.toString(typeSignature);
 
-		boolean isAutoboxMatch= isPrimitiveType(expectedType) != isPrimitiveType(type);
-		return new Variable(type, elementName, variableType, isAutoboxMatch, positionScore, NO_TRIGGERS, getImageDescriptor(element));
-	}
+    boolean isAutoboxMatch = isPrimitiveType(expectedType) != isPrimitiveType(type);
+    return new Variable(
+        type,
+        elementName,
+        variableType,
+        isAutoboxMatch,
+        positionScore,
+        NO_TRIGGERS,
+        getImageDescriptor(element));
+  }
 

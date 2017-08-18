@@ -1,29 +1,31 @@
-    InputStream getContent(LocalVirtualFile virtualFile) throws ForbiddenException, ServerException {
-        if (virtualFile.isFile()) {
-            final PathLockFactory.PathLock lock = pathLockFactory.getLock(virtualFile.getPath(), false).acquire(WAIT_FOR_FILE_LOCK_TIMEOUT);
-            File spoolFile = null;
-            try {
-                final File ioFile = virtualFile.toIoFile();
-                final long fileLength = ioFile.length();
-                if (fileLength <= MAX_BUFFER_SIZE) {
-                    return new ByteArrayInputStream(Files.toByteArray(ioFile));
-                }
-                // Copy this file to be able release the file lock before leave this method.
-                spoolFile = File.createTempFile("spool_file", null);
-                Files.copy(ioFile, spoolFile);
-                return new DeleteOnCloseFileInputStream(spoolFile);
-            } catch (IOException e) {
-                if (spoolFile != null) {
-                    FileCleaner.addFile(spoolFile);
-                }
-                String errorMessage = String.format("Unable get content of '%s'", virtualFile.getPath());
-                LOG.error(errorMessage + "\n" + e.getMessage(), e);
-                throw new ServerException(errorMessage);
-            } finally {
-                lock.release();
-            }
-        } else {
-            throw new ForbiddenException(String.format("Unable get content. Item '%s' is not a file", virtualFile.getPath()));
+  InputStream getContent(LocalVirtualFile virtualFile) throws ForbiddenException, ServerException {
+    if (virtualFile.isFile()) {
+      final PathLockFactory.PathLock lock =
+          pathLockFactory.getLock(virtualFile.getPath(), false).acquire(WAIT_FOR_FILE_LOCK_TIMEOUT);
+      File spoolFile = null;
+      try {
+        final File ioFile = virtualFile.toIoFile();
+        final long fileLength = ioFile.length();
+        if (fileLength <= MAX_BUFFER_SIZE) {
+          return new ByteArrayInputStream(Files.toByteArray(ioFile));
         }
+        // Copy this file to be able release the file lock before leave this method.
+        spoolFile = File.createTempFile("spool_file", null);
+        Files.copy(ioFile, spoolFile);
+        return new DeleteOnCloseFileInputStream(spoolFile);
+      } catch (IOException e) {
+        if (spoolFile != null) {
+          FileCleaner.addFile(spoolFile);
+        }
+        String errorMessage = String.format("Unable get content of '%s'", virtualFile.getPath());
+        LOG.error(errorMessage + "\n" + e.getMessage(), e);
+        throw new ServerException(errorMessage);
+      } finally {
+        lock.release();
+      }
+    } else {
+      throw new ForbiddenException(
+          String.format("Unable get content. Item '%s' is not a file", virtualFile.getPath()));
     }
+  }
 

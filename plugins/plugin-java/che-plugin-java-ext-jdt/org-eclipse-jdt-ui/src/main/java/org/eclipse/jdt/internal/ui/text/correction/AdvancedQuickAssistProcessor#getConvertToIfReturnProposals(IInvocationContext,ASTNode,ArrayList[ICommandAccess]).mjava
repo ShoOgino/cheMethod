@@ -1,83 +1,99 @@
-	private static boolean getConvertToIfReturnProposals(IInvocationContext context, ASTNode coveringNode, ArrayList<ICommandAccess> resultingCollections) {
-		if (!(coveringNode instanceof IfStatement)) {
-			return false;
-		}
-		IfStatement ifStatement= (IfStatement) coveringNode;
-		if (ifStatement.getElseStatement() != null) {
-			return false;
-		}
+  private static boolean getConvertToIfReturnProposals(
+      IInvocationContext context,
+      ASTNode coveringNode,
+      ArrayList<ICommandAccess> resultingCollections) {
+    if (!(coveringNode instanceof IfStatement)) {
+      return false;
+    }
+    IfStatement ifStatement = (IfStatement) coveringNode;
+    if (ifStatement.getElseStatement() != null) {
+      return false;
+    }
 
-		// enclosing lambda or method should return 'void'
-		LambdaExpression enclosingLambda= ASTResolving.findEnclosingLambdaExpression(ifStatement);
-		if (enclosingLambda != null) {
-			IMethodBinding lambdaMethodBinding= enclosingLambda.resolveMethodBinding();
-			if (lambdaMethodBinding == null) {
-				return false;
-			}
-			if (!(ifStatement.getAST().resolveWellKnownType("void").equals(lambdaMethodBinding.getReturnType()))) { //$NON-NLS-1$
-				return false;
-			}
-		} else {
-			MethodDeclaration coveringMethod= ASTResolving.findParentMethodDeclaration(ifStatement);
-			if (coveringMethod == null) {
-				return false;
-			}
-			Type returnType= coveringMethod.getReturnType2();
-			if (!isVoid(returnType)) {
-				return false;
-			}
-		}
+    // enclosing lambda or method should return 'void'
+    LambdaExpression enclosingLambda = ASTResolving.findEnclosingLambdaExpression(ifStatement);
+    if (enclosingLambda != null) {
+      IMethodBinding lambdaMethodBinding = enclosingLambda.resolveMethodBinding();
+      if (lambdaMethodBinding == null) {
+        return false;
+      }
+      if (!(ifStatement
+          .getAST()
+          .resolveWellKnownType("void")
+          .equals(lambdaMethodBinding.getReturnType()))) { //$NON-NLS-1$
+        return false;
+      }
+    } else {
+      MethodDeclaration coveringMethod = ASTResolving.findParentMethodDeclaration(ifStatement);
+      if (coveringMethod == null) {
+        return false;
+      }
+      Type returnType = coveringMethod.getReturnType2();
+      if (!isVoid(returnType)) {
+        return false;
+      }
+    }
 
-		// should be present in a block
-		if (!(ifStatement.getParent() instanceof Block)) {
-			return false;
-		}
-		// should have at least one statement in 'then' part other than 'return'
-		Statement thenStatement= ifStatement.getThenStatement();
-		if (thenStatement instanceof ReturnStatement) {
-			return false;
-		}
-		if (thenStatement instanceof Block) {
-			List<Statement> thenStatements= ((Block) thenStatement).statements();
-			if (thenStatements.isEmpty() || (thenStatements.size() == 1 && (thenStatements.get(0) instanceof ReturnStatement))) {
-				return false;
-			}
-		}
-		// should have no further executable statement
-		if (!isLastStatementInEnclosingMethodOrLambda(ifStatement)) {
-			return false;
-		}
-		//  we could produce quick assist
-		if (resultingCollections == null) {
-			return true;
-		}
+    // should be present in a block
+    if (!(ifStatement.getParent() instanceof Block)) {
+      return false;
+    }
+    // should have at least one statement in 'then' part other than 'return'
+    Statement thenStatement = ifStatement.getThenStatement();
+    if (thenStatement instanceof ReturnStatement) {
+      return false;
+    }
+    if (thenStatement instanceof Block) {
+      List<Statement> thenStatements = ((Block) thenStatement).statements();
+      if (thenStatements.isEmpty()
+          || (thenStatements.size() == 1 && (thenStatements.get(0) instanceof ReturnStatement))) {
+        return false;
+      }
+    }
+    // should have no further executable statement
+    if (!isLastStatementInEnclosingMethodOrLambda(ifStatement)) {
+      return false;
+    }
+    //  we could produce quick assist
+    if (resultingCollections == null) {
+      return true;
+    }
 
-		AST ast= coveringNode.getAST();
-		ASTRewrite rewrite= ASTRewrite.create(ast);
+    AST ast = coveringNode.getAST();
+    ASTRewrite rewrite = ASTRewrite.create(ast);
 
-		// create inverted 'if' statement
-		Expression inversedExpression= getInversedExpression(rewrite, ifStatement.getExpression());
-		IfStatement newIf= ast.newIfStatement();
-		newIf.setExpression(inversedExpression);
-		newIf.setThenStatement(ast.newReturnStatement());
-		ListRewrite listRewriter= rewrite.getListRewrite(ifStatement.getParent(), (ChildListPropertyDescriptor) ifStatement.getLocationInParent());
-		listRewriter.replace(ifStatement, newIf, null);
-		// remove last 'return' in 'then' block
-		ArrayList<Statement> statements= getUnwrappedStatements(ifStatement.getThenStatement());
-		Statement lastStatement= statements.get(statements.size() - 1);
-		if (lastStatement instanceof ReturnStatement) {
-			statements.remove(lastStatement);
-		}
-		// add statements from 'then' to the end of block
-		for (Statement statement : statements) {
-			listRewriter.insertLast(rewrite.createMoveTarget(statement), null);
-		}
+    // create inverted 'if' statement
+    Expression inversedExpression = getInversedExpression(rewrite, ifStatement.getExpression());
+    IfStatement newIf = ast.newIfStatement();
+    newIf.setExpression(inversedExpression);
+    newIf.setThenStatement(ast.newReturnStatement());
+    ListRewrite listRewriter =
+        rewrite.getListRewrite(
+            ifStatement.getParent(),
+            (ChildListPropertyDescriptor) ifStatement.getLocationInParent());
+    listRewriter.replace(ifStatement, newIf, null);
+    // remove last 'return' in 'then' block
+    ArrayList<Statement> statements = getUnwrappedStatements(ifStatement.getThenStatement());
+    Statement lastStatement = statements.get(statements.size() - 1);
+    if (lastStatement instanceof ReturnStatement) {
+      statements.remove(lastStatement);
+    }
+    // add statements from 'then' to the end of block
+    for (Statement statement : statements) {
+      listRewriter.insertLast(rewrite.createMoveTarget(statement), null);
+    }
 
-		// add correction proposal
-		String label= CorrectionMessages.AdvancedQuickAssistProcessor_convertToIfReturn;
-		Image image= JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
-		ASTRewriteCorrectionProposal proposal= new ASTRewriteCorrectionProposal(label, context.getCompilationUnit(), rewrite, IProposalRelevance.CONVERT_TO_IF_RETURN, image);
-		resultingCollections.add(proposal);
-		return true;
-	}
+    // add correction proposal
+    String label = CorrectionMessages.AdvancedQuickAssistProcessor_convertToIfReturn;
+    Image image = JavaPluginImages.get(JavaPluginImages.IMG_CORRECTION_CHANGE);
+    ASTRewriteCorrectionProposal proposal =
+        new ASTRewriteCorrectionProposal(
+            label,
+            context.getCompilationUnit(),
+            rewrite,
+            IProposalRelevance.CONVERT_TO_IF_RETURN,
+            image);
+    resultingCollections.add(proposal);
+    return true;
+  }
 

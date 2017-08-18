@@ -1,48 +1,53 @@
-    private List<String> findClassesInContainer(IJavaElement container, String testMethodAnnotation, String testClassAnnotation) {
-        List<String> result = new LinkedList<>();
-        IRegion region = getRegion(container);
-        try {
-            ITypeHierarchy hierarchy = JavaCore.newTypeHierarchy(region, null, null);
-            IType[] allClasses = hierarchy.getAllClasses();
+  private List<String> findClassesInContainer(
+      IJavaElement container, String testMethodAnnotation, String testClassAnnotation) {
+    List<String> result = new LinkedList<>();
+    IRegion region = getRegion(container);
+    try {
+      ITypeHierarchy hierarchy = JavaCore.newTypeHierarchy(region, null, null);
+      IType[] allClasses = hierarchy.getAllClasses();
 
-            // search for all types with references to RunWith and Test and all subclasses
-            HashSet<IType> candidates = new HashSet<>(allClasses.length);
-            SearchRequestor requestor = new AnnotationSearchRequestor(hierarchy, candidates);
+      // search for all types with references to RunWith and Test and all subclasses
+      HashSet<IType> candidates = new HashSet<>(allClasses.length);
+      SearchRequestor requestor = new AnnotationSearchRequestor(hierarchy, candidates);
 
-            IJavaSearchScope scope = SearchEngine.createJavaSearchScope(allClasses, IJavaSearchScope.SOURCES);
-            int matchRule = SearchPattern.R_CASE_SENSITIVE;
+      IJavaSearchScope scope =
+          SearchEngine.createJavaSearchScope(allClasses, IJavaSearchScope.SOURCES);
+      int matchRule = SearchPattern.R_CASE_SENSITIVE;
 
-            SearchPattern testPattern = SearchPattern.createPattern(testMethodAnnotation,
-                                                                    IJavaSearchConstants.ANNOTATION_TYPE,
-                                                                    IJavaSearchConstants.ANNOTATION_TYPE_REFERENCE,
-                                                                    matchRule);
+      SearchPattern testPattern =
+          SearchPattern.createPattern(
+              testMethodAnnotation,
+              IJavaSearchConstants.ANNOTATION_TYPE,
+              IJavaSearchConstants.ANNOTATION_TYPE_REFERENCE,
+              matchRule);
 
+      SearchPattern runWithPattern =
+          isNullOrEmpty(testClassAnnotation)
+              ? testPattern
+              : SearchPattern.createPattern(
+                  testClassAnnotation,
+                  IJavaSearchConstants.ANNOTATION_TYPE,
+                  IJavaSearchConstants.ANNOTATION_TYPE_REFERENCE,
+                  matchRule);
 
-            SearchPattern runWithPattern = isNullOrEmpty(testClassAnnotation)
-                                           ? testPattern
-                                           : SearchPattern.createPattern(testClassAnnotation,
-                                                                         IJavaSearchConstants.ANNOTATION_TYPE,
-                                                                         IJavaSearchConstants.ANNOTATION_TYPE_REFERENCE,
-                                                                         matchRule);
+      SearchPattern annotationsPattern = SearchPattern.createOrPattern(runWithPattern, testPattern);
+      SearchParticipant[] searchParticipants =
+          new SearchParticipant[] {SearchEngine.getDefaultSearchParticipant()};
+      new SearchEngine().search(annotationsPattern, searchParticipants, scope, requestor, null);
 
-
-            SearchPattern annotationsPattern = SearchPattern.createOrPattern(runWithPattern, testPattern);
-            SearchParticipant[] searchParticipants = new SearchParticipant[]{SearchEngine.getDefaultSearchParticipant()};
-            new SearchEngine().search(annotationsPattern, searchParticipants, scope, requestor, null);
-
-            // find all classes in the region
-            for (IType candidate : candidates) {
-                if (isAccessibleClass(candidate) && !Flags.isAbstract(candidate.getFlags()) && region.contains(candidate)) {
-                    result.add(candidate.getFullyQualifiedName());
-                }
-            }
-        } catch (
-                CoreException e)
-
-        {
-            LOG.info("Can't build project hierarchy.", e);
+      // find all classes in the region
+      for (IType candidate : candidates) {
+        if (isAccessibleClass(candidate)
+            && !Flags.isAbstract(candidate.getFlags())
+            && region.contains(candidate)) {
+          result.add(candidate.getFullyQualifiedName());
         }
+      }
+    } catch (CoreException e) {
 
-        return result;
+      LOG.info("Can't build project hierarchy.", e);
     }
+
+    return result;
+  }
 

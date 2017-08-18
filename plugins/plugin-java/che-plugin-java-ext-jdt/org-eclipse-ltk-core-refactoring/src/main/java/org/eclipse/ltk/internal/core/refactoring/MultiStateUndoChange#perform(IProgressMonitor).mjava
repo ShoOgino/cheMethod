@@ -1,44 +1,40 @@
-	/**
-	 * {@inheritDoc}
-	 */
-	public Change perform(IProgressMonitor pm) throws CoreException {
-		if (fValidationState == null || fValidationState.isValid(needsSaving(), false).hasFatalError())
-			return new NullChange();
-		if (pm == null)
-			pm= new NullProgressMonitor();
-		ITextFileBufferManager manager= FileBuffers.getTextFileBufferManager();
-		pm.beginTask("", 2); //$NON-NLS-1$
-		ITextFileBuffer buffer= null;
-		try {
-			manager.connect(fFile.getFullPath(), LocationKind.IFILE, new SubProgressMonitor(pm, 1));
-			buffer= manager.getTextFileBuffer(fFile.getFullPath(), LocationKind.IFILE);
-			IDocument document= buffer.getDocument();
-			ContentStamp currentStamp= ContentStamps.get(fFile, document);
-			// perform the changes
-			LinkedList list= new LinkedList();
-			for (int index= 0; index < fUndos.length; index++) {
-				UndoEdit edit= fUndos[index];
-				UndoEdit redo= edit.apply(document, TextEdit.CREATE_UNDO);
-				list.addFirst(redo);
+  /** {@inheritDoc} */
+  public Change perform(IProgressMonitor pm) throws CoreException {
+    if (fValidationState == null || fValidationState.isValid(needsSaving(), false).hasFatalError())
+      return new NullChange();
+    if (pm == null) pm = new NullProgressMonitor();
+    ITextFileBufferManager manager = FileBuffers.getTextFileBufferManager();
+    pm.beginTask("", 2); //$NON-NLS-1$
+    ITextFileBuffer buffer = null;
+    try {
+      manager.connect(fFile.getFullPath(), LocationKind.IFILE, new SubProgressMonitor(pm, 1));
+      buffer = manager.getTextFileBuffer(fFile.getFullPath(), LocationKind.IFILE);
+      IDocument document = buffer.getDocument();
+      ContentStamp currentStamp = ContentStamps.get(fFile, document);
+      // perform the changes
+      LinkedList list = new LinkedList();
+      for (int index = 0; index < fUndos.length; index++) {
+        UndoEdit edit = fUndos[index];
+        UndoEdit redo = edit.apply(document, TextEdit.CREATE_UNDO);
+        list.addFirst(redo);
+      }
 
-			}
-
-			// try to restore the document content stamp
-			boolean success= ContentStamps.set(document, fContentStampToRestore);
-			if (needsSaving()) {
-				buffer.commit(pm, false);
-				if (!success) {
-					// We weren't able to restore document stamp.
-					// Since we save restore the file stamp instead
-					ContentStamps.set(fFile, fContentStampToRestore);
-				}
-			}
-			return createUndoChange((UndoEdit[]) list.toArray(new UndoEdit[list.size()]), currentStamp);
-		} catch (BadLocationException e) {
-			throw Changes.asCoreException(e);
-		} finally {
-			if (buffer != null)
-				manager.disconnect(fFile.getFullPath(), LocationKind.IFILE, new SubProgressMonitor(pm, 1));
-		}
-	}
+      // try to restore the document content stamp
+      boolean success = ContentStamps.set(document, fContentStampToRestore);
+      if (needsSaving()) {
+        buffer.commit(pm, false);
+        if (!success) {
+          // We weren't able to restore document stamp.
+          // Since we save restore the file stamp instead
+          ContentStamps.set(fFile, fContentStampToRestore);
+        }
+      }
+      return createUndoChange((UndoEdit[]) list.toArray(new UndoEdit[list.size()]), currentStamp);
+    } catch (BadLocationException e) {
+      throw Changes.asCoreException(e);
+    } finally {
+      if (buffer != null)
+        manager.disconnect(fFile.getFullPath(), LocationKind.IFILE, new SubProgressMonitor(pm, 1));
+    }
+  }
 

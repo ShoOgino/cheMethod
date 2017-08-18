@@ -1,60 +1,52 @@
-	/**
-	 * Create a container description from the specified container handle that
-	 * can be used to create the container. The returned ContainerState
-	 * should represent any non-existing parents in addition to the specified
-	 * container.
-	 *
-	 * @param container
-	 *            the handle of the container to be described
-	 * @return a container description describing the container and any
-	 *         non-existing parents.
-	 */
+  /**
+   * Create a container description from the specified container handle that can be used to create
+   * the container. The returned ContainerState should represent any non-existing parents in
+   * addition to the specified container.
+   *
+   * @param container the handle of the container to be described
+   * @return a container description describing the container and any non-existing parents.
+   */
+  public static ContainerUndoState fromContainer(IContainer container) {
+    IPath fullPath = container.getFullPath();
+    ContainerUndoState firstCreatedParent = null;
+    ContainerUndoState currentContainerDescription = null;
 
-	public static ContainerUndoState fromContainer(IContainer container) {
-		IPath fullPath = container.getFullPath();
-		ContainerUndoState firstCreatedParent = null;
-		ContainerUndoState currentContainerDescription = null;
+    // Does the container exist already? If so, then the parent exists and
+    // we use the normal creation constructor.
+    IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+    IContainer currentContainer = (IContainer) root.findMember(fullPath);
+    if (currentContainer != null) {
+      return (ContainerUndoState) ResourceUndoState.fromResource(container);
+    }
 
-		// Does the container exist already? If so, then the parent exists and
-		// we use the normal creation constructor.
-		IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
-		IContainer currentContainer = (IContainer) root.findMember(fullPath);
-		if (currentContainer != null) {
-			return (ContainerUndoState) ResourceUndoState
-					.fromResource(container);
-		}
-
-		// Create container descriptions for any uncreated parents in the given
-		// path.
-		currentContainer = root;
-		for (int i = 0; i < fullPath.segmentCount(); i++) {
-			String currentSegment = fullPath.segment(i);
-			IResource resource = currentContainer.findMember(currentSegment);
-			if (resource != null) {
-				// parent already exists, no need to create a description for it
-				currentContainer = (IContainer) resource;
-			} else {
-				if (i == 0) {
-					// parent does not exist and it is a project
-					firstCreatedParent = new ProjectUndoState(root
-							.getProject(currentSegment));
-					currentContainerDescription = firstCreatedParent;
-				} else {
-					IFolder folderHandle = currentContainer.getFolder(new Path(
-							currentSegment));
-					ContainerUndoState currentFolder = new FolderUndoState(
-							folderHandle);
-					currentContainer = folderHandle;
-					if (currentContainerDescription != null) {
-						currentContainerDescription.addMember(currentFolder);
-					}
-					currentContainerDescription = currentFolder;
-					if (firstCreatedParent == null) {
-						firstCreatedParent = currentFolder;
-					}
-				}
-			}
-		}
-		return firstCreatedParent;
-	}
+    // Create container descriptions for any uncreated parents in the given
+    // path.
+    currentContainer = root;
+    for (int i = 0; i < fullPath.segmentCount(); i++) {
+      String currentSegment = fullPath.segment(i);
+      IResource resource = currentContainer.findMember(currentSegment);
+      if (resource != null) {
+        // parent already exists, no need to create a description for it
+        currentContainer = (IContainer) resource;
+      } else {
+        if (i == 0) {
+          // parent does not exist and it is a project
+          firstCreatedParent = new ProjectUndoState(root.getProject(currentSegment));
+          currentContainerDescription = firstCreatedParent;
+        } else {
+          IFolder folderHandle = currentContainer.getFolder(new Path(currentSegment));
+          ContainerUndoState currentFolder = new FolderUndoState(folderHandle);
+          currentContainer = folderHandle;
+          if (currentContainerDescription != null) {
+            currentContainerDescription.addMember(currentFolder);
+          }
+          currentContainerDescription = currentFolder;
+          if (firstCreatedParent == null) {
+            firstCreatedParent = currentFolder;
+          }
+        }
+      }
+    }
+    return firstCreatedParent;
+  }
 

@@ -1,42 +1,47 @@
-    public List<MavenProject> findDependentProjects(List<MavenProject> projects) {
-        readLock.lock();
-        try {
-            List<MavenProject> result = new ArrayList<>();
+  public List<MavenProject> findDependentProjects(List<MavenProject> projects) {
+    readLock.lock();
+    try {
+      List<MavenProject> result = new ArrayList<>();
 
-            Set<MavenKey> mavenKeys = projects.stream().map(MavenProject::getMavenKey).collect(Collectors.toSet());
-            Set<String> paths = projects.stream()
-                                        .map(project -> project.getProject().getFullPath().toOSString())
-                                        .collect(Collectors.toSet());
+      Set<MavenKey> mavenKeys =
+          projects.stream().map(MavenProject::getMavenKey).collect(Collectors.toSet());
+      Set<String> paths =
+          projects
+              .stream()
+              .map(project -> project.getProject().getFullPath().toOSString())
+              .collect(Collectors.toSet());
 
-            for (MavenProject project : projectToMavenProjectMap.values()) {
-                boolean isAdd = false;
-                for (String path : project.getModulesPath()) {
-                    if (paths.contains(path)) {
-                        isAdd = true;
-                        break;
-                    }
-                }
-
-                if (!isAdd) {
-                    for (MavenArtifact artifact : project.getDependencies()) {
-                        if (contains(mavenKeys, artifact.getArtifactId(), artifact.getGroupId(), artifact.getVersion())) {
-                            isAdd = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (isAdd) {
-                    result.add(project);
-                }
-
-            }
-
-
-            return result;
-
-        } finally {
-            readLock.unlock();
+      for (MavenProject project : projectToMavenProjectMap.values()) {
+        boolean isAdd = false;
+        for (String path : project.getModulesPath()) {
+          if (paths.contains(path)) {
+            isAdd = true;
+            break;
+          }
         }
+
+        if (!isAdd) {
+          for (MavenArtifact artifact : project.getDependencies()) {
+            if (contains(
+                mavenKeys,
+                artifact.getArtifactId(),
+                artifact.getGroupId(),
+                artifact.getVersion())) {
+              isAdd = true;
+              break;
+            }
+          }
+        }
+
+        if (isAdd) {
+          result.add(project);
+        }
+      }
+
+      return result;
+
+    } finally {
+      readLock.unlock();
     }
+  }
 

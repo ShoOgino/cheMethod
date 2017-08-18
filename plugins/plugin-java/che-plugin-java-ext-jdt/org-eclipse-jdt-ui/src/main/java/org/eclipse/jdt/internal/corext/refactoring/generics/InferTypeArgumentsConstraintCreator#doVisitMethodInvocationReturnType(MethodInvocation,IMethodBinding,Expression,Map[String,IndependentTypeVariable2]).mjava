@@ -1,68 +1,78 @@
-	private void doVisitMethodInvocationReturnType(MethodInvocation node, IMethodBinding methodBinding, Expression receiver, Map<String, IndependentTypeVariable2> methodTypeVariables) {
-		ITypeBinding declaredReturnType= methodBinding.getMethodDeclaration().getReturnType();
+  private void doVisitMethodInvocationReturnType(
+      MethodInvocation node,
+      IMethodBinding methodBinding,
+      Expression receiver,
+      Map<String, IndependentTypeVariable2> methodTypeVariables) {
+    ITypeBinding declaredReturnType = methodBinding.getMethodDeclaration().getReturnType();
 
-		if (declaredReturnType.isPrimitive()) {
-			ImmutableTypeVariable2 boxed= fTCModel.makeImmutableTypeVariable(declaredReturnType, node);
-			setConstraintVariable(node, boxed);
+    if (declaredReturnType.isPrimitive()) {
+      ImmutableTypeVariable2 boxed = fTCModel.makeImmutableTypeVariable(declaredReturnType, node);
+      setConstraintVariable(node, boxed);
 
-		} else 	if (declaredReturnType.isTypeVariable()) {
-			ConstraintVariable2 methodTypeVariableCv= methodTypeVariables.get(declaredReturnType.getKey());
-			if (methodTypeVariableCv != null) {
-				// e.g. in Collections: <T ..> T min(Collection<? extends T> coll):
-				setConstraintVariable(node, methodTypeVariableCv); //TODO: should be [retVal] <= Elem[arg] in this case?
+    } else if (declaredReturnType.isTypeVariable()) {
+      ConstraintVariable2 methodTypeVariableCv =
+          methodTypeVariables.get(declaredReturnType.getKey());
+      if (methodTypeVariableCv != null) {
+        // e.g. in Collections: <T ..> T min(Collection<? extends T> coll):
+        setConstraintVariable(
+            node, methodTypeVariableCv); //TODO: should be [retVal] <= Elem[arg] in this case?
 
-	//			TODO:
-	//			} else if (methodBinding.getErasure().getTypeParameters().length == 1 &&
-	//					(genericReturnType.isTypeVariable() || genericReturnType.isWildcardType()) &&
-	//					methodBinding.getParameterTypes().length == 1 &&
-	//					methodBinding.getParameterTypes()[0].getErasure().isGenericType()) {
-	//				// e.g. in Collections: <T ..> T min(Collection<? extends T> coll):
-	//				TypeConstraintVariable2 argCv= (TypeConstraintVariable2) getConstraintVariable((Expression) node.arguments().get(0));
-	//				ConstraintVariable2 elementCv= fTCModel.makeElementVariable(argCv);
-	//				// [retVal] =^= Elem[arg]:
-	//				setConstraintVariable(node, elementCv); //TODO: should be [retVal] <= Elem[arg]
+        //			TODO:
+        //			} else if (methodBinding.getErasure().getTypeParameters().length == 1 &&
+        //					(genericReturnType.isTypeVariable() || genericReturnType.isWildcardType()) &&
+        //					methodBinding.getParameterTypes().length == 1 &&
+        //					methodBinding.getParameterTypes()[0].getErasure().isGenericType()) {
+        //				// e.g. in Collections: <T ..> T min(Collection<? extends T> coll):
+        //				TypeConstraintVariable2 argCv= (TypeConstraintVariable2) getConstraintVariable((Expression) node.arguments().get(0));
+        //				ConstraintVariable2 elementCv= fTCModel.makeElementVariable(argCv);
+        //				// [retVal] =^= Elem[arg]:
+        //				setConstraintVariable(node, elementCv); //TODO: should be [retVal] <= Elem[arg]
 
-			} else {
-				//TODO: nested generic classes and methods?
+      } else {
+        //TODO: nested generic classes and methods?
 
-				if (receiver == null) //TODO: deal with methods inside generic types
-					return;
-				// e.g. in List<E>: E get(int index):
-				ConstraintVariable2 expressionCv= getConstraintVariable(receiver);
-				ConstraintVariable2 elementCv= fTCModel.getElementVariable(expressionCv, declaredReturnType);
-				// [retVal] =^= Elem[receiver]:
-				setConstraintVariable(node, elementCv);
-			}
+        if (receiver == null) //TODO: deal with methods inside generic types
+        return;
+        // e.g. in List<E>: E get(int index):
+        ConstraintVariable2 expressionCv = getConstraintVariable(receiver);
+        ConstraintVariable2 elementCv =
+            fTCModel.getElementVariable(expressionCv, declaredReturnType);
+        // [retVal] =^= Elem[receiver]:
+        setConstraintVariable(node, elementCv);
+      }
 
-		} else if (declaredReturnType.isParameterizedType()) {
-			ConstraintVariable2 returnTypeCv= fTCModel.makeParameterizedTypeVariable(declaredReturnType.getTypeDeclaration());
-			setConstraintVariable(node, returnTypeCv);
-			//e.g. List<E>: Iterator<E> iterator()
-			ConstraintVariable2 receiverCv= null;
-			if (receiver != null) //TODO: deal with methods inside generic types
-				receiverCv= getConstraintVariable(receiver);
-			// Elem[retVal] =^= Elem[receiver]
-			TType declaredReturnTType= fTCModel.createTType(declaredReturnType);
-			fTCModel.createTypeVariablesEqualityConstraints(receiverCv, methodTypeVariables, returnTypeCv, declaredReturnTType);
+    } else if (declaredReturnType.isParameterizedType()) {
+      ConstraintVariable2 returnTypeCv =
+          fTCModel.makeParameterizedTypeVariable(declaredReturnType.getTypeDeclaration());
+      setConstraintVariable(node, returnTypeCv);
+      //e.g. List<E>: Iterator<E> iterator()
+      ConstraintVariable2 receiverCv = null;
+      if (receiver != null) //TODO: deal with methods inside generic types
+      receiverCv = getConstraintVariable(receiver);
+      // Elem[retVal] =^= Elem[receiver]
+      TType declaredReturnTType = fTCModel.createTType(declaredReturnType);
+      fTCModel.createTypeVariablesEqualityConstraints(
+          receiverCv, methodTypeVariables, returnTypeCv, declaredReturnTType);
 
-		} else if (declaredReturnType.isArray()) {
-			ConstraintVariable2 returnTypeCv= fTCModel.makeArrayTypeVariable(declaredReturnType);
-			setConstraintVariable(node, returnTypeCv);
-			//e.g. List<E>: <T> T[] toArray(T[] a)
-			ConstraintVariable2 receiverCv= null;
-			if (receiver != null) { //TODO: deal with methods inside generic types
-				receiverCv= getConstraintVariable(receiver);
+    } else if (declaredReturnType.isArray()) {
+      ConstraintVariable2 returnTypeCv = fTCModel.makeArrayTypeVariable(declaredReturnType);
+      setConstraintVariable(node, returnTypeCv);
+      //e.g. List<E>: <T> T[] toArray(T[] a)
+      ConstraintVariable2 receiverCv = null;
+      if (receiver != null) { //TODO: deal with methods inside generic types
+        receiverCv = getConstraintVariable(receiver);
 
-				//TODO: is this necessary elsewhere?
-				fTCModel.setMethodReceiverCV(returnTypeCv, receiverCv);
-			}
-			// Elem[retVal] =^= Elem[receiver]
-			TType declaredReturnTType= fTCModel.createTType(declaredReturnType);
-			fTCModel.createTypeVariablesEqualityConstraints(receiverCv, methodTypeVariables, returnTypeCv, declaredReturnTType);
+        //TODO: is this necessary elsewhere?
+        fTCModel.setMethodReceiverCV(returnTypeCv, receiverCv);
+      }
+      // Elem[retVal] =^= Elem[receiver]
+      TType declaredReturnTType = fTCModel.createTType(declaredReturnType);
+      fTCModel.createTypeVariablesEqualityConstraints(
+          receiverCv, methodTypeVariables, returnTypeCv, declaredReturnTType);
 
-		} else {
-			ReturnTypeVariable2 returnTypeCv= fTCModel.makeReturnTypeVariable(methodBinding);
-			setConstraintVariable(node, returnTypeCv);
-		}
-	}
+    } else {
+      ReturnTypeVariable2 returnTypeCv = fTCModel.makeReturnTypeVariable(methodBinding);
+      setConstraintVariable(node, returnTypeCv);
+    }
+  }
 

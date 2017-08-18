@@ -1,32 +1,33 @@
-    /**
-     * Attaches to the container with specified id.
-     * <br/>
-     * Note, that if @{code stream} parameter is {@code true} then get 'live' stream from container.
-     * Typically need to run this method in separate thread, if {@code stream}
-     * is {@code true} since this method blocks until container is running.
-     * @param containerLogsProcessor
-     *         output for container logs
-     * @throws IOException
-     *          when a problem occurs with docker api calls
-     */
-    public void attachContainer(final AttachContainerParams params, MessageProcessor<LogMessage> containerLogsProcessor)
-            throws IOException {
-        final Boolean stream = params.isStream();
+  /**
+   * Attaches to the container with specified id. <br>
+   * Note, that if @{code stream} parameter is {@code true} then get 'live' stream from container.
+   * Typically need to run this method in separate thread, if {@code stream} is {@code true} since
+   * this method blocks until container is running.
+   *
+   * @param containerLogsProcessor output for container logs
+   * @throws IOException when a problem occurs with docker api calls
+   */
+  public void attachContainer(
+      final AttachContainerParams params, MessageProcessor<LogMessage> containerLogsProcessor)
+      throws IOException {
+    final Boolean stream = params.isStream();
 
-        try (DockerConnection connection = connectionFactory.openConnection(dockerDaemonUri)
-                                                            .method("POST")
-                                                            .path(apiVersionPathPrefix + "/containers/" + params.getContainer() + "/attach")
-                                                            .query("stdout", 1)
-                                                            .query("stderr", 1)) {
-            addQueryParamIfNotNull(connection, "stream", stream);
-            addQueryParamIfNotNull(connection, "logs", stream);
-            final DockerResponse response = connection.request();
-            if (OK.getStatusCode() != response.getStatus()) {
-                throw getDockerException(response);
-            }
-            try (InputStream responseStream = response.getInputStream()) {
-                new LogMessagePumper(responseStream, containerLogsProcessor).start();
-            }
-        }
+    try (DockerConnection connection =
+        connectionFactory
+            .openConnection(dockerDaemonUri)
+            .method("POST")
+            .path(apiVersionPathPrefix + "/containers/" + params.getContainer() + "/attach")
+            .query("stdout", 1)
+            .query("stderr", 1)) {
+      addQueryParamIfNotNull(connection, "stream", stream);
+      addQueryParamIfNotNull(connection, "logs", stream);
+      final DockerResponse response = connection.request();
+      if (OK.getStatusCode() != response.getStatus()) {
+        throw getDockerException(response);
+      }
+      try (InputStream responseStream = response.getInputStream()) {
+        new LogMessagePumper(responseStream, containerLogsProcessor).start();
+      }
     }
+  }
 

@@ -1,77 +1,86 @@
-	private SourceProvider resolveSourceProvider(IMethodBinding methodBinding, RefactoringStatus status) throws JavaModelException {
-		final IMethod method = (IMethod)methodBinding.getJavaElement();
+  private SourceProvider resolveSourceProvider(
+      IMethodBinding methodBinding, RefactoringStatus status) throws JavaModelException {
+    final IMethod method = (IMethod) methodBinding.getJavaElement();
 
-		ITypeRoot typeRoot;
-		IDocument source;
-		CompilationUnit methodDeclarationAstRoot;
+    ITypeRoot typeRoot;
+    IDocument source;
+    CompilationUnit methodDeclarationAstRoot;
 
-		ICompilationUnit methodCu = (method).getCompilationUnit();
-		if (methodCu != null) {
-			typeRoot = methodCu;
-			ASTParser parser = ASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
-			parser.setSource(methodCu);
-			parser.setFocalPosition(method.getNameRange().getOffset());
-			CompilationUnit compilationUnit = (CompilationUnit)parser.createAST(null);
-			MethodDeclaration methodDecl = (MethodDeclaration)NodeFinder.perform(compilationUnit, method.getNameRange()).getParent();
-			AST ast = compilationUnit.getAST();
-			ASTRewrite rewrite = ASTRewrite.create(ast);
-			Block newBody = ast.newBlock();
-			newBody.statements().add(rewrite.createStringPlaceholder(fBody, ASTNode.EMPTY_STATEMENT));
-			rewrite.replace(methodDecl.getBody(), newBody, null);
-			List<SingleVariableDeclaration> parameters = methodDecl.parameters();
-			for (int i = 0; i < parameters.size(); i++) {
-				SingleVariableDeclaration parameter = parameters.get(i);
-				rewrite.set(parameter.getName(), SimpleName.IDENTIFIER_PROPERTY, fParameterNames[i], null);
-			}
-			TextEdit textEdit = rewrite.rewriteAST();
-			Document document= new Document(methodCu.getBuffer().getContents());
-			try {
-				textEdit.apply(document);
-			} catch (MalformedTreeException e) {
-				JavaPlugin.log(e);
-			} catch (BadLocationException e) {
-				JavaPlugin.log(e);
-			}
-			source= document;
+    ICompilationUnit methodCu = (method).getCompilationUnit();
+    if (methodCu != null) {
+      typeRoot = methodCu;
+      ASTParser parser = ASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+      parser.setSource(methodCu);
+      parser.setFocalPosition(method.getNameRange().getOffset());
+      CompilationUnit compilationUnit = (CompilationUnit) parser.createAST(null);
+      MethodDeclaration methodDecl =
+          (MethodDeclaration)
+              NodeFinder.perform(compilationUnit, method.getNameRange()).getParent();
+      AST ast = compilationUnit.getAST();
+      ASTRewrite rewrite = ASTRewrite.create(ast);
+      Block newBody = ast.newBlock();
+      newBody.statements().add(rewrite.createStringPlaceholder(fBody, ASTNode.EMPTY_STATEMENT));
+      rewrite.replace(methodDecl.getBody(), newBody, null);
+      List<SingleVariableDeclaration> parameters = methodDecl.parameters();
+      for (int i = 0; i < parameters.size(); i++) {
+        SingleVariableDeclaration parameter = parameters.get(i);
+        rewrite.set(parameter.getName(), SimpleName.IDENTIFIER_PROPERTY, fParameterNames[i], null);
+      }
+      TextEdit textEdit = rewrite.rewriteAST();
+      Document document = new Document(methodCu.getBuffer().getContents());
+      try {
+        textEdit.apply(document);
+      } catch (MalformedTreeException e) {
+        JavaPlugin.log(e);
+      } catch (BadLocationException e) {
+        JavaPlugin.log(e);
+      }
+      source = document;
 
-			methodDeclarationAstRoot= new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(source.get(), methodCu, true, true, null);
+      methodDeclarationAstRoot =
+          new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL)
+              .parse(source.get(), methodCu, true, true, null);
 
-		} else {
-			IClassFile classFile= method.getClassFile();
-			//TODO: use source if available?
-			StubCreator stubCreator= new StubCreator(true) {
-				@Override
-				protected void appendMethodBody(IMethod currentMethod) throws JavaModelException {
-					if (currentMethod.equals(method)) {
-						fBuffer.append(fBody);
-					} else {
-						super.appendMethodBody(currentMethod);
-					}
-				}
-				/*
-				 * @see org.eclipse.jdt.internal.corext.refactoring.binary.StubCreator#appendMethodParameterName(org.eclipse.jdt.core.IMethod, int)
-				 */
-				@Override
-				protected void appendMethodParameterName(IMethod currentMethod, int index) {
-					if (currentMethod.equals(method)) {
-						fBuffer.append(fParameterNames[index]);
-					} else {
-						super.appendMethodParameterName(currentMethod, index);
-					}
-				}
-			};
+    } else {
+      IClassFile classFile = method.getClassFile();
+      //TODO: use source if available?
+      StubCreator stubCreator =
+          new StubCreator(true) {
+            @Override
+            protected void appendMethodBody(IMethod currentMethod) throws JavaModelException {
+              if (currentMethod.equals(method)) {
+                fBuffer.append(fBody);
+              } else {
+                super.appendMethodBody(currentMethod);
+              }
+            }
+            /*
+             * @see org.eclipse.jdt.internal.corext.refactoring.binary.StubCreator#appendMethodParameterName(org.eclipse.jdt.core.IMethod, int)
+             */
+            @Override
+            protected void appendMethodParameterName(IMethod currentMethod, int index) {
+              if (currentMethod.equals(method)) {
+                fBuffer.append(fParameterNames[index]);
+              } else {
+                super.appendMethodParameterName(currentMethod, index);
+              }
+            }
+          };
 
-			String stub= stubCreator.createStub(classFile.getType(), null);
-			source= new Document(stub);
-			methodDeclarationAstRoot= new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL).parse(stub, classFile, true, true, null);
-			typeRoot= classFile;
-		}
-		ASTNode node= methodDeclarationAstRoot.findDeclaringNode(methodBinding.getKey());
-		if (node instanceof MethodDeclaration) {
-			return new SourceProvider(typeRoot, source, (MethodDeclaration) node);
-		} else {
-			status.addFatalError(RefactoringCoreMessages.ReplaceInvocationsRefactoring_cannot_find_method_declaration);
-			return null;
-		}
-	}
+      String stub = stubCreator.createStub(classFile.getType(), null);
+      source = new Document(stub);
+      methodDeclarationAstRoot =
+          new RefactoringASTParser(ASTProvider.SHARED_AST_LEVEL)
+              .parse(stub, classFile, true, true, null);
+      typeRoot = classFile;
+    }
+    ASTNode node = methodDeclarationAstRoot.findDeclaringNode(methodBinding.getKey());
+    if (node instanceof MethodDeclaration) {
+      return new SourceProvider(typeRoot, source, (MethodDeclaration) node);
+    } else {
+      status.addFatalError(
+          RefactoringCoreMessages.ReplaceInvocationsRefactoring_cannot_find_method_declaration);
+      return null;
+    }
+  }
 

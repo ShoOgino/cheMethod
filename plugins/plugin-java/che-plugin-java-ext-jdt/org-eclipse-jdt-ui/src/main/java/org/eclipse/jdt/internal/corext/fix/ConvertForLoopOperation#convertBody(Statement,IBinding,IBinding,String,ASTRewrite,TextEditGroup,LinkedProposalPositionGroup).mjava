@@ -1,45 +1,57 @@
-	private void convertBody(Statement body, final IBinding indexBinding, final IBinding arrayBinding, final String parameterName, final ASTRewrite rewrite, final TextEditGroup editGroup, final LinkedProposalPositionGroup pg) {
-		final AST ast= body.getAST();
+  private void convertBody(
+      Statement body,
+      final IBinding indexBinding,
+      final IBinding arrayBinding,
+      final String parameterName,
+      final ASTRewrite rewrite,
+      final TextEditGroup editGroup,
+      final LinkedProposalPositionGroup pg) {
+    final AST ast = body.getAST();
 
-		body.accept(new GenericVisitor() {
-			@Override
-			public boolean visit(ArrayAccess node) {
-				IBinding binding= getBinding(node.getArray());
-				if (arrayBinding.equals(binding)) {
-					IBinding index= getBinding(node.getIndex());
-					if (indexBinding.equals(index)) {
-						replaceAccess(node);
-					}
-				}
+    body.accept(
+        new GenericVisitor() {
+          @Override
+          public boolean visit(ArrayAccess node) {
+            IBinding binding = getBinding(node.getArray());
+            if (arrayBinding.equals(binding)) {
+              IBinding index = getBinding(node.getIndex());
+              if (indexBinding.equals(index)) {
+                replaceAccess(node);
+              }
+            }
 
-				return super.visit(node);
-			}
+            return super.visit(node);
+          }
 
-			private void replaceAccess(ASTNode node) {
-				if (fElementDeclaration != null && node.getLocationInParent() == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
-					VariableDeclarationFragment fragment= (VariableDeclarationFragment)node.getParent();
-					IBinding targetBinding= fragment.getName().resolveBinding();
-					if (targetBinding != null) {
-						VariableDeclarationStatement statement= (VariableDeclarationStatement)fragment.getParent();
+          private void replaceAccess(ASTNode node) {
+            if (fElementDeclaration != null
+                && node.getLocationInParent() == VariableDeclarationFragment.INITIALIZER_PROPERTY) {
+              VariableDeclarationFragment fragment = (VariableDeclarationFragment) node.getParent();
+              IBinding targetBinding = fragment.getName().resolveBinding();
+              if (targetBinding != null) {
+                VariableDeclarationStatement statement =
+                    (VariableDeclarationStatement) fragment.getParent();
 
-						if (statement.fragments().size() == 1) {
-							rewrite.remove(statement, editGroup);
-						} else {
-							ListRewrite listRewrite= rewrite.getListRewrite(statement, VariableDeclarationStatement.FRAGMENTS_PROPERTY);
-							listRewrite.remove(fragment, editGroup);
-						}
+                if (statement.fragments().size() == 1) {
+                  rewrite.remove(statement, editGroup);
+                } else {
+                  ListRewrite listRewrite =
+                      rewrite.getListRewrite(
+                          statement, VariableDeclarationStatement.FRAGMENTS_PROPERTY);
+                  listRewrite.remove(fragment, editGroup);
+                }
 
-					} else {
-						SimpleName name= ast.newSimpleName(parameterName);
-						rewrite.replace(node, name, editGroup);
-						pg.addPosition(rewrite.track(name), true);
-					}
-				} else {
-					SimpleName name= ast.newSimpleName(parameterName);
-					rewrite.replace(node, name, editGroup);
-					pg.addPosition(rewrite.track(name), true);
-				}
-			}
-		});
-	}
+              } else {
+                SimpleName name = ast.newSimpleName(parameterName);
+                rewrite.replace(node, name, editGroup);
+                pg.addPosition(rewrite.track(name), true);
+              }
+            } else {
+              SimpleName name = ast.newSimpleName(parameterName);
+              rewrite.replace(node, name, editGroup);
+              pg.addPosition(rewrite.track(name), true);
+            }
+          }
+        });
+  }
 

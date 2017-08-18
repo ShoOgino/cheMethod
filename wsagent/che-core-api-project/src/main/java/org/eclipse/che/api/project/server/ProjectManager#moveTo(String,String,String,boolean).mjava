@@ -1,69 +1,69 @@
-    /**
-     * Moves item to the new path
-     *
-     * @param itemPath path to the item
-     * @param newParentPath path of new parent
-     * @param newName new item's name
-     * @param overwrite whether existed (if any) item should be overwritten
-     *
-     * @return new item
-     * @throws ServerException
-     * @throws NotFoundException
-     * @throws ConflictException
-     * @throws ForbiddenException
-     */
-    public VirtualFileEntry moveTo(String itemPath, String newParentPath, String newName, boolean overwrite) throws ServerException,
-                                                                                                                    NotFoundException,
-                                                                                                                    ConflictException,
-                                                                                                                    ForbiddenException {
-        final VirtualFile oldItem = vfs.getRoot().getChild(Path.of(itemPath));
-        if (oldItem == null) {
-            throw new NotFoundException("Item not found " + itemPath);
-        }
-
-        final VirtualFile newParent;
-        if (newParentPath == null) {
-            // rename only
-            newParent = oldItem.getParent();
-        } else {
-            newParent = vfs.getRoot().getChild(Path.of(newParentPath));
-        }
-
-        if (newParent == null) {
-            throw new NotFoundException("New parent not found " + newParentPath);
-        }
-
-        // TODO lock token ?
-        final VirtualFile newItem = oldItem.moveTo(newParent, newName, overwrite, null);
-        final RegisteredProject owner = projectRegistry.getParentProject(newItem.getPath().toString());
-        if (owner == null) {
-            throw new NotFoundException("Parent project not found " + newItem.getPath().toString());
-        }
-
-        final VirtualFileEntry move;
-        if (newItem.isFile()) {
-            move = new FileEntry(newItem, projectRegistry);
-        } else {
-            move = new FolderEntry(newItem, projectRegistry);
-        }
-
-        if (move.isProject()) {
-            final RegisteredProject project = projectRegistry.getProject(itemPath);
-            NewProjectConfig projectConfig = new NewProjectConfigImpl(newItem.getPath().toString(),
-                                                                      project.getType(),
-                                                                      project.getMixins(),
-                                                                      newName,
-                                                                      project.getDescription(),
-                                                                      project.getAttributes(),
-                                                                      null,
-                                                                      project.getSource());
-
-            if (move instanceof FolderEntry) {
-                projectRegistry.removeProjects(project.getPath());
-                updateProject(projectConfig);
-            }
-        }
-
-        return move;
+  /**
+   * Moves item to the new path
+   *
+   * @param itemPath path to the item
+   * @param newParentPath path of new parent
+   * @param newName new item's name
+   * @param overwrite whether existed (if any) item should be overwritten
+   * @return new item
+   * @throws ServerException
+   * @throws NotFoundException
+   * @throws ConflictException
+   * @throws ForbiddenException
+   */
+  public VirtualFileEntry moveTo(
+      String itemPath, String newParentPath, String newName, boolean overwrite)
+      throws ServerException, NotFoundException, ConflictException, ForbiddenException {
+    final VirtualFile oldItem = vfs.getRoot().getChild(Path.of(itemPath));
+    if (oldItem == null) {
+      throw new NotFoundException("Item not found " + itemPath);
     }
+
+    final VirtualFile newParent;
+    if (newParentPath == null) {
+      // rename only
+      newParent = oldItem.getParent();
+    } else {
+      newParent = vfs.getRoot().getChild(Path.of(newParentPath));
+    }
+
+    if (newParent == null) {
+      throw new NotFoundException("New parent not found " + newParentPath);
+    }
+
+    // TODO lock token ?
+    final VirtualFile newItem = oldItem.moveTo(newParent, newName, overwrite, null);
+    final RegisteredProject owner = projectRegistry.getParentProject(newItem.getPath().toString());
+    if (owner == null) {
+      throw new NotFoundException("Parent project not found " + newItem.getPath().toString());
+    }
+
+    final VirtualFileEntry move;
+    if (newItem.isFile()) {
+      move = new FileEntry(newItem, projectRegistry);
+    } else {
+      move = new FolderEntry(newItem, projectRegistry);
+    }
+
+    if (move.isProject()) {
+      final RegisteredProject project = projectRegistry.getProject(itemPath);
+      NewProjectConfig projectConfig =
+          new NewProjectConfigImpl(
+              newItem.getPath().toString(),
+              project.getType(),
+              project.getMixins(),
+              newName,
+              project.getDescription(),
+              project.getAttributes(),
+              null,
+              project.getSource());
+
+      if (move instanceof FolderEntry) {
+        projectRegistry.removeProjects(project.getPath());
+        updateProject(projectConfig);
+      }
+    }
+
+    return move;
+  }
 

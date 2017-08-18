@@ -1,32 +1,48 @@
-    protected Promise<Project> importProject(final Project.ProjectRequest importRequest) {
-        checkArgument(checkProjectName(importRequest.getBody().getName()), "Invalid project name");
-        checkNotNull(importRequest.getBody().getSource(), "Null source configuration occurred");
+  protected Promise<Project> importProject(final Project.ProjectRequest importRequest) {
+    checkArgument(checkProjectName(importRequest.getBody().getName()), "Invalid project name");
+    checkNotNull(importRequest.getBody().getSource(), "Null source configuration occurred");
 
-        final Path path = Path.valueOf(importRequest.getBody().getPath());
+    final Path path = Path.valueOf(importRequest.getBody().getPath());
 
-        return findResource(path, true).thenPromise(resource -> {
+    return findResource(path, true)
+        .thenPromise(
+            resource -> {
+              final SourceStorage sourceStorage = importRequest.getBody().getSource();
+              final SourceStorageDto sourceStorageDto =
+                  dtoFactory
+                      .createDto(SourceStorageDto.class)
+                      .withType(sourceStorage.getType())
+                      .withLocation(sourceStorage.getLocation())
+                      .withParameters(sourceStorage.getParameters());
 
-            final SourceStorage sourceStorage = importRequest.getBody().getSource();
-            final SourceStorageDto sourceStorageDto = dtoFactory.createDto(SourceStorageDto.class)
-                                                                .withType(sourceStorage.getType())
-                                                                .withLocation(sourceStorage.getLocation())
-                                                                .withParameters(sourceStorage.getParameters());
+              return ps.importProject(path, sourceStorageDto)
+                  .thenPromise(
+                      ignored ->
+                          ps.getProject(path)
+                              .then(
+                                  (Function<ProjectConfigDto, Project>)
+                                      config -> {
+                                        cachedConfigs = add(cachedConfigs, config);
 
-            return ps.importProject(path, sourceStorageDto)
-                     .thenPromise(ignored -> ps.getProject(path).then((Function<ProjectConfigDto, Project>)config -> {
-                         cachedConfigs = add(cachedConfigs, config);
+                                        Resource project =
+                                            resourceFactory.newProjectImpl(
+                                                config, ResourceManager.this);
 
-                         Resource project = resourceFactory.newProjectImpl(config, ResourceManager.this);
+                                        checkState(
+                                            project != null,
+                                            "Failed to locate imported project's configuration");
 
-                         checkState(project != null, "Failed to locate imported project's configuration");
+                                        store.register(project);
 
-                         store.register(project);
+                                        eventBus.fireEvent(
+                                            new ResourceChangedEvent(
+                                                new ResourceDeltaImpl(
+                                                    project,
+                                                    (resource.isPresent() ? UPDATED : ADDED)
+                                                        | DERIVED)));
 
-                         eventBus.fireEvent(new ResourceChangedEvent(
-                                 new ResourceDeltaImpl(project, (resource.isPresent() ? UPDATED : ADDED) | DERIVED)));
-
-                         return (Project)project;
-                     }));
-        });
-    }
+                                        return (Project) project;
+                                      }));
+            });
+  }
 

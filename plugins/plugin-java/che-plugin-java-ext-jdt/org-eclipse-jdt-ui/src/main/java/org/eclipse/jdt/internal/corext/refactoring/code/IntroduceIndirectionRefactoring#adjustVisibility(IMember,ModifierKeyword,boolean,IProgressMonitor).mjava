@@ -1,48 +1,61 @@
-	private RefactoringStatus adjustVisibility(IMember whoToAdjust, ModifierKeyword neededVisibility, boolean alsoIncreaseEnclosing, IProgressMonitor monitor) throws
-																																							   CoreException {
+  private RefactoringStatus adjustVisibility(
+      IMember whoToAdjust,
+      ModifierKeyword neededVisibility,
+      boolean alsoIncreaseEnclosing,
+      IProgressMonitor monitor)
+      throws CoreException {
 
-		Map<IMember, IncomingMemberVisibilityAdjustment> adjustments;
-		if (isRewriteKept(whoToAdjust.getCompilationUnit()))
-			adjustments= fIntermediaryAdjustments;
-		else
-			adjustments= new HashMap<IMember, IncomingMemberVisibilityAdjustment>();
+    Map<IMember, IncomingMemberVisibilityAdjustment> adjustments;
+    if (isRewriteKept(whoToAdjust.getCompilationUnit())) adjustments = fIntermediaryAdjustments;
+    else adjustments = new HashMap<IMember, IncomingMemberVisibilityAdjustment>();
 
-		int existingAdjustments= adjustments.size();
-		addAdjustment(whoToAdjust, neededVisibility, adjustments);
+    int existingAdjustments = adjustments.size();
+    addAdjustment(whoToAdjust, neededVisibility, adjustments);
 
-		if (alsoIncreaseEnclosing)
-			while (whoToAdjust.getDeclaringType() != null) {
-				whoToAdjust= whoToAdjust.getDeclaringType();
-				addAdjustment(whoToAdjust, neededVisibility, adjustments);
-			}
+    if (alsoIncreaseEnclosing)
+      while (whoToAdjust.getDeclaringType() != null) {
+        whoToAdjust = whoToAdjust.getDeclaringType();
+        addAdjustment(whoToAdjust, neededVisibility, adjustments);
+      }
 
-		boolean hasNewAdjustments= (adjustments.size() - existingAdjustments) > 0;
-		if (hasNewAdjustments && ( (whoToAdjust.isReadOnly() || whoToAdjust.isBinary())))
-			return RefactoringStatus.createErrorStatus(
-					Messages.format(RefactoringCoreMessages.IntroduceIndirectionRefactoring_cannot_update_binary_target_visibility,
-									new String[]{JavaElementLabels
-														 .getElementLabel(whoToAdjust, JavaElementLabels.ALL_DEFAULT)}), JavaStatusContext.create(whoToAdjust));
+    boolean hasNewAdjustments = (adjustments.size() - existingAdjustments) > 0;
+    if (hasNewAdjustments && ((whoToAdjust.isReadOnly() || whoToAdjust.isBinary())))
+      return RefactoringStatus.createErrorStatus(
+          Messages.format(
+              RefactoringCoreMessages
+                  .IntroduceIndirectionRefactoring_cannot_update_binary_target_visibility,
+              new String[] {
+                JavaElementLabels.getElementLabel(whoToAdjust, JavaElementLabels.ALL_DEFAULT)
+              }),
+          JavaStatusContext.create(whoToAdjust));
 
-		RefactoringStatus status= new RefactoringStatus();
+    RefactoringStatus status = new RefactoringStatus();
 
-		// Don't create a rewrite if it is not necessary
-		if (!hasNewAdjustments)
-			return status;
+    // Don't create a rewrite if it is not necessary
+    if (!hasNewAdjustments) return status;
 
-		try {
-			monitor.beginTask(RefactoringCoreMessages.MemberVisibilityAdjustor_adjusting, 2);
-			Map<ICompilationUnit, CompilationUnitRewrite> rewrites;
-			if (!isRewriteKept(whoToAdjust.getCompilationUnit())) {
-				CompilationUnitRewrite rewrite= new CompilationUnitRewrite(whoToAdjust.getCompilationUnit());
-				rewrite.setResolveBindings(false);
-				rewrites= new HashMap<ICompilationUnit, CompilationUnitRewrite>();
-				rewrites.put(whoToAdjust.getCompilationUnit(), rewrite);
-				status.merge(rewriteVisibility(adjustments, rewrites, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)));
-				rewrite.attachChange((CompilationUnitChange) fTextChangeManager.get(whoToAdjust.getCompilationUnit()), true, new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
-			}
-		} finally {
-			monitor.done();
-		}
-		return status;
-	}
+    try {
+      monitor.beginTask(RefactoringCoreMessages.MemberVisibilityAdjustor_adjusting, 2);
+      Map<ICompilationUnit, CompilationUnitRewrite> rewrites;
+      if (!isRewriteKept(whoToAdjust.getCompilationUnit())) {
+        CompilationUnitRewrite rewrite =
+            new CompilationUnitRewrite(whoToAdjust.getCompilationUnit());
+        rewrite.setResolveBindings(false);
+        rewrites = new HashMap<ICompilationUnit, CompilationUnitRewrite>();
+        rewrites.put(whoToAdjust.getCompilationUnit(), rewrite);
+        status.merge(
+            rewriteVisibility(
+                adjustments,
+                rewrites,
+                new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL)));
+        rewrite.attachChange(
+            (CompilationUnitChange) fTextChangeManager.get(whoToAdjust.getCompilationUnit()),
+            true,
+            new SubProgressMonitor(monitor, 1, SubProgressMonitor.SUPPRESS_SUBTASK_LABEL));
+      }
+    } finally {
+      monitor.done();
+    }
+    return status;
+  }
 

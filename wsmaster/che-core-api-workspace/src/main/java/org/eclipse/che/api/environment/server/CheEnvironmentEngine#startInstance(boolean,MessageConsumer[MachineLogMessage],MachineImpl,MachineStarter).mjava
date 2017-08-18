@@ -1,113 +1,117 @@
-    private Instance startInstance(boolean recover,
-                                   MessageConsumer<MachineLogMessage> environmentLogger,
-                                   MachineImpl machine,
-                                   MachineStarter machineStarter)
-            throws ServerException,
-                   EnvironmentException {
+  private Instance startInstance(
+      boolean recover,
+      MessageConsumer<MachineLogMessage> environmentLogger,
+      MachineImpl machine,
+      MachineStarter machineStarter)
+      throws ServerException, EnvironmentException {
 
-        LineConsumer machineLogger = null;
-        Instance instance = null;
-        try {
-            addMachine(machine);
+    LineConsumer machineLogger = null;
+    Instance instance = null;
+    try {
+      addMachine(machine);
 
-            eventService.publish(newDto(MachineStatusEvent.class)
-                                         .withEventType(MachineStatusEvent.EventType.CREATING)
-                                         .withDev(machine.getConfig().isDev())
-                                         .withMachineName(machine.getConfig().getName())
-                                         .withMachineId(machine.getId())
-                                         .withWorkspaceId(machine.getWorkspaceId()));
+      eventService.publish(
+          newDto(MachineStatusEvent.class)
+              .withEventType(MachineStatusEvent.EventType.CREATING)
+              .withDev(machine.getConfig().isDev())
+              .withMachineName(machine.getConfig().getName())
+              .withMachineId(machine.getId())
+              .withWorkspaceId(machine.getWorkspaceId()));
 
-            machineLogger = getMachineLogger(environmentLogger,
-                                             machine.getId(),
-                                             machine.getConfig().getName());
+      machineLogger =
+          getMachineLogger(environmentLogger, machine.getId(), machine.getConfig().getName());
 
-            MachineImpl originMachine = new MachineImpl(machine);
+      MachineImpl originMachine = new MachineImpl(machine);
+      try {
+        MachineSourceImpl machineSource = null;
+        if (recover) {
+          try {
+            SnapshotImpl snapshot =
+                snapshotDao.getSnapshot(
+                    machine.getWorkspaceId(), machine.getEnvName(), machine.getConfig().getName());
+            machineSource = snapshot.getMachineSource();
+            // Snapshot image location has SHA-256 digest which needs to be removed,
+            // otherwise it will be pulled without tag and cause problems
+            String imageName = machineSource.getLocation();
+            if (imageName.contains("@sha256:")) {
+              machineSource.setLocation(imageName.substring(0, imageName.indexOf('@')));
+            }
+          } catch (NotFoundException e) {
             try {
-                MachineSourceImpl machineSource = null;
-                if (recover) {
-                    try {
-                        SnapshotImpl snapshot = snapshotDao.getSnapshot(machine.getWorkspaceId(),
-                                                                        machine.getEnvName(),
-                                                                        machine.getConfig().getName());
-                        machineSource = snapshot.getMachineSource();
-                        // Snapshot image location has SHA-256 digest which needs to be removed,
-                        // otherwise it will be pulled without tag and cause problems
-                        String imageName = machineSource.getLocation();
-                        if (imageName.contains("@sha256:")) {
-                            machineSource.setLocation(imageName.substring(0, imageName.indexOf('@')));
-                        }
-                    } catch (NotFoundException e) {
-                        try {
-                            machineLogger.writeLine(
-                                    format("Failed to boot machine %s of workspace %s, because snapshot not found. " +
-                                           "The machine will be created from origin source.",
-                                            machine.getConfig().getName(),
-                                            machine.getWorkspaceId()));
-                        } catch (IOException ignore) { }
-                    }
-                }
-
-                instance = machineStarter.startMachine(machineLogger, machineSource);
-            } catch (SourceNotFoundException e) {
-                if (recover) {
-                    LOG.error(format("The snapshot of the image for the machine %s of the workspace %s not found. " +
-                                     "The machine will be created from origin source.",
-                                     machine.getConfig().getName(),
-                                     machine.getWorkspaceId()));
-                    machine = originMachine;
-                    instance = machineStarter.startMachine(machineLogger, null);
-                } else {
-                    throw e;
-                }
+              machineLogger.writeLine(
+                  format(
+                      "Failed to boot machine %s of workspace %s, because snapshot not found. "
+                          + "The machine will be created from origin source.",
+                      machine.getConfig().getName(), machine.getWorkspaceId()));
+            } catch (IOException ignore) {
             }
-
-            replaceMachine(instance);
-
-            eventService.publish(newDto(MachineStatusEvent.class)
-                                         .withEventType(MachineStatusEvent.EventType.RUNNING)
-                                         .withDev(machine.getConfig().isDev())
-                                         .withMachineName(machine.getConfig().getName())
-                                         .withMachineId(instance.getId())
-                                         .withWorkspaceId(machine.getWorkspaceId()));
-
-            return instance;
-        } catch (ApiException | RuntimeException e) {
-            boolean interrupted = Thread.interrupted();
-
-            removeMachine(machine.getWorkspaceId(), machine.getId());
-
-            if (instance != null) {
-                try {
-                    instance.destroy();
-                } catch (Exception destroyingExc) {
-                    LOG.error(destroyingExc.getLocalizedMessage(), destroyingExc);
-                }
-            }
-
-            if (machineLogger != null) {
-                try {
-                    machineLogger.writeLine("[ERROR] " + e.getLocalizedMessage());
-                } catch (IOException ioEx) {
-                    LOG.error(ioEx.getLocalizedMessage(), ioEx);
-                }
-                try {
-                    machineLogger.close();
-                } catch (IOException ioEx) {
-                    LOG.error(ioEx.getLocalizedMessage(), ioEx);
-                }
-            }
-
-            eventService.publish(newDto(MachineStatusEvent.class)
-                                         .withEventType(MachineStatusEvent.EventType.ERROR)
-                                         .withDev(machine.getConfig().isDev())
-                                         .withMachineName(machine.getConfig().getName())
-                                         .withMachineId(machine.getId())
-                                         .withWorkspaceId(machine.getWorkspaceId()));
-
-            if (interrupted) {
-                Thread.currentThread().interrupt();
-            }
-            throw new ServerException(e.getLocalizedMessage(), e);
+          }
         }
+
+        instance = machineStarter.startMachine(machineLogger, machineSource);
+      } catch (SourceNotFoundException e) {
+        if (recover) {
+          LOG.error(
+              format(
+                  "The snapshot of the image for the machine %s of the workspace %s not found. "
+                      + "The machine will be created from origin source.",
+                  machine.getConfig().getName(), machine.getWorkspaceId()));
+          machine = originMachine;
+          instance = machineStarter.startMachine(machineLogger, null);
+        } else {
+          throw e;
+        }
+      }
+
+      replaceMachine(instance);
+
+      eventService.publish(
+          newDto(MachineStatusEvent.class)
+              .withEventType(MachineStatusEvent.EventType.RUNNING)
+              .withDev(machine.getConfig().isDev())
+              .withMachineName(machine.getConfig().getName())
+              .withMachineId(instance.getId())
+              .withWorkspaceId(machine.getWorkspaceId()));
+
+      return instance;
+    } catch (ApiException | RuntimeException e) {
+      boolean interrupted = Thread.interrupted();
+
+      removeMachine(machine.getWorkspaceId(), machine.getId());
+
+      if (instance != null) {
+        try {
+          instance.destroy();
+        } catch (Exception destroyingExc) {
+          LOG.error(destroyingExc.getLocalizedMessage(), destroyingExc);
+        }
+      }
+
+      if (machineLogger != null) {
+        try {
+          machineLogger.writeLine("[ERROR] " + e.getLocalizedMessage());
+        } catch (IOException ioEx) {
+          LOG.error(ioEx.getLocalizedMessage(), ioEx);
+        }
+        try {
+          machineLogger.close();
+        } catch (IOException ioEx) {
+          LOG.error(ioEx.getLocalizedMessage(), ioEx);
+        }
+      }
+
+      eventService.publish(
+          newDto(MachineStatusEvent.class)
+              .withEventType(MachineStatusEvent.EventType.ERROR)
+              .withDev(machine.getConfig().isDev())
+              .withMachineName(machine.getConfig().getName())
+              .withMachineId(machine.getId())
+              .withWorkspaceId(machine.getWorkspaceId()));
+
+      if (interrupted) {
+        Thread.currentThread().interrupt();
+      }
+      throw new ServerException(e.getLocalizedMessage(), e);
     }
+  }
 

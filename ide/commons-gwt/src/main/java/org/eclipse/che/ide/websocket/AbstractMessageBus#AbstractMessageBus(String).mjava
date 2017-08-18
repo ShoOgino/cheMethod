@@ -1,49 +1,52 @@
-    public AbstractMessageBus(String wsConnectionUrl) {
-        this.wsConnectionUrl = wsConnectionUrl;
+  public AbstractMessageBus(String wsConnectionUrl) {
+    this.wsConnectionUrl = wsConnectionUrl;
 
-        this.requestCallbackMap = new HashMap<>();
-        this.replyCallbackMap = new HashMap<>();
-        this.channelToSubscribersMap = new HashMap<>();
-        this.connectionOpenedHandlers = ListenerManager.create();
-        this.connectionClosedHandlers = ListenerManager.create();
-        this.connectionErrorHandlers = ListenerManager.create();
-        this.messages2send = new ArrayList<>();
+    this.requestCallbackMap = new HashMap<>();
+    this.replyCallbackMap = new HashMap<>();
+    this.channelToSubscribersMap = new HashMap<>();
+    this.connectionOpenedHandlers = ListenerManager.create();
+    this.connectionClosedHandlers = ListenerManager.create();
+    this.connectionErrorHandlers = ListenerManager.create();
+    this.messages2send = new ArrayList<>();
 
-        MessageBuilder builder = new MessageBuilder(RequestBuilder.POST, null);
-        builder.header("x-everrest-websocket-message-type", "ping");
-        heartbeatMessage = builder.build();
+    MessageBuilder builder = new MessageBuilder(RequestBuilder.POST, null);
+    builder.header("x-everrest-websocket-message-type", "ping");
+    heartbeatMessage = builder.build();
 
-        if (isSupported()) {
-            initialize();
-        }
-
-        this.heartbeatTimer = new Timer() {
-            @Override
-            public void run() {
-                Message message = getHeartbeatMessage();
-                try {
-                    send(message, null);
-                } catch (WebSocketException e) {
-                    if (getReadyState() == ReadyState.CLOSED) {
-                        wsListener.onClose(new WebSocketClosedEvent());
-                    } else {
-                        Log.error(AbstractMessageBus.class, e);
-                    }
-                }
-            }
-        };
-
-        this.reconnectionTimer = new Timer() {
-            @Override
-            public void run() {
-                if (reconnectionAttemptsCounter == MAX_RECONNECTION_ATTEMPTS) {
-                    cancel();
-                    reconnectionCallback.onFailure(new Exception("The maximum number of reconnection attempts has been reached"));
-                    return;
-                }
-                reconnectionAttemptsCounter++;
-                initialize();
-            }
-        };
+    if (isSupported()) {
+      initialize();
     }
+
+    this.heartbeatTimer =
+        new Timer() {
+          @Override
+          public void run() {
+            Message message = getHeartbeatMessage();
+            try {
+              send(message, null);
+            } catch (WebSocketException e) {
+              if (getReadyState() == ReadyState.CLOSED) {
+                wsListener.onClose(new WebSocketClosedEvent());
+              } else {
+                Log.error(AbstractMessageBus.class, e);
+              }
+            }
+          }
+        };
+
+    this.reconnectionTimer =
+        new Timer() {
+          @Override
+          public void run() {
+            if (reconnectionAttemptsCounter == MAX_RECONNECTION_ATTEMPTS) {
+              cancel();
+              reconnectionCallback.onFailure(
+                  new Exception("The maximum number of reconnection attempts has been reached"));
+              return;
+            }
+            reconnectionAttemptsCounter++;
+            initialize();
+          }
+        };
+  }
 

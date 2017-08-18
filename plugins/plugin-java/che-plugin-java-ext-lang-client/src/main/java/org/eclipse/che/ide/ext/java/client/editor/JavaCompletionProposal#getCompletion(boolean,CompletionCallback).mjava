@@ -1,24 +1,30 @@
-    @Override
-    public void getCompletion(boolean insert, final CompletionCallback callback) {
-        client.applyProposal(sessionId, id, insert, new AsyncCallback<ProposalApplyResult>() {
-            @Override
-            public void onFailure(Throwable caught) {
-                Log.error(JavaCompletionProposal.class, caught);
+  @Override
+  public void getCompletion(boolean insert, final CompletionCallback callback) {
+    client.applyProposal(
+        sessionId,
+        id,
+        insert,
+        new AsyncCallback<ProposalApplyResult>() {
+          @Override
+          public void onFailure(Throwable caught) {
+            Log.error(JavaCompletionProposal.class, caught);
+          }
+
+          @Override
+          public void onSuccess(ProposalApplyResult result) {
+            callback.onCompletion(
+                new CompletionImpl(
+                    result.getChanges(), result.getSelection(), result.getLinkedModeModel()));
+
+            final VirtualFile file = editorAgent.getActiveEditor().getEditorInput().getFile();
+
+            if (file instanceof Resource) {
+              final ChangeInfo changeInfo = result.getChangeInfo();
+              if (changeInfo != null && changeInfo.getName() != null) {
+                refactoringUpdater.updateAfterRefactoring(singletonList(changeInfo));
+              }
             }
-
-            @Override
-            public void onSuccess(ProposalApplyResult result) {
-                callback.onCompletion(new CompletionImpl(result.getChanges(), result.getSelection(), result.getLinkedModeModel()));
-
-                final VirtualFile file = editorAgent.getActiveEditor().getEditorInput().getFile();
-
-                if (file instanceof Resource) {
-                    final ChangeInfo changeInfo = result.getChangeInfo();
-                    if (changeInfo != null && changeInfo.getName() != null) {
-                        refactoringUpdater.updateAfterRefactoring(singletonList(changeInfo));
-                    }
-                }
-            }
+          }
         });
-    }
+  }
 

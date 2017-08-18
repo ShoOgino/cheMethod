@@ -1,51 +1,47 @@
-    /**
-     * Starts machine in running workspace.
-     *
-     * @param workspaceId
-     *         ID of workspace that owns machine
-     * @param machineConfig
-     *         config of machine that should be started
-     * @return running machine
-     * @throws ConflictException
-     *         if environment is not running or conflicting machine already exists in the environment
-     * @throws ConflictException
-     *         if environment was stopped during start of machine
-     * @throws ServerException
-     *         if any other error occurs
-     */
-    public Instance startMachine(String workspaceId,
-                                 MachineConfig machineConfig) throws ServerException,
-                                                                     ConflictException,
-                                                                     NotFoundException,
-                                                                     AgentException,
-                                                                     EnvironmentException {
+  /**
+   * Starts machine in running workspace.
+   *
+   * @param workspaceId ID of workspace that owns machine
+   * @param machineConfig config of machine that should be started
+   * @return running machine
+   * @throws ConflictException if environment is not running or conflicting machine already exists
+   *     in the environment
+   * @throws ConflictException if environment was stopped during start of machine
+   * @throws ServerException if any other error occurs
+   */
+  public Instance startMachine(String workspaceId, MachineConfig machineConfig)
+      throws ServerException, ConflictException, NotFoundException, AgentException,
+          EnvironmentException {
 
-        try (@SuppressWarnings("unused") Unlocker u = locks.readLock(workspaceId)) {
-            getRunningState(workspaceId);
-        }
-
-        // Copy constructor makes deep copy of objects graph
-        // which means that original values won't affect the values in used further in this class
-        MachineConfigImpl machineConfigCopy = new MachineConfigImpl(machineConfig);
-
-        List<String> agents = Arrays.asList("org.eclipse.che.exec", "org.eclipse.che.terminal");
-
-        Instance instance = envEngine.startMachine(workspaceId, machineConfigCopy, agents);
-        launchAgents(instance, agents);
-
-        try (@SuppressWarnings("unused") Unlocker u = locks.writeLock(workspaceId)) {
-            checkIsNotTerminated("start the machine");
-            RuntimeState workspaceState = states.get(workspaceId);
-            if (workspaceState == null || workspaceState.status != RUNNING) {
-                try {
-                    envEngine.stopMachine(workspaceId, instance.getId());
-                } catch (NotFoundException | ServerException | ConflictException e) {
-                    LOG.error(e.getLocalizedMessage(), e);
-                }
-                throw new ConflictException(format("Environment of workspace '%s' was stopped during start of  machine",
-                                                   workspaceId));
-            }
-        }
-        return instance;
+    try (@SuppressWarnings("unused")
+        Unlocker u = locks.readLock(workspaceId)) {
+      getRunningState(workspaceId);
     }
+
+    // Copy constructor makes deep copy of objects graph
+    // which means that original values won't affect the values in used further in this class
+    MachineConfigImpl machineConfigCopy = new MachineConfigImpl(machineConfig);
+
+    List<String> agents = Arrays.asList("org.eclipse.che.exec", "org.eclipse.che.terminal");
+
+    Instance instance = envEngine.startMachine(workspaceId, machineConfigCopy, agents);
+    launchAgents(instance, agents);
+
+    try (@SuppressWarnings("unused")
+        Unlocker u = locks.writeLock(workspaceId)) {
+      checkIsNotTerminated("start the machine");
+      RuntimeState workspaceState = states.get(workspaceId);
+      if (workspaceState == null || workspaceState.status != RUNNING) {
+        try {
+          envEngine.stopMachine(workspaceId, instance.getId());
+        } catch (NotFoundException | ServerException | ConflictException e) {
+          LOG.error(e.getLocalizedMessage(), e);
+        }
+        throw new ConflictException(
+            format(
+                "Environment of workspace '%s' was stopped during start of  machine", workspaceId));
+      }
+    }
+    return instance;
+  }
 

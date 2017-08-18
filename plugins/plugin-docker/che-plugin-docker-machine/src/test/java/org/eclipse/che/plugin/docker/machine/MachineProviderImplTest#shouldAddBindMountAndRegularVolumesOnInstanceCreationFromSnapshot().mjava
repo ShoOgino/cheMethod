@@ -1,35 +1,42 @@
-    @Test
-    public void shouldAddBindMountAndRegularVolumesOnInstanceCreationFromSnapshot() throws Exception {
-        String[] bindMountVolumesFromMachine = new String[] {"/my/bind/mount1:/from/host1",
-                                                             "/my/bind/mount2:/from/host2:ro",
-                                                             "/my/bind/mount3:/from/host3:ro,Z"};
-        String[] volumesFromMachine = new String[] {"/projects",
-                                                    "/something",
-                                                    "/something/else"};
-        String[] expectedBindMountVolumes = new String[] {"/my/bind/mount1:/from/host1",
-                                                          "/my/bind/mount2:/from/host2:ro",
-                                                          "/my/bind/mount3:/from/host3:ro,Z"};
-        Map<String, Volume> expectedVolumes = Stream.of("/projects",
-                                                        "/something",
-                                                        "/something/else")
-                                                    .collect(toMap(Function.identity(), v -> new Volume()));
+  @Test
+  public void shouldAddBindMountAndRegularVolumesOnInstanceCreationFromSnapshot() throws Exception {
+    String[] bindMountVolumesFromMachine =
+        new String[] {
+          "/my/bind/mount1:/from/host1",
+          "/my/bind/mount2:/from/host2:ro",
+          "/my/bind/mount3:/from/host3:ro,Z"
+        };
+    String[] volumesFromMachine = new String[] {"/projects", "/something", "/something/else"};
+    String[] expectedBindMountVolumes =
+        new String[] {
+          "/my/bind/mount1:/from/host1",
+          "/my/bind/mount2:/from/host2:ro",
+          "/my/bind/mount3:/from/host3:ro,Z"
+        };
+    Map<String, Volume> expectedVolumes =
+        Stream.of("/projects", "/something", "/something/else")
+            .collect(toMap(Function.identity(), v -> new Volume()));
 
-        provider = new MachineProviderBuilder().setDevMachineVolumes(emptySet())
-                                               .setAllMachineVolumes(emptySet())
-                                               .build();
+    provider =
+        new MachineProviderBuilder()
+            .setDevMachineVolumes(emptySet())
+            .setAllMachineVolumes(emptySet())
+            .build();
 
-        CheServiceImpl service = createService();
-        service.setVolumes(Stream.concat(Stream.of(bindMountVolumesFromMachine), Stream.of(volumesFromMachine))
-                                 .collect(Collectors.toList()));
-        createInstanceFromSnapshot(service, true);
+    CheServiceImpl service = createService();
+    service.setVolumes(
+        Stream.concat(Stream.of(bindMountVolumesFromMachine), Stream.of(volumesFromMachine))
+            .collect(Collectors.toList()));
+    createInstanceFromSnapshot(service, true);
 
+    ArgumentCaptor<CreateContainerParams> argumentCaptor =
+        ArgumentCaptor.forClass(CreateContainerParams.class);
+    verify(dockerConnector).createContainer(argumentCaptor.capture());
 
-        ArgumentCaptor<CreateContainerParams> argumentCaptor = ArgumentCaptor.forClass(CreateContainerParams.class);
-        verify(dockerConnector).createContainer(argumentCaptor.capture());
-
-        String[] actualBindMountVolumes = argumentCaptor.getValue().getContainerConfig().getHostConfig().getBinds();
-        Map<String, Volume> actualVolumes = argumentCaptor.getValue().getContainerConfig().getVolumes();
-        assertEquals(actualVolumes, expectedVolumes);
-        assertEqualsNoOrder(actualBindMountVolumes, expectedBindMountVolumes);
-    }
+    String[] actualBindMountVolumes =
+        argumentCaptor.getValue().getContainerConfig().getHostConfig().getBinds();
+    Map<String, Volume> actualVolumes = argumentCaptor.getValue().getContainerConfig().getVolumes();
+    assertEquals(actualVolumes, expectedVolumes);
+    assertEqualsNoOrder(actualBindMountVolumes, expectedBindMountVolumes);
+  }
 

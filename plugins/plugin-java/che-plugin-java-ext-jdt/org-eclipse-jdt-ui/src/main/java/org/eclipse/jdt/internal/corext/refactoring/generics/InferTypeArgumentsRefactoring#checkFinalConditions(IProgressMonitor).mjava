@@ -1,106 +1,140 @@
-	/*
-	 * @see org.eclipse.ltk.core.refactoring.Refactoring#checkFinalConditions(org.eclipse.core.runtime.IProgressMonitor)
-	 */
-	@Override
-	public RefactoringStatus checkFinalConditions(final IProgressMonitor pm) throws CoreException, OperationCanceledException {
-		HashMap<IJavaProject, ArrayList<IJavaElement>> projectsToElements = getJavaElementsPerProject(fElements);
-		pm.beginTask("", projectsToElements.size() + 2); //$NON-NLS-1$
-		final RefactoringStatus result = new RefactoringStatus();
-		try {
-			fTCModel = new InferTypeArgumentsTCModel();
-			final InferTypeArgumentsConstraintCreator unitCollector =
-					new InferTypeArgumentsConstraintCreator(fTCModel, fAssumeCloneReturnsSameType);
+  /*
+   * @see org.eclipse.ltk.core.refactoring.Refactoring#checkFinalConditions(org.eclipse.core.runtime.IProgressMonitor)
+   */
+  @Override
+  public RefactoringStatus checkFinalConditions(final IProgressMonitor pm)
+      throws CoreException, OperationCanceledException {
+    HashMap<IJavaProject, ArrayList<IJavaElement>> projectsToElements =
+        getJavaElementsPerProject(fElements);
+    pm.beginTask("", projectsToElements.size() + 2); //$NON-NLS-1$
+    final RefactoringStatus result = new RefactoringStatus();
+    try {
+      fTCModel = new InferTypeArgumentsTCModel();
+      final InferTypeArgumentsConstraintCreator unitCollector =
+          new InferTypeArgumentsConstraintCreator(fTCModel, fAssumeCloneReturnsSameType);
 
-			for (Iterator<Entry<IJavaProject, ArrayList<IJavaElement>>> iter = projectsToElements.entrySet().iterator(); iter.hasNext();
-					) {
-				Entry<IJavaProject, ArrayList<IJavaElement>> entry = iter.next();
-				IJavaProject project = entry.getKey();
-				ArrayList<IJavaElement> javaElementsList = entry.getValue();
-				IJavaElement[] javaElements = javaElementsList.toArray(new IJavaElement[javaElementsList.size()]);
-				List<ICompilationUnit> cus = Arrays.asList(JavaModelUtil.getAllCompilationUnits(javaElements));
+      for (Iterator<Entry<IJavaProject, ArrayList<IJavaElement>>> iter =
+              projectsToElements.entrySet().iterator();
+          iter.hasNext();
+          ) {
+        Entry<IJavaProject, ArrayList<IJavaElement>> entry = iter.next();
+        IJavaProject project = entry.getKey();
+        ArrayList<IJavaElement> javaElementsList = entry.getValue();
+        IJavaElement[] javaElements =
+            javaElementsList.toArray(new IJavaElement[javaElementsList.size()]);
+        List<ICompilationUnit> cus =
+            Arrays.asList(JavaModelUtil.getAllCompilationUnits(javaElements));
 
-				int batchSize = 150;
-				int batches = ((cus.size() - 1) / batchSize) + 1;
-				SubProgressMonitor projectMonitor = new SubProgressMonitor(pm, 1);
-				projectMonitor.beginTask("", batches); //$NON-NLS-1$
-				projectMonitor.setTaskName(RefactoringCoreMessages.InferTypeArgumentsRefactoring_building);
-				for (int i = 0; i < batches; i++) {
-					List<ICompilationUnit> batch = cus.subList(i * batchSize, Math.min(cus.size(), (i + 1) * batchSize));
-					ICompilationUnit[] batchCus = batch.toArray(new ICompilationUnit[batch.size()]);
-					final SubProgressMonitor batchMonitor = new SubProgressMonitor(projectMonitor, 1);
-					batchMonitor.subTask(RefactoringCoreMessages.InferTypeArgumentsRefactoring_calculating_dependencies);
+        int batchSize = 150;
+        int batches = ((cus.size() - 1) / batchSize) + 1;
+        SubProgressMonitor projectMonitor = new SubProgressMonitor(pm, 1);
+        projectMonitor.beginTask("", batches); //$NON-NLS-1$
+        projectMonitor.setTaskName(RefactoringCoreMessages.InferTypeArgumentsRefactoring_building);
+        for (int i = 0; i < batches; i++) {
+          List<ICompilationUnit> batch =
+              cus.subList(i * batchSize, Math.min(cus.size(), (i + 1) * batchSize));
+          ICompilationUnit[] batchCus = batch.toArray(new ICompilationUnit[batch.size()]);
+          final SubProgressMonitor batchMonitor = new SubProgressMonitor(projectMonitor, 1);
+          batchMonitor.subTask(
+              RefactoringCoreMessages.InferTypeArgumentsRefactoring_calculating_dependencies);
 
-					ASTParser parser = ASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
-					parser.setProject(project);
-					parser.setCompilerOptions(RefactoringASTParser.getCompilerOptions(project));
-					parser.setResolveBindings(true);
-					parser.createASTs(batchCus, new String[0], new ASTRequestor() {
-						@Override
-						public void acceptAST(final ICompilationUnit source, final CompilationUnit ast) {
-							batchMonitor.subTask(BasicElementLabels.getFileName(source));
+          ASTParser parser = ASTParser.newParser(ASTProvider.SHARED_AST_LEVEL);
+          parser.setProject(project);
+          parser.setCompilerOptions(RefactoringASTParser.getCompilerOptions(project));
+          parser.setResolveBindings(true);
+          parser.createASTs(
+              batchCus,
+              new String[0],
+              new ASTRequestor() {
+                @Override
+                public void acceptAST(final ICompilationUnit source, final CompilationUnit ast) {
+                  batchMonitor.subTask(BasicElementLabels.getFileName(source));
 
-							SafeRunner.run(new ISafeRunnable() {
-								public void run() throws Exception {
-									IProblem[] problems = ast.getProblems();
-									for (int p = 0; p < problems.length; p++) {
-										if (problems[p].isError()) {
-											String cuName = JavaElementLabels.getElementLabel(source, JavaElementLabels.CU_QUALIFIED);
-											String msg = Messages.format(
-													RefactoringCoreMessages.InferTypeArgumentsRefactoring_error_in_cu_skipped,
-													new Object[]{cuName});
-											result.addError(msg, JavaStatusContext.create(source, SourceRangeFactory.create(problems[p])));
-											return;
-										}
-									}
-									ast.accept(unitCollector);
-								}
+                  SafeRunner.run(
+                      new ISafeRunnable() {
+                        public void run() throws Exception {
+                          IProblem[] problems = ast.getProblems();
+                          for (int p = 0; p < problems.length; p++) {
+                            if (problems[p].isError()) {
+                              String cuName =
+                                  JavaElementLabels.getElementLabel(
+                                      source, JavaElementLabels.CU_QUALIFIED);
+                              String msg =
+                                  Messages.format(
+                                      RefactoringCoreMessages
+                                          .InferTypeArgumentsRefactoring_error_in_cu_skipped,
+                                      new Object[] {cuName});
+                              result.addError(
+                                  msg,
+                                  JavaStatusContext.create(
+                                      source, SourceRangeFactory.create(problems[p])));
+                              return;
+                            }
+                          }
+                          ast.accept(unitCollector);
+                        }
 
-								public void handleException(Throwable exception) {
-									String cuName = JavaElementLabels.getElementLabel(source, JavaElementLabels.CU_QUALIFIED);
-									String msg = Messages.format(RefactoringCoreMessages.InferTypeArgumentsRefactoring_internal_error,
-																 new Object[]{cuName});
-									JavaPlugin.log(new Status(IStatus.ERROR, JavaPlugin.getPluginId(), IJavaStatusConstants.INTERNAL_ERROR,
-															  msg, null));
-									String msg2 = Messages.format(RefactoringCoreMessages.InferTypeArgumentsRefactoring_error_skipped,
-																  new Object[]{cuName});
-									result.addError(msg2, JavaStatusContext.create(source));
-								}
-							});
+                        public void handleException(Throwable exception) {
+                          String cuName =
+                              JavaElementLabels.getElementLabel(
+                                  source, JavaElementLabels.CU_QUALIFIED);
+                          String msg =
+                              Messages.format(
+                                  RefactoringCoreMessages
+                                      .InferTypeArgumentsRefactoring_internal_error,
+                                  new Object[] {cuName});
+                          JavaPlugin.log(
+                              new Status(
+                                  IStatus.ERROR,
+                                  JavaPlugin.getPluginId(),
+                                  IJavaStatusConstants.INTERNAL_ERROR,
+                                  msg,
+                                  null));
+                          String msg2 =
+                              Messages.format(
+                                  RefactoringCoreMessages
+                                      .InferTypeArgumentsRefactoring_error_skipped,
+                                  new Object[] {cuName});
+                          result.addError(msg2, JavaStatusContext.create(source));
+                        }
+                      });
 
-							fTCModel.newCu();
-						}
+                  fTCModel.newCu();
+                }
 
-						@Override
-						public void acceptBinding(String bindingKey, IBinding binding) {
-							//do nothing
-						}
-					}, batchMonitor);
-				}
+                @Override
+                public void acceptBinding(String bindingKey, IBinding binding) {
+                  //do nothing
+                }
+              },
+              batchMonitor);
+        }
 
-				projectMonitor.done();
-				fTCModel.newCu();
-			}
+        projectMonitor.done();
+        fTCModel.newCu();
+      }
 
-//			Display.getDefault().syncExec(new Runnable() {
-//				public void run() {
-//					MessageDialog.openInformation(Display.getCurrent().getActiveShell(), "Debugging...", "after constraint gen");
-//				}
-//			});
+      //			Display.getDefault().syncExec(new Runnable() {
+      //				public void run() {
+      //					MessageDialog.openInformation(Display.getCurrent().getActiveShell(), "Debugging...", "after constraint gen");
+      //				}
+      //			});
 
-			pm.setTaskName(RefactoringCoreMessages.InferTypeArgumentsRefactoring_solving);
-			InferTypeArgumentsConstraintsSolver solver= new InferTypeArgumentsConstraintsSolver(fTCModel);
-			InferTypeArgumentsUpdate updates= solver.solveConstraints(new SubProgressMonitor(pm, 1));
-			solver= null; //free caches
+      pm.setTaskName(RefactoringCoreMessages.InferTypeArgumentsRefactoring_solving);
+      InferTypeArgumentsConstraintsSolver solver =
+          new InferTypeArgumentsConstraintsSolver(fTCModel);
+      InferTypeArgumentsUpdate updates = solver.solveConstraints(new SubProgressMonitor(pm, 1));
+      solver = null; //free caches
 
-			fChangeManager= new TextChangeManager();
-			rewriteDeclarations(updates, new SubProgressMonitor(pm, 1));
+      fChangeManager = new TextChangeManager();
+      rewriteDeclarations(updates, new SubProgressMonitor(pm, 1));
 
-			IFile[] filesToModify= ResourceUtil.getFiles(fChangeManager.getAllCompilationUnits());
-			result.merge(Checks.validateModifiesFiles(filesToModify, getValidationContext()));
-			return result;
-		} finally {
-			pm.done();
-			clearGlobalState();
-		}
-	}
+      IFile[] filesToModify = ResourceUtil.getFiles(fChangeManager.getAllCompilationUnits());
+      result.merge(Checks.validateModifiesFiles(filesToModify, getValidationContext()));
+      return result;
+    } finally {
+      pm.done();
+      clearGlobalState();
+    }
+  }
 
