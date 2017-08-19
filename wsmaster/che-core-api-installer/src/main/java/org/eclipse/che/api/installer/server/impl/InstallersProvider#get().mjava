@@ -1,0 +1,35 @@
+  @Override
+  public Set<Installer> get() {
+    Set<Installer> installers = new HashSet<>();
+
+    try {
+      Enumeration<URL> installerResources =
+          Thread.currentThread().getContextClassLoader().getResources("/installers");
+      while (installerResources.hasMoreElements()) {
+        URL installerResource = installerResources.nextElement();
+
+        IoUtil.listResources(
+            installerResource.toURI(),
+            versionDir -> {
+              if (!isDirectory(versionDir)) {
+                return;
+              }
+
+              List<Path> descriptors = findInstallersDescriptors(versionDir);
+              for (Path descriptor : descriptors) {
+                Optional<Path> script = findInstallerScript(descriptor);
+                script.ifPresent(
+                    path -> {
+                      Installer installer = init(descriptor, script.get());
+                      installers.add(installer);
+                    });
+              }
+            });
+      }
+    } catch (IOException | URISyntaxException e) {
+      throw new IllegalStateException(e);
+    }
+
+    return installers;
+  }
+
