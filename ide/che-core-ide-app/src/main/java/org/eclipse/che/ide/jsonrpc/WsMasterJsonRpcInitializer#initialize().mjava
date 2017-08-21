@@ -1,19 +1,25 @@
   private void initialize() {
-    String protocol = "https:".equals(getProtocol()) ? "wss://" : "ws://";
-    String host = getHost();
-    String context = "/wsmaster/websocket";
-    String url = protocol + host + context;
+    WorkspaceImpl workspace = appContext.getWorkspace();
+    String url = workspace.getLinks().get(LINK_REL_ENVIRONMENT_STATUS_CHANNEL);
+
+    if (workspace.getStatus() == STOPPED || url == null) {
+      return;
+    }
+
     String separator = url.contains("?") ? "&" : "?";
-    String queryParams =
-        appContext.getApplicationWebsocketId().map(id -> separator + "clientId=" + id).orElse("");
+    Optional<String> appWebSocketId = appContext.getApplicationWebsocketId();
+    String queryParams = appWebSocketId.map(id -> separator + "clientId=" + id).orElse("");
     String wsMasterEndpointURL = url + queryParams;
 
-    Set<Runnable> initActions =
-        appContext.getApplicationWebsocketId().isPresent()
-            ? emptySet()
-            : singleton(this::processWsId);
+    Map<String, String> initProperties = singletonMap("url", wsMasterEndpointURL);
 
-    initializer.initialize(
-        WS_MASTER_JSON_RPC_ENDPOINT_ID, singletonMap("url", wsMasterEndpointURL), initActions);
+    Set<Runnable> initActions = new HashSet<>();
+    initActions.add(this::subscribeToEvents);
+
+    if (!appWebSocketId.isPresent()) {
+      initActions.add(this::processWsId);
+    }
+
+    initializer.initialize(WS_MASTER_JSON_RPC_ENDPOINT_ID, initProperties, initActions);
   }
 
