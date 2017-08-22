@@ -1,0 +1,35 @@
+  @Inject
+  public void initializePool(final TestWorkspaceServiceClient workspaceServiceClient) {
+    LOG.info("Initialize workspace pool with {} entries.", poolSize);
+
+    this.executor.scheduleWithFixedDelay(
+        () -> {
+          while (testWorkspaceQueue.remainingCapacity() != 0) {
+            String name = generateName();
+            TestWorkspace testWorkspace =
+                new TestWorkspaceImpl(
+                    name,
+                    defaultUser,
+                    defaultMemoryGb,
+                    WorkspaceTemplate.DEFAULT,
+                    workspaceServiceClient);
+
+            try {
+              if (!testWorkspaceQueue.offer(testWorkspace)) {
+                LOG.warn("Workspace {} can't be added into the pool and will be destroyed.", name);
+                testWorkspace.delete();
+              }
+            } catch (Exception e) {
+              LOG.warn(
+                  "Workspace {} can't be added into the pool and will be destroyed because of: {}",
+                  name,
+                  e.getMessage());
+              testWorkspace.delete();
+            }
+          }
+        },
+        0,
+        100,
+        TimeUnit.MILLISECONDS);
+  }
+

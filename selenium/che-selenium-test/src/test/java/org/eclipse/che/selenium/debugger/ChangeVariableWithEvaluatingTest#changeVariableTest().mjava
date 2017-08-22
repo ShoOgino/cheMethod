@@ -1,0 +1,44 @@
+  @Test
+  public void changeVariableTest() throws Exception {
+    buildProjectAndOpenMainClass();
+    commandsPalette.openCommandPalette();
+    commandsPalette.startCommandByDoubleClick(START_DEBUG_COMMAND_NAME);
+    consoles.waitExpectedTextIntoConsole(" Server startup in");
+    editor.setCursorToLine(34);
+    editor.setBreakPointAndWaitInactiveState(34);
+    menu.runCommand(
+        TestMenuCommandsConstants.Run.RUN_MENU,
+        TestMenuCommandsConstants.Run.EDIT_DEBUG_CONFIGURATION);
+    debugConfig.createConfig(PROJECT_NAME_CHANGE_VARIABLE);
+    menu.runCommand(
+        TestMenuCommandsConstants.Run.RUN_MENU,
+        TestMenuCommandsConstants.Run.DEBUG,
+        TestMenuCommandsConstants.Run.DEBUG + "/" + PROJECT_NAME_CHANGE_VARIABLE);
+    String appUrl =
+        "http"
+            + "://"
+            + workspaceServiceClient.getServerAddressByPort(ws.getId(), 8080)
+            + "/spring/guess";
+    String requestMess = "11";
+    editor.waitBreakPointWithActiveState(34);
+    CompletableFuture<String> instToRequestThread =
+        debuggerUtils.gotoDebugAppAndSendRequest(appUrl, requestMess);
+    debugPanel.waitDebugHighlightedText("result = \"Sorry, you failed. Try again later!\";");
+    debugPanel.waitVariablesPanel();
+    debugPanel.selectVarInVariablePanel("numGuessByUser: \"11\"");
+    debugPanel.clickOnButton(DebugPanel.DebuggerButtonsPanel.CHANGE_VARIABLE);
+    String secretNum = getValueOfSecretNumFromVarWidget().trim();
+    debugPanel.typeAndChangeVariable(secretNum);
+    debugPanel.selectVarInVariablePanel(String.format("numGuessByUser: %s", secretNum));
+    debugPanel.clickOnButton(DebugPanel.DebuggerButtonsPanel.EVALUATE_EXPRESSIONS);
+    debugPanel.typeEvaluateExpression("numGuessByUser.length()");
+    debugPanel.clickEvaluateBtn();
+    debugPanel.waitExpectedResultInEvaluateExpression("1");
+    debugPanel.typeEvaluateExpression("numGuessByUser.isEmpty()");
+    debugPanel.clickEvaluateBtn();
+    debugPanel.waitExpectedResultInEvaluateExpression("false");
+    debugPanel.clickCloseEvaluateBtn();
+    debugPanel.clickOnButton(DebugPanel.DebuggerButtonsPanel.RESUME_BTN_ID);
+    assertTrue(instToRequestThread.get().contains("Sorry, you failed. Try again later!"));
+  }
+

@@ -1,0 +1,34 @@
+  /** Import zip project from file system into user workspace. */
+  public void importZipProject(
+      String workspaceId, Path zipFile, String projectName, String template) throws Exception {
+    String url = getWsAgentUrl(workspaceId) + "/import/" + projectName;
+    createFolder(workspaceId, projectName);
+
+    HttpURLConnection httpConnection = null;
+    try {
+      httpConnection = (HttpURLConnection) new URL(url).openConnection();
+      httpConnection.setRequestMethod("POST");
+      httpConnection.setRequestProperty("Content-Type", "application/zip");
+      httpConnection.addRequestProperty(
+          "Authorization", machineServiceClient.getMachineApiToken(workspaceId));
+      httpConnection.setDoOutput(true);
+
+      try (OutputStream outputStream = httpConnection.getOutputStream()) {
+        Files.copy(zipFile, outputStream);
+        if (httpConnection.getResponseCode() != 201) {
+          throw new RuntimeException(
+              "Cannot deploy requested project using ProjectServiceClient REST API. Server response "
+                  + httpConnection.getResponseCode()
+                  + " "
+                  + IoUtil.readStream(httpConnection.getErrorStream())
+                  + "REST url: "
+                  + url);
+        }
+      }
+    } finally {
+      ofNullable(httpConnection).ifPresent(HttpURLConnection::disconnect);
+    }
+
+    setProjectType(workspaceId, template, projectName);
+  }
+
