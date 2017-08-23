@@ -1,0 +1,40 @@
+  /**
+   * Import source projects and if it's already exist in workspace then show warning notification
+   *
+   * @param projects list of projects that already exist in workspace and will be imported on file
+   *     system
+   */
+  public void importProjects(List<Project> projects, AsyncCallback<Void> callback) {
+    this.callback = callback;
+
+    if (projects.isEmpty()) {
+      if (callback != null) {
+        callback.onSuccess(null);
+      }
+      return;
+    }
+
+    List<Promise<Project>> imports = newArrayList();
+
+    for (Project projectConfig : projects) {
+      imports.add(
+          startImport(Path.valueOf(projectConfig.getPath()), projectConfig.getSource())
+              .thenPromise(project -> project.update().withBody(projectConfig).send()));
+    }
+
+    promises
+        .all2(imports.toArray(new Promise<?>[imports.size()]))
+        .then(
+            ignored -> {
+              if (callback != null) {
+                callback.onSuccess(null);
+              }
+            })
+        .catchError(
+            error -> {
+              if (callback != null) {
+                callback.onFailure(error.getCause());
+              }
+            });
+  }
+

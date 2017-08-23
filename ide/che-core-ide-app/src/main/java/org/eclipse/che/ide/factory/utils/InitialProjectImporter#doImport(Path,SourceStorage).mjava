@@ -1,0 +1,90 @@
+  private Promise<Project> doImport(Path pathToProject, SourceStorage sourceStorage) {
+    String projectName = pathToProject.lastSegment();
+    StatusNotification notification =
+        notificationManager.notify(locale.cloningSource(projectName), null, PROGRESS, FLOAT_MODE);
+    subscriber.subscribe(projectName, notification);
+    String location = sourceStorage.getLocation();
+
+    // it's needed for extract repository name from repository url e.g https://github.com/a/b.git
+    // lastIndexOf('/') + 1 for not to capture slash and length - 4 for trim .git
+    String repository = location.substring(location.lastIndexOf('/') + 1).replace(".git", "");
+    Map<String, String> parameters = firstNonNull(sourceStorage.getParameters(), emptyMap());
+    String branch = parameters.get("branch");
+    String startPoint = parameters.get("startPoint");
+
+    MutableProjectConfig importConfig = new MutableProjectConfig();
+    importConfig.setPath(pathToProject.toString());
+    importConfig.setSource(sourceStorage);
+
+    return appContext
+        .getWorkspaceRoot()
+        .importProject()
+        .withBody(importConfig)
+        .send()
+        .thenPromise(
+            project -> {
+              subscriber.onSuccess();
+
+              notification.setContent(locale.clonedSource(projectName));
+              notification.setStatus(SUCCESS);
+
+              return promises.resolve(project);
+            })
+        .catchErrorPromise(
+            caught -> {
+              int errorCode = ExceptionUtils.getErrorCode(caught.getCause());
+              switch (errorCode) {
+                case UNAUTHORIZED_GIT_OPERATION:
+                  subscriber.onFailure(caught.getMessage());
+
+                  Map<String, String> attributes = getAttributes(caught.getCause());
+                  String providerName = attributes.get(PROVIDER_NAME);
+                  String authenticateUrl = attributes.get(AUTHENTICATE_URL);
+                  boolean authenticated = parseBoolean(attributes.get("authenticated"));
+
+                  if (!(isNullOrEmpty(providerName) || isNullOrEmpty(authenticateUrl))) {
+                    if (!authenticated) {
+                      return tryAuthenticateAndRepeatImport(
+                          providerName, authenticateUrl, pathToProject, sourceStorage, subscriber);
+                    } else {
+                      dialogFactory
+                          .createMessageDialog(
+                              locale.cloningSourceSshKeyUploadFailedTitle(),
+                              locale.cloningSourcesSshKeyUploadFailedText(),
+                              null)
+                          .show();
+                    }
+                  } else {
+                    dialogFactory
+                        .createMessageDialog(
+                            locale.oauthFailedToGetAuthenticatorTitle(),
+                            locale.oauthFailedToGetAuthenticatorText(),
+                            null)
+                        .show();
+                  }
+
+                  break;
+                case UNAUTHORIZED_SVN_OPERATION:
+                  subscriber.onFailure(caught.getMessage());
+                  return recallSubversionImportWithCredentials(pathToProject, sourceStorage);
+                case UNABLE_GET_PRIVATE_SSH_KEY:
+                  subscriber.onFailure(locale.acceptSshNotFoundText());
+                  break;
+                case FAILED_CHECKOUT:
+                  subscriber.onFailure(locale.cloningSourceWithCheckoutFailed(branch, repository));
+                  notification.setTitle(locale.cloningSourceFailedTitle(projectName));
+                  break;
+                case FAILED_CHECKOUT_WITH_START_POINT:
+                  subscriber.onFailure(locale.cloningSourceCheckoutFailed(branch, startPoint));
+                  notification.setTitle(locale.cloningSourceFailedTitle(projectName));
+                  break;
+                default:
+                  subscriber.onFailure(caught.getMessage());
+                  notification.setTitle(locale.cloningSourceFailedTitle(projectName));
+                  notification.setStatus(FAIL);
+              }
+
+              return promises.resolve(null);
+            });
+  }
+
