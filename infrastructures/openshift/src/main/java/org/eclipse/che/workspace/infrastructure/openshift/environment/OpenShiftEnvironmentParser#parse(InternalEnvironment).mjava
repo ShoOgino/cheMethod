@@ -1,0 +1,65 @@
+  public OpenShiftEnvironment parse(InternalEnvironment environment)
+      throws ValidationException, InfrastructureException {
+    checkNotNull(environment, "Environment should not be null");
+    InternalRecipe recipe = environment.getRecipe();
+    checkNotNull(environment.getRecipe(), "Environment recipe should not be null");
+    String content = recipe.getContent();
+    checkNotNull(content, "Recipe content should not be null");
+    String contentType = recipe.getContentType();
+    checkNotNull(contentType, "Recipe content type should not be null");
+
+    switch (contentType) {
+      case "application/x-yaml":
+      case "text/yaml":
+      case "text/x-yaml":
+        break;
+      default:
+        throw new ValidationException(
+            "Provided environment recipe content type '"
+                + contentType
+                + "' is unsupported. Supported values are: "
+                + "application/x-yaml, text/yaml, text/x-yaml");
+    }
+
+    //TODO Implement own validation for OpenShift recipes, because it is OK for OpenShift client to load  list with services only, but in our case there should be at least one pod with containers
+    KubernetesList list;
+    try (OpenShiftClient client = clientFactory.create()) {
+      list = client.lists().load(new ByteArrayInputStream(content.getBytes())).get();
+    }
+
+    Map<String, Pod> pods = new HashMap<>();
+    Map<String, Service> services = new HashMap<>();
+    Map<String, Route> routes = new HashMap<>();
+    Map<String, PersistentVolumeClaim> pvcs = new HashMap<>();
+    for (HasMetadata object : list.getItems()) {
+      if (object instanceof DeploymentConfig) {
+        throw new ValidationException("Supporting of deployment configs is not implemented yet.");
+      } else if (object instanceof Pod) {
+        Pod pod = (Pod) object;
+        pods.put(pod.getMetadata().getName(), pod);
+      } else if (object instanceof Service) {
+        Service service = (Service) object;
+        services.put(service.getMetadata().getName(), service);
+      } else if (object instanceof Route) {
+        Route route = (Route) object;
+        routes.put(route.getMetadata().getName(), route);
+      } else if (object instanceof PersistentVolumeClaim) {
+        PersistentVolumeClaim pvc = (PersistentVolumeClaim) object;
+        pvcs.put(pvc.getMetadata().getName(), pvc);
+      } else {
+        throw new ValidationException(
+            String.format("Found unknown object type '%s'", object.getMetadata()));
+      }
+    }
+
+    OpenShiftEnvironment openShiftEnvironment =
+        new OpenShiftEnvironment()
+            .withPods(pods)
+            .withServices(services)
+            .withRoutes(routes)
+            .withPersistentVolumeClaims(pvcs);
+    normalizeEnvironment(openShiftEnvironment, environment);
+
+    return openShiftEnvironment;
+  }
+

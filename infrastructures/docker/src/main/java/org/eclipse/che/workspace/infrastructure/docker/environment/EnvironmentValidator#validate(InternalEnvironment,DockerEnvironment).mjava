@@ -1,0 +1,48 @@
+  public void validate(InternalEnvironment env, DockerEnvironment dockerEnvironment)
+      throws ValidationException, InfrastructureException {
+    checkArgument(
+        dockerEnvironment.getContainers() != null && !dockerEnvironment.getContainers().isEmpty(),
+        "Environment should contain at least 1 container");
+
+    checkArgument(
+        env.getMachines() != null && !env.getMachines().isEmpty(),
+        "Environment should contain at least 1 machine");
+
+    List<String> missingContainers =
+        env.getMachines()
+            .keySet()
+            .stream()
+            .filter(machineName -> !dockerEnvironment.getContainers().containsKey(machineName))
+            .collect(toList());
+    checkArgument(
+        missingContainers.isEmpty(),
+        "Environment contains machines that are missing in environment recipe: %s",
+        Joiner.on(", ").join(missingContainers));
+
+    List<String> machinesWithWsagentServer =
+        env.getMachines()
+            .entrySet()
+            .stream()
+            .filter(
+                entry ->
+                    WsAgentMachineFinderUtil.containsWsAgentServerOrInstaller(entry.getValue()))
+            .map(Map.Entry::getKey)
+            .collect(toList());
+
+    checkArgument(
+        machinesWithWsagentServer.size() == 1,
+        "Environment should contain exactly 1 machine with wsagent, but contains '%s'. "
+            + "All machines with this agent: %s",
+        machinesWithWsagentServer.size(),
+        Joiner.on(", ").join(machinesWithWsagentServer));
+
+    // needed to validate different kinds of dependencies in containers to other containers
+    Set<String> containersNames = dockerEnvironment.getContainers().keySet();
+
+    for (Map.Entry<String, DockerContainerConfig> entry :
+        dockerEnvironment.getContainers().entrySet()) {
+      validateMachine(
+          entry.getKey(), env.getMachines().get(entry.getKey()), entry.getValue(), containersNames);
+    }
+  }
+

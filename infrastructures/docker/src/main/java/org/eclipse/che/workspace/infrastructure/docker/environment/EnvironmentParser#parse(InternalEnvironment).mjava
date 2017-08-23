@@ -1,0 +1,39 @@
+  /**
+   * Parses {@link Environment} into {@link DockerEnvironment}.
+   *
+   * @param environment environment to parse
+   * @return environment representation as compose environment
+   * @throws ValidationException if provided environment is illegal
+   * @throws InfrastructureException if fetching of environment recipe content fails
+   */
+  public DockerEnvironment parse(InternalEnvironment environment)
+      throws ValidationException, InfrastructureException {
+
+    checkNotNull(environment, "Environment should not be null");
+    InternalRecipe recipe = environment.getRecipe();
+    checkNotNull(recipe, "Environment recipe should not be null");
+    checkNotNull(recipe.getType(), "Environment recipe type should not be null");
+    checkNotNull(recipe.getContent(), "Recipe of environment must contain content");
+
+    DockerConfigSourceSpecificEnvironmentParser parser = environmentParsers.get(recipe.getType());
+    if (parser == null) {
+      throw new ValidationException(
+          format(
+              "Environment type '%s' is not supported. " + "Supported environment types: %s",
+              recipe.getType(), Joiner.on(", ").join(environmentParsers.keySet())));
+    }
+
+    DockerEnvironment dockerEnvironment = parser.parse(environment);
+
+    for (Map.Entry<String, DockerContainerConfig> entry :
+        dockerEnvironment.getContainers().entrySet()) {
+
+      InternalMachineConfig machineConfig = environment.getMachines().get(entry.getKey());
+      if (machineConfig != null) {
+        normalizeMachine(entry.getKey(), entry.getValue(), machineConfig);
+      }
+    }
+
+    return dockerEnvironment;
+  }
+

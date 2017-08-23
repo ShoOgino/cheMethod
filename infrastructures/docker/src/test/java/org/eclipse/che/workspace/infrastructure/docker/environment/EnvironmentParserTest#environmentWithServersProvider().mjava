@@ -1,0 +1,99 @@
+  @DataProvider(name = "environmentWithServersProvider")
+  public static Object[][] environmentWithServersProvider() {
+    // Format of result array:
+    // [ [InternalMachineConfig object, expected exposes list, parsed representation of environment], ... ]
+    List<List<Object>> data = new ArrayList<>();
+
+    // no exposes, servers -> no exposes
+    data.add(asList(mockMachine(), createContainer(), emptyList()));
+
+    // server port normalization
+    data.add(
+        asList(
+            mockMachineWithServers(singletonMap("ref1", new ServerConfigImpl("8080", null, null))),
+            createContainer(emptyList()),
+            singletonList("8080/tcp")));
+
+    // when expose match server port single value is used
+    data.add(
+        asList(
+            mockMachineWithServers(
+                singletonMap("ref1", new ServerConfigImpl("8080/tcp", null, null))),
+            createContainer(singletonList("8080/tcp")),
+            singletonList("8080/tcp")));
+
+    // when expose match server port without protocol suffix single value is used
+    data.add(
+        asList(
+            mockMachineWithServers(singletonMap("ref1", new ServerConfigImpl("8080", null, null))),
+            createContainer(singletonList("8080/tcp")),
+            singletonList("8080/tcp")));
+
+    // when expose without protocol suffix match server port single value is used
+    data.add(
+        asList(
+            mockMachineWithServers(
+                singletonMap("ref1", new ServerConfigImpl("8080/tcp", null, null))),
+            createContainer(singletonList("8080")),
+            singletonList("8080/tcp")));
+
+    // normalization of ports
+    data.add(
+        asList(
+            mockMachineWithServers(singletonMap("ref1", new ServerConfigImpl("8080", null, null))),
+            createContainer(singletonList("8080")),
+            singletonList("8080/tcp")));
+
+    // normalization of several servers
+    data.add(
+        asList(
+            mockMachineWithServers(
+                ImmutableMap.of(
+                    "ref1",
+                    new ServerConfigImpl("8080", null, null),
+                    "ref2",
+                    new ServerConfigImpl("9090", null, null))),
+            createContainer(emptyList()),
+            asList("8080/tcp", "9090/tcp")));
+
+    // it's OK to have expose of single port with different protocols
+    data.add(
+        asList(
+            mockMachineWithServers(
+                ImmutableMap.of(
+                    "ref1",
+                    new ServerConfigImpl("8080/tcp", null, null),
+                    "ref2",
+                    new ServerConfigImpl("8080/udp", null, null))),
+            createContainer(emptyList()),
+            asList("8080/tcp", "8080/udp")));
+
+    // it's OK to have expose of single port with different protocols
+    data.add(
+        asList(
+            mockMachineWithServers(
+                ImmutableMap.of(
+                    "ref1",
+                    new ServerConfigImpl("8080", null, null),
+                    "ref2",
+                    new ServerConfigImpl("8080/udp", null, null))),
+            createContainer(emptyList()),
+            asList("8080/tcp", "8080/udp")));
+
+    // merging expose of container and servers ports
+    data.add(
+        asList(
+            mockMachineWithServers(
+                ImmutableMap.of(
+                    "ref1",
+                    new ServerConfigImpl("8080", null, null),
+                    "ref2",
+                    new ServerConfigImpl("9090/udp", null, null))),
+            createContainer(asList("7070", "6060/udp")),
+            asList("8080/tcp", "9090/udp", "7070/tcp", "6060/udp")));
+
+    return data.stream()
+        .map(list -> list.toArray(new Object[list.size()]))
+        .toArray(value -> new Object[data.size()][]);
+  }
+

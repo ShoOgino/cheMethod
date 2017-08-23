@@ -1,0 +1,29 @@
+  private void normalizeMachine(
+      String name, DockerContainerConfig container, InternalMachineConfig machineConfig)
+      throws ValidationException {
+    if (machineConfig.getAttributes().containsKey("memoryLimitBytes")) {
+      try {
+        container.setMemLimit(
+            Long.parseLong(machineConfig.getAttributes().get("memoryLimitBytes")));
+      } catch (NumberFormatException e) {
+        throw new ValidationException(
+            format("Value of attribute 'memoryLimitBytes' of machine '%s' is illegal", name));
+      }
+    }
+    container.setExpose(
+        container
+            .getExpose()
+            .stream()
+            .map(expose -> expose.contains("/") ? expose : expose + "/tcp")
+            .collect(toList()));
+    for (ServerConfig serverConfig : machineConfig.getServers().values()) {
+      String normalizedPort =
+          serverConfig.getPort().contains("/")
+              ? serverConfig.getPort()
+              : serverConfig.getPort() + "/tcp";
+
+      container.getExpose().add(normalizedPort);
+    }
+    container.setExpose(container.getExpose().stream().distinct().collect(Collectors.toList()));
+  }
+
