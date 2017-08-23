@@ -1,0 +1,45 @@
+  @Test(priority = 0)
+  public void shouldDebugCliPhpScriptFromFirstLine() {
+    // when
+    menu.runCommand(
+        TestMenuCommandsConstants.Run.RUN_MENU,
+        TestMenuCommandsConstants.Run.EDIT_DEBUG_CONFIGURATION);
+    debugConfig.createConfig(PROJECT);
+
+    menu.runCommandByXpath(
+        TestMenuCommandsConstants.Run.RUN_MENU,
+        TestMenuCommandsConstants.Run.DEBUG,
+        getXpathForDebugConfigurationMenuItem());
+
+    notificationPopup.waitExpectedMessageOnProgressPanelAndClosed("Remote debugger connected");
+
+    projectExplorer.openItemByPath(PATH_TO_LIB_PHP);
+    editor.setBreakPointAndWaitActiveState(14);
+    editor.closeAllTabs();
+
+    projectExplorer.openItemByPath(PATH_TO_INDEX_PHP);
+    projectExplorer.invokeCommandWithContextMenu(
+        ProjectExplorer.CommandsGoal.COMMON, PROJECT, DEBUG_PHP_SCRIPT_COMMAND_NAME);
+    debugPanel.openDebugPanel();
+
+    // then
+    debugPanel.waitDebugHighlightedText("<?php include 'lib.php';?>");
+    debugPanel.waitTextInVariablesPanel("$_GET: array [0]");
+
+    // when
+    debugPanel.clickOnButton(DebugPanel.DebuggerButtonsPanel.RESUME_BTN_ID);
+
+    // then
+    editor.waitTabFileWithSavedStatus("lib.php");
+    debugPanel.waitDebugHighlightedText("return \"Hello, \" + $name;");
+    debugPanel.waitTextInVariablesPanel("$name: \"man\"");
+
+    // when
+    debugPanel.clickOnButton(DebugPanel.DebuggerButtonsPanel.STEP_OUT);
+
+    //then
+    editor.waitTabFileWithSavedStatus("index.php");
+    debugPanel.waitDebugHighlightedText("echo sayHello(\"man\");");
+    debugPanel.waitTextInVariablesPanel("$_GET: array [0]");
+  }
+

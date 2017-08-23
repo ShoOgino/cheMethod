@@ -1,0 +1,52 @@
+  /**
+   * create URL
+   *
+   * @param port number of port
+   * @param machineToken authorization token for machine
+   * @param workspaceName name of workspace
+   * @return String
+   * @throws JsonParseException
+   */
+  public String createURLByExposedPort(String port, String machineToken, String workspaceName)
+      throws JsonParseException {
+    String json;
+    String url;
+    String serverAddress = "";
+    expandWorkSpaceItem();
+    clickTryItOutByXpath(Locators.TRY_IT_OUT_RUNTIME);
+    json =
+        new WebDriverWait(seleniumWebDriver, REDRAW_UI_ELEMENTS_TIMEOUT_SEC)
+            .until(
+                ExpectedConditions.visibilityOfElementLocated(
+                    By.xpath(Locators.RESPONSE_BODY_RUNTIME)))
+            .getText();
+    JsonValue jsonValue = JsonHelper.parseJson(json);
+    JsonValue foundValue = null;
+    Iterator<JsonValue> jsonIterator = jsonValue.getElements();
+    while (jsonIterator.hasNext()) {
+      JsonValue value = jsonIterator.next();
+      JsonValue config = value.getElement("config");
+      JsonValue defaultEnv = config.getElement("defaultEnv");
+      if (defaultEnv.isString() && workspaceName.equals(defaultEnv.getStringValue())) {
+        foundValue = value;
+        break;
+      }
+    }
+    if (foundValue != null) {
+      serverAddress =
+          foundValue
+              .getElement("runtime")
+              .getElement("devMachine")
+              .getElement("runtime")
+              .getElement("servers")
+              .getElement(port)
+              .getElement("url")
+              .toString()
+              .replaceAll("\"", "");
+    }
+
+    url = serverAddress + "/docs/swagger.json?token=" + machineToken;
+    collapseWorkSpaceItem();
+    return url;
+  }
+

@@ -1,0 +1,32 @@
+  @Override
+  public void shutdown() {
+    boolean isInterrupted = false;
+
+    if (!executor.isShutdown()) {
+      executor.shutdown();
+      try {
+        LOG.info("Shutdown workspace threads pool, wait 30s to stop normally");
+        if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+          executor.shutdownNow();
+          LOG.info("Interrupt workspace threads pool, wait 60s to stop");
+          if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+            LOG.error("Couldn't shutdown workspace threads pool");
+          }
+        }
+      } catch (InterruptedException x) {
+        isInterrupted = true;
+        if (!executor.isShutdown()) {
+          LOG.warn("Unable to terminate executor service");
+        }
+      }
+      LOG.info("Workspace threads pool is terminated");
+    }
+
+    LOG.info("Destroy remained workspaces: {}.", testWorkspaceQueue.size());
+    testWorkspaceQueue.forEach(TestWorkspace::delete);
+
+    if (isInterrupted) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
