@@ -1,0 +1,41 @@
+  @BeforeClass
+  public void setup() throws Exception {
+    testProjectServiceClient.importProject(
+        ws.getId(),
+        Paths.get(
+            getClass()
+                .getResource("/projects/plugins/DebuggerPlugin/java-with-external-libs")
+                .toURI()),
+        PROJECT,
+        ProjectTemplates.CONSOLE_JAVA_SIMPLE);
+
+    testCommandServiceClient.createCommand(
+        "mvn -f ${current.project.path} clean install && java -jar "
+            + "-Xdebug -Xnoagent -Djava.compiler=NONE "
+            + "-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000 "
+            + "${current.project.path}/target/java-with-external-libs-1.0-SNAPSHOT-jar-with-dependencies.jar",
+        BUILD_AND_DEBUG_COMMAND_NAME,
+        TestCommandsConstants.CUSTOM,
+        ws.getId());
+
+    // open IDE
+    ide.open(ws);
+    loader.waitOnClosed();
+    projectExplorer.waitItem(PROJECT);
+    notifications.waitProgressPopupPanelClose();
+
+    // add java debug configuration
+    menu.runCommand(
+        TestMenuCommandsConstants.Run.RUN_MENU,
+        TestMenuCommandsConstants.Run.EDIT_DEBUG_CONFIGURATION);
+    debugConfig.createConfig(PROJECT);
+
+    projectExplorer.quickRevealToItemWithJavaScript(PATH_TO_CLASS);
+
+    // perform command "Maven > Reimport" to avoid "Type with fully qualified name: ch.qos.logback.classic.Logger was not found" error
+    projectExplorer.openContextMenuByPathSelectedItem(PROJECT);
+    projectExplorer.clickOnItemInContextMenu(TestProjectExplorerContextMenuConstants.MAVEN);
+    projectExplorer.clickOnNewContextMenuItem(
+        ProjectExplorer.PROJECT_EXPLORER_CONTEXT_MENU_MAVEN.REIMPORT);
+  }
+

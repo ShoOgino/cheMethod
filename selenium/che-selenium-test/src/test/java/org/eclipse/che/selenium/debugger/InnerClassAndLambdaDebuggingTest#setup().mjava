@@ -1,0 +1,34 @@
+  @BeforeClass
+  public void setup() throws Exception {
+    testProjectServiceClient.importProject(
+        ws.getId(),
+        Paths.get(
+            getClass().getResource("/projects/plugins/DebuggerPlugin/java-inner-lambda").toURI()),
+        PROJECT,
+        ProjectTemplates.CONSOLE_JAVA_SIMPLE);
+
+    testCommandServiceClient.createCommand(
+        "mvn -f ${current.project.path} clean install && "
+            + "java -jar -Xdebug -Xrunjdwp:transport=dt_socket,address=8000,server=y,suspend=y "
+            + "${current.project.path}/target/*.jar",
+        BUILD_AND_DEBUG_COMMAND_NAME,
+        TestCommandsConstants.MAVEN,
+        ws.getId());
+
+    // open IDE
+    ide.open(ws);
+    loader.waitOnClosed();
+    projectExplorer.waitItem(PROJECT);
+    notificationPopup.waitProgressPopupPanelClose();
+
+    // add java debug configuration
+    menu.runCommand(
+        TestMenuCommandsConstants.Run.RUN_MENU,
+        TestMenuCommandsConstants.Run.EDIT_DEBUG_CONFIGURATION);
+    debugConfig.createConfig(PROJECT);
+
+    // open test class
+    projectExplorer.quickRevealToItemWithJavaScript(PATH_TO_CLASS);
+    projectExplorer.openItemByPath(PATH_TO_CLASS);
+  }
+

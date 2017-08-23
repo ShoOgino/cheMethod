@@ -1,0 +1,31 @@
+  @Override
+  public void injectMembers(T instance) {
+    Injector injector = injectorProvider.get();
+
+    TestWorkspaceProvider testWorkspaceProvider = injector.getInstance(TestWorkspaceProvider.class);
+    int workspaceDefaultMemoryGb =
+        injector.getInstance(Key.get(int.class, Names.named("workspace.default_memory_gb")));
+
+    try {
+      TestUser testUser =
+          isNullOrEmpty(injectTestWorkspace.user())
+              ? injector.getInstance(DefaultTestUser.class)
+              : findInjectedUser(instance, injectTestWorkspace.user());
+
+      int memoryGb =
+          injectTestWorkspace.memoryGb() <= 0
+              ? workspaceDefaultMemoryGb
+              : injectTestWorkspace.memoryGb();
+
+      TestWorkspace testWorkspace =
+          testWorkspaceProvider.createWorkspace(testUser, memoryGb, injectTestWorkspace.template());
+      testWorkspace.await();
+
+      field.setAccessible(true);
+      field.set(instance, testWorkspace);
+    } catch (Exception e) {
+      throw new RuntimeException(
+          "Failed to instantiate workspace in " + instance.getClass().getName(), e);
+    }
+  }
+

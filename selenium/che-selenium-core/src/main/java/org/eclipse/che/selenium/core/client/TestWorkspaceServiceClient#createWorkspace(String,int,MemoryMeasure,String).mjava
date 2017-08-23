@@ -1,0 +1,27 @@
+  /** Creates a new workspace. */
+  public Workspace createWorkspace(
+      String workspaceName, int memory, MemoryMeasure memoryUnit, String pathToPattern)
+      throws Exception {
+    String json = FileUtils.readFileToString(new File(pathToPattern), Charset.forName("UTF-8"));
+    WorkspaceConfigDto workspace =
+        DtoFactory.getInstance().createDtoFromJson(json, WorkspaceConfigDto.class);
+
+    EnvironmentDto environment = workspace.getEnvironments().get("replaced_name");
+    environment
+        .getMachines()
+        .get("dev-machine")
+        .getAttributes()
+        .put("memoryLimitBytes", Long.toString(convertToByte(memory, memoryUnit)));
+    workspace.getEnvironments().remove("replaced_name");
+    workspace.getEnvironments().put(workspaceName, environment);
+    workspace.setName(workspaceName);
+    workspace.setDefaultEnv(workspaceName);
+
+    return requestFactory
+        .fromUrl(getBaseUrl())
+        .usePostMethod()
+        .setBody(workspace)
+        .request()
+        .asDto(WorkspaceDto.class);
+  }
+

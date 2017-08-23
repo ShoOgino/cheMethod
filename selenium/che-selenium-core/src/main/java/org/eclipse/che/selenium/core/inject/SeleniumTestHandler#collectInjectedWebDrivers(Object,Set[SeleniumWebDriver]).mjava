@@ -1,0 +1,42 @@
+  /**
+   * Iterates recursively throw all fields and collects instances of {@link SeleniumWebDriver}.
+   *
+   * @param testInstance the based object to examine
+   * @param webDrivers as the result of the method will contain all {@link WebDriver}
+   */
+  private void collectInjectedWebDrivers(Object testInstance, Set<SeleniumWebDriver> webDrivers) {
+    for (Field field : testInstance.getClass().getDeclaredFields()) {
+      field.setAccessible(true);
+
+      Object obj;
+      try {
+        obj = field.get(testInstance);
+      } catch (IllegalAccessException e) {
+        LOG.error(
+            "Field {} is unaccessable in {}.", field.getName(), testInstance.getClass().getName());
+        continue;
+      }
+
+      if (obj == null) {
+        continue;
+      }
+
+      Optional<Constructor<?>> injectedConstructor =
+          Stream.of(obj.getClass().getConstructors()).filter(this::hasInjectAnnotation).findAny();
+
+      if (!hasInjectAnnotation(field) && !injectedConstructor.isPresent()) {
+        continue;
+      }
+
+      if (obj instanceof com.google.inject.Provider || obj instanceof javax.inject.Provider) {
+        continue;
+      }
+
+      if (obj instanceof SeleniumWebDriver) {
+        webDrivers.add((SeleniumWebDriver) obj);
+      } else {
+        collectInjectedWebDrivers(obj, webDrivers);
+      }
+    }
+  }
+

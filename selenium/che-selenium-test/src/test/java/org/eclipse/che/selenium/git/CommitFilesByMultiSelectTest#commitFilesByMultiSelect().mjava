@@ -1,0 +1,162 @@
+  @Test
+  public void commitFilesByMultiSelect() {
+    projectExplorer.waitProjectExplorer();
+    projectExplorer.waitItem(PROJECT_NAME);
+    projectExplorer.selectItem(PROJECT_NAME);
+    menu.runCommand(
+        TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.INITIALIZE_REPOSITORY);
+    askDialog.confirmAndWaitClosed();
+    git.waitGitStatusBarWithMess(TestGitConstants.GIT_INITIALIZED_SUCCESS);
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(TestGitConstants.GIT_INITIALIZED_SUCCESS);
+    loader.waitOnClosed();
+
+    // Check the 'Cancel' button
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.COMMIT);
+    git.waitCommitMainFormIsOpened();
+    git.clickOnCancelBtnComitForm();
+
+    // perform init commit
+    projectExplorer.selectItem(PROJECT_NAME);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.COMMIT);
+    git.waitAndRunCommit("init");
+    loader.waitOnClosed();
+
+    // Edit SayHelloTest.java
+    projectExplorer.expandPathInProjectExplorerAndOpenFile(
+        PATH_FOR_EXPAND_FIRST_MODULE, "SayHelloTest.java");
+    loader.waitOnClosed();
+    editor.setCursorToLine(16);
+    editor.typeTextIntoEditor("//" + CHANGE_CONTENT);
+    editor.waitTextIntoEditor("//" + CHANGE_CONTENT);
+
+    // Edit GreetingController.java
+    git.closeGitInfoPanel();
+    projectExplorer.expandPathInProjectExplorerAndOpenFile(
+        PATH_FOR_EXPAND_SECOND_MODULE, 1, "AppController.java");
+    loader.waitOnClosed();
+    editor.setCursorToLine(16);
+    editor.typeTextIntoEditor("//" + CHANGE_CONTENT);
+    editor.waitTextIntoEditor("//" + CHANGE_CONTENT);
+
+    // Edit several files in the first module
+    projectExplorer.openItemByPath(PROJECT_NAME + "/my-lib/src/test/java/hello/file.css");
+    editor.waitActiveEditor();
+    editor.typeTextIntoEditor(Keys.ENTER.toString());
+    editor.typeTextIntoEditor(Keys.PAGE_UP.toString());
+    editor.typeTextIntoEditor(CHANGE_CONTENT);
+    editor.waitTextIntoEditor(CHANGE_CONTENT);
+    projectExplorer.openItemByPath(PROJECT_NAME + "/my-lib/src/test/java/hello/file.html");
+    editor.waitActiveEditor();
+    editor.typeTextIntoEditor(Keys.ENTER.toString());
+    editor.typeTextIntoEditor(Keys.PAGE_UP.toString());
+    editor.typeTextIntoEditor("<!" + CHANGE_CONTENT + ">");
+    editor.waitTextIntoEditor("<!" + CHANGE_CONTENT + ">");
+
+    // Check git status
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.STATUS);
+    git.waitGitStatusBarWithMess(STATUS_MESSAGE_BEFORE_COMMIT);
+
+    // Perform the commit selected files
+    projectExplorer.selectItem(PROJECT_NAME + "/my-lib/src/test/java/hello/SayHelloTest.java");
+    git.closeGitInfoPanel();
+    projectExplorer.selectMultiFilesByCtrlKeys(
+        PROJECT_NAME + "/my-webapp/src/main/java/helloworld/AppController.java");
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.ADD_TO_INDEX);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.COMMIT);
+    git.waitAndRunCommit(COMMIT_MESSAGE_1);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.STATUS);
+    git.waitGitStatusBarWithMess(STATUS_MESSAGE_AFTER_COMMIT);
+    git.closeGitInfoPanel();
+
+    // Check the git history
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.SHOW_HISTORY);
+    git.waitHistoryFormToOpen();
+    git.waitCommitInHistoryForm(COMMIT_MESSAGE_1);
+    git.clickOnHistoryRowInСommitsList(0);
+    loader.waitOnClosed();
+    git.waitContentInHistoryEditor(COMMIT_MESSAGE_1);
+
+    // check changes in git compare form
+    git.clickCompareBtnGitHistory();
+    checkChangesIntoCompareForm(CHANGE_CONTENT);
+    closeGitCompareForm();
+    git.waitHistoryFormToOpen();
+    git.closeGitHistoryForm();
+    projectExplorer.selectItem(PROJECT_NAME);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.SHOW_HISTORY);
+    git.waitHistoryFormToOpen();
+    git.clickOnHistoryRowInСommitsList(0);
+    loader.waitOnClosed();
+    git.clickCompareBtnGitHistory();
+    git.waitGroupGitCompareIsOpen();
+    git.waitExpTextInGroupGitCompare(TEXT_GROUP_1);
+    git.selectFileInChangedFilesTreePanel("AppController.java");
+    git.clickOnGroupCompareButton();
+    checkChangesIntoCompareForm(CHANGE_CONTENT);
+    closeGitCompareForm();
+    git.closeGroupGitCompareForm();
+    git.closeGitHistoryForm();
+
+    // Add the 'file.css' and 'file.html' to index
+    projectExplorer.selectItem(PROJECT_NAME);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.ADD_TO_INDEX);
+    loader.waitOnClosed();
+    git.closeGitInfoPanel();
+
+    // Edit several files in the second module
+    projectExplorer.waitProjectExplorer();
+    projectExplorer.openItemByPath(PROJECT_NAME + "/my-webapp/src/file.xml");
+    editor.waitActiveEditor();
+    editor.typeTextIntoEditor(Keys.ENTER.toString());
+    editor.typeTextIntoEditor(Keys.PAGE_UP.toString());
+    editor.typeTextIntoEditor("<!" + CHANGE_CONTENT + ">");
+    editor.waitTextIntoEditor("<!" + CHANGE_CONTENT + ">");
+    projectExplorer.openItemByPath(PROJECT_NAME + "/my-webapp/src/file.js");
+    editor.waitActiveEditor();
+    editor.typeTextIntoEditor(CHANGE_CONTENT);
+    editor.waitTextIntoEditor(CHANGE_CONTENT);
+
+    // Check git status
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.STATUS);
+    git.waitGitStatusBarWithMess(STATUS_MESS_AFTER_ADD_TO_INDEX);
+    loader.waitOnClosed();
+    git.closeGitInfoPanel();
+
+    // Perform the commit and add selected files
+    projectExplorer.selectItem(PROJECT_NAME + "/my-webapp/src/file.xml");
+    projectExplorer.selectMultiFilesByCtrlKeys(PROJECT_NAME + "/my-webapp/src/file.js");
+    projectExplorer.selectMultiFilesByCtrlKeys(
+        PROJECT_NAME + "/my-lib/src/test/java/hello/file.css");
+    projectExplorer.selectMultiFilesByCtrlKeys(
+        PROJECT_NAME + "/my-lib/src/test/java/hello/file.html");
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.COMMIT);
+    git.waitAndRunCommit(COMMIT_MESSAGE_2);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.STATUS);
+    git.waitGitStatusBarWithMess(CHANGE_TO_COMMIT_MESSAGE);
+    git.closeGitInfoPanel();
+
+    // Check the git history
+    projectExplorer.waitProjectExplorer();
+    projectExplorer.selectItem(PROJECT_NAME);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.SHOW_HISTORY);
+    git.waitHistoryFormToOpen();
+    git.waitCommitInHistoryForm(COMMIT_MESSAGE_2);
+    git.clickOnHistoryRowInСommitsList(0);
+    loader.waitOnClosed();
+    git.waitContentInHistoryEditor(COMMIT_MESSAGE_2);
+
+    // check changes in git compare form
+    git.clickCompareBtnGitHistory();
+    git.waitGroupGitCompareIsOpen();
+    git.waitExpTextInGroupGitCompare(TEXT_GROUP_2);
+    git.selectFileInChangedFilesTreePanel("file.css");
+    git.clickOnGroupCompareButton();
+    checkChangesIntoCompareForm(CHANGE_CONTENT);
+    closeGitCompareForm();
+    git.waitGroupGitCompareIsOpen();
+    git.selectFileInChangedFilesTreePanel("file.js");
+    git.clickOnGroupCompareButton();
+    checkChangesIntoCompareForm(CHANGE_CONTENT);
+  }
+

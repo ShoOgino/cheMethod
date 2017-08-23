@@ -1,0 +1,29 @@
+  /** Updates file content. */
+  public void updateFile(String workspaceId, String pathToFile, String content) throws Exception {
+    String url = getWsAgentUrl(workspaceId) + "/file/" + pathToFile;
+
+    HttpURLConnection httpConnection = null;
+    try {
+      httpConnection = (HttpURLConnection) new URL(url).openConnection();
+      httpConnection.setRequestMethod("PUT");
+      httpConnection.setRequestProperty("Content-Type", "text/plain");
+      httpConnection.addRequestProperty(
+          "Authorization", machineServiceClient.getMachineApiToken(workspaceId));
+      httpConnection.setDoOutput(true);
+
+      try (OutputStream output = httpConnection.getOutputStream()) {
+        output.write(content.getBytes("UTF-8"));
+        if (httpConnection.getResponseCode() != 200) {
+          throw new RuntimeException(
+              "Cannot update content in the current file: "
+                  + url
+                  + " something went wrong "
+                  + httpConnection.getResponseCode()
+                  + IoUtil.readStream(httpConnection.getErrorStream()));
+        }
+      }
+    } finally {
+      ofNullable(httpConnection).ifPresent(HttpURLConnection::disconnect);
+    }
+  }
+

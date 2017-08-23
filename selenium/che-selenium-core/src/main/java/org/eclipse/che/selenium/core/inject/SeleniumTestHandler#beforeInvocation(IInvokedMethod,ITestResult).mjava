@@ -1,0 +1,26 @@
+  @Override
+  public void beforeInvocation(IInvokedMethod method, ITestResult testResult) {
+    Object testInstance = method.getTestMethod().getInstance();
+    if (runningTests.containsValue(testInstance)) {
+      return;
+    }
+
+    long currentThreadId = Thread.currentThread().getId();
+    if (isNewTestInProgress(testInstance)) {
+      preDestroy(runningTests.remove(currentThreadId));
+    }
+
+    String testName = testInstance.getClass().getName();
+
+    try {
+      LOG.info("Dependencies injection in {}", testName);
+      injectDependencies(testResult.getTestContext(), testInstance);
+    } catch (Exception e) {
+      String errorMessage = "Failed to inject fields in " + testName;
+      LOG.error(errorMessage, e);
+      throw new TestException(errorMessage, e);
+    } finally {
+      runningTests.put(currentThreadId, testInstance);
+    }
+  }
+

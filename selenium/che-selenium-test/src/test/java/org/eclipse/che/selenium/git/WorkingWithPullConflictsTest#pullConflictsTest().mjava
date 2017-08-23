@@ -1,0 +1,109 @@
+  @Test
+  public void pullConflictsTest() {
+    // Preconditions and import 2 repositories in 2 projects
+    projectExplorer.waitProjectExplorer();
+    menu.runCommand(
+        TestMenuCommandsConstants.Workspace.WORKSPACE,
+        TestMenuCommandsConstants.Workspace.IMPORT_PROJECT);
+
+    String cloneUri = "git@github.com:" + gitHubUsername + "/testRepo-3.git";
+    importProjectFromRemoteRepo(cloneUri, PROJECT_1);
+    menu.runCommand(
+        TestMenuCommandsConstants.Workspace.WORKSPACE,
+        TestMenuCommandsConstants.Workspace.IMPORT_PROJECT);
+    importProjectFromRemoteRepo(cloneUri, PROJECT_2);
+    projectExplorer.quickExpandWithJavaScript();
+    loader.waitOnClosed();
+
+    // Change files in second project, commit and push to remote repo
+    projectExplorer.openItemByPath(PROJECT_1);
+    projectExplorer.openItemByPath(
+        PROJECT_2 + "/src/main/java/commenttest/" + fileForChange + ".java");
+    typeTextAndSaveIntoJavaClass(CHANGE_STRING_1);
+    typeTextAndSaveIntoTextFile(CHANGE_STRING_1);
+    projectExplorer.selectItem(PROJECT_2);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.ADD_TO_INDEX);
+    git.waitGitStatusBarWithMess(TestGitConstants.GIT_ADD_TO_INDEX_SUCCESS);
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(TestGitConstants.GIT_ADD_TO_INDEX_SUCCESS);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.COMMIT);
+    git.waitAndRunCommit(COMMIT_MSG);
+    git.waitGitStatusBarWithMess(TestGitConstants.COMMIT_MESSAGE_SUCCESS);
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(TestGitConstants.COMMIT_MESSAGE_SUCCESS);
+    menu.runCommand(
+        TestMenuCommandsConstants.Git.GIT,
+        TestMenuCommandsConstants.Git.Remotes.REMOTES_TOP,
+        TestMenuCommandsConstants.Git.Remotes.PUSH);
+    git.waitPushFormToOpen();
+    git.selectPushRemoteBranchName("master");
+    git.clickPush();
+    git.waitPushFormToClose();
+    consoles.waitProcessInProcessConsoleTree("Git push", LOADER_TIMEOUT_SEC);
+    git.waitGitStatusBarWithMess("Successfully pushed");
+    git.waitGitStatusBarWithMess("to git@github.com:" + gitHubUsername + "/testRepo-3.git");
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(PUSH_MSG);
+
+    // Open first project and change the same files
+    projectExplorer.quickExpandWithJavaScript();
+    projectExplorer.openItemByPath(
+        PROJECT_1 + "/src/main/java/commenttest/" + fileForChange + ".java");
+    typeTextAndSaveIntoJavaClass(CHANGE_STRING_2);
+    typeTextAndSaveIntoTextFile(CHANGE_STRING_2);
+
+    // Make pull and get the first conflict
+    menu.runCommand(
+        TestMenuCommandsConstants.Git.GIT,
+        TestMenuCommandsConstants.Git.Remotes.REMOTES_TOP,
+        TestMenuCommandsConstants.Git.Remotes.PULL);
+    git.waitPullFormToOpen();
+    git.clickPull();
+    git.waitPullFormToClose();
+    consoles.waitProcessInProcessConsoleTree("Git pull", LOADER_TIMEOUT_SEC);
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(firstMergeConflictMessage);
+
+    // Add to index and commit
+    projectExplorer.selectItem(PROJECT_1);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.ADD_TO_INDEX);
+    git.waitGitStatusBarWithMess(TestGitConstants.GIT_ADD_TO_INDEX_SUCCESS);
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(TestGitConstants.GIT_ADD_TO_INDEX_SUCCESS);
+    menu.runCommand(TestMenuCommandsConstants.Git.GIT, TestMenuCommandsConstants.Git.COMMIT);
+    git.waitAndRunCommit(COMMIT_MSG);
+    git.waitGitStatusBarWithMess(TestGitConstants.COMMIT_MESSAGE_SUCCESS);
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(TestGitConstants.COMMIT_MESSAGE_SUCCESS);
+
+    // Make pull again and get second conflict
+    menu.runCommand(
+        TestMenuCommandsConstants.Git.GIT,
+        TestMenuCommandsConstants.Git.Remotes.REMOTES_TOP,
+        TestMenuCommandsConstants.Git.Remotes.PULL);
+    git.waitPullFormToOpen();
+    git.clickPull();
+    git.waitPullFormToClose();
+    consoles.waitProcessInProcessConsoleTree("Git pull", LOADER_TIMEOUT_SEC);
+    git.closeGitInfoPanel();
+    events.clickProjectEventsTab();
+    events.waitExpectedMessage(secondMergeConflictMessage);
+    loader.waitOnClosed();
+
+    // Checking the message has present
+    projectExplorer.openItemByPath(
+        PROJECT_1 + "/src/main/java/commenttest/" + fileForChange + ".java");
+    editor.waitTextIntoEditor(headConfPrefixConfMess);
+    editor.closeFileByNameWithSaving(fileForChange);
+    editor.waitWhileFileIsClosed(fileForChange);
+    projectExplorer.openItemByVisibleNameInExplorer(fileForChange2);
+    editor.waitActiveEditor();
+    editor.waitTextIntoEditor(headConfPrefixConfMess);
+  }
+

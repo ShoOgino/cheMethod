@@ -1,0 +1,29 @@
+  /** Creates file in the project. */
+  public void createFileInProject(
+      String workspaceId, String parentFolder, String fileName, String content) throws Exception {
+    String apiRESTUrl = getWsAgentUrl(workspaceId) + "/file/" + parentFolder + "?name=" + fileName;
+
+    HttpURLConnection httpConnection = null;
+    try {
+      httpConnection = (HttpURLConnection) new URL(apiRESTUrl).openConnection();
+      httpConnection.setRequestMethod("POST");
+      httpConnection.setRequestProperty("Content-Type", "text/plain");
+      httpConnection.addRequestProperty(
+          "Authorization", machineServiceClient.getMachineApiToken(workspaceId));
+      httpConnection.setDoOutput(true);
+      try (OutputStream output = httpConnection.getOutputStream()) {
+        output.write(content.getBytes("UTF-8"));
+        if (httpConnection.getResponseCode() != 201) {
+          throw new RuntimeException(
+              "Cannot create requested content in the current project: "
+                  + apiRESTUrl
+                  + " something went wrong "
+                  + httpConnection.getResponseCode()
+                  + IoUtil.readStream(httpConnection.getErrorStream()));
+        }
+      }
+    } finally {
+      ofNullable(httpConnection).ifPresent(HttpURLConnection::disconnect);
+    }
+  }
+

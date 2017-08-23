@@ -1,0 +1,36 @@
+  /** Releases resources by invoking methods annotated with {@link PreDestroy} */
+  private void preDestroy(Object testInstance) {
+    LOG.info("Processing @PreDestroy annotation in {}", testInstance.getClass().getName());
+
+    for (Field field : testInstance.getClass().getDeclaredFields()) {
+      field.setAccessible(true);
+
+      Object obj;
+      try {
+        obj = field.get(testInstance);
+      } catch (IllegalAccessException e) {
+        LOG.error(
+            "Field {} is unaccessable in {}.", field.getName(), testInstance.getClass().getName());
+        continue;
+      }
+
+      if (obj == null || !hasInjectAnnotation(field)) {
+        continue;
+      }
+
+      for (Method m : obj.getClass().getMethods()) {
+        if (m.isAnnotationPresent(PreDestroy.class)) {
+          try {
+            m.invoke(obj);
+          } catch (Exception e) {
+            LOG.error(
+                format(
+                    "Failed to invoke method %s annotated with @PreDestroy in %s. Test instance: %s",
+                    m.getName(), obj.getClass().getName(), testInstance.getClass().getName()),
+                e);
+          }
+        }
+      }
+    }
+  }
+
