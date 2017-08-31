@@ -1,0 +1,37 @@
+  private List<ExtendedTextEdit> convertToExtendedEdit(List<TextEdit> edits, String filePath) {
+    try {
+      // for some reason C# LS sends ws related path,
+      if (!isStartWithProject(filePath)) {
+        filePath = prefixProject(filePath);
+      }
+      String fileContent =
+          com.google.common.io.Files.toString(new File(filePath), Charset.defaultCharset());
+      Document document = new Document(fileContent);
+      return edits
+          .stream()
+          .map(
+              textEdit -> {
+                ExtendedTextEdit result = new ExtendedTextEdit();
+                result.setRange(textEdit.getRange());
+                result.setNewText(textEdit.getNewText());
+                try {
+                  IRegion lineInformation =
+                      document.getLineInformation(textEdit.getRange().getStart().getLine());
+                  String lineText =
+                      document.get(lineInformation.getOffset(), lineInformation.getLength());
+                  result.setLineText(lineText);
+                  result.setInLineStart(textEdit.getRange().getStart().getCharacter());
+                  result.setInLineEnd(textEdit.getRange().getEnd().getCharacter());
+                } catch (BadLocationException e) {
+                  LOG.error("Can't read file line", e);
+                }
+
+                return result;
+              })
+          .collect(Collectors.toList());
+    } catch (IOException e) {
+      LOG.error("Can't read file", e);
+    }
+    return Collections.emptyList();
+  }
+

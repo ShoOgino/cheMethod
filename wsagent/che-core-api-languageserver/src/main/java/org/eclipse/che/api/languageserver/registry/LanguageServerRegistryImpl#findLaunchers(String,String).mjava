@@ -1,0 +1,26 @@
+  List<LanguageServerLauncher> findLaunchers(String projectPath, String fileUri) {
+    String wsPath = absolutize(LanguageServiceUtils.removePrefixUri(fileUri));
+    LanguageDescription language = languageRecognizer.recognizeByPath(wsPath);
+    if (language == null) {
+      return Collections.emptyList();
+    }
+    List<LanguageServerLauncher> combinedLaunchers = new LinkedList<>(launchers);
+    initWorkspaceConfiguration();
+    if (workspace != null) {
+      for (RemoteLsLauncherProvider launcherProvider : launcherProviders) {
+        combinedLaunchers.addAll(launcherProvider.getAll(workspace));
+      }
+    }
+
+    List<LanguageServerLauncher> result = new ArrayList<>();
+    for (LanguageServerLauncher launcher : combinedLaunchers) {
+      if (launcher.isAbleToLaunch()) {
+        int score = matchScore(launcher.getDescription(), fileUri, language.getLanguageId());
+        if (score > 0) {
+          result.add(launcher);
+        }
+      }
+    }
+    return result;
+  }
+
