@@ -2,14 +2,18 @@
     Workspace workspace = workspaceServiceClient.getById(workspaceId);
     workspaceServiceClient.ensureRunningStatus(workspace);
 
-    return workspace
-            .getRuntime()
-            .getMachines()
-            .get(0)
-            .getRuntime()
-            .getServers()
-            .get(String.valueOf(WS_AGENT_PORT) + "/tcp")
-            .getUrl()
-        + "/project";
+    Map<String, ? extends Machine> machines =
+        workspaceServiceClient.getById(workspaceId).getRuntime().getMachines();
+    for (Machine machine : machines.values()) {
+      if (containsWsAgentServer(machine)) {
+        Server wsAgentServer = machine.getServers().get(SERVER_WS_AGENT_HTTP_REFERENCE);
+        if (wsAgentServer != null) {
+          return wsAgentServer.getUrl() + "/project";
+        } else {
+          throw new RuntimeException("Workspace agent server is null");
+        }
+      }
+    }
+    throw new RuntimeException("Cannot find dev machine on workspace");
   }
 
