@@ -5,10 +5,7 @@
     install(new org.eclipse.che.account.api.AccountModule());
     install(new org.eclipse.che.api.user.server.jpa.UserJpaModule());
     install(new org.eclipse.che.api.ssh.server.jpa.SshJpaModule());
-    //        install(new org.eclipse.che.api.machine.server.jpa.MachineJpaModule());
     bind(RecipeDao.class).to(JpaRecipeDao.class);
-    // TODO spi move into docker infra impl
-    bind(SnapshotDao.class).to(JpaSnapshotDao.class);
     install(new org.eclipse.che.api.workspace.server.jpa.WorkspaceJpaModule());
     install(new org.eclipse.che.api.core.jsonrpc.impl.JsonRpcModule());
     install(new org.eclipse.che.api.core.websocket.impl.WebSocketModule());
@@ -78,7 +75,6 @@
         .asEagerSingleton();
     bind(org.eclipse.che.api.workspace.server.event.MachineLogJsonRpcMessenger.class)
         .asEagerSingleton();
-    //
 
     bind(org.eclipse.che.security.oauth.OAuthAuthenticatorProvider.class)
         .to(org.eclipse.che.security.oauth.OAuthAuthenticatorProviderImpl.class);
@@ -96,7 +92,6 @@
 
     // installers
     install(new InstallerModule());
-
     binder().bind(new TypeLiteral<Set<Installer>>() {}).toProvider(InstallersProvider.class);
 
     bind(org.eclipse.che.api.deploy.WsMasterAnalyticsAddresser.class);
@@ -127,10 +122,14 @@
     //        bind(org.eclipse.che.api.agent.server.filters.AddExecInstallerInWorkspaceFilter.class);
     //        bind(org.eclipse.che.api.agent.server.filters.AddExecInstallerInStackFilter.class);
 
-    // FIXME: spi
-    install(new DockerInfraModule());
-    install(new LocalDockerModule());
-    install(new OpenShiftInfraModule());
+    String infrastructure = System.getenv("CHE_INFRASTRUCTURE_ACTIVE");
+    if ("openshift".equals(infrastructure)) {
+      install(new OpenShiftInfraModule());
+    } else {
+      install(new LocalDockerModule());
+      install(new DockerInfraModule());
+    }
     bind(RemoveWorkspaceFilesAfterRemoveWorkspaceEventSubscriber.class).asEagerSingleton();
+    bind(ServerCheckerFactory.class).to(ServerCheckerFactoryImpl.class);
   }
 
