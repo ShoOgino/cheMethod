@@ -1,0 +1,43 @@
+  void modifyContent(
+      LocalVirtualFile virtualFile,
+      BiConsumer<InputStream, OutputStream> modifier,
+      String lockToken)
+      throws ForbiddenException, ServerException {
+    if (virtualFile.isFile()) {
+      if (fileIsLockedAndLockTokenIsInvalid(virtualFile, lockToken)) {
+        throw new ForbiddenException(
+            String.format(
+                "Unable update content of file '%s'. File is locked", virtualFile.getPath()));
+      }
+      final PathLockFactory.PathLock lock =
+          pathLockFactory.getLock(virtualFile.getPath(), true).acquire(WAIT_FOR_FILE_LOCK_TIMEOUT);
+      try {
+        File tempFile = createTempIoFile(virtualFile.getParent(), "edit", "tmp");
+        try {
+          File ioFile = virtualFile.toIoFile();
+          try (BufferedInputStream input = new BufferedInputStream(new FileInputStream(ioFile));
+              BufferedOutputStream output =
+                  new BufferedOutputStream(new FileOutputStream(tempFile)); ) {
+            modifier.accept(input, output);
+          }
+
+          java.nio.file.Files.move(
+              tempFile.toPath(),
+              ioFile.toPath(),
+              StandardCopyOption.REPLACE_EXISTING,
+              StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+          tempFile.delete();
+        }
+      } catch (IOException e) {
+        throw new ServerException(e);
+      } finally {
+        lock.release();
+      }
+      updateInSearcher(virtualFile);
+    } else {
+      throw new ForbiddenException(
+          String.format("Unable update content. Item '%s' is not file", virtualFile.getPath()));
+    }
+  }
+
