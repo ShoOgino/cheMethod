@@ -1,0 +1,68 @@
+  private Promise<Supplier<Promise<Void>>> handleFileChange(
+      Notification notification, String uri, List<TextEdit> edits) {
+    for (EditorPartPresenter editor : editorAgent.getOpenedEditors()) {
+      if (editor instanceof TextEditor
+          && uri.endsWith(editor.getEditorInput().getFile().getLocation().toString())) {
+        notification.setContent(localization.applyWorkspaceActionNotificationModifying(uri));
+        TextEditor textEditor = (TextEditor) editor;
+        HandlesUndoRedo undoRedo = textEditor.getEditorWidget().getUndoRedo();
+        undoRedo.beginCompoundChange();
+        Document document = textEditor.getDocument();
+        edits
+            .stream()
+            .sorted(COMPARATOR)
+            .forEach(
+                e -> {
+                  Range r = e.getRange();
+                  Position start = r.getStart();
+                  Position end = r.getEnd();
+                  document.replace(
+                      start.getLine(),
+                      start.getCharacter(),
+                      end.getLine(),
+                      end.getCharacter(),
+                      e.getNewText());
+                });
+        undoRedo.endCompoundChange();
+        Supplier<Promise<Void>> value =
+            () -> {
+              return promiseProvider.create(
+                  Executor.create(
+                      (ResolveFunction<Void> resolve, RejectFunction reject) -> {
+                        try {
+                          undoRedo.undo();
+                          resolve.apply(null);
+                        } catch (Exception e) {
+                          reject.apply(
+                              new PromiseError() {
+                                public String getMessage() {
+                                  return "Error during undo";
+                                }
+
+                                public Throwable getCause() {
+                                  return e;
+                                }
+                              });
+                        }
+                      }));
+            };
+        return promiseProvider.resolve(value);
+      }
+    }
+    Promise<List<TextEdit>> undoPromise =
+        workspaceService.editFile(new FileEditParamsDto(new FileEditParams(uri, edits)));
+    return undoPromise.then(
+        (Function<List<TextEdit>, Supplier<Promise<Void>>>)
+            (List<TextEdit> undoEdits) -> {
+              return () -> {
+                Promise<List<TextEdit>> redoPromise =
+                    workspaceService.editFile(
+                        new FileEditParamsDto(new FileEditParams(uri, undoEdits)));
+                return redoPromise.then(
+                    (List<TextEdit> redo) -> {
+                      return null;
+                    });
+              };
+            });
+  }
+

@@ -1,0 +1,46 @@
+  /**
+   * Apply a list of text edits to a workspace file
+   *
+   * @param params the edit to be effected
+   * @return a list of text edits that will undo the effected change
+   */
+  @SuppressWarnings("deprecation")
+  private List<TextEditDto> editFile(FileEditParams params) {
+    try {
+      VirtualFileEntry child =
+          projectManager
+              .getProjectsRoot()
+              .getChild(LanguageServiceUtils.removePrefixUri(params.getUri()));
+      if (child != null) {
+        VirtualFile vf = child.getVirtualFile();
+        List<TextEdit> undo = new ArrayList<>();
+        vf.modifyContent(
+            new BiConsumer<InputStream, OutputStream>() {
+
+              @Override
+              public void accept(InputStream in, OutputStream out) {
+                OutputStreamWriter w = new OutputStreamWriter(out);
+                undo.addAll(
+                    new CharStreamEditor(
+                            params.getEdits(),
+                            CharStreamEditor.forReader(new InputStreamReader(in)),
+                            CharStreamEditor.forWriter(w))
+                        .transform());
+                try {
+                  w.flush();
+                } catch (IOException e) {
+                  throw new RuntimeException("failed to write tranformed file", e);
+                }
+              }
+            });
+        return undo.stream().map(e -> new TextEditDto(e)).collect(Collectors.toList());
+      } else {
+        LOG.error("did not find file " + params.getUri());
+        throw new JsonRpcException(-27000, "File not found for edit: " + params.getUri());
+      }
+    } catch (ServerException | ForbiddenException e) {
+      LOG.error("error editing file", e);
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+

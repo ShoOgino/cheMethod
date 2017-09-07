@@ -1,0 +1,28 @@
+  @Override
+  public VirtualFile modifyContent(BiConsumer<InputStream, OutputStream> modifier, String lockToken)
+      throws ForbiddenException, ServerException {
+    checkExistence();
+
+    if (isFile()) {
+      if (fileIsLockedAndLockTokenIsInvalid(lockToken)) {
+        throw new ForbiddenException(
+            String.format(
+                "We were unable to update the content of file '%s'. The file is locked",
+                getPath()));
+      }
+
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      ByteArrayInputStream in = new ByteArrayInputStream(this.content);
+      modifier.accept(in, out);
+      this.content = out.toByteArray();
+      lastModificationDate = System.currentTimeMillis();
+
+      updateInSearcher();
+    } else {
+      throw new ForbiddenException(
+          String.format(
+              "We were unable to update the content. Item '%s' is not a file", getPath()));
+    }
+    return this;
+  }
+
