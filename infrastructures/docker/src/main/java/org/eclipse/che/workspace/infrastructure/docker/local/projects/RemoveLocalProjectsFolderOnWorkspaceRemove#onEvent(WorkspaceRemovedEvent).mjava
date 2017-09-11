@@ -1,0 +1,26 @@
+  @Override
+  public void onEvent(WorkspaceRemovedEvent event) {
+    Workspace workspace = event.getWorkspace();
+    String workspaceName = workspace.getConfig().getName();
+
+    String projectSourcesPath;
+    try {
+      projectSourcesPath = workspaceFolderPathProvider.getPathByName(workspaceName);
+    } catch (IOException e) {
+      LOG.error(
+          "Failed to evaluate projects files path for workspace with id: '{}'. Cause: '{}'",
+          workspace.getId(),
+          e.getMessage());
+      return;
+    }
+
+    if (projectSourcesPath.equals(hostProjectsFolder)) {
+      // Do not remove folder because workspace uses shared folder for projects
+      return;
+    }
+
+    // Remove the workspace folder located in the Che instance docker container.
+    String mountedProjectSourcesPath = projectSourcesPath.replace(getInstanceDataPath(), "");
+    deleteRecursiveAsync(workspace.getId(), mountedProjectSourcesPath);
+  }
+
