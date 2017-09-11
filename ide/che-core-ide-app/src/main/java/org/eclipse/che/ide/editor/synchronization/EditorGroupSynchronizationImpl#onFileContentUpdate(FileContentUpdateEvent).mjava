@@ -1,5 +1,5 @@
   @Override
-  public void onFileContentUpdate(final FileContentUpdateEvent event) {
+  public void onFileContentUpdate(FileContentUpdateEvent event) {
     if (synchronizedEditors.keySet().isEmpty()) {
       return;
     }
@@ -14,23 +14,22 @@
       return;
     }
 
-    documentStorage.getDocument(
-        virtualFile,
-        new DocumentStorage.DocumentCallback() {
+    if (!(virtualFile instanceof File)) {
+      updateContent(virtualFile, false);
+      return;
+    }
 
-          @Override
-          public void onDocumentReceived(final String content) {
-            updateContent(content, event.getModificationStamp(), virtualFile);
-          }
+    File file = (File) virtualFile;
 
-          @Override
-          public void onDocumentLoadFailure(final Throwable caught) {
-            notificationManager.notify(
-                "",
-                "Can not to update content for the file " + virtualFile.getDisplayName(),
-                FAIL,
-                EMERGE_MODE);
-          }
-        });
+    String eventModificationStamp = event.getModificationStamp();
+    String currentModificationStamp = file.getModificationStamp();
+    if (isNullOrEmpty(currentModificationStamp) || isNullOrEmpty(eventModificationStamp)) {
+      updateContent(virtualFile, false);
+      return;
+    }
+
+    if (!Objects.equals(eventModificationStamp, currentModificationStamp)) {
+      updateContent(virtualFile, true);
+    }
   }
 
