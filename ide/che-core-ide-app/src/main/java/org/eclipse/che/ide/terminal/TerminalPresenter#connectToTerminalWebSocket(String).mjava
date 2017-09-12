@@ -3,52 +3,32 @@
 
     socket = WebSocket.create(wsUrl);
 
-    socket.setOnMessageHandler(
-        new MessageReceivedHandler() {
-          @Override
-          public void onMessageReceived(MessageReceivedEvent event) {
-            terminal.write(event.getMessage());
-          }
-        });
+    socket.setOnMessageHandler(event -> terminal.write(event.getMessage()));
 
     socket.setOnCloseHandler(
-        new ConnectionClosedHandler() {
-          @Override
-          public void onClose(WebSocketClosedEvent event) {
-            if (CLOSE_NORMAL == event.getCode()) {
-              connected = false;
-              terminalStateListener.onExit();
-            }
+        event -> {
+          if (CLOSE_NORMAL == event.getCode()) {
+            connected = false;
+            terminalStateListener.onExit();
           }
         });
 
     socket.setOnOpenHandler(
-        new ConnectionOpenedHandler() {
-          @Override
-          public void onOpen() {
-            JavaScriptObject terminalJso = moduleHolder.getModule("Xterm");
-            // if terminal was created programmatically then we don't set focus on it
-            TerminalOptionsJso terminalOptionsJso = TerminalOptionsJso.createDefault();
-            if (source instanceof AddTerminalClickHandler || source instanceof Action) {
-              terminalOptionsJso.withFocusOnOpen(true);
-            }
-            terminal = TerminalJso.create(terminalJso, terminalOptionsJso);
-            connected = true;
+        () -> {
+          JavaScriptObject terminalJso = moduleHolder.getModule("Xterm");
+          terminal = TerminalJso.create(terminalJso, options);
+          connected = true;
 
-            view.openTerminal(terminal);
+          view.openTerminal(terminal);
 
-            terminal.on(
-                DATA_EVENT_NAME,
-                new Operation<String>() {
-                  @Override
-                  public void apply(String arg) throws OperationException {
-                    Jso jso = Jso.create();
-                    jso.addField("type", "data");
-                    jso.addField("data", arg);
-                    socket.send(jso.serialize());
-                  }
-                });
-          }
+          terminal.on(
+              DATA_EVENT_NAME,
+              data -> {
+                Jso jso = Jso.create();
+                jso.addField("type", "data");
+                jso.addField("data", data);
+                socket.send(jso.serialize());
+              });
         });
 
     socket.setOnErrorHandler(
