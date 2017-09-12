@@ -1,0 +1,46 @@
+  @Override
+  public void filter(GenericResourceMethod genericResourceMethod, Object[] arguments)
+      throws ForbiddenException, ServerException {
+    final String methodName = genericResourceMethod.getMethod().getName();
+
+    final Subject currentSubject = EnvironmentContext.getCurrent().getSubject();
+    String action;
+    String recipeId;
+
+    switch (methodName) {
+      case "getRecipe":
+      case "getRecipeScript":
+        recipeId = ((String) arguments[0]);
+        action = READ;
+
+        if (currentSubject.hasPermission(DOMAIN_ID, recipeId, SEARCH)) {
+          //allow to read recipe if user has 'search' permission
+          return;
+        }
+        break;
+
+      case "updateRecipe":
+        RecipeUpdate recipeUpdate = (RecipeUpdate) arguments[0];
+        recipeId = recipeUpdate.getId();
+        action = UPDATE;
+        break;
+
+      case "removeRecipe":
+        recipeId = ((String) arguments[0]);
+        action = DELETE;
+        break;
+
+      case "createRecipe":
+      case "searchRecipes":
+        //available for all
+        return;
+      default:
+        throw new ForbiddenException("The user does not have permission to perform this operation");
+    }
+
+    if (!currentSubject.hasPermission(DOMAIN_ID, recipeId, action)) {
+      throw new ForbiddenException(
+          "The user does not have permission to " + action + " recipe with id '" + recipeId + "'");
+    }
+  }
+

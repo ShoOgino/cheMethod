@@ -1,0 +1,28 @@
+  @Override
+  public void check(Permissions permissions) throws ForbiddenException {
+    if (!"*".equals(permissions.getUserId())) {
+      defaultChecker.check(permissions);
+      return;
+    }
+    final Set<String> unsupportedPublicActions = new HashSet<>(permissions.getActions());
+    unsupportedPublicActions.remove(READ);
+
+    //public search is supported only for admins
+    if (EnvironmentContext.getCurrent()
+        .getSubject()
+        .hasPermission(DOMAIN_ID, null, MANAGE_SYSTEM_ACTION)) {
+      unsupportedPublicActions.remove(SEARCH);
+    } else {
+      defaultChecker.check(permissions);
+    }
+
+    if (!unsupportedPublicActions.isEmpty()) {
+      throw new ForbiddenException(
+          "Following actions are not supported for setting as public:"
+              + getActions()
+                  .stream()
+                  .filter(a -> !(a.equals(READ) || a.equals(SEARCH)))
+                  .collect(toList()));
+    }
+  }
+

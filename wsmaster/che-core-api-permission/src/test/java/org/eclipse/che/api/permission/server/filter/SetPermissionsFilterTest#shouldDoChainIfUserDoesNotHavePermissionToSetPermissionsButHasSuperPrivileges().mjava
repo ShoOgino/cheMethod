@@ -1,0 +1,25 @@
+  @Test
+  public void shouldDoChainIfUserDoesNotHavePermissionToSetPermissionsButHasSuperPrivileges()
+      throws Exception {
+    when(superPrivilegesChecker.isPrivilegedToManagePermissions(anyString())).thenReturn(true);
+    when(subject.hasPermission("test", "test123", SET_PERMISSIONS)).thenReturn(false);
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .body(
+                DtoFactory.newDto(PermissionsDto.class)
+                    .withDomainId("test")
+                    .withInstanceId("test123")
+                    .withUserId("user123")
+                    .withActions(Collections.singletonList("read")))
+            .when()
+            .post(SECURE_PATH + "/permissions");
+
+    assertEquals(response.getStatusCode(), 204);
+    verify(permissionsService).storePermissions(any());
+    verify(superPrivilegesChecker).isPrivilegedToManagePermissions("test");
+  }
+
