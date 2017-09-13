@@ -1,0 +1,43 @@
+  @Override
+  public List<Field> getFields() {
+    if (fields.get() == null) {
+      synchronized (fields) {
+        if (fields.get() == null) {
+          try {
+            ObjectReference object = jdiStackFrame.thisObject();
+            if (object == null) {
+              ReferenceType type = jdiStackFrame.location().declaringType();
+              fields.set(
+                  jdiStackFrame
+                      .location()
+                      .declaringType()
+                      .allFields()
+                      .stream()
+                      .map(
+                          f -> new JdbField(f, type, new VariablePathImpl(Collections.emptyList())))
+                      .sorted(new JdbFieldComparator())
+                      .collect(Collectors.toList()));
+            } else {
+              fields.set(
+                  object
+                      .referenceType()
+                      .allFields()
+                      .stream()
+                      .map(
+                          f ->
+                              new JdbField(
+                                  f, object, new VariablePathImpl(Collections.emptyList())))
+                      .sorted(new JdbFieldComparator())
+                      .collect(Collectors.toList()));
+            }
+
+          } catch (Exception e) {
+            fields.set(Collections.emptyList());
+          }
+        }
+      }
+    }
+
+    return fields.get();
+  }
+

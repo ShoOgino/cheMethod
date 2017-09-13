@@ -1,8 +1,9 @@
-  /** {@inheritDoc} */
   @Override
   public void onLineChange(
       final VirtualFile file, final int firstLine, final int linesAdded, final int linesRemoved) {
-    final List<Breakpoint> fileBreakpoints = breakpoints.get(file.getLocation().toString());
+
+    final List<Breakpoint> fileBreakpoints =
+        breakpointStorage.getByPath(file.getLocation().toString());
     final int delta = linesAdded - linesRemoved;
 
     if (fileBreakpoints != null) {
@@ -12,40 +13,42 @@
       final List<Breakpoint> toAdd = new ArrayList<>();
 
       for (final Breakpoint breakpoint : fileBreakpoints) {
-        final int lineNumber = breakpoint.getLineNumber();
-        if (lineNumber < firstLine) {
-          // we're before any change
+        final int lineNumber = breakpoint.getLocation().getLineNumber();
+
+        // before any change
+        if (firstLine > lineNumber) {
           continue;
         }
 
-        toRemove.add(breakpoint);
-        toAdd.add(
-            new Breakpoint(
-                breakpoint.getType(),
-                breakpoint.getLineNumber() + delta,
-                breakpoint.getPath(),
-                breakpoint.getFile(),
-                breakpoint.isActive()));
+        // in the middle
+        if (firstLine + Math.abs(delta) > lineNumber && lineNumber >= firstLine) {
+          toRemove.add(breakpoint);
+          toAdd.add(breakpoint);
+
+        } else {
+          Location currentLocation = breakpoint.getLocation();
+          Location newLocation =
+              new LocationImpl(
+                  currentLocation.getTarget(),
+                  currentLocation.getLineNumber() + delta,
+                  currentLocation.isExternalResource(),
+                  currentLocation.getExternalResourceId(),
+                  currentLocation.getResourceProjectPath(),
+                  currentLocation.getMethod(),
+                  currentLocation.getThreadId());
+
+          toRemove.add(breakpoint);
+          toAdd.add(
+              new BreakpointImpl(newLocation, breakpoint.isEnabled(), breakpoint.getCondition()));
+        }
       }
 
       for (final Breakpoint breakpoint : toRemove) {
-        breakpointStorage.delete(breakpoint);
         deleteBreakpoint(file, breakpoint);
       }
 
       for (final Breakpoint breakpoint : toAdd) {
-        if (isLineNotEmpty(file, breakpoint.getLineNumber())) {
-          Breakpoint newBreakpoint =
-              new Breakpoint(
-                  breakpoint.getType(),
-                  breakpoint.getLineNumber(),
-                  breakpoint.getPath(),
-                  file,
-                  false);
-
-          addBreakpoint(newBreakpoint);
-          breakpointStorage.add(newBreakpoint);
-        }
+        addBreakpoint(file, breakpoint);
       }
     }
   }

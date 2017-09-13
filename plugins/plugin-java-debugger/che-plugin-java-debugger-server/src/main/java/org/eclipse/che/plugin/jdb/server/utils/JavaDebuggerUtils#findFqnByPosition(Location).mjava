@@ -1,0 +1,84 @@
+  /**
+   * Return nested class fqn if line with number {@code lineNumber} contains such element, otherwise
+   * return outer class fqn.
+   *
+   * @throws DebuggerException
+   */
+  public String findFqnByPosition(Location location) throws DebuggerException {
+    IPath path = Path.fromOSString(location.getTarget());
+    IJavaProject project = getJavaProject(path);
+    if (project == null) {
+      if (location.getResourceProjectPath() != null) {
+        project = MODEL.getJavaProject(location.getResourceProjectPath());
+      } else {
+        return location.getTarget();
+      }
+    }
+
+    String fqn = null;
+    for (int i = path.segmentCount(); i > 0; i--) {
+      try {
+        IClasspathEntry classpathEntry =
+            ((JavaProject) project).getClasspathEntryFor(path.removeLastSegments(i));
+
+        if (classpathEntry != null) {
+          fqn =
+              path.removeFirstSegments(path.segmentCount() - i)
+                  .removeFileExtension()
+                  .toString()
+                  .replace("/", ".");
+          break;
+        }
+      } catch (JavaModelException e) {
+        return location.getTarget();
+      }
+    }
+
+    if (fqn == null) {
+      return location.getTarget();
+    }
+
+    IType outerClass;
+    IMember iMember;
+    try {
+      outerClass = project.findType(fqn);
+
+      if (outerClass == null) {
+        return location.getTarget();
+      }
+
+      String source;
+      if (outerClass.isBinary()) {
+        IClassFile classFile = outerClass.getClassFile();
+        source = classFile.getSource();
+      } else {
+        ICompilationUnit unit = outerClass.getCompilationUnit();
+        source = unit.getSource();
+      }
+
+      Document document = new Document(source);
+      IRegion region = document.getLineInformation(location.getLineNumber());
+      int start = region.getOffset();
+      int end = start + region.getLength();
+
+      iMember = binSearch(outerClass, start, end);
+    } catch (JavaModelException e) {
+      throw new DebuggerException(
+          format(
+              "Unable to find source for class with fqn '%s' in the project '%s'",
+              location.getTarget(), project),
+          e);
+    } catch (BadLocationException e) {
+      throw new DebuggerException("Unable to calculate breakpoint location", e);
+    }
+
+    if (iMember instanceof IType) {
+      return ((IType) iMember).getFullyQualifiedName();
+    }
+    if (iMember != null) {
+      return iMember.getDeclaringType().getFullyQualifiedName();
+    }
+
+    return location.getTarget();
+  }
+
