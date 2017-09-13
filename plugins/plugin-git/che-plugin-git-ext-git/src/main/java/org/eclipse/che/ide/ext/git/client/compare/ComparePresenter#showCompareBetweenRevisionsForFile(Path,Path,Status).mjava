@@ -1,0 +1,58 @@
+  private void showCompareBetweenRevisionsForFile(
+      final Path gitDir, final Path relPath, final Status status) {
+    view.setTitle(getTitleForFile(relPath.toString()));
+
+    if (status == Status.ADDED) {
+      service
+          .showFileContent(gitDir, relPath, revisionB)
+          .then(
+              response -> {
+                view.setColumnTitles(
+                    revisionB + locale.compareReadOnlyTitle(),
+                    revisionA == null ? "" : revisionA + locale.compareReadOnlyTitle());
+                view.show("", response.getContent(), relPath.toString(), true);
+              })
+          .catchError(
+              error -> {
+                notificationManager.notify(error.getMessage(), FAIL, NOT_EMERGE_MODE);
+              });
+    } else if (status == Status.DELETED) {
+      service
+          .showFileContent(gitDir, relPath, revisionA)
+          .then(
+              response -> {
+                view.setColumnTitles(
+                    revisionB + locale.compareReadOnlyTitle(),
+                    revisionA + locale.compareReadOnlyTitle());
+                view.show(response.getContent(), "", relPath.toString(), true);
+              })
+          .catchError(
+              error -> {
+                notificationManager.notify(error.getMessage(), FAIL, NOT_EMERGE_MODE);
+              });
+    } else {
+      service
+          .showFileContent(gitDir, relPath, revisionA)
+          .then(
+              contentAResponse -> {
+                service
+                    .showFileContent(gitDir, relPath, revisionB)
+                    .then(
+                        contentBResponse -> {
+                          view.setColumnTitles(
+                              revisionB + locale.compareReadOnlyTitle(),
+                              revisionA + locale.compareReadOnlyTitle());
+                          view.show(
+                              contentAResponse.getContent(),
+                              contentBResponse.getContent(),
+                              relPath.toString(),
+                              true);
+                        })
+                    .catchError(
+                        error -> {
+                          notificationManager.notify(error.getMessage(), FAIL, NOT_EMERGE_MODE);
+                        });
+              });
+    }
+  }
+
