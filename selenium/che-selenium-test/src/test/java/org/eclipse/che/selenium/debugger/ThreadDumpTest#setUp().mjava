@@ -1,0 +1,31 @@
+  @BeforeClass
+  public void setUp() throws Exception {
+    testProjectServiceClient.importProject(
+        ws.getId(),
+        Paths.get(
+            getClass().getResource("/projects/plugins/DebuggerPlugin/java-multimodule").toURI()),
+        PROJECT,
+        CONSOLE_JAVA_SIMPLE);
+
+    testCommandServiceClient.createCommand(
+        "mvn -f ${current.project.path} clean install &&"
+            + " java -Xdebug -Xrunjdwp:transport=dt_socket,address=8000,server=y,suspend=y"
+            + " -classpath ${current.project.path}/app/target/classes/:${current.project.path}/model/target/classes multimodule.App",
+        DEBUG_COMMAND,
+        MAVEN,
+        ws.getId());
+
+    // open IDE
+    ide.open(ws);
+    loader.waitOnClosed();
+    projectExplorer.waitItem(PROJECT);
+    notificationPopup.waitProgressPopupPanelClose();
+
+    // open project tree
+    projectExplorer.quickExpandWithJavaScript();
+    projectExplorer.waitVisibleItem(PROJECT);
+    projectExplorer.selectItem(PROJECT);
+
+    startDebuggingApp();
+  }
+

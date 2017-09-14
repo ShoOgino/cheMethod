@@ -34,7 +34,7 @@
    *    }
    * </pre>
    *
-   * There are two ways to access variable <i>str</i> in class <i>A</i>:
+   * * There are two ways to access variable <i>str</i> in class <i>A</i>:
    *
    * <ol>
    *   <li>Through field <i>a</i> in class <i>B</i>: ['this', 'a', 'str']
@@ -47,67 +47,11 @@
    */
   @Override
   public SimpleValue getValue(VariablePath variablePath) throws DebuggerException {
-    List<String> path = variablePath.getPath();
-    if (path.size() == 0) {
-      throw new IllegalArgumentException("Path to value may not be empty. ");
+    lock.lock();
+    try {
+      return getValue(variablePath, getCurrentThread().uniqueID(), 0);
+    } finally {
+      lock.unlock();
     }
-    JdiVariable variable;
-    int offset;
-    if ("this".equals(path.get(0)) || "static".equals(path.get(0))) {
-      if (path.size() < 2) {
-        throw new IllegalArgumentException("Name of field required. ");
-      }
-      variable = getCurrentFrame().getFieldByName(path.get(1));
-      offset = 2;
-    } else {
-      try {
-        variable = getCurrentFrame().getLocalVariableByName(path.get(0));
-      } catch (DebuggerAbsentInformationException e) {
-        return null;
-      }
-      offset = 1;
-    }
-
-    for (int i = offset; variable != null && i < path.size(); i++) {
-      variable = variable.getValue().getVariableByName(path.get(i));
-    }
-
-    if (variable == null) {
-      return null;
-    }
-
-    List<Variable> variables = new ArrayList<>();
-    for (JdiVariable ch : variable.getValue().getVariables()) {
-      VariablePathDto chPath = newDto(VariablePathDto.class).withPath(new ArrayList<>(path));
-      chPath.getPath().add(ch.getName());
-      if (ch instanceof JdiField) {
-        JdiField f = (JdiField) ch;
-        variables.add(
-            new FieldImpl(
-                f.getName(),
-                true,
-                f.getValue().getAsString(),
-                f.getTypeName(),
-                f.isPrimitive(),
-                Collections.<Variable>emptyList(),
-                chPath,
-                f.isFinal(),
-                f.isStatic(),
-                f.isTransient(),
-                f.isVolatile()));
-      } else {
-        // Array element.
-        variables.add(
-            new VariableImpl(
-                ch.getTypeName(),
-                ch.getName(),
-                ch.getValue().getAsString(),
-                ch.isPrimitive(),
-                chPath,
-                Collections.emptyList(),
-                true));
-      }
-    }
-    return new SimpleValueImpl(variables, variable.getValue().getAsString());
   }
 

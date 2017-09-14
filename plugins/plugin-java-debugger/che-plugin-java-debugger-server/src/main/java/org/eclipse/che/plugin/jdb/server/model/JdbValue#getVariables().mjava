@@ -1,0 +1,32 @@
+  @Override
+  public List<Variable> getVariables() {
+    if (variables.get() == null) {
+      synchronized (variables) {
+        if (variables.get() == null) {
+          if (isPrimitive()) {
+            variables.set(Collections.emptyList());
+          } else if (isArray()) {
+            variables.set(new LinkedList<>());
+
+            ArrayReference array = (ArrayReference) jdiValue;
+            for (int i = 0; i < array.length(); i++) {
+              variables.get().add(new JdbArrayElement(array.getValue(i), i, variablePath));
+            }
+          } else {
+            ObjectReference object = (ObjectReference) jdiValue;
+            variables.set(
+                object
+                    .referenceType()
+                    .allFields()
+                    .stream()
+                    .map(f -> new JdbField(f, object, variablePath))
+                    .sorted(new JdbFieldComparator())
+                    .collect(Collectors.toList()));
+          }
+        }
+      }
+    }
+
+    return variables.get();
+  }
+

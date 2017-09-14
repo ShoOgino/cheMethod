@@ -8,7 +8,7 @@
                 .request()
                 .getProperty("org.eclipse.che.ide.java.debug.condition.expression.parser");
     if (parser != null) {
-      com.sun.jdi.Value result = evaluate(parser);
+      com.sun.jdi.Value result = evaluate(parser, event.thread().uniqueID(), 0);
       hitBreakpoint =
           result instanceof com.sun.jdi.BooleanValue && ((com.sun.jdi.BooleanValue) result).value();
     } else {
@@ -17,16 +17,14 @@
     }
 
     if (hitBreakpoint) {
-      com.sun.jdi.Location jdiLocation = event.location();
-
-      Location location;
       try {
-        location = debuggerUtil.getLocation(jdiLocation);
-      } catch (DebuggerException e) {
-        location = new LocationImpl(jdiLocation.declaringType().name(), jdiLocation.lineNumber());
-      }
 
-      debuggerCallback.onEvent(new SuspendEventImpl(location));
+        Location location = new JdbLocation(event.thread().frame(0));
+
+        debuggerCallback.onEvent(new SuspendEventImpl(location));
+      } catch (IncompatibleThreadStateException e) {
+        return true;
+      }
     }
 
     // Left target JVM in suspended state if result of evaluation of expression is boolean value and true
