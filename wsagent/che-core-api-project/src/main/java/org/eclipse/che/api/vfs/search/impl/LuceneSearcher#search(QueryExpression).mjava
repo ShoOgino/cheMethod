@@ -71,22 +71,20 @@
 
               float res = queryScorer.getTokenScore();
               if (res > 0.0F && startOffset <= endOffset) {
-                String tokenText = txt.substring(startOffset, endOffset);
-                Scanner sc = new Scanner(txt);
-                int lineNum = 0;
-                long len = 0;
-                String foundLine = "";
-                while (sc.hasNextLine()) {
-                  foundLine = sc.nextLine();
-                  lineNum++;
-                  len += foundLine.length();
-                  if (len > startOffset) {
-                    break;
-                  }
+                try {
+                  IDocument document = new org.eclipse.jface.text.Document(txt);
+                  int lineNum = document.getLineOfOffset(startOffset);
+                  IRegion lineInfo = document.getLineInformation(lineNum);
+                  String foundLine = document.get(lineInfo.getOffset(), lineInfo.getLength());
+                  String tokenText = document.get(startOffset, endOffset - startOffset);
+
+                  offsetData.add(
+                      new OffsetData(
+                          tokenText, startOffset, endOffset, docId, res, lineNum, foundLine));
+                } catch (BadLocationException e) {
+                  LOG.error(e.getLocalizedMessage(), e);
+                  throw new ServerException("Can not provide data for token " + termAtt.toString());
                 }
-                offsetData.add(
-                    new OffsetData(
-                        tokenText, startOffset, endOffset, docId, res, lineNum, foundLine));
               }
             }
           }
