@@ -1,0 +1,40 @@
+  /**
+   * Find related VCS provider and set VCS status of {@link ItemReference} file to it's attributes
+   * to each item of the given list, if VCS provider is present.
+   *
+   * @param itemReferences list of {@link ItemReference} files to update
+   */
+  List<ItemReference> injectVcsStatus(List<ItemReference> itemReferences)
+      throws ServerException, NotFoundException {
+    Optional<ItemReference> itemReferenceOptional =
+        itemReferences
+            .stream()
+            .filter(itemReference -> "file".equals(itemReference.getType()))
+            .findAny();
+    if (itemReferenceOptional.isPresent()) {
+      String project = normalizeProjectPath(itemReferenceOptional.get().getProject());
+      Optional<VcsStatusProvider> vcsStatusProviderOptional = getVcsStatusProvider(project);
+      if (vcsStatusProviderOptional.isPresent()) {
+        List<String> itemReferenceFiles =
+            itemReferences
+                .stream()
+                .filter(itemReference -> "file".equals(itemReference.getType()))
+                .map(itemReference -> normalizeFilePath(itemReference.getPath()))
+                .collect(Collectors.toList());
+        Map<String, VcsStatusProvider.VcsStatus> status =
+            vcsStatusProviderOptional.get().getStatus(project, itemReferenceFiles);
+
+        itemReferences
+            .stream()
+            .filter(itemReference -> "file".equals(itemReference.getType()))
+            .forEach(
+                itemReference -> {
+                  Map<String, String> attributes = new HashMap<>(itemReference.getAttributes());
+                  attributes.put("vcs.status", status.get(itemReference.getPath()).toString());
+                  itemReference.setAttributes(attributes);
+                });
+      }
+    }
+    return itemReferences;
+  }
+

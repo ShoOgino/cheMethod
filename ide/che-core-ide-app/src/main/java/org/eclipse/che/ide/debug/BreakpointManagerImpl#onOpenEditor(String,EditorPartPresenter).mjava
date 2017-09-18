@@ -1,21 +1,30 @@
   /** The new file has been opened in the editor. Method reads breakpoints. */
-  private void onOpenEditor(String path, EditorPartPresenter editor) {
-    final List<Breakpoint> fileBreakpoints = breakpoints.get(path);
+  private void onOpenEditor(String filePath, EditorPartPresenter editor) {
+    final BreakpointRenderer renderer = getBreakpointRendererForEditor(editor);
+    if (renderer != null) {
+      breakpointStorage
+          .getByPath(filePath)
+          .forEach(
+              breakpoint ->
+                  renderer.addBreakpointMark(
+                      breakpoint.getLocation().getLineNumber() - 1,
+                      BreakpointManagerImpl.this::onLineChange));
 
-    if (fileBreakpoints != null) {
-      final BreakpointRenderer breakpointRenderer = getBreakpointRendererForEditor(editor);
-
-      if (breakpointRenderer != null) {
-        for (final Breakpoint breakpoint : fileBreakpoints) {
-          reAddBreakpointMark(breakpointRenderer, breakpoint);
-        }
+      Debugger debugger = debuggerManager.getActiveDebugger();
+      if (debugger != null) {
+        debugger
+            .getAllBreakpoints()
+            .then(
+                breakpoints -> {
+                  for (Breakpoint breakpoint : breakpoints) {
+                    renderer.setBreakpointActive(
+                        breakpoint.getLocation().getLineNumber() - 1, true);
+                  }
+                });
       }
-    }
 
-    if (currentBreakpoint != null && path.equals(currentBreakpoint.getPath())) {
-      BreakpointRenderer breakpointRenderer = getBreakpointRendererForFile(path);
-      if (breakpointRenderer != null) {
-        breakpointRenderer.setLineActive(currentBreakpoint.getLineNumber(), true);
+      if (suspendedLocation != null && suspendedLocation.getTarget().equals(filePath)) {
+        renderer.setLineActive(suspendedLocation.getLineNumber() - 1, true);
       }
     }
   }

@@ -1,0 +1,42 @@
+  @Override
+  public SimpleValue getValue(VariablePath variablePath, long threadId, int frameIndex)
+      throws DebuggerException {
+    JdbStackFrame jdbStackFrame = new JdbStackFrame(getJdiStackFrame(threadId, frameIndex));
+
+    Optional<? extends Variable> targetVar;
+
+    List<String> path = variablePath.getPath();
+    int offset;
+    if ("this".equals(path.get(0)) || "static".equals(path.get(0))) {
+      targetVar =
+          jdbStackFrame.getFields().stream().filter(f -> f.getName().equals(path.get(1))).findAny();
+      offset = 2;
+    } else {
+      targetVar =
+          jdbStackFrame
+              .getVariables()
+              .stream()
+              .filter(f -> f.getName().equals(path.get(0)))
+              .findAny();
+      offset = 1;
+    }
+
+    for (int i = offset; targetVar.isPresent() && i < path.size(); i++) {
+      final int index = i;
+      targetVar =
+          targetVar
+              .get()
+              .getValue()
+              .getVariables()
+              .stream()
+              .filter(v -> v.getName().equals(path.get(index)))
+              .findAny();
+    }
+
+    if (!targetVar.isPresent()) {
+      return null;
+    }
+
+    return targetVar.get().getValue();
+  }
+

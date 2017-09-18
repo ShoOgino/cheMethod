@@ -2,10 +2,18 @@
   public VcsStatus getStatus(String path) throws ServerException {
     try {
       String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+      String projectPath =
+          projectManagerProvider
+              .get()
+              .getProject(normalizedPath.split("/")[0])
+              .getBaseFolder()
+              .getVirtualFile()
+              .toIoFile()
+              .getAbsolutePath();
       Status status =
           gitConnectionFactory
-              .getConnection(normalizedPath.split("/")[0])
-              .status(StatusFormat.SHORT);
+              .getConnection(projectPath)
+              .status(singletonList(normalizedPath.substring(normalizedPath.indexOf("/") + 1)));
       String itemPath = normalizedPath.substring(normalizedPath.indexOf("/") + 1);
       if (status.getUntracked().contains(itemPath)) {
         return VcsStatus.UNTRACKED;
@@ -17,7 +25,7 @@
       } else {
         return VcsStatus.NOT_MODIFIED;
       }
-    } catch (GitException e) {
+    } catch (GitException | NotFoundException e) {
       throw new ServerException(e.getMessage());
     }
   }
