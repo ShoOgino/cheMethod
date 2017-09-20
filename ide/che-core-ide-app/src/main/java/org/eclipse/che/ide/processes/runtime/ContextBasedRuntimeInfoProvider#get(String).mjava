@@ -1,0 +1,53 @@
+  @Override
+  public List<RuntimeInfo> get(String machineName) {
+
+    requireNonNull(machineName, "Machine name should not be a null");
+
+    WorkspaceImpl workspace = appContext.getWorkspace();
+
+    if (workspace == null) {
+      return emptyList();
+    }
+
+    //map with servers where probably port is set
+    MachineConfigImpl preConfiguredRuntime =
+        workspace
+            .getConfig()
+            .getEnvironments()
+            .get(workspace.getConfig().getDefaultEnv())
+            .getMachines()
+            .get(machineName);
+
+    //current runtime, usually always exists
+    Optional<MachineImpl> runtimeMachine = workspace.getRuntime().getMachineByName(machineName);
+
+    if (runtimeMachine.isPresent()) {
+      return runtimeMachine
+          .get()
+          .getServers()
+          .entrySet()
+          .stream()
+          .map(
+              runtimeEntry -> {
+                String serverRef = runtimeEntry.getKey();
+                String serverUrl = runtimeEntry.getValue().getUrl();
+                String serverProtocol = extractProtocol(runtimeEntry.getValue().getUrl());
+
+                String serverPort = null;
+
+                if (preConfiguredRuntime.getServers().containsKey(serverRef)) {
+                  serverPort = preConfiguredRuntime.getServers().get(serverRef).getPort();
+                }
+
+                return new RuntimeInfo(serverRef, serverPort, serverProtocol, serverUrl);
+              })
+          .sorted(
+              (o1, o2) ->
+                  Comparator.<String>reverseOrder()
+                      .compare(nullToEmpty(o1.getPort()), nullToEmpty(o2.getPort())))
+          .collect(Collectors.toList());
+    }
+
+    return emptyList();
+  }
+
