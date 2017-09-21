@@ -1,0 +1,38 @@
+  public ProcessHandler executeTests(TestExecutionContext context) {
+    String projectPath = context.getProjectPath();
+    String testTargetRelativePath = context.getFilePath();
+    String projectAbsolutePath = ResourcesPlugin.getPathToWorkspace() + projectPath;
+    File testTargetFile = getTestTargetFile(testTargetRelativePath, projectAbsolutePath);
+    File testTargetWorkingDirectory =
+        testTargetFile.isDirectory() ? testTargetFile : testTargetFile.getParentFile();
+    // Get appropriate path to executable
+    String phpUnitExecutable = PHPUNIT_GLOBAL;
+    if (hasComposerRunner(projectPath)) {
+      phpUnitExecutable = projectAbsolutePath + PHPUNIT_COMPOSER;
+    }
+    // Get appropriate logger for PHP unit version
+    final File printerFile = getPrinterFile();
+    final String printerDirAbsolutePath = printerFile.getParentFile().getAbsolutePath();
+    final CommandLine cmdRunTests =
+        new CommandLine(
+            phpUnitExecutable,
+            "--include-path",
+            printerDirAbsolutePath,
+            "--printer",
+            PRINTER_NAME,
+            getTestTarget(testTargetFile));
+    ProcessBuilder pb =
+        new ProcessBuilder()
+            .redirectErrorStream(true)
+            .directory(testTargetWorkingDirectory)
+            .command(cmdRunTests.toShellCommand());
+    pb.environment().put("ZEND_PHPUNIT_PORT", String.valueOf(PRINTER_PORT));
+    try {
+      return new ProcessHandler(pb.start());
+    } catch (IOException e) {
+      LOG.error("Can't run PHPUnit", e);
+    }
+
+    return null;
+  }
+
