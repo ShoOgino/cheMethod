@@ -1,0 +1,35 @@
+  @Test(
+    expectedExceptions = LimitExceededException.class,
+    expectedExceptionsMessageRegExp =
+        "Workspace namespace/workspace.. needs 3000MB to start\\. "
+            + "Your account has 200MB available and 100MB in use\\. "
+            + "The workspace can't be start. Stop other workspaces or grant more resources\\."
+  )
+  public void shouldThrowLimitExceedExceptionIfAccountDoesNotHaveEnoughAvailableRamResource()
+      throws Exception {
+    doThrow(
+            new NoEnoughResourcesException(
+                singletonList(new ResourceImpl(RamResourceType.ID, 200L, RamResourceType.UNIT)),
+                singletonList(new ResourceImpl(RamResourceType.ID, 3000L, RamResourceType.UNIT)),
+                emptyList()))
+        .when(resourceUsageManager)
+        .checkResourcesAvailability(any(), any());
+    doReturn(singletonList(new ResourceImpl(RamResourceType.ID, 100L, RamResourceType.UNIT)))
+        .when(resourceUsageManager)
+        .getUsedResources(any());
+
+    //given
+    LimitsCheckingWorkspaceManager manager =
+        managerBuilder()
+            .setResourceUsageManager(resourceUsageManager)
+            .setEnvironmentRamCalculator(environmentRamCalculator)
+            .build();
+
+    when(environmentRamCalculator.calculate(any())).thenReturn(3000L);
+
+    WorkspaceConfig config = createConfig("3gb");
+
+    //when
+    manager.checkRamResourcesAvailability(ACCOUNT_ID, NAMESPACE, config, null);
+  }
+

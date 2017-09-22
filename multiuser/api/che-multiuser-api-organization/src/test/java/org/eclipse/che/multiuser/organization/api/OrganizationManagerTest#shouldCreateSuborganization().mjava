@@ -1,0 +1,22 @@
+  @Test
+  public void shouldCreateSuborganization() throws Exception {
+    final OrganizationImpl parentOrganization = new OrganizationImpl("org123", "parentOrg", null);
+    when(organizationDao.getById(anyString())).thenReturn(parentOrganization);
+    final Organization toCreate = new OrganizationImpl(null, "orgName", parentOrganization.getId());
+
+    manager.create(toCreate);
+
+    verify(organizationDao).create(organizationCaptor.capture());
+    final OrganizationImpl createdOrganization = organizationCaptor.getValue();
+    assertEquals(createdOrganization.getName(), toCreate.getName());
+    assertEquals(
+        createdOrganization.getQualifiedName(),
+        parentOrganization.getQualifiedName() + "/" + toCreate.getName());
+    assertEquals(createdOrganization.getParent(), toCreate.getParent());
+    verify(eventService).publish(persistEventCaptor.capture());
+    assertEquals(persistEventCaptor.getValue().getOrganization(), createdOrganization);
+    verify(memberDao)
+        .store(
+            new MemberImpl(USER_ID, createdOrganization.getId(), OrganizationDomain.getActions()));
+  }
+

@@ -1,0 +1,80 @@
+  @Override
+  protected void filter(GenericResourceMethod genericMethodResource, Object[] arguments)
+      throws ApiException {
+    final String methodName = genericMethodResource.getMethod().getName();
+
+    final Subject currentSubject = EnvironmentContext.getCurrent().getSubject();
+    String action;
+    String organizationId;
+
+    switch (methodName) {
+      case CREATE_METHOD:
+        final OrganizationDto organization = (OrganizationDto) arguments[0];
+        if (organization.getParent() != null) {
+          organizationId = organization.getParent();
+          action = OrganizationDomain.MANAGE_SUBORGANIZATIONS;
+          break;
+        }
+        //anybody can create root organization
+        return;
+
+      case UPDATE_METHOD:
+        organizationId = ((String) arguments[0]);
+        action = OrganizationDomain.UPDATE;
+        break;
+
+      case REMOVE_METHOD:
+        organizationId = ((String) arguments[0]);
+        action = OrganizationDomain.DELETE;
+        break;
+
+      case GET_BY_PARENT_METHOD:
+        organizationId = ((String) arguments[0]);
+        action = OrganizationDomain.MANAGE_SUBORGANIZATIONS;
+        if (superPrivilegesChecker.hasSuperPrivileges()) {
+          return;
+        }
+        break;
+
+      case GET_ORGANIZATIONS_METHOD:
+        final String userId = (String) arguments[0];
+        if (userId != null
+            && !userId.equals(currentSubject.getUserId())
+            && !superPrivilegesChecker.hasSuperPrivileges()) {
+          throw new ForbiddenException("The user is able to specify only his own id");
+        }
+        //user specified his user id or has super privileges
+        return;
+
+        //methods accessible to every user
+      case GET_BY_ID_METHOD:
+      case FIND_METHOD:
+        return;
+
+      default:
+        throw new ForbiddenException("The user does not have permission to perform this operation");
+    }
+
+    //user is not admin and it is need to check permissions on organization instance level
+    final Organization organization = manager.getById(organizationId);
+    final String parentOrganizationId = organization.getParent();
+    //check permissions on parent organization level when updating or removing child organization
+    if (parentOrganizationId != null
+        && (OrganizationDomain.UPDATE.equals(action) || OrganizationDomain.DELETE.equals(action))) {
+      if (currentSubject.hasPermission(
+          OrganizationDomain.DOMAIN_ID, parentOrganizationId, MANAGE_SUBORGANIZATIONS)) {
+        //user has permissions to manage organization on parent organization level
+        return;
+      }
+    }
+
+    if (!currentSubject.hasPermission(DOMAIN_ID, organizationId, action)) {
+      throw new ForbiddenException(
+          "The user does not have permission to "
+              + action
+              + " organization with id '"
+              + organizationId
+              + "'");
+    }
+  }
+

@@ -1,0 +1,34 @@
+  /**
+   * Checks that suborganization is using less resources that new resources cap defines.
+   *
+   * @param suborganizationId identifier of suborganization
+   * @param newResourcesCap resources to capResources
+   * @throws ConflictException when parent organization doesn't have enough resources to increase
+   *     distributed resource amount
+   * @throws ConflictException when resources can't be distributed because suborganization is using
+   *     existing resources or when they are distributed to next organizations level
+   * @throws ServerException when any other error occurs
+   */
+  @VisibleForTesting
+  void checkResourcesAvailability(
+      String suborganizationId, List<? extends Resource> newResourcesCap)
+      throws NotFoundException, ConflictException, ServerException {
+    Map<String, Resource> usedResources =
+        usageManager
+            .getUsedResources(suborganizationId)
+            .stream()
+            .collect(Collectors.toMap(Resource::getType, Function.identity()));
+    for (Resource resourceToCheck : newResourcesCap) {
+      Resource usedResource = usedResources.get(resourceToCheck.getType());
+      if (usedResource != null) {
+        try {
+          resourceAggregator.deduct(resourceToCheck, usedResource);
+        } catch (NoEnoughResourcesException e) {
+          throw new ConflictException(
+              "Resources are currently in use. "
+                  + getMessage(e.getMissingResources().get(0).getType()));
+        }
+      }
+    }
+  }
+

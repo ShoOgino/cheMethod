@@ -1,0 +1,38 @@
+  /**
+   * Updates organization with new entity.
+   *
+   * @param organizationId id of organization to update
+   * @param update organization update
+   * @throws NullPointerException when {@code organizationId} or {@code update} is null
+   * @throws NotFoundException when organization with given id doesn't exist
+   * @throws ConflictException when name updated with a value which is reserved or is not unique
+   * @throws ServerException when any other error occurs organization updating
+   */
+  @Transactional(rollbackOn = {RuntimeException.class, ApiException.class})
+  public Organization update(String organizationId, Organization update)
+      throws NotFoundException, ConflictException, ServerException {
+    requireNonNull(organizationId, "Required non-null organization id");
+    requireNonNull(update, "Required non-null organization");
+    requireNonNull(update.getName(), "Required non-null organization name");
+
+    final OrganizationImpl organization = organizationDao.getById(organizationId);
+    final String oldQualifiedName = organization.getQualifiedName();
+    final String oldName = organization.getName();
+
+    final String newName = update.getName();
+    final String newQualifiedName = buildQualifiedName(oldQualifiedName, update.getName());
+
+    checkNameReservation(newQualifiedName);
+    organization.setQualifiedName(newQualifiedName);
+
+    organizationDao.update(organization);
+    if (!newName.equals(oldName)) {
+      updateSuborganizationsQualifiedNames(oldQualifiedName, organization.getQualifiedName());
+
+      final String performerName = EnvironmentContext.getCurrent().getSubject().getUserName();
+      eventService.publish(
+          new OrganizationRenamedEvent(performerName, oldName, newName, organization));
+    }
+    return organization;
+  }
+

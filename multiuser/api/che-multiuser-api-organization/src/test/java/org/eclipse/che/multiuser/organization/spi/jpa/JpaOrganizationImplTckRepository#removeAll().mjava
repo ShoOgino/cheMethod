@@ -1,0 +1,38 @@
+  @Override
+  public void removeAll() throws TckRepositoryException {
+    uow.begin();
+    final EntityManager manager = managerProvider.get();
+    try {
+      manager.getTransaction().begin();
+
+      for (int i = createdOrganizations.size() - 1; i > -1; i--) {
+        // The query 'DELETE FROM ....' won't be correct as it will ignore orphanRemoval
+        // and may also ignore some configuration options, while EntityManager#remove won't
+        try {
+          final OrganizationImpl organizationToRemove =
+              manager
+                  .createQuery(
+                      "SELECT o FROM Organization o " + "WHERE o.id = :id", OrganizationImpl.class)
+                  .setParameter("id", createdOrganizations.get(i).getId())
+                  .getSingleResult();
+          manager.remove(organizationToRemove);
+        } catch (NoResultException ignored) {
+          //it is already removed
+        }
+      }
+      createdOrganizations.clear();
+
+      manager.getTransaction().commit();
+    } catch (RuntimeException x) {
+      if (manager.getTransaction().isActive()) {
+        manager.getTransaction().rollback();
+      }
+      throw new TckRepositoryException(x.getLocalizedMessage(), x);
+    } finally {
+      uow.end();
+    }
+
+    //remove all objects that was created in tests
+    super.removeAll();
+  }
+
