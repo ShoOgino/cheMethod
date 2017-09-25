@@ -1,0 +1,36 @@
+  private void assureServerLaunched(String projectPath, LanguageClient client)
+      throws LanguageServerException {
+    boolean mustLaunch = false;
+    synchronized (launchLock) {
+      try {
+        while (state == State.LAUNCHING) {
+          launchLock.wait();
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new LanguageServerException("Interrupted");
+      }
+      if (state == State.INIT) {
+        mustLaunch = true;
+        state = State.LAUNCHING;
+        launchLock.notifyAll();
+      }
+    }
+    if (mustLaunch) {
+      try {
+        LanguageServer ls = wrappedLauncher.launch(projectPath, client);
+        synchronized (launchLock) {
+          languageServer = ls;
+          state = State.LAUNCHED;
+          launchLock.notifyAll();
+        }
+      } catch (LanguageServerException e) {
+        synchronized (launchLock) {
+          state = State.INIT;
+          launchLock.notifyAll();
+        }
+        throw e;
+      }
+    }
+  }
+

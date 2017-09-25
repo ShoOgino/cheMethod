@@ -1,0 +1,68 @@
+  public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
+    boolean mustInit = false;
+    synchronized (launchLock) {
+      if (state == State.LAUNCHED) {
+        state = State.INITIALIZING;
+        mustInit = true;
+        launchLock.notifyAll();
+      } else if (state < State.INITIALIZING) {
+        throw new IllegalStateException("Called init when not launched");
+      }
+    }
+    if (mustInit) {
+      params.setRootUri("file:///projects");
+      params.setRootPath("/projects");
+      CompletableFuture<InitializeResult> res = new CompletableFuture<>();
+      languageServer
+          .initialize(params)
+          .thenApply(
+              (result) -> {
+                synchronized (launchLock) {
+                  initResult = result;
+                  state = State.INITIALIZED;
+                  launchLock.notifyAll();
+                }
+                return res.complete(result);
+              })
+          .exceptionally(
+              (e) -> {
+                synchronized (launchLock) {
+                  state = State.LAUNCHED;
+                  launchLock.notifyAll();
+                }
+                res.completeExceptionally(e);
+                return null;
+              });
+      return res;
+    } else {
+      CompletableFuture<InitializeResult> res = new CompletableFuture<>();
+      CompletableFuture.runAsync(
+          () -> {
+            try {
+              while (state == State.INITIALIZING) {
+                launchLock.wait();
+              }
+              if (state > State.INITIALIZING) {
+                res.complete(initResult);
+              } else {
+                CompletableFuture<Void> f =
+                    initialize(params)
+                        .thenAccept(
+                            (result) -> {
+                              res.complete(result);
+                            });
+                f.exceptionally(
+                    (e) -> {
+                      res.completeExceptionally(e);
+                      return null;
+                    });
+              }
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              res.completeExceptionally(e);
+            }
+          });
+      return res;
+    }
+  }
+
