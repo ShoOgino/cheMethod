@@ -1,0 +1,28 @@
+  private void revert() {
+    final GitOutputConsole console = gitOutputConsoleFactory.create(REVERT_COMMAND_NAME);
+    service
+        .revert(project.getLocation(), selectedRevision.getId())
+        .then(
+            result -> {
+              console.print(formRevertMessage(result));
+
+              String conflictsMessage = formConflictsMessage(result.getConflicts());
+              if (conflictsMessage != null && !conflictsMessage.isEmpty()) {
+                console.printError(conflictsMessage);
+              }
+
+              consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+              notificationManager.notify(constant.resetSuccessfully());
+
+              project.synchronize();
+            })
+        .catchError(
+            error -> {
+              String errorMessage =
+                  (error.getMessage() != null) ? error.getMessage() : constant.resetFail();
+              console.printError(errorMessage);
+              consolesPanelPresenter.addCommandOutput(appContext.getDevMachine().getId(), console);
+              notificationManager.notify(constant.resetFail(), FAIL, FLOAT_MODE);
+            });
+  }
+
