@@ -1,0 +1,38 @@
+  /**
+   * Cap usage of shared resources.
+   *
+   * <p>By default suborganization is able to use all parent organization resources Cap allow to
+   * limit usage of shared resources by suborganization.
+   *
+   * @param suborganizationId suborganization id
+   * @param resourcesCaps resources to capped
+   * @throws NotFoundException when specified suborganization was not found
+   * @throws ConflictException when organization with specified id is root organization
+   * @throws ConflictException when suborganization is currently using more shared resources than
+   *     should be capped
+   * @throws ServerException when any other error occurs
+   */
+  public void capResources(String suborganizationId, List<? extends Resource> resourcesCaps)
+      throws NotFoundException, ConflictException, ServerException {
+    requireNonNull(suborganizationId, "Required non-null suborganization id");
+    requireNonNull(resourcesCaps, "Required non-null resources to capResources");
+    checkIsSuborganization(suborganizationId);
+
+    // remove caps with amount -1
+    resourcesCaps = resourcesCaps.stream().filter(res -> res.getAmount() != -1).collect(toList());
+
+    // locking resources by suborganization should lock resources whole organization tree
+    // so we can check resource availability for suborganization organization
+    try (@SuppressWarnings("unused")
+        Unlocker u = resourcesLocks.lock(suborganizationId)) {
+      if (resourcesCaps.isEmpty()) {
+        organizationDistributedResourcesDao.remove(suborganizationId);
+      } else {
+        checkResourcesAvailability(suborganizationId, resourcesCaps);
+
+        organizationDistributedResourcesDao.store(
+            new OrganizationDistributedResourcesImpl(suborganizationId, resourcesCaps));
+      }
+    }
+  }
+

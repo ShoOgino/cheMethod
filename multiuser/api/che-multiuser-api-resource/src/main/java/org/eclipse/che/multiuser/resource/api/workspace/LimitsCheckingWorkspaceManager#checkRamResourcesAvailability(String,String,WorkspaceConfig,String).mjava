@@ -1,0 +1,39 @@
+  @VisibleForTesting
+  void checkRamResourcesAvailability(
+      String accountId, String namespace, WorkspaceConfig config, @Nullable String envName)
+      throws NotFoundException, ServerException, ConflictException {
+
+    final Environment environment =
+        config.getEnvironments().get(firstNonNull(envName, config.getDefaultEnv()));
+    final ResourceImpl ramToUse =
+        new ResourceImpl(
+            RamResourceType.ID,
+            environmentRamCalculator.calculate(environment),
+            RamResourceType.UNIT);
+    try {
+      resourceUsageManager.checkResourcesAvailability(accountId, singletonList(ramToUse));
+    } catch (NoEnoughResourcesException e) {
+      final Resource requiredRam =
+          e.getRequiredResources().get(0); // starting of workspace requires only RAM resource
+      final Resource availableRam =
+          getResourceOrDefault(
+              e.getAvailableResources(), RamResourceType.ID, 0, RamResourceType.UNIT);
+      final Resource usedRam =
+          getResourceOrDefault(
+              resourceUsageManager.getUsedResources(accountId),
+              RamResourceType.ID,
+              0,
+              RamResourceType.UNIT);
+
+      throw new LimitExceededException(
+          format(
+              "Workspace %s/%s needs %s to start. Your account has %s available and %s in use. "
+                  + "The workspace can't be start. Stop other workspaces or grant more resources.",
+              namespace,
+              config.getName(),
+              printResourceInfo(requiredRam),
+              printResourceInfo(availableRam),
+              printResourceInfo(usedRam)));
+    }
+  }
+

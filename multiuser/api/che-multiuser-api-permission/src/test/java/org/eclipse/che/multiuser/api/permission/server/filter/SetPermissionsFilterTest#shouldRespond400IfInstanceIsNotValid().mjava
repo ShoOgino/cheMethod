@@ -1,0 +1,27 @@
+  @Test
+  public void shouldRespond400IfInstanceIsNotValid() throws Exception {
+    when(subject.hasPermission("test", "test123", SET_PERMISSIONS)).thenReturn(false);
+    doThrow(new BadRequestException("instance is not valid"))
+        .when(instanceValidator)
+        .validate(any(), any());
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .body(
+                DtoFactory.newDto(PermissionsDto.class)
+                    .withDomainId("test")
+                    .withInstanceId("test123")
+                    .withUserId("user123")
+                    .withActions(Collections.singletonList("read")))
+            .when()
+            .post(SECURE_PATH + "/permissions");
+
+    assertEquals(response.getStatusCode(), 400);
+    assertEquals(unwrapError(response), "instance is not valid");
+    verifyZeroInteractions(permissionsService);
+    verify(instanceValidator).validate("test", "test123");
+  }
+

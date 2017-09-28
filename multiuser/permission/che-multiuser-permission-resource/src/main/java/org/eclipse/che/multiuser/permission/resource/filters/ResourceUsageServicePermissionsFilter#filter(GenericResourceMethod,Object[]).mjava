@@ -1,0 +1,33 @@
+  @Override
+  protected void filter(GenericResourceMethod genericMethodResource, Object[] arguments)
+      throws ApiException {
+    String accountId;
+    switch (genericMethodResource.getMethod().getName()) {
+      case GET_TOTAL_RESOURCES_METHOD:
+      case GET_AVAILABLE_RESOURCES_METHOD:
+      case GET_USED_RESOURCES_METHOD:
+        Subject currentSubject = EnvironmentContext.getCurrent().getSubject();
+        if (currentSubject.hasPermission(
+            SystemDomain.DOMAIN_ID, null, SystemDomain.MANAGE_SYSTEM_ACTION)) {
+          // user is admin and he is able to see resources of all accounts
+          return;
+        }
+
+        accountId = ((String) arguments[0]);
+        break;
+
+      default:
+        throw new ForbiddenException("The user does not have permission to perform this operation");
+    }
+    final Account account = accountManager.getById(accountId);
+
+    final AccountPermissionsChecker resourcesPermissionsChecker =
+        permissionsCheckers.get(account.getType());
+    if (resourcesPermissionsChecker != null) {
+      resourcesPermissionsChecker.checkPermissions(
+          accountId, AccountOperation.SEE_RESOURCE_INFORMATION);
+    } else {
+      throw new ForbiddenException("User is not authorized to perform given operation");
+    }
+  }
+

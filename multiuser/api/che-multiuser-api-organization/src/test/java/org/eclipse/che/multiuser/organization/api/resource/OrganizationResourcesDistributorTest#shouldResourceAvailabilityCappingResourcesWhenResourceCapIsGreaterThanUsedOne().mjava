@@ -1,0 +1,26 @@
+  @Test(
+    expectedExceptions = ConflictException.class,
+    expectedExceptionsMessageRegExp = "Resources are currently in use. Denied."
+  )
+  public void shouldResourceAvailabilityCappingResourcesWhenResourceCapIsGreaterThanUsedOne()
+      throws Exception {
+    //given
+    doCallRealMethod().when(manager).checkResourcesAvailability(anyString(), any());
+    doReturn("Denied.").when(manager).getMessage(anyString());
+
+    ResourceImpl used = createTestResource(1000);
+    doReturn(singletonList(used)).when(usageManager).getUsedResources(any());
+
+    ResourceImpl toCap = createTestResource(700);
+    doThrow(new NoEnoughResourcesException(emptyList(), emptyList(), singletonList(toCap)))
+        .when(resourceAggregator)
+        .deduct((Resource) any(), any());
+
+    //when
+    manager.checkResourcesAvailability(ORG_ID, singletonList(toCap));
+
+    //then
+    verify(usageManager).getUsedResources(ORG_ID);
+    verify(resourceAggregator).deduct(toCap, used);
+  }
+

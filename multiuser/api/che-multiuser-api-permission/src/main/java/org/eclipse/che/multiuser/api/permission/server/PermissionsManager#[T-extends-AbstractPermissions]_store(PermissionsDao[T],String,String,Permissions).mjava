@@ -1,0 +1,15 @@
+  private <T extends AbstractPermissions> void store(
+      PermissionsDao<T> dao, String userId, String instanceId, Permissions permissions)
+      throws ConflictException, ServerException {
+    final AbstractPermissionsDomain<T> permissionsDomain = dao.getDomain();
+    final T permission =
+        permissionsDomain.newInstance(userId, instanceId, permissions.getActions());
+    checkActionsSupporting(permissionsDomain, permission.getActions());
+    final Optional<T> existing = dao.store(permission);
+    if (!existing.isPresent()) {
+      Subject subject = EnvironmentContext.getCurrent().getSubject();
+      final String initiator = subject.isAnonymous() ? null : subject.getUserName();
+      eventService.publish(new PermissionsCreatedEvent(initiator, permissions));
+    }
+  }
+

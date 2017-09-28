@@ -1,0 +1,115 @@
+  protected void injectRuntimeLinks(
+      WorkspaceDto workspace, URI ideUri, UriBuilder uriBuilder, ServiceContext serviceContext) {
+    final WorkspaceRuntimeDto runtime = workspace.getRuntime();
+    // add links for running workspace
+    if (workspace.getStatus() == RUNNING && runtime != null) {
+      runtime
+          .getLinks()
+          .add(
+              createLink(
+                  "DELETE",
+                  uriBuilder
+                      .clone()
+                      .path(WorkspaceService.class, "stop")
+                      .build(workspace.getId())
+                      .toString(),
+                  LINK_REL_STOP_WORKSPACE));
+      String token = null;
+      try {
+        token =
+            httpJsonRequestFactory
+                .fromUrl(tokenServiceBaseUrl + workspace.getId())
+                .setMethod(HttpMethod.GET)
+                .request()
+                .asDto(MachineTokenDto.class)
+                .getMachineToken();
+      } catch (ApiException | IOException ex) {
+        LOG.warn("Failed to get machine token", ex);
+      }
+      final String machineToken = firstNonNull(token, "");
+
+      runtime.getMachines().forEach(machine -> injectMachineLinks(machine, serviceContext));
+
+      final MachineDto devMachine = runtime.getDevMachine();
+      if (devMachine != null) {
+        final Collection<ServerDto> servers = devMachine.getRuntime().getServers().values();
+        servers
+            .stream()
+            .filter(server -> WSAGENT_REFERENCE.equals(server.getRef()))
+            .findAny()
+            .ifPresent(
+                wsAgent -> {
+                  runtime.getLinks().add(createLink("GET", wsAgent.getUrl(), WSAGENT_REFERENCE));
+                  runtime
+                      .getLinks()
+                      .add(
+                          createLink(
+                              "GET",
+                              UriBuilder.fromUri(wsAgent.getUrl())
+                                  .path("ws")
+                                  .scheme("https".equals(ideUri.getScheme()) ? "wss" : "ws")
+                                  .build()
+                                  .toString(),
+                              WSAGENT_WEBSOCKET_REFERENCE));
+
+                  devMachine
+                      .getLinks()
+                      .add(
+                          createLink(
+                              "GET",
+                              UriBuilder.fromUri(wsAgent.getUrl())
+                                  .scheme("https".equals(ideUri.getScheme()) ? "wss" : "ws")
+                                  .path("/ws")
+                                  .queryParam(MACHINE_TOKEN, machineToken)
+                                  .build()
+                                  .toString(),
+                              WSAGENT_WEBSOCKET_REFERENCE,
+                              ImmutableList.of(
+                                  newDto(LinkParameter.class)
+                                      .withName(MACHINE_TOKEN)
+                                      .withDefaultValue(machineToken)
+                                      .withRequired(true))));
+                });
+
+        servers
+            .stream()
+            .filter(server -> TERMINAL_REFERENCE.equals(server.getRef()))
+            .findAny()
+            .ifPresent(
+                terminal -> {
+                  devMachine
+                      .getLinks()
+                      .add(
+                          createLink(
+                              "GET",
+                              UriBuilder.fromUri(terminal.getUrl())
+                                  .scheme("https".equals(ideUri.getScheme()) ? "wss" : "ws")
+                                  .queryParam(MACHINE_TOKEN, machineToken)
+                                  .path("/pty")
+                                  .build()
+                                  .toString(),
+                              TERMINAL_REFERENCE));
+                });
+        servers
+            .stream()
+            .filter(server -> EXEC_AGENT_REFERENCE.equals(server.getRef()))
+            .findAny()
+            .ifPresent(
+                exec -> {
+                  devMachine
+                      .getLinks()
+                      .add(
+                          createLink(
+                              "GET",
+                              UriBuilder.fromUri(exec.getUrl())
+                                  .scheme("https".equals(ideUri.getScheme()) ? "wss" : "ws")
+                                  .queryParam(MACHINE_TOKEN, machineToken)
+                                  .path("/connect")
+                                  .build()
+                                  .toString(),
+                              EXEC_AGENT_REFERENCE));
+                });
+      }
+    }
+  }
+

@@ -1,0 +1,28 @@
+  @Test
+  public void shouldRespond403IfUserDoesNotHaveAnyPermissionsForInstance() throws Exception {
+    when(subject.hasPermission("test", "test123", SET_PERMISSIONS)).thenReturn(false);
+    when(subject.hasPermission("test", "test123", SET_PERMISSIONS)).thenReturn(true);
+    final SetPermissionsChecker setPermissionsChecker = mock(SetPermissionsChecker.class);
+    when(domainsPermissionsCheckers.getSetChecker("test")).thenReturn(setPermissionsChecker);
+    doThrow(new ForbiddenException("ex")).when(setPermissionsChecker).check(any(Permissions.class));
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .body(
+                DtoFactory.newDto(PermissionsDto.class)
+                    .withDomainId("test")
+                    .withInstanceId("test123")
+                    .withUserId("user123")
+                    .withActions(Collections.singletonList("read")))
+            .when()
+            .post(SECURE_PATH + "/permissions");
+
+    assertEquals(response.getStatusCode(), 403);
+    verifyZeroInteractions(permissionsService);
+    verify(instanceValidator).validate("test", "test123");
+    verify(setPermissionsChecker, times(1)).check(any(Permissions.class));
+  }
+

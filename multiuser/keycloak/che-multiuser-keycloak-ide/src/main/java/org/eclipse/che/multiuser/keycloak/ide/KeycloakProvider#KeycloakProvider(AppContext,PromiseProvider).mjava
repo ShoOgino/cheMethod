@@ -1,0 +1,40 @@
+  @Inject
+  public KeycloakProvider(AppContext appContext, PromiseProvider promiseProvider) {
+    this.appContext = appContext;
+    String keycloakSettings =
+        getKeycloakSettings(KeycloakConstants.getEndpoint(appContext.getMasterEndpoint()));
+    Map<String, String> settings = JsonHelper.toMap(keycloakSettings);
+    Log.info(getClass(), "Keycloak settings: ", settings);
+
+    keycloak =
+        CallbackPromiseHelper.createFromCallback(
+                new CallbackPromiseHelper.Call<Void, Throwable>() {
+                  @Override
+                  public void makeCall(final Callback<Void, Throwable> callback) {
+                    ScriptInjector.fromUrl(
+                            settings.get(AUTH_SERVER_URL_SETTING) + "/js/keycloak.js")
+                        .setCallback(
+                            new Callback<Void, Exception>() {
+                              @Override
+                              public void onSuccess(Void result) {
+                                callback.onSuccess(null);
+                              }
+
+                              @Override
+                              public void onFailure(Exception reason) {
+                                callback.onFailure(reason);
+                              }
+                            })
+                        .setWindow(getWindow())
+                        .inject();
+                  }
+                })
+            .thenPromise(
+                (v) ->
+                    Keycloak.init(
+                        settings.get(AUTH_SERVER_URL_SETTING),
+                        settings.get(REALM_SETTING),
+                        settings.get(CLIENT_ID_SETTING)));
+    Log.info(getClass(), "Keycloak init complete: ", this);
+  }
+
