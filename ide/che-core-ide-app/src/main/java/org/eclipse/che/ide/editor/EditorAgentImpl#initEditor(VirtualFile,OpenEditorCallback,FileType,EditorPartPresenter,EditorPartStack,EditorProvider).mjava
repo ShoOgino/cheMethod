@@ -1,0 +1,37 @@
+  private void initEditor(
+      VirtualFile file,
+      OpenEditorCallback openEditorCallback,
+      FileType fileType,
+      EditorPartPresenter editor,
+      EditorPartStack editorPartStack,
+      EditorProvider editorProvider) {
+    OpenEditorCallback initializeCallback =
+        new OpenEditorCallbackImpl() {
+          @Override
+          public void onEditorOpened(EditorPartPresenter editor) {
+            editorPartStack.addPart(editor);
+            editorMultiPartStack.setActivePart(editor);
+
+            openedEditors.add(editor);
+            removeFromOpeningFilesList(file.getLocation(), editorPartStack);
+
+            openEditorCallback.onEditorOpened(editor);
+          }
+
+          @Override
+          public void onInitializationFailed() {
+            openEditorCallback.onInitializationFailed();
+
+            removeFromOpeningFilesList(file.getLocation(), editorPartStack);
+
+            if (!openingEditorsPathsToStacks.containsKey(editorPartStack)
+                && editorPartStack.getParts().isEmpty()) {
+              editorMultiPartStack.removePartStack(editorPartStack);
+            }
+          }
+        };
+
+    editor.init(new EditorInputImpl(fileType, file), initializeCallback);
+    finalizeInit(file, editor, editorProvider);
+  }
+

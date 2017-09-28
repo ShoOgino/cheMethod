@@ -1,0 +1,23 @@
+  private void doOpen(
+      VirtualFile file, EditorPartStack editorPartStackConsumer, OpenEditorCallback callback) {
+
+    addToOpeningFilesList(file.getLocation(), editorPartStackConsumer);
+
+    final FileType fileType = fileTypeRegistry.getFileTypeByFile(file);
+    final EditorProvider editorProvider = editorRegistry.getEditor(fileType);
+    if (editorProvider instanceof AsyncEditorProvider) {
+      AsyncEditorProvider provider = (AsyncEditorProvider) editorProvider;
+      Promise<EditorPartPresenter> promise = provider.createEditor(file);
+      if (promise != null) {
+        promise.then(
+            editor -> {
+              initEditor(file, callback, fileType, editor, editorPartStackConsumer, editorProvider);
+            });
+        return;
+      }
+    }
+
+    final EditorPartPresenter editor = editorProvider.getEditor();
+    initEditor(file, callback, fileType, editor, editorPartStackConsumer, editorProvider);
+  }
+

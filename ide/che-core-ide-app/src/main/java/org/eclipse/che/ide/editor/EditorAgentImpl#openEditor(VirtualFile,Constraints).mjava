@@ -1,5 +1,30 @@
   @Override
   public void openEditor(@NotNull VirtualFile file, Constraints constraints) {
-    doOpen(file, new OpenEditorCallbackImpl(), constraints);
+    if (constraints == null) {
+      openEditor(file);
+      return;
+    }
+
+    EditorPartStack relativeEditorPartStack =
+        editorMultiPartStack.getPartStackByTabId(constraints.relativeId);
+    if (relativeEditorPartStack == null) {
+      String errorMessage =
+          coreLocalizationConstant.canNotOpenFileInSplitMode(file.getLocation().toString());
+      notificationManager.notify(errorMessage, FAIL, EMERGE_MODE);
+      Log.error(getClass(), errorMessage + ": relative part stack is not found");
+      return;
+    }
+
+    EditorPartStack editorPartStackConsumer =
+        editorMultiPartStack.split(relativeEditorPartStack, constraints, -1);
+    if (editorPartStackConsumer == null) {
+      String errorMessage =
+          coreLocalizationConstant.canNotOpenFileInSplitMode(file.getLocation().toString());
+      notificationManager.notify(errorMessage, FAIL, EMERGE_MODE);
+      Log.error(getClass(), errorMessage + ": split part stack is not found");
+      return;
+    }
+
+    doOpen(file, editorPartStackConsumer, new OpenEditorCallbackImpl());
   }
 
