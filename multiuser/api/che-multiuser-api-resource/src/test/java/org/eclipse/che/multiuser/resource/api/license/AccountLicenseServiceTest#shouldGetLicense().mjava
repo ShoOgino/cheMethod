@@ -1,0 +1,42 @@
+  @Test
+  public void shouldGetLicense() throws Exception {
+    //given
+    final ResourceDto testResource =
+        DtoFactory.newDto(ResourceDto.class).withType("test").withAmount(1234).withUnit("mb");
+
+    final AccountLicenseDto toFetch =
+        DtoFactory.newDto(AccountLicenseDto.class)
+            .withAccountId("account123")
+            .withResourcesDetails(
+                singletonList(
+                    DtoFactory.newDto(ProvidedResourcesDto.class)
+                        .withId("resource123")
+                        .withProviderId("provider")
+                        .withOwner("account123")
+                        .withStartTime(123L)
+                        .withEndTime(321L)
+                        .withResources(singletonList(testResource))))
+            .withTotalResources(singletonList(testResource));
+
+    //when
+    when(accountLicenseManager.getByAccount(eq("account123")))
+        .thenReturn(new AccountLicenseImpl(toFetch));
+
+    //then
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .when()
+            .expect()
+            .statusCode(200)
+            .get(SECURE_PATH + "/license/account/account123");
+
+    final AccountLicenseDto fetchedLicense =
+        DtoFactory.getInstance()
+            .createDtoFromJson(response.body().print(), AccountLicenseDto.class);
+    assertEquals(fetchedLicense, toFetch);
+    verify(accountLicenseManager).getByAccount("account123");
+  }
+

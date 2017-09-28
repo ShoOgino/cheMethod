@@ -1,0 +1,36 @@
+  @Override
+  public List<ProvidedResources> getResources(String accountId)
+      throws NotFoundException, ServerException {
+    final Account account = accountManager.getById(accountId);
+    String parent;
+
+    if (!OrganizationImpl.ORGANIZATIONAL_ACCOUNT.equals(account.getType())
+        || (parent = organizationManager.getById(accountId).getParent()) == null) {
+      return emptyList();
+    }
+
+    // given account is suborganization's account and can have resources provided by parent
+    List<? extends Resource> parentTotalResources =
+        usageManagerProvider.get().getTotalResources(parent);
+
+    if (!parentTotalResources.isEmpty()) {
+      try {
+        List<? extends Resource> resourcesCaps =
+            distributorProvider.get().getResourcesCaps(accountId);
+
+        return singletonList(
+            new ProvidedResourcesImpl(
+                PARENT_RESOURCES_PROVIDER,
+                null,
+                accountId,
+                -1L,
+                -1L,
+                cap(parentTotalResources, resourcesCaps)));
+      } catch (ConflictException e) {
+        throw new ServerException(e.getLocalizedMessage());
+      }
+    }
+
+    return emptyList();
+  }
+

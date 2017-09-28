@@ -1,0 +1,101 @@
+  @Override
+  protected void configure() {
+    final Map<String, String> properties = new HashMap<>();
+    properties.put(TRANSACTION_TYPE, PersistenceUnitTransactionType.RESOURCE_LOCAL.name());
+
+    final String dbUrl = System.getProperty("jdbc.url");
+    final String dbUser = System.getProperty("jdbc.user");
+    final String dbPassword = System.getProperty("jdbc.password");
+
+    waitConnectionIsEstablished(dbUrl, dbUser, dbPassword);
+
+    properties.put(JDBC_URL, dbUrl);
+    properties.put(JDBC_USER, dbUser);
+    properties.put(JDBC_PASSWORD, dbPassword);
+    properties.put(JDBC_DRIVER, System.getProperty("jdbc.driver"));
+
+    JpaPersistModule main = new JpaPersistModule("main");
+    main.properties(properties);
+    install(main);
+    final PGSimpleDataSource dataSource = new PGSimpleDataSource();
+    dataSource.setUser(dbUser);
+    dataSource.setPassword(dbPassword);
+    dataSource.setUrl(dbUrl);
+    bind(SchemaInitializer.class).toInstance(new FlywaySchemaInitializer(dataSource, "che-schema"));
+    bind(DBInitializer.class).asEagerSingleton();
+    bind(TckResourcesCleaner.class).to(JpaCleaner.class);
+
+    //repositories
+    //api-account
+    bind(new TypeLiteral<TckRepository<AccountImpl>>() {})
+        .toInstance(new JpaTckRepository<>(AccountImpl.class));
+    //api-user
+    bind(new TypeLiteral<TckRepository<UserImpl>>() {}).to(UserJpaTckRepository.class);
+
+    //api-workspace
+    bind(new TypeLiteral<TckRepository<WorkspaceImpl>>() {})
+        .toInstance(new JpaTckRepository<>(WorkspaceImpl.class));
+    bind(new TypeLiteral<TckRepository<StackImpl>>() {})
+        .toInstance(new JpaTckRepository<>(StackImpl.class));
+    bind(new TypeLiteral<TckRepository<WorkerImpl>>() {})
+        .toInstance(new JpaTckRepository<>(WorkerImpl.class));
+
+    //api-machine
+    bind(new TypeLiteral<TckRepository<OldRecipeImpl>>() {})
+        .toInstance(new JpaTckRepository<>(OldRecipeImpl.class));
+    //api permission
+    bind(new TypeLiteral<TckRepository<RecipePermissionsImpl>>() {})
+        .toInstance(new JpaTckRepository<>(RecipePermissionsImpl.class));
+    bind(new TypeLiteral<TckRepository<StackPermissionsImpl>>() {})
+        .toInstance(new JpaTckRepository<>(StackPermissionsImpl.class));
+    bind(new TypeLiteral<TckRepository<SystemPermissionsImpl>>() {})
+        .toInstance(new JpaTckRepository<>(SystemPermissionsImpl.class));
+
+    bind(new TypeLiteral<PermissionsDao<StackPermissionsImpl>>() {})
+        .to(JpaStackPermissionsDao.class);
+    bind(new TypeLiteral<PermissionsDao<RecipePermissionsImpl>>() {})
+        .to(JpaRecipePermissionsDao.class);
+    bind(new TypeLiteral<PermissionsDao<SystemPermissionsImpl>>() {})
+        .to(JpaSystemPermissionsDao.class);
+
+    //permissions domains
+    bind(new TypeLiteral<AbstractPermissionsDomain<RecipePermissionsImpl>>() {})
+        .to(RecipePermissionsDaoTest.TestDomain.class);
+    bind(new TypeLiteral<AbstractPermissionsDomain<StackPermissionsImpl>>() {})
+        .to(StackPermissionsDaoTest.TestDomain.class);
+    bind(new TypeLiteral<AbstractPermissionsDomain<WorkerImpl>>() {})
+        .to(WorkerDaoTest.TestDomain.class);
+    bind(new TypeLiteral<AbstractPermissionsDomain<SystemPermissionsImpl>>() {})
+        .to(SystemPermissionsDaoTest.TestDomain.class);
+
+    //api-organization
+    bind(new TypeLiteral<TckRepository<OrganizationImpl>>() {})
+        .to(JpaOrganizationImplTckRepository.class);
+    bind(new TypeLiteral<TckRepository<MemberImpl>>() {})
+        .toInstance(new JpaTckRepository<>(MemberImpl.class));
+    bind(new TypeLiteral<TckRepository<OrganizationDistributedResourcesImpl>>() {})
+        .toInstance(new JpaTckRepository<>(OrganizationDistributedResourcesImpl.class));
+
+    //api-resource
+    bind(new TypeLiteral<TckRepository<FreeResourcesLimitImpl>>() {})
+        .toInstance(new JpaTckRepository<>(FreeResourcesLimitImpl.class));
+
+    //dao
+    bind(OrganizationDao.class).to(JpaOrganizationDao.class);
+    bind(OrganizationDistributedResourcesDao.class)
+        .to(JpaOrganizationDistributedResourcesDao.class);
+    bind(FreeResourcesLimitDao.class).to(JpaFreeResourcesLimitDao.class);
+
+    bind(WorkerDao.class).to(JpaWorkerDao.class);
+    bind(MemberDao.class).to(JpaMemberDao.class);
+    bind(new TypeLiteral<PermissionsDao<MemberImpl>>() {}).to(JpaMemberDao.class);
+    bind(new TypeLiteral<AbstractPermissionsDomain<MemberImpl>>() {}).to(OrganizationDomain.class);
+
+    // SHA-512 ecnryptor is faster than PBKDF2 so it is better for testing
+    bind(PasswordEncryptor.class).to(SHA512PasswordEncryptor.class).in(Singleton.class);
+
+    //Creates empty multibinder to avoid error during container starting
+    Multibinder.newSetBinder(
+        binder(), String.class, Names.named(SystemDomain.SYSTEM_DOMAIN_ACTIONS));
+  }
+

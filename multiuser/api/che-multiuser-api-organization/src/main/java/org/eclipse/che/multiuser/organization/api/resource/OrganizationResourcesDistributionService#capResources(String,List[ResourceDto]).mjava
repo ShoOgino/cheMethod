@@ -1,0 +1,36 @@
+  @POST
+  @Path("/{suborganizationId}/cap")
+  @Consumes(APPLICATION_JSON)
+  @ApiOperation(
+    value = "Cap usage of shared resources.",
+    notes =
+        "By default suborganization is able to use all parent organization resources."
+            + "Cap allow to limit usage of shared resources by suborganization."
+  )
+  @ApiResponses({
+    @ApiResponse(code = 204, message = "Resources successfully capped"),
+    @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+    @ApiResponse(code = 404, message = "Specified organization was not found"),
+    @ApiResponse(code = 409, message = "Specified organization is root organization"),
+    @ApiResponse(code = 409, message = "Suborganization is using shared resources"),
+    @ApiResponse(code = 500, message = "Internal server error occurred")
+  })
+  public void capResources(
+      @ApiParam("Suborganization id") @PathParam("suborganizationId") String suborganizationId,
+      @ApiParam("Resources to cap") List<ResourceDto> resourcesCap)
+      throws BadRequestException, NotFoundException, ConflictException, ServerException {
+    checkArgument(resourcesCap != null, "Missed resources caps.");
+    Set<String> resourcesToSet = new HashSet<>();
+    for (ResourceDto resource : resourcesCap) {
+      if (!resourcesToSet.add(resource.getType())) {
+        throw new BadRequestException(
+            format(
+                "Resources to cap must contain only one resource with type '%s'.",
+                resource.getType()));
+      }
+      resourceValidator.validate(resource);
+    }
+
+    resourcesDistributor.capResources(suborganizationId, resourcesCap);
+  }
+

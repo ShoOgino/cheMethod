@@ -1,0 +1,34 @@
+  @Inject
+  public HttpPermissionCheckerImpl(
+      @Named("che.api") String apiEndpoint, HttpJsonRequestFactory requestFactory) {
+    //TODO mb make configurable size of cache and expiration time
+    this.permissionsCache =
+        CacheBuilder.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(1, TimeUnit.MINUTES)
+            .build(
+                new CacheLoader<Key, Set<String>>() {
+                  @Override
+                  public Set<String> load(Key key) throws Exception {
+                    UriBuilder currentUsersPermissions =
+                        UriBuilder.fromUri(apiEndpoint).path("permissions/" + key.domain);
+                    if (key.instance != null) {
+                      currentUsersPermissions.queryParam("instance", key.instance);
+                    }
+                    String userPermissionsUrl = currentUsersPermissions.build().toString();
+                    try {
+                      PermissionsDto usersPermissions =
+                          requestFactory
+                              .fromUrl(userPermissionsUrl)
+                              .useGetMethod()
+                              .request()
+                              .asDto(PermissionsDto.class);
+                      return new HashSet<>(usersPermissions.getActions());
+                    } catch (NotFoundException e) {
+                      //user doesn't have permissions
+                      return new HashSet<>();
+                    }
+                  }
+                });
+  }
+

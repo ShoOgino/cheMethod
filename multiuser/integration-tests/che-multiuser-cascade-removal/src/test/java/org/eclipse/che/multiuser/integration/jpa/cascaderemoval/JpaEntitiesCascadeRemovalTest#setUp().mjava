@@ -1,0 +1,96 @@
+  @BeforeMethod
+  public void setUp() throws Exception {
+    injector =
+        Guice.createInjector(
+            Stage.PRODUCTION,
+            new AbstractModule() {
+              @Override
+              protected void configure() {
+                install(new JpaPersistModule("main"));
+                bind(EventService.class).in(Singleton.class);
+                bind(SchemaInitializer.class)
+                    .toInstance(new FlywaySchemaInitializer(inMemoryDefault(), "che-schema"));
+                bind(DBInitializer.class).asEagerSingleton();
+                bind(TckResourcesCleaner.class).to(H2JpaCleaner.class);
+                install(new InitModule(PostConstruct.class));
+                install(new UserJpaModule());
+                install(new AccountModule());
+                install(new SshJpaModule());
+                install(new MultiuserMachineJpaModule());
+                install(new FactoryJpaModule());
+                install(new OrganizationJpaModule());
+                install(new MultiuserWorkspaceJpaModule());
+                bind(RecipeDao.class).to(JpaRecipeDao.class);
+
+                bind(FreeResourcesLimitDao.class).to(JpaFreeResourcesLimitDao.class);
+                bind(RemoveFreeResourcesLimitSubscriber.class).asEagerSingleton();
+                bind(WorkspaceManager.class);
+                Multibinder.newSetBinder(binder(), RuntimeInfrastructure.class);
+                bind(AccountManager.class);
+                bind(Boolean.class)
+                    .annotatedWith(Names.named("che.workspace.auto_snapshot"))
+                    .toInstance(false);
+                bind(Boolean.class)
+                    .annotatedWith(Names.named("che.workspace.auto_restore"))
+                    .toInstance(false);
+                bind(WorkspaceSharedPool.class)
+                    .toInstance(new WorkspaceSharedPool("cached", null, null));
+
+                bind(String[].class)
+                    .annotatedWith(Names.named("che.auth.reserved_user_names"))
+                    .toInstance(new String[0]);
+                bind(RemoveOrganizationOnLastUserRemovedEventSubscriber.class).asEagerSingleton();
+
+                Multibinder.newSetBinder(binder(), ResourceLockKeyProvider.class);
+                Multibinder.newSetBinder(binder(), ResourceUsageTracker.class);
+                MapBinder.newMapBinder(binder(), String.class, AvailableResourcesProvider.class);
+                Multibinder.newSetBinder(binder(), ResourceType.class)
+                    .addBinding()
+                    .to(RamResourceType.class);
+                Multibinder.newSetBinder(binder(), ResourcesProvider.class)
+                    .addBinding()
+                    .toInstance(
+                        (accountId) ->
+                            singletonList(
+                                new ProvidedResourcesImpl(
+                                    "test",
+                                    null,
+                                    accountId,
+                                    -1L,
+                                    -1L,
+                                    singletonList(
+                                        new ResourceImpl(
+                                            RamResourceType.ID, 1024, RamResourceType.UNIT)))));
+              }
+            });
+
+    eventService = injector.getInstance(EventService.class);
+    accountDao = injector.getInstance(AccountDao.class);
+    accountManager = injector.getInstance(AccountManager.class);
+    userDao = injector.getInstance(UserDao.class);
+    userManager = injector.getInstance(UserManager.class);
+    preferenceDao = injector.getInstance(PreferenceDao.class);
+    profileDao = injector.getInstance(ProfileDao.class);
+    sshDao = injector.getInstance(SshDao.class);
+    workspaceDao = injector.getInstance(WorkspaceDao.class);
+    factoryDao = injector.getInstance(FactoryDao.class);
+    stackDao = injector.getInstance(StackDao.class);
+    recipeDao = injector.getInstance(RecipeDao.class);
+    workerDao = injector.getInstance(WorkerDao.class);
+    freeResourcesLimitDao = injector.getInstance(FreeResourcesLimitDao.class);
+    organizationManager = injector.getInstance(OrganizationManager.class);
+    memberDao = injector.getInstance(MemberDao.class);
+    organizationResourcesDistributor = injector.getInstance(OrganizationResourcesDistributor.class);
+
+    TypeLiteral<Set<PermissionsDao<? extends AbstractPermissions>>> lit =
+        new TypeLiteral<Set<PermissionsDao<? extends AbstractPermissions>>>() {};
+    Key<Set<PermissionsDao<? extends AbstractPermissions>>> key = Key.get(lit);
+    for (PermissionsDao<? extends AbstractPermissions> dao : injector.getInstance(key)) {
+      if (dao.getDomain().getId().equals(RecipeDomain.DOMAIN_ID)) {
+        recipePermissionsDao = (JpaRecipePermissionsDao) dao;
+      } else if (dao.getDomain().getId().equals(StackDomain.DOMAIN_ID)) {
+        stackPermissionsDao = (JpaStackPermissionsDao) dao;
+      }
+    }
+  }
+

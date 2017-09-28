@@ -1,0 +1,57 @@
+  public void sendMail(EmailBean emailBean) throws SendMailException {
+    File tempDir = null;
+    try {
+      MimeMessage message = new MimeMessage(mailSessionProvider.get());
+      Multipart contentPart = new MimeMultipart();
+
+      MimeBodyPart bodyPart = new MimeBodyPart();
+      bodyPart.setText(emailBean.getBody(), "UTF-8", getSubType(emailBean.getMimeType()));
+      contentPart.addBodyPart(bodyPart);
+
+      if (emailBean.getAttachments() != null) {
+        tempDir = Files.createTempDir();
+        for (Attachment attachment : emailBean.getAttachments()) {
+          // Create attachment file in temporary directory
+          byte[] attachmentContent = Base64.getDecoder().decode(attachment.getContent());
+          File attachmentFile = new File(tempDir, attachment.getFileName());
+          Files.write(attachmentContent, attachmentFile);
+
+          // Attach the attachment file to email
+          MimeBodyPart attachmentPart = new MimeBodyPart();
+          attachmentPart.attachFile(attachmentFile);
+          attachmentPart.setContentID("<" + attachment.getContentId() + ">");
+          contentPart.addBodyPart(attachmentPart);
+        }
+      }
+
+      message.setContent(contentPart);
+      message.setSubject(emailBean.getSubject(), "UTF-8");
+      message.setFrom(new InternetAddress(emailBean.getFrom(), true));
+      message.setSentDate(new Date());
+      message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(emailBean.getTo()));
+
+      if (emailBean.getReplyTo() != null) {
+        message.setReplyTo(InternetAddress.parse(emailBean.getReplyTo()));
+      }
+      LOG.info(
+          "Sending from {} to {} with subject {}",
+          emailBean.getFrom(),
+          emailBean.getTo(),
+          emailBean.getSubject());
+
+      Transport.send(message);
+      LOG.debug("Mail sent");
+    } catch (Exception e) {
+      LOG.error(e.getLocalizedMessage());
+      throw new SendMailException(e.getLocalizedMessage(), e);
+    } finally {
+      if (tempDir != null) {
+        try {
+          FileUtils.deleteDirectory(tempDir);
+        } catch (IOException exception) {
+          LOG.error(exception.getMessage());
+        }
+      }
+    }
+  }
+

@@ -1,0 +1,30 @@
+  /**
+   * Returns total resources minus resources which are already used by organization or by any of its
+   * suborganizations.
+   *
+   * @param organization organization id to calculate its available resources
+   * @return resources which are available for usage by specified organization
+   * @throws NotFoundException when organization with specified id doesn't exist
+   * @throws ServerException when any other exception occurs on calculation of available resources
+   */
+  @VisibleForTesting
+  List<? extends Resource> getAvailableOrganizationResources(Organization organization)
+      throws NotFoundException, ServerException {
+    final ResourceUsageManager resourceUsageManager = resourceUsageManagerProvider.get();
+    final List<? extends Resource> total =
+        resourceUsageManager.getTotalResources(organization.getId());
+    final List<Resource> unavailable =
+        new ArrayList<>(resourceUsageManager.getUsedResources(organization.getId()));
+    unavailable.addAll(getUsedResourcesBySuborganizations(organization.getQualifiedName()));
+    try {
+      return resourceAggregator.deduct(total, unavailable);
+    } catch (NoEnoughResourcesException e) {
+      LOG.warn(
+          "Organization with id {} uses more resources {} than it has {}.",
+          organization.getId(),
+          format(unavailable),
+          format(total));
+      return resourceAggregator.excess(total, unavailable);
+    }
+  }
+

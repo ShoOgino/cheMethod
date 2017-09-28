@@ -1,0 +1,26 @@
+  /**
+   * Returns license which given account can use.
+   *
+   * @param accountId account id
+   * @return license which can be used by given account
+   * @throws NotFoundException when account with specified id was not found
+   * @throws ServerException when some exception occurs
+   */
+  public AccountLicense getByAccount(String accountId) throws NotFoundException, ServerException {
+    final List<ProvidedResources> resources = new ArrayList<>();
+    for (ResourcesProvider resourcesProvider : resourcesProviders) {
+      resources.addAll(resourcesProvider.getResources(accountId));
+    }
+
+    final List<Resource> allResources =
+        resources
+            .stream()
+            .flatMap(providedResources -> providedResources.getResources().stream())
+            .collect(Collectors.toList());
+
+    return new AccountLicenseImpl(
+        accountId,
+        resources,
+        new ArrayList<>(resourceAggregator.aggregateByType(allResources).values()));
+  }
+

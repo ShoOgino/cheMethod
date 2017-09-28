@@ -1,0 +1,26 @@
+  @Test
+  public void shouldDoChainIfUserHasAnyPermissionsForInstance() throws Exception {
+    when(subject.hasPermission("test", "test123", SET_PERMISSIONS)).thenReturn(true);
+    final SetPermissionsChecker setPermissionsChecker = mock(SetPermissionsChecker.class);
+    when(domainsPermissionsCheckers.getSetChecker("test")).thenReturn(setPermissionsChecker);
+    doNothing().when(setPermissionsChecker).check(any(Permissions.class));
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .body(
+                DtoFactory.newDto(PermissionsDto.class)
+                    .withDomainId("test")
+                    .withInstanceId("test123")
+                    .withUserId("user123")
+                    .withActions(Collections.singletonList("read")))
+            .when()
+            .post(SECURE_PATH + "/permissions");
+
+    assertEquals(response.getStatusCode(), 204);
+    verify(permissionsService).storePermissions(any());
+    verify(instanceValidator).validate("test", "test123");
+  }
+

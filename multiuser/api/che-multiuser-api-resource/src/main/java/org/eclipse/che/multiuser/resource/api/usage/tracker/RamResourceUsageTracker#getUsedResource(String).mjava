@@ -1,0 +1,42 @@
+  @Override
+  public Optional<Resource> getUsedResource(String accountId)
+      throws NotFoundException, ServerException {
+    final Account account = accountManager.getById(accountId);
+    List<WorkspaceImpl> activeWorkspaces =
+        workspaceManagerProvider
+            .get()
+            .getByNamespace(account.getName(), true)
+            .stream()
+            .filter(ws -> STOPPED != ws.getStatus())
+            .collect(Collectors.toList());
+    long currentlyUsedRamMB = 0;
+    for (WorkspaceImpl activeWorkspace : activeWorkspaces) {
+      if (WorkspaceStatus.STARTING.equals(activeWorkspace.getStatus())) {
+        //starting workspace may not have all machine in runtime
+        //it is need to calculate ram from environment config
+        EnvironmentImpl activeEnvironmentConfig =
+            activeWorkspace
+                .getConfig()
+                .getEnvironments()
+                .get(activeWorkspace.getRuntime().getActiveEnv());
+
+        currentlyUsedRamMB += environmentRamCalculator.calculate(activeEnvironmentConfig);
+      } else {
+        currentlyUsedRamMB += 0L;
+        //            activeWorkspace
+        //                .getRuntime()
+        //                .getMachines()
+        //                .stream()
+        //                .mapToInt(machine -> machine.getConfig().getLimits().getRam())
+        //                .sum();
+      }
+    }
+
+    if (currentlyUsedRamMB > 0) {
+      return Optional.of(
+          new ResourceImpl(RamResourceType.ID, currentlyUsedRamMB, RamResourceType.UNIT));
+    } else {
+      return Optional.empty();
+    }
+  }
+

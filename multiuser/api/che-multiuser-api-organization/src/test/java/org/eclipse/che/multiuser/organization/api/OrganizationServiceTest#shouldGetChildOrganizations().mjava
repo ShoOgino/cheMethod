@@ -1,0 +1,25 @@
+  @Test
+  public void shouldGetChildOrganizations() throws Exception {
+    final OrganizationDto toFetch = createOrganization();
+
+    doReturn(new Page<>(singletonList(toFetch), 0, 1, 1))
+        .when(orgManager)
+        .getByParent(anyString(), anyInt(), anyInt());
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .when()
+            .expect()
+            .statusCode(200)
+            .get(SECURE_PATH + "/organization/parentOrg123/organizations?skipCount=0&maxItems=1");
+
+    final List<OrganizationDto> organizationDtos = unwrapDtoList(response, OrganizationDto.class);
+    assertEquals(organizationDtos.size(), 1);
+    assertEquals(organizationDtos.get(0), toFetch);
+    verify(orgManager).getByParent("parentOrg123", 1, 0);
+    verify(linksInjector).injectLinks(any(), any());
+  }
+

@@ -1,0 +1,76 @@
+  private void createTestData() throws NotFoundException, ConflictException, ServerException {
+    userDao.create(user = createUser("bobby"));
+    accountDao.create(account = createAccount("bobby"));
+    // test permissions users
+    userDao.create(user2 = createUser("worker"));
+    userDao.create(user3 = createUser("stacker"));
+
+    profileDao.create(profile = createProfile(user.getId()));
+
+    preferenceDao.setPreferences(user.getId(), preferences = createPreferences());
+
+    workspaceDao.create(workspace1 = createWorkspace("workspace1", account));
+    workspaceDao.create(workspace2 = createWorkspace("workspace2", account));
+    workspaceDao.create(workspace3 = createWorkspace("workspace3", account));
+
+    sshDao.create(sshPair1 = createSshPair(user.getId(), "service", "name1"));
+    sshDao.create(sshPair2 = createSshPair(user.getId(), "service", "name2"));
+
+    factoryDao.create(factory1 = createFactory("factory1", user.getId()));
+    factoryDao.create(factory2 = createFactory("factory2", user.getId()));
+
+    recipeDao.create(recipe1 = createRecipe("recipe1"));
+    recipeDao.create(recipe2 = createRecipe("recipe2"));
+
+    stackDao.create(stack1 = createStack("stack1", "st1"));
+    stackDao.create(stack2 = createStack("stack2", "st2"));
+    stackDao.create(stack3 = createStack("stack3", "st3"));
+
+    workerDao.store(createWorker(user2.getId(), workspace3.getId()));
+
+    stackPermissionsDao.store(
+        new StackPermissionsImpl(
+            user2.getId(), stack1.getId(), asList(SET_PERMISSIONS, "read", "write")));
+    stackPermissionsDao.store(
+        new StackPermissionsImpl(
+            user2.getId(), stack2.getId(), asList(SET_PERMISSIONS, "read", "execute")));
+    // To test removal only permissions if more users with setPermissions are present
+    stackPermissionsDao.store(
+        new StackPermissionsImpl(
+            user2.getId(), stack3.getId(), asList(SET_PERMISSIONS, "read", "write")));
+    stackPermissionsDao.store(
+        new StackPermissionsImpl(
+            user3.getId(), stack3.getId(), asList(SET_PERMISSIONS, "read", "write", "execute")));
+
+    recipePermissionsDao.store(
+        new RecipePermissionsImpl(
+            user2.getId(), recipe1.getId(), asList(SET_PERMISSIONS, "read", "write")));
+    recipePermissionsDao.store(
+        new RecipePermissionsImpl(
+            user2.getId(), recipe2.getId(), asList(SET_PERMISSIONS, "read", "execute")));
+
+    //creator will have all permissions for newly created organization
+    prepareCreator(user.getId());
+    organization = organizationManager.create(new OrganizationImpl(null, "testOrg", null));
+    organizationalAccount = accountDao.getById(organization.getId());
+    workspaceDao.create(workspace4 = createWorkspace("workspace4", organizationalAccount));
+    organization2 = organizationManager.create(new OrganizationImpl(null, "anotherOrg", null));
+    prepareCreator(user2.getId());
+    childOrganization =
+        organizationManager.create(
+            new OrganizationImpl(null, "childTestOrg", organization.getId()));
+
+    memberDao.store(
+        new MemberImpl(user2.getId(), organization2.getId(), singletonList(SET_PERMISSIONS)));
+    memberDao.store(
+        new MemberImpl(user3.getId(), organization2.getId(), singletonList(SET_PERMISSIONS)));
+
+    freeResourcesLimitDao.store(freeResourcesLimit = createFreeResourcesLimit(account.getId()));
+    freeResourcesLimitDao.store(
+        freeResourcesLimit2 = createFreeResourcesLimit(organization.getId()));
+
+    organizationResourcesDistributor.capResources(
+        childOrganization.getId(),
+        singletonList(new ResourceImpl(RamResourceType.ID, 1024, RamResourceType.UNIT)));
+  }
+

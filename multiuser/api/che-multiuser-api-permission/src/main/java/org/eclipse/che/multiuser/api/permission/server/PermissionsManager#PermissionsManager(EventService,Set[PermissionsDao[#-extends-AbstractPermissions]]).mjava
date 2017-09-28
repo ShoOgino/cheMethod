@@ -1,0 +1,29 @@
+  @Inject
+  public PermissionsManager(
+      EventService eventService, Set<PermissionsDao<? extends AbstractPermissions>> daos)
+      throws ServerException {
+    this.eventService = eventService;
+    final Map<String, PermissionsDao<? extends AbstractPermissions>> domainToDao = new HashMap<>();
+    final List<AbstractPermissionsDomain<? extends AbstractPermissions>> domains =
+        new ArrayList<>();
+    for (PermissionsDao<? extends AbstractPermissions> dao : daos) {
+      final AbstractPermissionsDomain<? extends AbstractPermissions> domain = dao.getDomain();
+      final PermissionsDao<? extends AbstractPermissions> oldStorage =
+          domainToDao.put(domain.getId(), dao);
+      domains.add(domain);
+      if (oldStorage != null) {
+        throw new ServerException(
+            "Permissions Domain '"
+                + domain.getId()
+                + "' should be stored in only one storage. "
+                + "Duplicated in "
+                + dao.getClass()
+                + " and "
+                + oldStorage.getClass());
+      }
+    }
+    this.domains = ImmutableList.copyOf(domains);
+    this.domainToDao = ImmutableMap.copyOf(domainToDao);
+    this.updateLocks = new StripedLocks(16);
+  }
+
