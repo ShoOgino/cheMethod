@@ -4,18 +4,15 @@
       publicKey = null;
     }
     if (publicKey == null) {
-      URL url;
-      HttpURLConnection conn;
+      HttpURLConnection conn = null;
       try {
-        url = new URL(authServerUrl + "/realms/" + realm);
+        URL url = new URL(authServerUrl + "/realms/" + realm);
         LOG.info("Pulling realm public key from URL : {}", url);
         conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
         Map<String, String> realmSettings;
         try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-          ObjectMapper mapper = new ObjectMapper();
-          //noinspection unchecked
-          realmSettings = mapper.readValue(in, Map.class);
+          realmSettings = GSON.fromJson(in, STRING_MAP_TYPE);
         }
         String encodedPublicKey = realmSettings.get("public_key");
         byte[] decoded = Base64.getDecoder().decode(encodedPublicKey);
@@ -24,6 +21,10 @@
         publicKey = kf.generatePublic(keySpec);
       } catch (IOException e) {
         LOG.error("Exception during retrieval of the Keycloak realm public key", e);
+      } finally {
+        if (conn != null) {
+          conn.disconnect();
+        }
       }
     }
     return publicKey;
