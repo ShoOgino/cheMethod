@@ -1,0 +1,31 @@
+  @Test
+  public void
+      shouldDoNotBreakSendingOfNotificationAboutOrganizationRenamingWhenUnableToRetrieveAUser()
+          throws Exception {
+    //given
+    MemberImpl member1 = new MemberImpl("user1", "org123", emptyList());
+    MemberImpl member2 = new MemberImpl("user2", "org123", emptyList());
+    doReturn(new Page<Member>(asList(member1, member2), 0, 2, 2))
+        .when(organizationManager)
+        .getMembers(anyString(), anyInt(), anyInt());
+
+    when(userManager.getById("user1")).thenThrow(new NotFoundException(""));
+    when(userManager.getById("user2"))
+        .thenReturn(new UserImpl("user2", "email2", null, null, emptyList()));
+
+    EmailBean email = new EmailBean().withBody("Org Renamed Notification");
+    when(emails.organizationRenamed(anyString(), anyString())).thenReturn(email);
+
+    //when
+    emailSender.onEvent(
+        new OrganizationRenamedEvent(
+            "admin",
+            "oldName",
+            "newName",
+            new OrganizationImpl("org123", "/parent/newName", "parent")));
+
+    //then
+    verify(emails).organizationRenamed("oldName", "newName");
+    verify(mailSender).sendAsync(new EmailBean(email).withTo("email2"));
+  }
+
