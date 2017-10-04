@@ -9,26 +9,23 @@
         .getWorkspaceRoot()
         .getContainer(startPoint)
         .then(
-            new Operation<Optional<Container>>() {
-              @Override
-              public void apply(Optional<Container> optionalContainer) throws OperationException {
-                if (!optionalContainer.isPresent()) {
-                  view.showErrorMessage("Path '" + startPoint + "' doesn't exists");
-                  return;
-                }
-
-                final Container container = optionalContainer.get();
-                container
-                    .search(view.getFileMask(), prepareQuery(text))
-                    .then(
-                        new Operation<List<SearchResult>>() {
-                          @Override
-                          public void apply(List<SearchResult> result) throws OperationException {
-                            view.close();
-                            findResultPresenter.handleResponse(result, text);
-                          }
-                        });
+            optionalContainer -> {
+              if (!optionalContainer.isPresent()) {
+                view.showErrorMessage("Path '" + startPoint + "' doesn't exists");
+                return;
               }
+
+              final Container container = optionalContainer.get();
+              QueryExpression queryExpression =
+                  container.createSearchQueryExpression(view.getFileMask(), prepareQuery(text));
+              queryExpression.setMaxItems(SEARCH_RESULT_ITEMS);
+              container
+                  .search(queryExpression)
+                  .then(
+                      result -> {
+                        view.close();
+                        findResultPresenter.handleResponse(result, queryExpression, text);
+                      });
             });
   }
 
