@@ -1,0 +1,35 @@
+  private void fetchRevisions() {
+    service
+        .log(project.getLocation(), null, skip, DEFAULT_PAGE_SIZE, false)
+        .then(
+            log -> {
+              List<Revision> commits = log.getCommits();
+              if (!commits.isEmpty()) {
+                skip += commits.size();
+                revisions.addAll(commits);
+                view.setEnableRevertButton(selectedRevision != null);
+                view.setRevisions(revisions);
+                view.showDialog();
+              }
+            })
+        .catchError(
+            error -> {
+              if (getErrorCode(error.getCause()) == ErrorCodes.INIT_COMMIT_WAS_NOT_PERFORMED) {
+                dialogFactory
+                    .createMessageDialog(
+                        constant.revertCommitViewTitle(),
+                        constant.initCommitWasNotPerformed(),
+                        null)
+                    .show();
+                return;
+              }
+              String errorMessage =
+                  (error.getMessage() != null) ? error.getMessage() : constant.logFailed();
+              GitOutputConsole console =
+                  gitOutputConsoleFactory.create(constant.consoleLogCommandName());
+              console.printError(errorMessage);
+              consolesPanelPresenter.addCommandOutput(console);
+              notificationManager.notify(constant.logFailed(), FAIL, FLOAT_MODE);
+            });
+  }
+
