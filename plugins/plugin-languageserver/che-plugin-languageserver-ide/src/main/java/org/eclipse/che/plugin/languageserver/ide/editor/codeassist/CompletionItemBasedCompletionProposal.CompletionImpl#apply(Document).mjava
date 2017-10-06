@@ -1,27 +1,53 @@
     @Override
     public void apply(Document document) {
+      List<TextEdit> edits = new ArrayList<>();
+      TextPosition cursorPosition = document.getCursorPosition();
       if (completionItem.getTextEdit() != null) {
-        Range range = completionItem.getTextEdit().getRange();
-        int startOffset =
-            document.getIndexFromPosition(
-                new TextPosition(range.getStart().getLine(), range.getStart().getCharacter()));
-        int endOffset =
-            offset
-                + document.getIndexFromPosition(
-                    new TextPosition(range.getEnd().getLine(), range.getEnd().getCharacter()));
-        document.replace(
-            startOffset, endOffset - startOffset, completionItem.getTextEdit().getNewText());
+        edits.add(adjustForOffset(completionItem.getTextEdit(), cursorPosition, offset));
+      } else if (completionItem.getInsertText() == null) {
+        edits.add(
+            new TextEdit(
+                newRange(
+                    cursorPosition.getLine(),
+                    cursorPosition.getCharacter() - currentWord.length(),
+                    cursorPosition.getLine(),
+                    cursorPosition.getCharacter()),
+                completionItem.getLabel()));
       } else {
-        int currentWordLength = currentWord.length();
-        int cursorOffset = document.getCursorOffset();
-        if (completionItem.getInsertText() == null) {
-          document.replace(
-              cursorOffset - currentWordLength, currentWordLength, completionItem.getLabel());
-          insertedText = completionItem.getLabel();
+        edits.add(
+            new TextEdit(
+                newRange(
+                    cursorPosition.getLine(),
+                    cursorPosition.getCharacter() - offset,
+                    cursorPosition.getLine(),
+                    cursorPosition.getCharacter()),
+                completionItem.getInsertText()));
+      }
+      if (completionItem.getAdditionalTextEdits() != null) {
+        completionItem
+            .getAdditionalTextEdits()
+            .forEach(e -> edits.add(adjustForOffset(e, cursorPosition, offset)));
+      }
+      TextEdit firstEdit = edits.get(0);
+      if (completionItem.getInsertTextFormat() == InsertTextFormat.Snippet) {
+        Position startPos = firstEdit.getRange().getStart();
+        TextPosition startTextPosition =
+            new TextPosition(startPos.getLine(), startPos.getCharacter());
+        int startOffset = document.getIndexFromPosition(startTextPosition);
+        Pair<String, LinkedModel> resolved =
+            new SnippetResolver(new DocumentVariableResolver(document, startTextPosition))
+                .resolve(firstEdit.getNewText(), editor, startOffset);
+        firstEdit.setNewText(resolved.first);
+        ApplyWorkspaceEditAction.applyTextEdits(document, edits);
+        if (resolved.second != null) {
+          editor.getLinkedMode().enterLinkedMode(resolved.second);
+          lastSelection = null;
         } else {
-          document.replace(cursorOffset - offset, offset, completionItem.getInsertText());
-          insertedText = completionItem.getInsertText();
+          lastSelection = computeLastSelection(document, firstEdit);
         }
+      } else {
+        ApplyWorkspaceEditAction.applyTextEdits(document, edits);
+        lastSelection = computeLastSelection(document, firstEdit);
       }
     }
 
