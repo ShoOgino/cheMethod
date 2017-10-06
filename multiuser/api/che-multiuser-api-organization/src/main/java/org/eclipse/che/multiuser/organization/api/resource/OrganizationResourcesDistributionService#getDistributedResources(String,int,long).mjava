@@ -1,0 +1,28 @@
+  @GET
+  @Path("/{organizationId}")
+  @Produces(APPLICATION_JSON)
+  @ApiOperation(
+    value = "Get resources which are distributed by specified parent.",
+    response = OrganizationDistributedResourcesDto.class,
+    responseContainer = "list"
+  )
+  @ApiResponses({
+    @ApiResponse(code = 200, message = "Resources caps successfully fetched"),
+    @ApiResponse(code = 500, message = "Internal server error occurred")
+  })
+  public Response getDistributedResources(
+      @ApiParam("Organization id") @PathParam("organizationId") String organizationId,
+      @ApiParam(value = "Max items") @QueryParam("maxItems") @DefaultValue("30") int maxItems,
+      @ApiParam(value = "Skip count") @QueryParam("skipCount") @DefaultValue("0") long skipCount)
+      throws BadRequestException, ServerException {
+    checkArgument(maxItems >= 0, "The number of items to return can't be negative.");
+    checkArgument(skipCount >= 0, "The number of items to skip can't be negative.");
+
+    final Page<? extends OrganizationDistributedResources> distributedResourcesPage =
+        resourcesDistributor.getByParent(organizationId, maxItems, skipCount);
+    return Response.ok()
+        .entity(distributedResourcesPage.getItems(DtoConverter::asDto))
+        .header("Link", createLinkHeader(distributedResourcesPage))
+        .build();
+  }
+

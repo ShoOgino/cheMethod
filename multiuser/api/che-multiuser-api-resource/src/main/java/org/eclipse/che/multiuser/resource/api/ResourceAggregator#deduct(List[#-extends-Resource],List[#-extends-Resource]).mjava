@@ -1,0 +1,42 @@
+  /**
+   * Returns list which is result of deduction {@code resourceToDeduct} from {@code
+   * sourceResources}.
+   *
+   * @param sourceResources the source resources
+   * @param resourcesToDeduct the resources which should be deducted from {@code sourceResources}
+   * @throws NoEnoughResourcesException when {@code sourceResources} list doesn't contain enough
+   *     resources
+   * @throws IllegalArgumentException when {@code sourceResources} or {@code resourcesToDeduct}
+   *     contain resource with not supported type
+   */
+  public List<? extends Resource> deduct(
+      List<? extends Resource> sourceResources, List<? extends Resource> resourcesToDeduct)
+      throws NoEnoughResourcesException {
+    checkSupporting(sourceResources);
+    checkSupporting(resourcesToDeduct);
+
+    final Map<String, Resource> result =
+        sourceResources.stream().collect(Collectors.toMap(Resource::getType, Function.identity()));
+    final List<Resource> missingResources = new ArrayList<>();
+
+    for (Resource toDeduct : resourcesToDeduct) {
+      final Resource sourceResource = result.get(toDeduct.getType());
+      if (sourceResource != null) {
+        try {
+          result.put(toDeduct.getType(), deduct(sourceResource, toDeduct));
+        } catch (NoEnoughResourcesException e) {
+          result.remove(toDeduct.getType());
+          missingResources.addAll(e.getMissingResources());
+        }
+      } else {
+        missingResources.add(toDeduct);
+      }
+    }
+
+    if (!missingResources.isEmpty()) {
+      throw new NoEnoughResourcesException(sourceResources, resourcesToDeduct, missingResources);
+    }
+
+    return new ArrayList<>(result.values());
+  }
+

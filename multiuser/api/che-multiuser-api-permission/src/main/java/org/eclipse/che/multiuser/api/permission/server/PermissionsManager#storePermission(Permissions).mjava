@@ -1,0 +1,28 @@
+  /**
+   * Stores (adds or updates) permissions.
+   *
+   * @param permissions permission to store
+   * @throws NotFoundException when permissions have unsupported domain
+   * @throws ConflictException when new permissions remove last 'setPermissions' of given instance
+   * @throws ServerException when any other error occurs during permissions storing
+   */
+  public void storePermission(Permissions permissions)
+      throws ServerException, ConflictException, NotFoundException {
+    final String domainId = permissions.getDomainId();
+    final String instanceId = permissions.getInstanceId();
+    final String userId = permissions.getUserId();
+
+    try (@SuppressWarnings("unused")
+        Unlocker unlocker = updateLocks.writeLock(firstNonNull(instanceId, domainId))) {
+      final PermissionsDao<? extends AbstractPermissions> permissionsDao =
+          getPermissionsDao(domainId);
+      if (!permissions.getActions().contains(SET_PERMISSIONS)
+          && userHasLastSetPermissions(permissionsDao, userId, instanceId)) {
+        throw new ConflictException(
+            "Can't edit permissions because there is not any another user "
+                + "with permission 'setPermissions'");
+      }
+      store(permissionsDao, userId, instanceId, permissions);
+    }
+  }
+

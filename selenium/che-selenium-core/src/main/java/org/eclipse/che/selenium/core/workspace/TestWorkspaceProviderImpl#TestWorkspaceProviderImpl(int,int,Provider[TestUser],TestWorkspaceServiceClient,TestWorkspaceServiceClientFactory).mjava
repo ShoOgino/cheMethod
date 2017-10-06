@@ -1,0 +1,28 @@
+  @Inject
+  public TestWorkspaceProviderImpl(
+      @Named("sys.threads") int threads,
+      @Named("workspace.default_memory_gb") int defaultMemoryGb,
+      Provider<TestUser> defaultUser,
+      TestWorkspaceServiceClient testWorkspaceServiceClient,
+      TestWorkspaceServiceClientFactory testWorkspaceServiceClientFactory) {
+    this.defaultUser = defaultUser.get();
+    this.defaultMemoryGb = defaultMemoryGb;
+    this.testWorkspaceServiceClient = testWorkspaceServiceClient;
+    this.testWorkspaceServiceClientFactory = testWorkspaceServiceClientFactory;
+
+    if (threads == 0) {
+      throw new ConfigurationException("Threads number is 0");
+    }
+
+    this.poolSize = (threads - 1) / 2 + 1;
+    this.testWorkspaceQueue = new ArrayBlockingQueue<>(poolSize);
+
+    this.executor =
+        Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder()
+                .setNameFormat("WorkspaceInitializer-%d")
+                .setDaemon(true)
+                .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+                .build());
+  }
+

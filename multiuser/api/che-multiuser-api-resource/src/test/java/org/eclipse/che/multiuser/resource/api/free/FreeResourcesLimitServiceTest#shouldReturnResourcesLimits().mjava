@@ -1,0 +1,32 @@
+  @Test
+  public void shouldReturnResourcesLimits() throws Exception {
+    FreeResourcesLimit resourcesLimit1 =
+        new FreeResourcesLimitImpl(
+            "account123", singletonList(new ResourceImpl(TEST_RESOURCE_TYPE, 1000, "unit")));
+
+    FreeResourcesLimit resourcesLimit2 =
+        new FreeResourcesLimitImpl(
+            "account321", singletonList(new ResourceImpl(TEST_RESOURCE_TYPE, 2000, "unit")));
+
+    doReturn(new Page<>(Arrays.asList(resourcesLimit1, resourcesLimit2), 1, 2, 2))
+        .when(freeResourcesLimitManager)
+        .getAll(anyInt(), anyInt());
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .when()
+            .expect()
+            .statusCode(200)
+            .get(SECURE_PATH + "/resource/free?skipCount=1&maxItems=5");
+
+    final List<FreeResourcesLimitDto> freeResourcesLimits =
+        unwrapDtoList(response, FreeResourcesLimitDto.class);
+    assertEquals(freeResourcesLimits.size(), 2);
+    assertTrue(freeResourcesLimits.contains(DtoConverter.asDto(resourcesLimit1)));
+    assertTrue(freeResourcesLimits.contains(DtoConverter.asDto(resourcesLimit2)));
+    verify(freeResourcesLimitManager).getAll(5, 1);
+  }
+

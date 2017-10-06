@@ -1,0 +1,24 @@
+  /**
+   * Acquire resources lock for specified account.
+   *
+   * @param accountId account id to lock resources
+   * @return lock for unlocking resources when resources operation finishes
+   * @throws NotFoundException when account with specified {@code account id} was not found
+   * @throws ServerException when any other error occurs
+   */
+  public Unlocker lock(String accountId) throws NotFoundException, ServerException {
+    final Account account = accountManager.getById(accountId);
+    final ResourceLockKeyProvider resourceLockKeyProvider =
+        accountTypeToLockProvider.get(account.getType());
+    String lockKey;
+    if (resourceLockKeyProvider == null) {
+      // this account type doesn't have custom lock provider.
+      // Lock resources by current account
+      lockKey = accountId;
+    } else {
+      lockKey = resourceLockKeyProvider.getLockKey(accountId);
+    }
+
+    return stripedLocks.writeLock(lockKey);
+  }
+

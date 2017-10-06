@@ -1,0 +1,30 @@
+  @Override
+  @Transactional
+  public List<StackImpl> searchStacks(
+      @Nullable String userId, @Nullable List<String> tags, int skipCount, int maxItems)
+      throws ServerException {
+    final TypedQuery<StackImpl> query;
+    if (tags == null || tags.isEmpty()) {
+      query = managerProvider.get().createQuery(findByPermissionsQuery, StackImpl.class);
+    } else {
+      query =
+          managerProvider
+              .get()
+              .createQuery(findByPermissionsAndTagsQuery, StackImpl.class)
+              .setParameter("tags", tags)
+              .setParameter("tagsSize", tags.size());
+    }
+    try {
+      return query
+          .setParameter("userId", userId)
+          .setMaxResults(maxItems)
+          .setFirstResult(skipCount)
+          .getResultList()
+          .stream()
+          .map(StackImpl::new)
+          .collect(Collectors.toList());
+    } catch (RuntimeException x) {
+      throw new ServerException(x.getLocalizedMessage(), x);
+    }
+  }
+

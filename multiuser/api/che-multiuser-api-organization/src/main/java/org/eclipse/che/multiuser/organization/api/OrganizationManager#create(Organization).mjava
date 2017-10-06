@@ -1,0 +1,35 @@
+  /**
+   * Creates new organization.
+   *
+   * @param newOrganization organization to create
+   * @return created organization
+   * @throws NullPointerException when {@code organization} is null
+   * @throws NotFoundException when parent organization was not found
+   * @throws ConflictException when organization with such id/name already exists
+   * @throws ConflictException when specified organization name is reserved
+   * @throws ServerException when any other error occurs during organization creation
+   */
+  @Transactional(rollbackOn = {RuntimeException.class, ApiException.class})
+  public Organization create(Organization newOrganization)
+      throws NotFoundException, ConflictException, ServerException {
+    requireNonNull(newOrganization, "Required non-null organization");
+    requireNonNull(newOrganization.getName(), "Required non-null organization name");
+
+    String qualifiedName;
+    if (newOrganization.getParent() != null) {
+      final Organization parent = getById(newOrganization.getParent());
+      qualifiedName = parent.getQualifiedName() + "/" + newOrganization.getName();
+    } else {
+      qualifiedName = newOrganization.getName();
+    }
+    checkNameReservation(qualifiedName);
+
+    final OrganizationImpl organization =
+        new OrganizationImpl(
+            NameGenerator.generate("organization", 16), qualifiedName, newOrganization.getParent());
+    organizationDao.create(organization);
+    addFirstMember(organization);
+    eventService.publish(new OrganizationPersistedEvent(organization)).propagateException();
+    return organization;
+  }
+

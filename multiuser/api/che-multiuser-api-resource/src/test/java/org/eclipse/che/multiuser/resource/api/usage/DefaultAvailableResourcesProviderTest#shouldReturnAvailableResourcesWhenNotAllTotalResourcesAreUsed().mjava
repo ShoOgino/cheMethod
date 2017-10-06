@@ -1,0 +1,25 @@
+  @Test
+  public void shouldReturnAvailableResourcesWhenNotAllTotalResourcesAreUsed() throws Exception {
+    //given
+    List<ResourceImpl> totalResources = singletonList(new ResourceImpl("test", 5000, "unit"));
+    doReturn(totalResources).when(resourceUsageManager).getTotalResources(anyString());
+    List<ResourceImpl> usedResources = singletonList(new ResourceImpl("test", 2000, "unit"));
+    doReturn(usedResources).when(resourceUsageManager).getUsedResources(anyString());
+    ResourceImpl availableResource = new ResourceImpl("test", 3000, "unit");
+    doReturn(singletonList(availableResource))
+        .when(resourceAggregator)
+        .deduct(anyList(), anyList());
+
+    //when
+    List<? extends Resource> availableResources =
+        defaultAvailableResourcesProvider.getAvailableResources("account123");
+
+    //then
+    assertEquals(availableResources.size(), 1);
+    assertEquals(availableResources.get(0), availableResource);
+    verify(resourceUsageManager).getTotalResources("account123");
+    verify(resourceUsageManager).getUsedResources("account123");
+    verify(resourceAggregator).deduct(totalResources, usedResources);
+    verify(resourceAggregator, never()).excess(anyList(), anyList());
+  }
+

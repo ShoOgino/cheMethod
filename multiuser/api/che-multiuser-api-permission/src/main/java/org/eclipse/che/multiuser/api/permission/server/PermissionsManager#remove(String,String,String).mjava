@@ -1,0 +1,29 @@
+  /**
+   * Removes permissions of userId related to the particular instanceId of specified domainId
+   *
+   * @param userId user id
+   * @param domainId domain id
+   * @param instanceId instance id
+   * @throws NotFoundException when given domainId is unsupported
+   * @throws ConflictException when removes last 'setPermissions' of given instanceId
+   * @throws ServerException when any other error occurs during permissions removing
+   */
+  public void remove(String userId, String domainId, String instanceId)
+      throws ConflictException, ServerException, NotFoundException {
+    final PermissionsDao<? extends AbstractPermissions> permissionsDao =
+        getPermissionsDao(domainId);
+    Permissions permissions;
+    try (@SuppressWarnings("unused")
+        Unlocker unlocker = updateLocks.writeLock(firstNonNull(instanceId, domainId))) {
+      if (userHasLastSetPermissions(permissionsDao, userId, instanceId)) {
+        throw new ConflictException(
+            "Can't remove permissions because there is not any another user "
+                + "with permission 'setPermissions'");
+      }
+      permissions = permissionsDao.get(userId, instanceId);
+      permissionsDao.remove(userId, instanceId);
+    }
+    final String initiator = EnvironmentContext.getCurrent().getSubject().getUserName();
+    eventService.publish(new PermissionsRemovedEvent(initiator, permissions));
+  }
+

@@ -1,0 +1,39 @@
+  @Test
+  public void shouldProvideResourcesForSuborganizationalAccount() throws Exception {
+    //given
+    when(account.getType()).thenReturn(OrganizationImpl.ORGANIZATIONAL_ACCOUNT);
+    when(organization.getParent()).thenReturn("parentOrg");
+    final ResourceImpl parentNotCapedResource = new ResourceImpl("test", 1234, "unit");
+    final ResourceImpl parentCapedResource = new ResourceImpl("caped", 20, "unit");
+    final ResourceImpl parentUnlimitedCapedResource = new ResourceImpl("unlimited", -1, "unit");
+    doReturn(asList(parentNotCapedResource, parentCapedResource, parentUnlimitedCapedResource))
+        .when(resourceUsageManager)
+        .getTotalResources(anyString());
+
+    final ResourceImpl capedResourceCap = new ResourceImpl("caped", 10, "unit");
+    final ResourceImpl unlimitedCapedResourceCap = new ResourceImpl("unlimited", 40, "unit");
+    doReturn(asList(capedResourceCap, unlimitedCapedResourceCap))
+        .when(resourcesDistributor)
+        .getResourcesCaps(any());
+
+    //when
+    final List<ProvidedResources> providedResources =
+        suborganizationResourcesProvider.getResources("organization123");
+
+    //then
+    assertEquals(providedResources.size(), 1);
+    assertEquals(
+        providedResources.get(0),
+        new ProvidedResourcesImpl(
+            SuborganizationResourcesProvider.PARENT_RESOURCES_PROVIDER,
+            null,
+            "organization123",
+            -1L,
+            -1L,
+            asList(parentNotCapedResource, capedResourceCap, unlimitedCapedResourceCap)));
+    verify(accountManager).getById("organization123");
+    verify(organizationManager).getById("organization123");
+    verify(resourcesDistributor).getResourcesCaps("organization123");
+    verify(resourceUsageManager).getTotalResources("parentOrg");
+  }
+

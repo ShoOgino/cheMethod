@@ -1,0 +1,38 @@
+  @GET
+  @Path("/{domain}/all")
+  @Produces(APPLICATION_JSON)
+  @ApiOperation(
+    value = "Get permissions which are related to specified domain and instance",
+    response = PermissionsDto.class,
+    responseContainer = "List"
+  )
+  @ApiResponses({
+    @ApiResponse(code = 200, message = "The permissions successfully fetched"),
+    @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+    @ApiResponse(code = 404, message = "Specified domain is unsupported"),
+    @ApiResponse(
+      code = 409,
+      message = "Given domain requires non nullable value for instance but it is null"
+    ),
+    @ApiResponse(code = 500, message = "Internal server error occurred during permissions fetching")
+  })
+  public Response getUsersPermissions(
+      @ApiParam(value = "Domain id to retrieve users' permissions") @PathParam("domain")
+          String domain,
+      @ApiParam(value = "Instance id to retrieve users' permissions") @QueryParam("instance")
+          String instance,
+      @ApiParam(value = "Max items") @QueryParam("maxItems") @DefaultValue("30") int maxItems,
+      @ApiParam(value = "Skip count") @QueryParam("skipCount") @DefaultValue("0") int skipCount)
+      throws ServerException, NotFoundException, ConflictException, BadRequestException {
+    instanceValidator.validate(domain, instance);
+    checkArgument(maxItems >= 0, "The number of items to return can't be negative.");
+    checkArgument(skipCount >= 0, "The number of items to skip can't be negative.");
+
+    final Page<AbstractPermissions> permissionsPage =
+        permissionsManager.getByInstance(domain, instance, maxItems, skipCount);
+    return Response.ok()
+        .entity(permissionsPage.getItems(this::toDto))
+        .header("Link", createLinkHeader(permissionsPage))
+        .build();
+  }
+

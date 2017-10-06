@@ -1,0 +1,30 @@
+  @Test
+  public void shouldReturnExcessiveResourcesWhenNotOneResourceIsUsedButNotPresentInTotal()
+      throws Exception {
+    //given
+    List<ResourceImpl> totalResources = singletonList(new ResourceImpl("test", 5000, "unit"));
+    doReturn(totalResources).when(resourceUsageManager).getTotalResources(anyString());
+    List<ResourceImpl> usedResources =
+        Arrays.asList(new ResourceImpl("test", 2000, "unit"), new ResourceImpl("test2", 5, "unit"));
+    doReturn(usedResources).when(resourceUsageManager).getUsedResources(anyString());
+    doThrow(new NoEnoughResourcesException(emptyList(), emptyList(), emptyList()))
+        .when(resourceAggregator)
+        .deduct(anyList(), anyList());
+    ResourceImpl excessiveResource = new ResourceImpl("test", 3000, "unit");
+    doReturn(singletonList(excessiveResource))
+        .when(resourceAggregator)
+        .excess(anyList(), anyList());
+
+    //when
+    List<? extends Resource> availableResources =
+        defaultAvailableResourcesProvider.getAvailableResources("account123");
+
+    //then
+    assertEquals(availableResources.size(), 1);
+    assertEquals(availableResources.get(0), excessiveResource);
+    verify(resourceUsageManager).getTotalResources("account123");
+    verify(resourceUsageManager).getUsedResources("account123");
+    verify(resourceAggregator).deduct(totalResources, usedResources);
+    verify(resourceAggregator).excess(totalResources, usedResources);
+  }
+

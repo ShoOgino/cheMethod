@@ -1,0 +1,29 @@
+  @Override
+  public List<ProvidedResources> getResources(String accountId)
+      throws ServerException, NotFoundException {
+    Map<String, ResourceImpl> freeResources = new HashMap<>();
+    String limitId = null;
+    try {
+      FreeResourcesLimit resourcesLimit = freeResourcesLimitManager.get(accountId);
+      for (Resource resource : resourcesLimit.getResources()) {
+        freeResources.put(resource.getType(), new ResourceImpl(resource));
+      }
+      limitId = resourcesLimit.getAccountId();
+    } catch (NotFoundException ignored) {
+      // there is no resources limit for given account
+    }
+
+    // add default resources which are not specified by limit
+    for (ResourceImpl resource : getDefaultResources(accountId)) {
+      freeResources.putIfAbsent(resource.getType(), resource);
+    }
+
+    if (!freeResources.isEmpty()) {
+      return singletonList(
+          new ProvidedResourcesImpl(
+              FREE_RESOURCES_PROVIDER, limitId, accountId, -1L, -1L, freeResources.values()));
+    } else {
+      return emptyList();
+    }
+  }
+

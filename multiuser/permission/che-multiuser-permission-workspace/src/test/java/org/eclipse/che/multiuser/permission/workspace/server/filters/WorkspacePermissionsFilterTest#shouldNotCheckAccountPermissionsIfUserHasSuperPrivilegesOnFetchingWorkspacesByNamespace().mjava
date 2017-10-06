@@ -1,0 +1,23 @@
+  @Test
+  public void
+      shouldNotCheckAccountPermissionsIfUserHasSuperPrivilegesOnFetchingWorkspacesByNamespace()
+          throws Exception {
+    when(superPrivilegesChecker.hasSuperPrivileges()).thenReturn(true);
+    doNothing().when(permissionsFilter).checkAccountPermissions(anyString(), any());
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .when()
+            .get(SECURE_PATH + "/workspace/namespace/userok");
+
+    assertEquals(response.getStatusCode(), 200);
+    verify(superPrivilegesChecker).hasSuperPrivileges();
+    verify(workspaceService).getByNamespace(any(), eq("userok"));
+    verify(permissionsFilter, never())
+        .checkAccountPermissions("userok", AccountOperation.MANAGE_WORKSPACES);
+    verifyZeroInteractions(subject);
+  }
+
