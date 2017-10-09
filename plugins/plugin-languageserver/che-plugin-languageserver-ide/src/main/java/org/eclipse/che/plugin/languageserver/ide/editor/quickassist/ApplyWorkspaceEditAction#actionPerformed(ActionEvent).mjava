@@ -4,57 +4,6 @@
     List<Object> arguments = qaEvent.getArguments();
     WorkspaceEdit edit =
         dtoFactory.createDtoFromJson(arguments.get(0).toString(), WorkspaceEdit.class);
-    List<Supplier<Promise<Void>>> undos = new ArrayList<>();
-
-    StatusNotification notification =
-        notificationManager.notify(
-            localization.applyWorkspaceActionNotificationTitle(),
-            Status.PROGRESS,
-            DisplayMode.FLOAT_MODE);
-
-    Map<String, List<TextEdit>> changes = null;
-    if (edit.getChanges() != null) {
-      changes = edit.getChanges();
-    } else if (edit.getDocumentChanges() != null) {
-      changes =
-          edit.getDocumentChanges()
-              .stream()
-              .collect(
-                  Collectors.toMap(
-                      (TextDocumentEdit e) -> e.getTextDocument().getUri(),
-                      TextDocumentEdit::getEdits));
-    }
-
-    Promise<Void> done =
-        promiseHelper.forEach(
-            changes.entrySet().iterator(),
-            (entry) -> handleFileChange(notification, entry.getKey(), entry.getValue()),
-            undos::add);
-
-    done.then(
-            (Void v) -> {
-              Log.debug(getClass(), "done applying changes");
-              notification.setStatus(Status.SUCCESS);
-              notification.setContent(localization.applyWorkspaceActionNotificationDone());
-            })
-        .catchError(
-            (error) -> {
-              Log.info(getClass(), "caught error applying changes", error);
-              notification.setStatus(Status.FAIL);
-              notification.setContent(localization.applyWorkspaceActionNotificationUndoing());
-              promiseHelper
-                  .forEach(undos.iterator(), (d) -> d.get(), (Void v) -> {})
-                  .then(
-                      (Void v) -> {
-                        notification.setContent(
-                            localization.applyWorkspaceActionNotificationUndone());
-                      })
-                  .catchError(
-                      e -> {
-                        Log.info(getClass(), "Error undoing changes", e);
-                        notification.setContent(
-                            localization.applyWorkspaceActionNotificationUndoFailed());
-                      });
-            });
+    applyWorkspaceEdit(edit);
   }
 

@@ -1,0 +1,39 @@
+  private RenameResultDto rename(RenameParams renameParams) {
+    String uri = prefixURI(renameParams.getTextDocument().getUri());
+    renameParams.getTextDocument().setUri(uri);
+    Map<String, ExtendedWorkspaceEdit> edits = new ConcurrentHashMap<>();
+    try {
+      List<InitializedLanguageServer> servers =
+          languageServerRegistry
+              .getApplicableLanguageServers(uri)
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      LSOperation<InitializedLanguageServer, WorkspaceEdit> op =
+          new LSOperation<InitializedLanguageServer, WorkspaceEdit>() {
+            @Override
+            public boolean canDo(InitializedLanguageServer server) {
+              Boolean renameProvider =
+                  server.getInitializeResult().getCapabilities().getRenameProvider();
+              return renameProvider != null && renameProvider;
+            }
+
+            @Override
+            public CompletableFuture<WorkspaceEdit> start(InitializedLanguageServer element) {
+              return element.getServer().getTextDocumentService().rename(renameParams);
+            }
+
+            @Override
+            public boolean handleResult(InitializedLanguageServer element, WorkspaceEdit result) {
+
+              addRenameResult(edits, element.getLauncher().getDescription().getId(), result);
+              return true;
+            }
+          };
+      OperationUtil.doInParallel(servers, op, TimeUnit.SECONDS.toMillis(30));
+    } catch (LanguageServerException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+    return new RenameResultDto(new RenameResult(edits));
+  }
+
