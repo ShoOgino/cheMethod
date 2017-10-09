@@ -1,0 +1,32 @@
+  @Inject
+  public GitChangesHandler(
+      RequestHandlerConfigurator configurator,
+      EventBus eventBus,
+      GitServiceClient gitServiceClient,
+      Provider<EditorAgent> editorAgentProvider,
+      Provider<ProjectExplorerPresenter> projectExplorerPresenterProvider,
+      Provider<EditorMultiPartStack> multiPartStackProvider) {
+    this.editorAgentProvider = editorAgentProvider;
+    this.projectExplorerPresenterProvider = projectExplorerPresenterProvider;
+    this.multiPartStackProvider = multiPartStackProvider;
+
+    eventBus.addHandler(
+        EditorOpenedEvent.TYPE,
+        event -> {
+          if (((File) event.getFile()).getVcsStatus() != MODIFIED) {
+            return;
+          }
+          VcsChangeMarkerRender render =
+              ((HasVcsChangeMarkerRender) event.getEditor()).getVcsChangeMarkersRender();
+
+          Path location = event.getFile().getLocation();
+          gitServiceClient
+              .getEditedRegions(location.uptoSegment(1), location.removeFirstSegments(1))
+              .then(
+                  edition -> {
+                    handleEditedRegions(edition, render);
+                  });
+        });
+    configureHandler(configurator);
+  }
+

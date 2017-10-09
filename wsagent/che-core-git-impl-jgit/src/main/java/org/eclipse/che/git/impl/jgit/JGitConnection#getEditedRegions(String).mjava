@@ -1,0 +1,58 @@
+  @Override
+  public List<EditedRegion> getEditedRegions(String filePath) throws GitException {
+    try (ObjectReader reader = repository.newObjectReader();
+        RevWalk revWalk = new RevWalk(repository);
+        DiffFormatter formatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+      formatter.setRepository(repository);
+      formatter.setPathFilter(PathFilter.create(filePath));
+
+      Ref headRef = repository.exactRef(HEAD);
+      RevCommit commit = revWalk.parseCommit(headRef.getObjectId());
+      RevTree tree = revWalk.parseTree(commit.getTree().getId());
+      CanonicalTreeParser treeParser = new CanonicalTreeParser();
+      treeParser.reset(reader, tree);
+
+      Optional<DiffEntry> optional =
+          formatter.scan(treeParser, new FileTreeIterator(repository)).stream().findAny();
+      if (optional.isPresent()) {
+        EditList edits = formatter.toFileHeader(optional.get()).getHunks().get(0).toEditList();
+        return edits
+            .stream()
+            .map(
+                edit -> {
+                  EditedRegionType type = null;
+                  switch (edit.getType()) {
+                    case INSERT:
+                      {
+                        type = INSERTION;
+                        break;
+                      }
+                    case REPLACE:
+                      {
+                        type = MODIFICATION;
+                        break;
+                      }
+                    case DELETE:
+                      {
+                        type = DELETION;
+                        break;
+                      }
+                    case EMPTY:
+                      {
+                        break;
+                      }
+                  }
+                  return newDto(EditedRegion.class)
+                      .withBeginLine(
+                          edit.getType() == DELETE ? edit.getBeginB() : edit.getBeginB() + 1)
+                      .withEndLine(edit.getEndB())
+                      .withType(type);
+                })
+            .collect(toList());
+      }
+    } catch (Exception e) {
+      throw new GitException(e.getMessage());
+    }
+    return Collections.emptyList();
+  }
+
