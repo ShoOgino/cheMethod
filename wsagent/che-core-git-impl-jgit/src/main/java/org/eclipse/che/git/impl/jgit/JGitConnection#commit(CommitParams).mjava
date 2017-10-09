@@ -48,13 +48,13 @@
           specified
               .stream()
               .filter(path -> staged.stream().anyMatch(s -> s.startsWith(path)))
-              .collect(Collectors.toList());
+              .collect(toList());
 
       List<String> specifiedChanged =
           specified
               .stream()
               .filter(path -> changed.stream().anyMatch(c -> c.startsWith(path)))
-              .collect(Collectors.toList());
+              .collect(toList());
 
       // Check that there are changes present for commit, if 'isAmend' is disabled
       if (!params.isAmend()) {
@@ -114,7 +114,15 @@
           gerritSupportConfigValue != null ? Boolean.valueOf(gerritSupportConfigValue) : false;
       commitCommand.setInsertChangeId(isGerritSupportConfigured);
       RevCommit result = commitCommand.call();
-      eventService.publish(newDto(GitCommitEvent.class).withStatus(status(emptyList())));
+      Map<String, List<EditedRegion>> modifiedFiles = new HashMap<>();
+      for (String file : status.getChanged()) {
+        modifiedFiles.put(file, getEditedRegions(file));
+      }
+      eventService.publish(
+          newDto(GitCommitEvent.class)
+              .withStatus(status(emptyList()))
+              .withModifiedFiles(modifiedFiles));
+
       GitUser gitUser = newDto(GitUser.class).withName(committerName).withEmail(committerEmail);
 
       return newDto(Revision.class)

@@ -1,0 +1,44 @@
+  private Consumer<String> transmitConsumer(String path) {
+    return id -> {
+      try {
+        String projectPath =
+            projectManagerProvider
+                .get()
+                .getProject((path.startsWith("/") ? path.substring(1) : path).split("/")[0])
+                .getBaseFolder()
+                .getVirtualFile()
+                .toIoFile()
+                .getAbsolutePath();
+        GitConnection connection = gitConnectionFactory.getConnection(projectPath);
+        Status status = connection.status(emptyList());
+        Status statusDto = newDto(Status.class);
+        statusDto.setAdded(status.getAdded());
+        statusDto.setUntracked(status.getUntracked());
+        statusDto.setChanged(status.getChanged());
+        statusDto.setModified(status.getModified());
+        statusDto.setMissing(status.getMissing());
+        statusDto.setRemoved(status.getRemoved());
+        statusDto.setConflicting(status.getConflicting());
+
+        Map<String, List<EditedRegion>> modifiedFiles = new HashMap<>();
+        for (String file : status.getChanged()) {
+          modifiedFiles.put(file, connection.getEditedRegions(file));
+        }
+
+        StatusChangedEventDto statusChangeEventDto =
+            newDto(StatusChangedEventDto.class).withStatus(status).withModifiedFiles(modifiedFiles);
+        transmitter
+            .newRequest()
+            .endpointId(id)
+            .methodName(OUTGOING_METHOD)
+            .paramsAsDto(statusChangeEventDto)
+            .sendAndSkipResult();
+      } catch (ServerException | NotFoundException e) {
+        String errorMessage = e.getMessage();
+        if (!("Not a git repository".equals(errorMessage))) {
+          LOG.error(errorMessage);
+        }
+      }
+    };
+  }
+
