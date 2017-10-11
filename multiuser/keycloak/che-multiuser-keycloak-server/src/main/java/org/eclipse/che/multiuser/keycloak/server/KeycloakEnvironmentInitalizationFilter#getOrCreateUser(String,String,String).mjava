@@ -1,16 +1,17 @@
-  private synchronized User getOrCreateUser(String id, String email, String username)
-      throws ServletException {
+  private User getOrCreateUser(String id, String email, String username)
+      throws ServerException, ConflictException {
     try {
       return userManager.getById(id);
     } catch (NotFoundException e) {
-      try {
-        final UserImpl cheUser = new UserImpl(id, email, username, "secret", emptyList());
-        return userManager.create(cheUser, false);
-      } catch (ServerException | ConflictException ex) {
-        throw new ServletException("Unable to create new user", ex);
+      synchronized (this) {
+        final UserImpl cheUser = new UserImpl(id, email, username, generate("", 12), emptyList());
+        try {
+          return userManager.create(cheUser, false);
+        } catch (ConflictException ex) {
+          cheUser.setName(generate(cheUser.getName(), 4));
+          return userManager.create(cheUser, false);
+        }
       }
-    } catch (ServerException e) {
-      throw new ServletException("Unable to get user", e);
     }
   }
 
