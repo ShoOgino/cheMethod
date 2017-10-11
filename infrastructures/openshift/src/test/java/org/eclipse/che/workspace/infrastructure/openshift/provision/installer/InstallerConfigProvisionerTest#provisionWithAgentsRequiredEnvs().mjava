@@ -1,0 +1,49 @@
+  @Test
+  public void provisionWithAgentsRequiredEnvs() throws Exception {
+    //given
+    when(machineTokenProvider.getToken(WORKSPACE_ID)).thenReturn("superToken");
+
+    final Pod podWithAgent = new PodBuilder().setName("pod1").setContainers("wsagent").build();
+
+    final Pod pod = new PodBuilder().setName("pod2").setContainers("machine").build();
+
+    OpenShiftEnvironment osEnvironment =
+        OpenShiftEnvironment.builder()
+            .setPods(
+                ImmutableMap.of(
+                    podWithAgent.getMetadata().getName(),
+                    podWithAgent,
+                    pod.getMetadata().getName(),
+                    pod))
+            .build();
+
+    final Map<String, InternalMachineConfig> machines =
+        ImmutableMap.of(
+            "pod1/wsagent",
+            new MachineConfigBuilder()
+                .setServer(Constants.SERVER_WS_AGENT_HTTP_REFERENCE, new ServerConfigImpl())
+                .build(),
+            "pod2/machine",
+            new MachineConfigBuilder()
+                .setServer(Constants.SERVER_TERMINAL_REFERENCE, new ServerConfigImpl())
+                .build());
+
+    InternalEnvironment environment = createEnvironment(machines);
+
+    //when
+    installerConfigProvisioner.provision(environment, osEnvironment, runtimeIdentity);
+
+    //then
+    Container container = podWithAgent.getSpec().getContainers().get(0);
+    List<EnvVar> envs = container.getEnv();
+    verifyContainsEnv(envs, "CHE_API", CHE_SERVER_ENDPOINT);
+    verifyContainsEnv(envs, "USER_TOKEN", "superToken");
+    verifyContainsEnv(envs, "CHE_WORKSPACE_ID", WORKSPACE_ID);
+
+    Container container2 = pod.getSpec().getContainers().get(0);
+    List<EnvVar> envs2 = container2.getEnv();
+    verifyContainsEnv(envs2, "CHE_API", CHE_SERVER_ENDPOINT);
+    verifyContainsEnv(envs, "USER_TOKEN", "superToken");
+    verifyDoesNotContainEnv(envs2, "CHE_WORKSPACE_ID");
+  }
+
