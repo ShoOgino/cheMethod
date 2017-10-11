@@ -1,0 +1,71 @@
+  @Inject
+  public RenameViewImpl(
+      SplitterFancyUtil splitterFancyUtil,
+      Resources coreRes,
+      AutoCompleteResources autoCompleteResources,
+      RenameNodeFactory nodeFactory,
+      LanguageServerLocalization localization) {
+    this.nodeFactory = nodeFactory;
+    splitLayoutPanel = new SplitLayoutPanel(1);
+    splitLayoutPanel.setSize("100%", "100%");
+    editPanel = new FlowPanel();
+    splitLayoutPanel.addWest(editPanel, 185);
+    setContentWidget(splitLayoutPanel);
+
+    Element itemHolder = Elements.createDivElement();
+    itemHolder.setClassName(autoCompleteResources.autocompleteComponentCss().items());
+    editPanel.getElement().appendChild(((com.google.gwt.dom.client.Element) itemHolder));
+
+    lsList =
+        SimpleList.create(
+            editPanel.getElement().cast(),
+            editPanel.getElement().cast(),
+            itemHolder,
+            coreRes.defaultSimpleListCss(),
+            new ListItemRenderer<String>() {
+              @Override
+              public void render(Element listItemBase, String itemData) {
+                listItemBase.setInnerText(itemData);
+              }
+            },
+            new ListEventDelegate<String>() {
+              @Override
+              public void onListItemClicked(Element listItemBase, String itemData) {
+                selectedEditSet(itemData);
+              }
+
+              @Override
+              public void onListItemDoubleClicked(Element listItemBase, String itemData) {}
+            });
+    splitterFancyUtil.tuneSplitter(splitLayoutPanel);
+    splitLayoutPanel.setWidgetHidden(editPanel, true);
+
+    treeDock = new DockLayoutPanel(Unit.PX);
+    FlowPanel buttonPanel = new FlowPanel();
+    treeDock.addSouth(buttonPanel, 25);
+    splitLayoutPanel.add(treeDock);
+
+    Button refactorButton = new Button();
+    refactorButton.addClickHandler(event -> delegate.applyRename());
+    refactorButton.setText(localization.renameViewDoRenameLabel());
+    refactorButton.getElement().getStyle().setMarginLeft(1, Unit.EM);
+    refactorButton
+        .getElement()
+        .getStyle()
+        .setBackgroundColor(Style.theme.getPrimaryButtonBackground());
+
+    Button cancelButton = new Button();
+    cancelButton.addClickHandler(event -> delegate.cancel());
+    cancelButton.setText(localization.renameViewCancelLabel());
+    cancelButton.getElement().getStyle().setMarginLeft(1, Unit.EM);
+
+    buttonPanel.add(refactorButton);
+    buttonPanel.add(cancelButton);
+
+    NodeStorage storage =
+        new NodeStorage((NodeUniqueKeyProvider) item -> String.valueOf(item.hashCode()));
+    NodeLoader loader = new NodeLoader(Collections.emptySet());
+    tree = new Tree(storage, loader);
+    treeDock.add(tree);
+  }
+

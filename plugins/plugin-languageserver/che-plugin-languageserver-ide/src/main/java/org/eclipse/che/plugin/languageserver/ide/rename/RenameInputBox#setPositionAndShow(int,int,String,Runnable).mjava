@@ -1,0 +1,42 @@
+  Promise<String> setPositionAndShow(int x, int y, String value, Runnable openWindow) {
+    setPopupPosition(x, y);
+    valueTextBox.setValue(value);
+    return promiseProvider.create(
+        callback -> {
+          show();
+
+          HandlerRegistration registration =
+              addCloseHandler(
+                  event -> {
+                    if (event.isAutoClosed()) {
+                      callback.onFailure(new OperationCanceledException());
+                    }
+                  });
+
+          KeyDownHandler handler =
+              event -> {
+                if (KeyboardEvent.KeyCode.ESC == event.getNativeEvent().getKeyCode()) {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  callback.onFailure(new OperationCanceledException());
+                  registration.removeHandler();
+                  hide(false);
+                } else if (KeyboardEvent.KeyCode.ENTER == event.getNativeEvent().getKeyCode()) {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  registration.removeHandler();
+                  hide(false);
+                  callback.onSuccess(valueTextBox.getValue());
+                } else {
+                  SignalEvent signalEvent = SignalEventUtils.create((Event) event.getNativeEvent());
+                  if (keyDigest == CharCodeWithModifiers.computeKeyDigest(signalEvent)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openWindow.run();
+                  }
+                }
+              };
+          valueTextBox.addDomHandler(handler, KeyDownEvent.getType());
+        });
+  }
+

@@ -1,0 +1,53 @@
+  /**
+   * Synchronizes Project Config state on Agent and Master
+   *
+   * @param projectRegistry project registry
+   * @param workspaceSyncCommunication events sender about workspace synchronization to the client
+   * @throws ServerException
+   */
+  public final void sync(
+      ProjectRegistry projectRegistry, WorkspaceSyncCommunication workspaceSyncCommunication)
+      throws ServerException {
+
+    List<? extends ProjectConfig> remote = getProjects();
+
+    // check on removed
+    List<ProjectConfig> removed = new ArrayList<>();
+    for (ProjectConfig r : remote) {
+      if (projectRegistry.getProject(r.getPath()) == null) removed.add(r);
+    }
+
+    for (ProjectConfig r : removed) removeProject(r);
+
+    // update or add
+    for (RegisteredProject project : projectRegistry.getProjects()) {
+
+      if (!project.isSynced() && !project.isDetected()) {
+
+        final ProjectConfig config =
+            new NewProjectConfigImpl(
+                project.getPath(),
+                project.getType(),
+                project.getMixins(),
+                project.getName(),
+                project.getDescription(),
+                project.getPersistableAttributes(),
+                null,
+                project.getSource());
+
+        boolean found = false;
+        for (ProjectConfig r : remote) {
+          if (r.getPath().equals(project.getPath())) {
+            updateProject(config);
+            found = true;
+          }
+        }
+
+        if (!found) addProject(config);
+
+        project.setSync();
+      }
+    }
+    workspaceSyncCommunication.synchronizeWorkspace();
+  }
+
