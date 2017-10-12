@@ -3,11 +3,15 @@
     final KeycloakToken token = tokens.get(username);
     if (token != null) {
       final long now = now().atZone(systemDefault()).toEpochSecond();
-      if (token.getDetails().getExpiresAt() - now < MIN_TOKEN_LIFETIME_SEC) {
-        final KeycloakToken refreshed = refreshRequest(token);
-        tokens.replace(username, refreshed);
+      if (token.getAccessDetails().getExpiresAt() - now < MIN_TOKEN_LIFETIME_SEC) {
+        if (!(token.getRefreshDetails().getExpiresAt() - now < MIN_TOKEN_LIFETIME_SEC)) {
+          final KeycloakToken refreshed = refreshRequest(token);
+          tokens.replace(username, refreshed);
+          return refreshed.getAccessToken();
+        }
+      } else {
+        return token.getAccessToken();
       }
-      return token.getAccessToken();
     }
     final KeycloakToken newToken = loginRequest(username, password);
     tokens.put(username, newToken);
