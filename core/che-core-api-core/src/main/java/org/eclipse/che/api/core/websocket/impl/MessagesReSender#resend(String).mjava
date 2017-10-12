@@ -1,30 +1,32 @@
   public void resend(String endpointId) {
-    final List<String> messages = messagesMap.remove(endpointId);
+    Queue<DelayedMessage> delayedMessages = delayedMessageRegistry.remove(endpointId);
 
-    if (messages == null || messages.isEmpty()) {
+    if (delayedMessages == null || delayedMessages.isEmpty()) {
       return;
     }
 
-    final Optional<Session> sessionOptional = registry.get(endpointId);
+    Optional<Session> sessionOptional = registry.get(endpointId);
 
     if (!sessionOptional.isPresent()) {
       return;
     }
 
-    final Session session = sessionOptional.get();
+    Queue<DelayedMessage> backingQueue = EvictingQueue.create(delayedMessages.size());
+    while (!delayedMessages.isEmpty()) {
+      backingQueue.offer(delayedMessages.poll());
+    }
 
-    final List<String> backing = new ArrayList<>(messages);
-    messages.clear();
-
-    for (String message : backing) {
-
+    Session session = sessionOptional.get();
+    for (DelayedMessage delayedMessage : backingQueue) {
       if (session.isOpen()) {
-        session.getAsyncRemote().sendText(message);
+        session.getAsyncRemote().sendText(delayedMessage.message);
       } else {
-        messages.add(message);
+        delayedMessages.add(delayedMessage);
       }
     }
 
-    messagesMap.put(endpointId, messages);
+    if (!delayedMessages.isEmpty()) {
+      delayedMessageRegistry.put(endpointId, delayedMessages);
+    }
   }
 

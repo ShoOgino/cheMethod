@@ -17,15 +17,21 @@
         throw new ServletException("Cannot detect or instantiate user.");
       }
       Claims claims = (Claims) jwtToken.getBody();
-      User user =
-          getOrCreateUser(
-              claims.getSubject(),
-              claims.get("email", String.class),
-              claims.get("preferred_username", String.class));
-      subject =
-          new AuthorizedSubject(
-              new SubjectImpl(user.getName(), user.getId(), token, false), permissionChecker);
-      session.setAttribute("che_subject", subject);
+
+      try {
+        User user =
+            getOrCreateUser(
+                claims.getSubject(),
+                claims.get("email", String.class),
+                claims.get("preferred_username", String.class));
+        subject =
+            new AuthorizedSubject(
+                new SubjectImpl(user.getName(), user.getId(), token, false), permissionChecker);
+        session.setAttribute("che_subject", subject);
+      } catch (ServerException | ConflictException e) {
+        throw new ServletException(
+            "Unable to identify user " + claims.getSubject() + " in Che database", e);
+      }
     }
 
     try {
