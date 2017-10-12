@@ -2,15 +2,13 @@
    * Starts all machines from specified workspace environment, creates workspace runtime instance
    * based on that environment.
    *
-   * <p>
-   *
    * <p>During the start of the workspace its runtime is visible with {@link
    * WorkspaceStatus#STARTING} status.
    *
    * @param workspace workspace which environment should be started
    * @param envName the name of the environment to start
    * @param options whether machines should be recovered(true) or not(false)
-   * @return the workspace runtime instance with machines set.
+   * @return completable future of start execution.
    * @throws ConflictException when workspace is already running
    * @throws ConflictException when start is interrupted
    * @throws NotFoundException when any not found exception occurs during environment start
@@ -72,32 +70,18 @@
         throw new ConflictException(
             "Could not start workspace '" + workspaceId + "' because it is not in 'STOPPED' state");
       }
-      eventService.publish(
-          DtoFactory.newDto(WorkspaceStatusEvent.class)
-              .withWorkspaceId(workspaceId)
-              .withStatus(STARTING)
-              .withPrevStatus(STOPPED));
+      LOG.info(
+          "Starting workspace '{}/{}' with id '{}' by user '{}'",
+          workspace.getNamespace(),
+          workspace.getConfig().getName(),
+          workspace.getId(),
+          sessionUserNameOr("undefined"));
+
+      publishWorkspaceStatusEvent(workspaceId, STARTING, STOPPED, null);
+
       return CompletableFuture.runAsync(
-          ThreadLocalPropagateContext.wrap(
-              () -> {
-                try {
-                  runtime.start(options);
-                  runtimes.replace(workspaceId, new RuntimeState(runtime, RUNNING));
-                  eventService.publish(
-                      DtoFactory.newDto(WorkspaceStatusEvent.class)
-                          .withWorkspaceId(workspaceId)
-                          .withStatus(RUNNING)
-                          .withPrevStatus(STARTING));
-                } catch (InfrastructureException e) {
-                  runtimes.remove(workspaceId);
-                  if (!(e instanceof RuntimeStartInterruptedException)) {
-                    publishWorkspaceStoppedEvent(workspaceId, STARTING, e.getMessage());
-                  }
-                  throw new RuntimeException(e);
-                }
-              }),
+          ThreadLocalPropagateContext.wrap(new StartRuntimeTask(workspace, options, runtime)),
           sharedPool.getExecutor());
-      //TODO made complete rework of exceptions.
     } catch (ValidationException e) {
       LOG.error(e.getLocalizedMessage(), e);
       throw new ConflictException(e.getLocalizedMessage());

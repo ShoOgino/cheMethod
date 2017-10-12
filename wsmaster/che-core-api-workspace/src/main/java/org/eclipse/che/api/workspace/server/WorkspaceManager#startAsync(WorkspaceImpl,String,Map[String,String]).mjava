@@ -1,6 +1,5 @@
   /** Asynchronously starts given workspace. */
-  private CompletableFuture<Void> startAsync(
-      WorkspaceImpl workspace, String envName, Map<String, String> options)
+  private void startAsync(WorkspaceImpl workspace, String envName, Map<String, String> options)
       throws ConflictException, NotFoundException, ServerException {
     if (envName != null && !workspace.getConfig().getEnvironments().containsKey(envName)) {
       throw new NotFoundException(
@@ -12,32 +11,13 @@
     workspaceDao.update(workspace);
     final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
 
-    return runtimes
+    runtimes
         .startAsync(workspace, env, firstNonNull(options, Collections.emptyMap()))
-        .thenRun(
-            () ->
-                LOG.info(
-                    "Workspace '{}:{}' with id '{}' started by user '{}'",
-                    workspace.getNamespace(),
-                    workspace.getConfig().getName(),
-                    workspace.getId(),
-                    sessionUserNameOr("undefined")))
         .exceptionally(
             ex -> {
               if (workspace.isTemporary()) {
                 removeWorkspaceQuietly(workspace);
               }
-              for (Throwable cause : getCausalChain(ex)) {
-                if (cause instanceof InfrastructureException
-                    && !(cause instanceof InternalInfrastructureException)) {
-
-                  // InfrastructureException is supposed to be an exception that can't be solved
-                  // by the admin, so should not be logged (but not InternalInfrastructureException).
-                  // It will prevent bothering the admin when user made a mistake in WS configuration.
-                  return null;
-                }
-              }
-              LOG.error(ex.getLocalizedMessage(), ex);
               return null;
             });
   }

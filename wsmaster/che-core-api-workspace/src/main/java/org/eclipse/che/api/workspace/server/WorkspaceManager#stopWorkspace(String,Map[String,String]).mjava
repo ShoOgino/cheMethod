@@ -11,7 +11,19 @@
 
     requireNonNull(workspaceId, "Required non-null workspace id");
     final WorkspaceImpl workspace = normalizeState(workspaceDao.get(workspaceId), true);
-    checkWorkspaceIsRunningOrStarting(workspace, "stop");
-    stopAsync(workspace, options);
+    checkWorkspaceIsRunningOrStarting(workspace);
+    if (!workspace.isTemporary()) {
+      workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
+      workspaceDao.update(workspace);
+    }
+
+    runtimes
+        .stopAsync(workspace, options)
+        .whenComplete(
+            (aVoid, throwable) -> {
+              if (workspace.isTemporary()) {
+                removeWorkspaceQuietly(workspace);
+              }
+            });
   }
 

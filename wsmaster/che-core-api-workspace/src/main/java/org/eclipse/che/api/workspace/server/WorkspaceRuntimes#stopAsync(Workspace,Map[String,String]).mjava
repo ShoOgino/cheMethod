@@ -1,20 +1,20 @@
   /**
-   * Stops running workspace runtime.
-   *
-   * <p>
+   * Stops running workspace runtime asynchronously.
    *
    * <p>Stops environment in an implementation specific way. During the stop of the workspace its
    * runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status. Workspace may be
-   * stopped only if its status is {@link WorkspaceStatus#RUNNING}.
+   * stopped only if its status is {@link WorkspaceStatus#RUNNING} or {@link
+   * WorkspaceStatus#STARTING}.
    *
-   * @param workspaceId identifier of workspace which should be stopped
+   * @param workspace workspace which runtime should be stopped
    * @throws NotFoundException when workspace with specified identifier does not have runtime
    * @throws ConflictException when running workspace status is different from {@link
-   *     WorkspaceStatus#RUNNING}
+   *     WorkspaceStatus#RUNNING} or {@link WorkspaceStatus#STARTING}
    * @see WorkspaceStatus#STOPPING
    */
-  public void stop(String workspaceId, Map<String, String> options)
+  public CompletableFuture<Void> stopAsync(Workspace workspace, Map<String, String> options)
       throws NotFoundException, ConflictException {
+    String workspaceId = workspace.getId();
     RuntimeState state = runtimes.get(workspaceId);
     if (state == null) {
       throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
@@ -31,25 +31,19 @@
       throw new ConflictException(
           format("Could not stop workspace '%s' because its state is '%s'", workspaceId, status));
     }
-    eventService.publish(
-        DtoFactory.newDto(WorkspaceStatusEvent.class)
-            .withWorkspaceId(workspaceId)
-            .withPrevStatus(state.status)
-            .withStatus(STOPPING));
+    String stoppedBy =
+        firstNonNull(
+            sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY)), "undefined");
+    LOG.info(
+        "Workspace '{}/{}' with id '{}' is being stopped by user '{}'",
+        workspace.getNamespace(),
+        workspace.getConfig().getName(),
+        workspace.getId(),
+        stoppedBy);
+    publishWorkspaceStatusEvent(workspaceId, STOPPING, state.status, null);
 
-    try {
-      state.runtime.stop(options);
-
-      // remove before firing an event to have consistency between state and the event
-      runtimes.remove(workspaceId);
-      publishWorkspaceStoppedEvent(workspaceId, STOPPING, null);
-    } catch (InfrastructureException e) {
-      // remove before firing an event to have consistency between state and the event
-      runtimes.remove(workspaceId);
-      publishWorkspaceStoppedEvent(
-          workspaceId,
-          STOPPING,
-          "Error occurs on workspace runtime stop. Error: " + e.getMessage());
-    }
+    return CompletableFuture.runAsync(
+        ThreadLocalPropagateContext.wrap(new StopRuntimeTask(workspace, options, stoppedBy, state)),
+        sharedPool.getExecutor());
   }
 
