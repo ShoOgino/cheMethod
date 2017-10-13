@@ -1,0 +1,41 @@
+  @BeforeMethod
+  public void setUp() throws Throwable {
+
+    Module module =
+        new AbstractModule() {
+          public void configure() {
+            //Bind manager and his dep-s. To bind interceptor, guice must create intercepted class by himself.
+            bind(WorkspaceDao.class).toInstance(mock(WorkspaceDao.class));
+            bind(EventService.class).toInstance(mock(EventService.class));
+            bind(DBInitializer.class).toInstance(mock(DBInitializer.class));
+            bind(WorkspaceSharedPool.class)
+                .toInstance(new WorkspaceSharedPool("cached", null, null));
+
+            bindConstant().annotatedWith(Names.named("che.api")).to("localhost");
+
+            bind(MachineTokenRegistry.class).toInstance(tokenRegistry);
+
+            Multibinder.newSetBinder(binder(), RuntimeInfrastructure.class);
+
+            bind(WorkspaceRuntimes.class);
+
+            //Main injection
+            install(new MachineAuthModule());
+
+            // To prevent real methods of manager calling
+            bindInterceptor(
+                subclassesOf(WorkspaceRuntimes.class), names("startAsync"), invocation -> null);
+          }
+        };
+
+    injector = Guice.createInjector(module);
+    workspaceRuntimes = injector.getInstance(WorkspaceRuntimes.class);
+    EnvironmentContext.setCurrent(
+        new EnvironmentContext() {
+          @Override
+          public Subject getSubject() {
+            return new SubjectImpl(USER_NAME, USER_ID, "token", false);
+          }
+        });
+  }
+
