@@ -1,0 +1,20 @@
+  @Test
+  public void shouldReturnWorkspaceWithTokenIfRuntimeExists() throws Exception {
+    final WorkspaceImpl workspace = createWorkspace(createConfigDto());
+    workspace.setRuntime(new RuntimeImpl("activeEnv", emptyMap(), "user123"));
+    when(wsManager.getWorkspace(workspace.getId())).thenReturn(workspace);
+    when(machineTokenProvider.getToken(anyString())).thenReturn("superToken");
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .when()
+            .get(SECURE_PATH + "/workspace/" + workspace.getId());
+
+    assertEquals(response.getStatusCode(), 200);
+    WorkspaceDto retrievedWorkspace = unwrapDto(response, WorkspaceDto.class);
+    assertEquals(retrievedWorkspace.getRuntime().getUserToken(), "superToken");
+    verify(machineTokenProvider).getToken(workspace.getId());
+  }
+
