@@ -1,5 +1,5 @@
   private void assertThatServerIsExposed(
-      String serverName, String portProtocol, Integer port, ServerConfigImpl expected) {
+      String serverNameRegex, String portProtocol, Integer port, ServerConfigImpl expected) {
     //then
     assertTrue(
         container
@@ -10,7 +10,14 @@
                     p.getContainerPort().equals(port)
                         && p.getProtocol().equals(portProtocol.toUpperCase())));
     //ensure that service is created
-    Service service = openShiftEnvironment.getServices().get(SERVER_PREFIX + "-pod-main");
+
+    Service service = null;
+    for (Entry<String, Service> entry : openShiftEnvironment.getServices().entrySet()) {
+      if (SERVER_PREFIX_REGEX.matcher(entry.getKey()).matches()) {
+        service = entry.getValue();
+        break;
+      }
+    }
     assertNotNull(service);
 
     //ensure that required service port is exposed
@@ -28,14 +35,15 @@
     assertEquals(servicePort.getName(), SERVER_PREFIX + "-" + port);
 
     //ensure that required route is created
-    Route route = openShiftEnvironment.getRoutes().get(SERVER_PREFIX + "-pod-main-server-" + port);
+    Route route =
+        openShiftEnvironment.getRoutes().get(service.getMetadata().getName() + "-server-" + port);
     assertEquals(route.getSpec().getTo().getName(), service.getMetadata().getName());
     assertEquals(route.getSpec().getPort().getTargetPort().getStrVal(), servicePort.getName());
 
     RoutesAnnotations.Deserializer routeDeserializer =
         RoutesAnnotations.newDeserializer(route.getMetadata().getAnnotations());
     Map<String, ServerConfigImpl> servers = routeDeserializer.servers();
-    ServerConfig serverConfig = servers.get(serverName);
+    ServerConfig serverConfig = servers.get(serverNameRegex);
     assertEquals(serverConfig, expected);
   }
 
