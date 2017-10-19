@@ -1,5 +1,6 @@
   @Override
-  public void getEvents(final GetEventsParams params, MessageProcessor<Event> messageProcessor) {
+  public void getEvents(final GetEventsParams params, MessageProcessor<Event> messageProcessor)
+      throws OpenShiftException {
     CountDownLatch waitForClose = new CountDownLatch(1);
     Watcher<io.fabric8.kubernetes.api.model.Event> eventWatcher =
         new Watcher<io.fabric8.kubernetes.api.model.Event>() {
@@ -18,15 +19,19 @@
             waitForClose.countDown();
           }
         };
-    OpenShiftClient openShiftClient = new DefaultOpenShiftClient();
-    openShiftClient.events().inNamespace(openShiftCheProjectName).watch(eventWatcher);
-    try {
-      waitForClose.await();
-    } catch (InterruptedException e) {
-      LOG.error("Thread interrupted while waiting for eventWatcher.");
-      Thread.currentThread().interrupt();
-    } finally {
-      openShiftClient.close();
+    try (OpenShiftClient openShiftClient =
+        new DefaultOpenShiftClient(
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
+      openShiftClient
+          .events()
+          .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+          .watch(eventWatcher);
+      try {
+        waitForClose.await();
+      } catch (InterruptedException e) {
+        LOG.error("Thread interrupted while waiting for eventWatcher.");
+        Thread.currentThread().interrupt();
+      }
     }
   }
 

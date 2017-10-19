@@ -28,11 +28,13 @@
         KubernetesStringUtils.getImageStreamNameFromPullSpec(imageStreamTagPullSpec);
 
     ImageStream imageStream;
-    try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient()) {
+    try (OpenShiftClient openShiftClient =
+        new DefaultOpenShiftClient(
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
       imageStream =
           openShiftClient
               .imageStreams()
-              .inNamespace(openShiftCheProjectName)
+              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
               .withName(imageStreamName)
               .get();
       if (imageStream == null) {
@@ -43,7 +45,11 @@
 
     // The above needs to be combined to form a pull spec that will work when defining a container.
     String dockerPullSpec =
-        String.format("%s/%s/%s", registryAddress, openShiftCheProjectName, imageStreamTagPullSpec);
+        String.format(
+            "%s/%s/%s",
+            registryAddress,
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace(),
+            imageStreamTagPullSpec);
 
     ContainerConfig containerConfig = createContainerParams.getContainerConfig();
     ImageConfig imageConfig = inspectImage(InspectImageParams.create(imageForDocker)).getConfig();
@@ -103,7 +109,9 @@
     }
 
     String containerID;
-    OpenShiftClient openShiftClient = new DefaultOpenShiftClient();
+    OpenShiftClient openShiftClient =
+        new DefaultOpenShiftClient(
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
     try {
       createOpenShiftService(
           deploymentName,
@@ -133,7 +141,8 @@
       // in an inconsistent state.
       LOG.info("Error while creating Pod, removing deployment");
       LOG.info(e.getMessage());
-      openShiftDeploymentCleaner.cleanDeploymentResources(deploymentName, openShiftCheProjectName);
+      openShiftDeploymentCleaner.cleanDeploymentResources(
+          deploymentName, openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace());
       openShiftClient.resource(imageStreamTag).delete();
       throw e;
     } finally {
