@@ -5,7 +5,17 @@
     while (running.get()) {
       try {
         WatchKey watchKey = service.take();
-        Path dir = keys.get(watchKey);
+        Path dir;
+        synchronized (keys) {
+          dir = keys.get(watchKey);
+        }
+
+        if (dir == null) {
+          resetAndRemove(watchKey, dir);
+
+          LOG.debug("Reported directory is not registered - skipping.");
+          continue;
+        }
 
         List<WatchEvent<?>> watchEvents = watchKey.pollEvents();
 
