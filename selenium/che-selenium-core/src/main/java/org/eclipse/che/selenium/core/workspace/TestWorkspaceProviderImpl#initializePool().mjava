@@ -1,18 +1,25 @@
-  @Inject
-  public void initializePool(final TestWorkspaceServiceClient workspaceServiceClient) {
+  private void initializePool() {
     LOG.info("Initialize workspace pool with {} entries.", poolSize);
+    testWorkspaceQueue = new ArrayBlockingQueue<>(poolSize);
+    executor =
+        Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder()
+                .setNameFormat("WorkspaceInitializer-%d")
+                .setDaemon(true)
+                .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+                .build());
 
-    this.executor.scheduleWithFixedDelay(
+    executor.scheduleWithFixedDelay(
         () -> {
           while (testWorkspaceQueue.remainingCapacity() != 0) {
             String name = generateName();
             TestWorkspace testWorkspace =
                 new TestWorkspaceImpl(
                     name,
-                    defaultUser,
+                    defaultUser.get(),
                     defaultMemoryGb,
                     WorkspaceTemplate.DEFAULT,
-                    workspaceServiceClient);
+                    testWorkspaceServiceClient);
 
             try {
               if (!testWorkspaceQueue.offer(testWorkspace)) {
