@@ -1,8 +1,15 @@
-  @Inject
-  public void initializePool(final TestWorkspaceServiceClient workspaceServiceClient) {
+  private void initializePool() {
     LOG.info("Initialize workspace pool with {} entries.", poolSize);
+    testWorkspaceQueue = new ArrayBlockingQueue<>(poolSize);
+    executor =
+        Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder()
+                .setNameFormat("WorkspaceInitializer-%d")
+                .setDaemon(true)
+                .setUncaughtExceptionHandler(LoggingUncaughtExceptionHandler.getInstance())
+                .build());
 
-    this.executor.scheduleWithFixedDelay(
+    executor.scheduleWithFixedDelay(
         () -> {
           while (testWorkspaceQueue.remainingCapacity() != 0) {
             String name = generateName();
@@ -15,7 +22,7 @@
                       defaultMemoryGb,
                       workspaceDtoDeserializer.deserializeWorkspaceTemplate(
                           WorkspaceTemplate.DEFAULT),
-                      workspaceServiceClient);
+                      testWorkspaceServiceClient);
             } catch (Exception e) {
               // scheduled executor service doesn't log any exceptions, so log possible exception
               // here
