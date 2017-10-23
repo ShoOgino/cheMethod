@@ -1,0 +1,25 @@
+  @Override
+  public void provision(
+      InternalEnvironment environment, OpenShiftEnvironment osEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+
+    for (Pod pod : osEnv.getPods().values()) {
+      String podName = pod.getMetadata().getName();
+      for (Container container : pod.getSpec().getContainers()) {
+        String containerName = container.getName();
+        String machineName = podName + "/" + containerName;
+        InternalMachineConfig machineConf = environment.getMachines().get(machineName);
+
+        if (machineConf != null) {
+          machineConf
+              .getEnv()
+              .forEach(
+                  (key, value) -> {
+                    container.getEnv().removeIf(env -> key.equals(env.getName()));
+                    container.getEnv().add(new EnvVar(key, value, null));
+                  });
+        }
+      }
+    }
+  }
+

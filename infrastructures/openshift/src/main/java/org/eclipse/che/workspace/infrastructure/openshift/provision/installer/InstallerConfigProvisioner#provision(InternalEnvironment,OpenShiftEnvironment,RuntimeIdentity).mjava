@@ -7,31 +7,19 @@
         WsAgentMachineFinderUtil.getWsAgentServerMachine(environment)
             .orElseThrow(() -> new InfrastructureException("Machine with wsagent not found"));
 
-    for (Pod pod : osEnv.getPods().values()) {
-      String podName = pod.getMetadata().getName();
-      for (Container container : pod.getSpec().getContainers()) {
-        String containerName = container.getName();
-        String machineName = podName + "/" + containerName;
-        InternalMachineConfig machineConf = environment.getMachines().get(machineName);
+    for (Entry<String, InternalMachineConfig> machineEntry : environment.getMachines().entrySet()) {
+      InternalMachineConfig config = machineEntry.getValue();
 
-        for (Installer installer : machineConf.getInstallers()) {
-          provisionEnv(container, installer.getProperties());
-        }
+      // CHE_API is used by installers for agent binary downloading
+      config.getEnv().put("CHE_API", cheServerEndpoint);
 
-        // CHE_API is used by installers for agent binary downloading
-        putEnv(container.getEnv(), "CHE_API", cheServerEndpoint);
+      config.getEnv().put("USER_TOKEN", machineTokenProvider.getToken(identity.getWorkspaceId()));
 
-        putEnv(
-            container.getEnv(),
-            "USER_TOKEN",
-            machineTokenProvider.getToken(identity.getWorkspaceId()));
-
-        // TODO incorrect place for env variable addition. workspace ID is needed for wsagent
-        // server, not installer
-        // WORKSPACE_ID is required only by workspace agent
-        if (devMachineName.equals(machineName)) {
-          putEnv(container.getEnv(), "CHE_WORKSPACE_ID", identity.getWorkspaceId());
-        }
+      // TODO incorrect place for env variable addition. workspace ID is needed for wsagent
+      // server, not installer
+      // WORKSPACE_ID is required only by workspace agent
+      if (devMachineName.equals(machineEntry.getKey())) {
+        config.getEnv().put("CHE_WORKSPACE_ID", identity.getWorkspaceId());
       }
     }
   }

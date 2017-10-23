@@ -3,30 +3,11 @@
     // given
     when(machineTokenProvider.getToken(WORKSPACE_ID)).thenReturn("superToken");
 
-    final Pod podWithAgent = new PodBuilder().setName("pod1").setContainers("wsagent").build();
-
-    final Pod pod = new PodBuilder().setName("pod2").setContainers("machine").build();
-
-    OpenShiftEnvironment osEnvironment =
-        OpenShiftEnvironment.builder()
-            .setPods(
-                ImmutableMap.of(
-                    podWithAgent.getMetadata().getName(),
-                    podWithAgent,
-                    pod.getMetadata().getName(),
-                    pod))
-            .build();
-
+    InternalMachineConfig machine1 =
+        createMachine(new HashMap<>(singletonMap("env1", "val1")), true);
+    InternalMachineConfig machine2 = createMachine(new HashMap<>(), false);
     final Map<String, InternalMachineConfig> machines =
-        ImmutableMap.of(
-            "pod1/wsagent",
-            new MachineConfigBuilder()
-                .setServer(Constants.SERVER_WS_AGENT_HTTP_REFERENCE, new ServerConfigImpl())
-                .build(),
-            "pod2/machine",
-            new MachineConfigBuilder()
-                .setServer(Constants.SERVER_TERMINAL_REFERENCE, new ServerConfigImpl())
-                .build());
+        ImmutableMap.of("pod1/wsagent", machine1, "pod2/machine", machine2);
 
     InternalEnvironment environment = createEnvironment(machines);
 
@@ -34,16 +15,15 @@
     installerConfigProvisioner.provision(environment, osEnvironment, runtimeIdentity);
 
     // then
-    Container container = podWithAgent.getSpec().getContainers().get(0);
-    List<EnvVar> envs = container.getEnv();
-    verifyContainsEnv(envs, "CHE_API", CHE_SERVER_ENDPOINT);
-    verifyContainsEnv(envs, "USER_TOKEN", "superToken");
-    verifyContainsEnv(envs, "CHE_WORKSPACE_ID", WORKSPACE_ID);
+    Map<String, String> env = machine1.getEnv();
+    verifyContainsEnv(env, "CHE_API", CHE_SERVER_ENDPOINT);
+    verifyContainsEnv(env, "USER_TOKEN", "superToken");
+    verifyContainsEnv(env, "CHE_WORKSPACE_ID", WORKSPACE_ID);
 
-    Container container2 = pod.getSpec().getContainers().get(0);
-    List<EnvVar> envs2 = container2.getEnv();
-    verifyContainsEnv(envs2, "CHE_API", CHE_SERVER_ENDPOINT);
-    verifyContainsEnv(envs, "USER_TOKEN", "superToken");
-    verifyDoesNotContainEnv(envs2, "CHE_WORKSPACE_ID");
+    env = machine2.getEnv();
+    verifyContainsEnv(env, "CHE_API", CHE_SERVER_ENDPOINT);
+    verifyContainsEnv(env, "USER_TOKEN", "superToken");
+    assertFalse(
+        env.containsKey("CHE_WORKSPACE_ID"), "Environment variable '%s' found CHE_WORKSPACE_ID");
   }
 
