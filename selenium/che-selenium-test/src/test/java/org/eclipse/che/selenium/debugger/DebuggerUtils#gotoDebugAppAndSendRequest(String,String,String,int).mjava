@@ -1,0 +1,51 @@
+  /**
+   * We need use other thread for send request in flow application. Because request will be stopped
+   * in breakpoint. And test cannot be continued.
+   *
+   * @param appUrl the application url of launched application in the Che
+   * @param data request message for application
+   * @param contentType content type
+   * @param successCode success code
+   */
+  public CompletableFuture<String> gotoDebugAppAndSendRequest(
+      final String appUrl, final String data, String contentType, int successCode)
+      throws ExecutionException {
+    return CompletableFuture.supplyAsync(
+        () -> {
+          HttpURLConnection connection = null;
+          String response;
+          BufferedReader br;
+          StringBuilder responseData = new StringBuilder();
+          try {
+            URL url = new URL(appUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", contentType);
+            connection.setDoOutput(true);
+            connection.setDoInput(true);
+            OutputStream output = connection.getOutputStream();
+            output.write(data.getBytes("UTF-8"));
+            if (connection.getResponseCode() != successCode) {
+              throw new RuntimeException(
+                  new Exception(
+                          "Cannot do request for application: " + connection.getResponseCode())
+                      + IoUtil.readStream(connection.getErrorStream()));
+            }
+            output.close();
+            br = new BufferedReader(new InputStreamReader(connection.getInputStream(), "UTF-8"));
+            while ((response = br.readLine()) != null) {
+              responseData.append(response);
+            }
+            System.out.println(responseData.toString());
+            br.close();
+          } catch (Exception e) {
+            LOG.error(e.getMessage(), e);
+          } finally {
+            if (connection != null) {
+              connection.disconnect();
+            }
+          }
+          return responseData.toString();
+        });
+  }
+
