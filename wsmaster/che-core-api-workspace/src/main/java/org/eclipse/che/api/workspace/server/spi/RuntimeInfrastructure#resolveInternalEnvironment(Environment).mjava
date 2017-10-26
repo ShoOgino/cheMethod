@@ -1,0 +1,40 @@
+  /**
+   * Resolves {@link InternalEnvironment} instance based on specified {@link Environment}.
+   *
+   * <p>Resolved internal environment will have:
+   *
+   * <ul>
+   *   <li>Downloaded recipe;
+   *   <li>Fetched information about configured {@link Installer installers};
+   *   <li>Full servers list that includes: configured servers by users and provided by installers.
+   * </ul>
+   *
+   * @param environment environment to resolve
+   * @return resolved internal environment
+   * @throws InfrastructureException if any exception occurs on environment resolving
+   * @see InternalEnvironment
+   */
+  private InternalEnvironment resolveInternalEnvironment(Environment environment)
+      throws InfrastructureException {
+    InternalRecipe internalRecipe = recipeRetriever.getRecipe(environment.getRecipe());
+
+    Map<String, InternalMachineConfig> internalMachines = new HashMap<>();
+    for (Map.Entry<String, ? extends MachineConfig> machineEntry :
+        environment.getMachines().entrySet()) {
+      MachineConfig machineConfig = machineEntry.getValue();
+      List<Installer> installers = getInstallers(machineConfig.getInstallers());
+
+      Map<String, ServerConfig> servers = new HashMap<>(machineConfig.getServers());
+
+      fillServers(servers, installers);
+
+      servers = normalizeServers(servers);
+
+      internalMachines.put(
+          machineEntry.getKey(),
+          new InternalMachineConfig(
+              installers, servers, machineConfig.getEnv(), machineConfig.getAttributes()));
+    }
+    return new InternalEnvironment(internalRecipe, internalMachines);
+  }
+
