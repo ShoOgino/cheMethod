@@ -1,0 +1,26 @@
+  @Override
+  public void prepare(InternalEnvironment env, OpenShiftEnvironment osEnv, String workspaceId)
+      throws InfrastructureException {
+    final PersistentVolumeClaim pvc = osEnv.getPersistentVolumeClaims().get(pvcName);
+    if (pvc != null) {
+      return;
+    }
+    final String machineWithSources =
+        getWsAgentServerMachine(env)
+            .orElseThrow(() -> new InfrastructureException("Machine with ws-agent not found"));
+    osEnv.getPersistentVolumeClaims().put(pvcName, newPVC(pvcName, pvcAccessMode, pvcQuantity));
+    for (Pod pod : osEnv.getPods().values()) {
+      final PodSpec podSpec = pod.getSpec();
+      for (Container container : podSpec.getContainers()) {
+        final String machine = pod.getMetadata().getName() + '/' + container.getName();
+        if (machine.equals(machineWithSources)) {
+          final String subPath =
+              workspaceId + (projectsPath.startsWith("/") ? projectsPath : "/" + projectsPath);
+          container.getVolumeMounts().add(newVolumeMount(pvcName, projectsPath, subPath));
+          podSpec.getVolumes().add(newVolume(pvcName, pvcName));
+          return;
+        }
+      }
+    }
+  }
+
