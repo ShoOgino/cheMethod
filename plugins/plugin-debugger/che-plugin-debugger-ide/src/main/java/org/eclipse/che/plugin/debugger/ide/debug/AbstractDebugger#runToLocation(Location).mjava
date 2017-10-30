@@ -1,0 +1,34 @@
+  @Override
+  public void runToLocation(Location location) {
+    if (!isConnected()) {
+      return;
+    }
+
+    if (disposableBreakpoint != null) {
+      return;
+    }
+
+    disposableBreakpoint =
+        dtoFactory.createDto(BreakpointDto.class).withLocation(toDto(location)).withEnabled(true);
+
+    service
+        .addBreakpoint(debugSessionDto.getId(), disposableBreakpoint)
+        .then(
+            it -> {
+              preserveDebuggerState();
+              resume();
+            })
+        .catchError(
+            error -> {
+              service
+                  .deleteBreakpoint(debugSessionDto.getId(), disposableBreakpoint.getLocation())
+                  .catchError(
+                      err -> {
+                        Log.error(AbstractDebugger.class, err.getMessage());
+                      });
+
+              invalidateDisposableBreakpoint();
+              preserveDebuggerState();
+            });
+  }
+
