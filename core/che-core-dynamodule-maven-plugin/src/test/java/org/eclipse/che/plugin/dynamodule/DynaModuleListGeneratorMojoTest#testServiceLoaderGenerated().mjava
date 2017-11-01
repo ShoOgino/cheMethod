@@ -1,0 +1,32 @@
+  /** Check that the ServiceLoader is generated and working */
+  @Test
+  public void testServiceLoaderGenerated() throws Exception {
+
+    File projectCopy = this.resources.getBasedir("project");
+    File pom = new File(projectCopy, "pom.xml");
+    assertNotNull(pom);
+    assertTrue(pom.exists());
+
+    DynaModuleListGeneratorMojo mojo =
+        (DynaModuleListGeneratorMojo) this.rule.lookupMojo("build", pom);
+    configure(mojo, projectCopy);
+    mojo.execute();
+
+    URL url = new File(projectCopy + File.separator + "classes").toURI().toURL();
+
+    URLClassLoader urlClassLoader = new URLClassLoader(new URL[] {url});
+
+    ServiceLoader<ModuleFinder> moduleFinderServiceLoader =
+        ServiceLoader.load(ModuleFinder.class, urlClassLoader);
+    Iterator<ModuleFinder> iterator = moduleFinderServiceLoader.iterator();
+    assertTrue(iterator.hasNext());
+    ModuleFinder moduleFinder = iterator.next();
+    List<Module> moduleList = moduleFinder.getModules();
+    org.testng.Assert.assertEquals(moduleList.size(), 2);
+
+    assertTrue(moduleList.stream().anyMatch(item -> item.getClass().equals(MyCustomModule.class)));
+    assertTrue(
+        moduleList.stream().anyMatch(item -> item.getClass().equals(AnotherCustomModule.class)));
+    assertFalse(iterator.hasNext());
+  }
+

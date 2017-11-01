@@ -1,0 +1,34 @@
+  /** scan the given directory */
+  protected void scanDirectory(Path directory) throws IOException {
+    final int maxDepth = 10;
+    Stream<Path> matches =
+        java.nio.file.Files.find(
+            directory, maxDepth, (path, basicFileAttributes) -> path.toString().endsWith(".class"));
+    matches.forEach(
+        file -> {
+          try {
+            scanFile(file);
+          } catch (IOException e) {
+            throw new IllegalStateException("Unable to scan the file", e);
+          }
+        });
+
+    matches =
+        java.nio.file.Files.find(
+            directory, maxDepth, (path, basicFileAttributes) -> path.toString().endsWith(".jar"));
+    matches.forEach(
+        file -> {
+          boolean skip =
+              skipResources.stream().anyMatch(pattern -> file.toString().matches(pattern));
+          if (skip) {
+            LOGGER.debug("skipping jar file {} inside directory {}", file.toFile(), directory);
+          } else {
+            try (JarFile jarFile = new JarFile(file.toFile())) {
+              scanJar(jarFile);
+            } catch (IOException e) {
+              throw new IllegalStateException("Unable to scan the file", e);
+            }
+          }
+        });
+  }
+

@@ -1,0 +1,64 @@
+  protected void generateClass(Set<String> guiceModules) {
+    ClassWriter cw = new ClassWriter(COMPUTE_FRAMES);
+    MethodVisitor methodVisitor;
+
+    // interface to implement
+    String moduleFinderInternalClassName = Type.getType(ModuleFinder.class).getInternalName();
+
+    cw.visit(
+        52,
+        ACC_PUBLIC + ACC_SUPER,
+        PACKAGE_NAME.concat(className),
+        null,
+        "java/lang/Object",
+        new String[] {moduleFinderInternalClassName});
+
+    // default constructor
+    methodVisitor = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
+    methodVisitor.visitCode();
+    methodVisitor.visitVarInsn(ALOAD, 0);
+    methodVisitor.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+    methodVisitor.visitInsn(RETURN);
+    methodVisitor.visitMaxs(0, 0);
+    methodVisitor.visitEnd();
+
+    // implements getModules method
+    final MethodVisitor getModulesMethodVisitor =
+        cw.visitMethod(
+            ACC_PUBLIC,
+            "getModules",
+            "()Ljava/util/List;",
+            "()Ljava/util/List<Lcom/google/inject/Module;>;",
+            null);
+    getModulesMethodVisitor.visitCode();
+    getModulesMethodVisitor.visitTypeInsn(NEW, "java/util/ArrayList");
+    getModulesMethodVisitor.visitInsn(DUP);
+    getModulesMethodVisitor.visitMethodInsn(
+        INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
+    getModulesMethodVisitor.visitVarInsn(ASTORE, 1);
+
+    guiceModules.forEach(
+        moduleClassName -> {
+          String moduleInternalName = moduleClassName.replace(".", "/");
+          // add each modules
+          getModulesMethodVisitor.visitVarInsn(ALOAD, 1);
+          getModulesMethodVisitor.visitTypeInsn(NEW, moduleInternalName);
+          getModulesMethodVisitor.visitInsn(DUP);
+          getModulesMethodVisitor.visitMethodInsn(
+              INVOKESPECIAL, moduleInternalName, "<init>", "()V", false);
+          getModulesMethodVisitor.visitMethodInsn(
+              INVOKEINTERFACE, "java/util/List", "add", "(Ljava/lang/Object;)Z", true);
+          getModulesMethodVisitor.visitInsn(POP);
+        });
+
+    // end of the method getModules()
+    getModulesMethodVisitor.visitVarInsn(ALOAD, 1);
+    getModulesMethodVisitor.visitInsn(ARETURN);
+    getModulesMethodVisitor.visitMaxs(0, 0);
+    getModulesMethodVisitor.visitEnd();
+
+    cw.visitEnd();
+
+    this.classToGenerate = cw.toByteArray();
+  }
+

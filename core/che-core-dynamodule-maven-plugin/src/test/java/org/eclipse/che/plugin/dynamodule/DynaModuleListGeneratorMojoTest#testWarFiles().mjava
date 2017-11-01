@@ -1,0 +1,35 @@
+  /** Check that the plugin is able to scan war files */
+  @Test
+  public void testWarFiles() throws Exception {
+
+    File projectCopy = this.resources.getBasedir("project");
+    File pom = new File(projectCopy, "pom.xml");
+    assertNotNull(pom);
+    assertTrue(pom.exists());
+
+    DynaModuleListGeneratorMojo mojo =
+        (DynaModuleListGeneratorMojo) this.rule.lookupMojo("build", pom);
+    configure(mojo, projectCopy);
+    this.rule.setVariableValueToObject(mojo, "scanWarDependencies", true);
+    this.rule.setVariableValueToObject(mojo, "scanJarInWarDependencies", true);
+    mojo.execute();
+    Set<String> findClasses =
+        mojo.getDynaModuleListGenerator().getDynaModuleScanner().getDynaModuleClasses();
+    assertTrue(
+        findClasses
+                .stream()
+                .filter(className -> className.contains("org.eclipse.che.wsagent"))
+                .collect(toList())
+                .size()
+            > 2);
+
+    // this dependency is inside the wsagent-core file.
+    assertTrue(
+        findClasses
+                .stream()
+                .filter(className -> className.contains("org.eclipse.che.wsagent.server."))
+                .collect(toList())
+                .size()
+            >= 2);
+  }
+
