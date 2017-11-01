@@ -1,0 +1,149 @@
+  @Override
+  public void execute() throws MojoExecutionException, MojoFailureException {
+    long start = System.currentTimeMillis();
+    generatedDirectory = new File(targetDirectory, "generated-sources/dynamodules");
+    unpackedDirectory = new File(targetDirectory, "unpacked-dynamodule");
+    if (!generatedDirectory.exists() && !generatedDirectory.mkdirs()) {
+      throw new MojoExecutionException(
+          "Unable to create a directory for writing Guice DynaModule file '"
+              + generatedDirectory
+              + "'.");
+    }
+    if (!unpackedDirectory.exists() && !unpackedDirectory.mkdirs()) {
+      throw new MojoExecutionException(
+          "Unable to create a directory for writing Guice unpacked files '"
+              + unpackedDirectory
+              + "'.");
+    }
+
+    dynaModuleListGenerator = new DynaModuleListByteCodeGenerator();
+    dynaModuleListGenerator.setSkipResources(skipResources);
+    dynaModuleListGenerator.setUnpackedDirectory(unpackedDirectory);
+    dynaModuleListGenerator.setScanJarInWarDependencies(scanJarInWarDependencies);
+
+    String className = LOWER_HYPHEN.to(UPPER_CAMEL, project.getArtifactId().replace(".", "-"));
+
+    Collection<URL> urls;
+    if (useClassPath) {
+      urls = new ArrayList<>();
+      String javaClassPath = System.getProperty("java.class.path");
+      if (javaClassPath != null) {
+        for (String path : javaClassPath.split(File.pathSeparator)) {
+          try {
+            urls.add(new File(path).toURI().toURL());
+          } catch (Exception e) {
+            throw new MojoExecutionException("Unable to get URL", e);
+          }
+        }
+      }
+    } else {
+      urls = new ArrayList<>();
+      List<String> elements;
+      try {
+        elements = project.getCompileClasspathElements();
+      } catch (DependencyResolutionRequiredException e) {
+        throw new MojoExecutionException("Unable to get classpath elements", e);
+      }
+
+      for (String element : elements) {
+        try {
+          urls.add(new File(element).toURI().toURL());
+        } catch (MalformedURLException e) {
+          throw new MojoExecutionException("Unable to create URL", e);
+        }
+      }
+    }
+
+    // do we have extra wars ?
+    if (scanWarDependencies) {
+      for (Artifact dependencyArtifact :
+          this.project
+              .getDependencyArtifacts()
+              .stream()
+              .filter(dependency -> "war".equals(dependency.getType()))
+              .collect(Collectors.toList())) {
+        Artifact toResolveArtifact =
+            repositorySystem.createArtifact(
+                dependencyArtifact.getGroupId(),
+                dependencyArtifact.getArtifactId(),
+                dependencyArtifact.getVersion(),
+                dependencyArtifact.getScope(),
+                dependencyArtifact.getType());
+
+        ArtifactResolutionRequest artifactResolutionRequest = new ArtifactResolutionRequest();
+        artifactResolutionRequest.setArtifact(toResolveArtifact);
+        artifactResolutionRequest
+            .setLocalRepository(localRepository)
+            .setRemoteRepositories(artifactRepositories);
+
+        ArtifactResolutionResult resolutionResult;
+        resolutionResult = this.repositorySystem.resolve(artifactResolutionRequest);
+
+        // The file should exists, but we never know.
+        File file = resolutionResult.getArtifacts().stream().findFirst().get().getFile();
+        if (file != null && file.exists()) {
+          try {
+            urls.add(file.toURI().toURL());
+          } catch (MalformedURLException e) {
+            throw new MojoExecutionException("Unable to get URL from file " + file, e);
+          }
+        }
+      }
+    }
+
+    dynaModuleListGenerator.setUrls(urls);
+    dynaModuleListGenerator.setClassName(className);
+
+    // define output path for the file to write
+    byte[] byteCodeToGenerate = dynaModuleListGenerator.execute();
+
+    String fullClassName = "org.eclipse.che.dynamodule." + className;
+
+    this.guiceGeneratedModuleFile =
+        new File(
+            targetDirectory,
+            "classes" + File.separator + fullClassName.replace(".", File.separator) + ".class");
+    File parentDir = this.guiceGeneratedModuleFile.getParentFile();
+    if (!parentDir.exists() && !parentDir.mkdirs()) {
+      throw new MojoExecutionException(
+          "Unable to create a directory for writing Guice DynaModule file '" + parentDir + "'.");
+    }
+
+    try {
+      Files.write(guiceGeneratedModuleFile.toPath(), byteCodeToGenerate);
+    } catch (IOException e) {
+      throw new MojoExecutionException(
+          "Unable to generate class for writing Guice DynaModule file '" + parentDir + "'.");
+    }
+
+    // And now, generates the ServiceLoader
+    File serviceLoaderModuleFile =
+        new File(
+            targetDirectory,
+            "classes"
+                + File.separator
+                + "META-INF"
+                + File.separator
+                + "services"
+                + File.separator
+                + "org.eclipse.che.inject.ModuleFinder");
+    File parentServiceLoaderDir = serviceLoaderModuleFile.getParentFile();
+    if (!parentServiceLoaderDir.exists() && !parentServiceLoaderDir.mkdirs()) {
+      throw new MojoExecutionException(
+          "Unable to create a directory for writing Guice ServiceLoader ModuleFinder file '"
+              + parentServiceLoaderDir
+              + "'.");
+    }
+
+    try (Writer fileWriter =
+        Files.newBufferedWriter(serviceLoaderModuleFile.toPath(), StandardCharsets.UTF_8)) {
+      fileWriter.write(fullClassName);
+    } catch (IOException e) {
+      throw new MojoExecutionException("Cannot write Guice ServiceLoader DynaModule file", e);
+    }
+
+    long end = System.currentTimeMillis();
+
+    getLog().debug("Generating Guice DynaModule file in " + (end - start) + " ms.");
+  }
+

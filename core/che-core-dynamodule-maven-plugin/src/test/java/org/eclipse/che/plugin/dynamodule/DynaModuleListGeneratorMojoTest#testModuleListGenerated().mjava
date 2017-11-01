@@ -1,0 +1,34 @@
+  /** Check that the ModuleList class is generated and contains the expected modules. */
+  @Test
+  public void testModuleListGenerated() throws Exception {
+
+    File projectCopy = this.resources.getBasedir("project");
+    File pom = new File(projectCopy, "pom.xml");
+    assertNotNull(pom);
+    assertTrue(pom.exists());
+
+    DynaModuleListGeneratorMojo mojo =
+        (DynaModuleListGeneratorMojo) this.rule.lookupMojo("build", pom);
+    configure(mojo, projectCopy);
+    mojo.execute();
+
+    File generatedModuleFile = mojo.getGuiceGeneratedModuleFile();
+    // Check file has been generated
+    assertTrue(generatedModuleFile.exists());
+
+    Class<ModuleFinder> moduleFinderClass =
+        (Class<ModuleFinder>)
+            new CustomClassLoader()
+                .defineClass(
+                    "org.eclipse.che.dynamodule.MyDynamoduleTestModule",
+                    Files.readAllBytes(generatedModuleFile.toPath()));
+
+    ModuleFinder moduleFinder = moduleFinderClass.getDeclaredConstructor().newInstance();
+    List<Module> moduleList = moduleFinder.getModules();
+    org.testng.Assert.assertEquals(moduleList.size(), 2);
+
+    assertTrue(moduleList.stream().anyMatch(item -> item.getClass().equals(MyCustomModule.class)));
+    assertTrue(
+        moduleList.stream().anyMatch(item -> item.getClass().equals(AnotherCustomModule.class)));
+  }
+
