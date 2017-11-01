@@ -1,0 +1,34 @@
+  @Override
+  public DockerRuntimeContext prepare(RuntimeIdentity identity, InternalEnvironment environment)
+      throws ValidationException, InfrastructureException {
+
+    DockerEnvironment dockerEnvironment;
+    String type = environment.getRecipe().getType();
+    switch (type) {
+      case "dockerfile":
+        dockerEnvironment = ((DockerfileInternalEnvironment) environment).getDockerEnvironment();
+        break;
+      case "dockerimage":
+        dockerEnvironment = ((DockerimageInternalEnvironment) environment).getDockerEnvironment();
+        break;
+      case "compose":
+        dockerEnvironment = ((ComposeInternalEnvironment) environment).getComposeEnvironment();
+        break;
+      default:
+        throw new InfrastructureException("Recipe type is not allowed " + type);
+    }
+
+    // modify environment with everything needed to use docker machines on particular (cloud)
+    // infrastructure
+    infrastructureProvisioner.provision(environment, dockerEnvironment, identity);
+    // check that containers start order can be resolved
+    // NOTE: it should be performed before environmentNormalizer.normalize because normalization
+    // changes links, volumes from which will fail order evaluation
+    // It can be changed after reimplementing strategy to respect normalization
+    List<String> containersOrder = startStrategy.order(dockerEnvironment);
+    // normalize env to provide environment description with absolutely everything expected in
+    environmentNormalizer.normalize(environment, dockerEnvironment, identity);
+
+    return contextFactory.create(this, identity, environment, dockerEnvironment, containersOrder);
+  }
+

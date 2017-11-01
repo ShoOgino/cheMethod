@@ -1,0 +1,64 @@
+  @Override
+  protected InternalEnvironment create(
+      Map<String, InternalMachineConfig> machines, InternalRecipe recipe, List<Warning> warnings)
+      throws InfrastructureException, ValidationException {
+
+    Map<String, Pod> pods = new HashMap<>();
+    Map<String, Service> services = new HashMap<>();
+    Map<String, PersistentVolumeClaim> pvcs = new HashMap<>();
+    Map<String, Route> routes = new HashMap<>();
+
+    switch (recipe.getContentType()) {
+      case "application/x-yaml":
+      case "text/yaml":
+      case "text/x-yaml":
+        break;
+      default:
+        throw new ValidationException(
+            "Provided environment recipe content type '"
+                + recipe.getContentType()
+                + "' is unsupported. Supported values are: "
+                + "application/x-yaml, text/yaml, text/x-yaml");
+    }
+
+    // TODO Implement own validation for OpenShift recipes, because it is OK for OpenShift client to
+    // load  list with services only, but in our case there should be at least one pod with
+    // containers
+    KubernetesList list;
+    try (OpenShiftClient client = clientFactory.create()) {
+      list = client.lists().load(new ByteArrayInputStream(recipe.getContent().getBytes())).get();
+    }
+
+    boolean isAnyRoutePresent = false;
+    boolean isAnyPVCPresent = false;
+    for (HasMetadata object : list.getItems()) {
+      if (object instanceof DeploymentConfig) {
+        throw new ValidationException("Supporting of deployment configs is not implemented yet.");
+      } else if (object instanceof Pod) {
+        Pod pod = (Pod) object;
+        pods.put(pod.getMetadata().getName(), pod);
+      } else if (object instanceof Service) {
+        Service service = (Service) object;
+        services.put(service.getMetadata().getName(), service);
+      } else if (object instanceof Route) {
+        isAnyRoutePresent = true;
+      } else if (object instanceof PersistentVolumeClaim) {
+        isAnyPVCPresent = true;
+      } else {
+        throw new ValidationException(
+            format("Found unknown object type '%s'", object.getMetadata()));
+      }
+    }
+
+    if (isAnyRoutePresent) {
+      warnings.add(new WarningImpl(ROUTE_IGNORED_WARNING_CODE, ROUTES_IGNORED_WARNING_MESSAGE));
+    }
+
+    if (isAnyPVCPresent) {
+      warnings.add(new WarningImpl(PVC_IGNORED_WARNING_CODE, PVC_IGNORED_WARNING_MESSAGE));
+    }
+
+    return new OpenShiftInternalEnvironment(
+        machines, recipe, warnings, pods, services, pvcs, routes);
+  }
+

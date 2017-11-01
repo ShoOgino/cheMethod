@@ -1,0 +1,30 @@
+  private DockerEnvironment dockerEnv(
+      Map<String, InternalMachineConfig> machines, InternalRecipe recipe)
+      throws ValidationException {
+
+    // empty list of machines is not expected, no needs to check for next()
+    Map.Entry<String, InternalMachineConfig> entry = machines.entrySet().iterator().next();
+    String machineName = entry.getKey();
+    InternalMachineConfig machineConfig = entry.getValue();
+
+    DockerEnvironment dockerEnv = new DockerEnvironment();
+    DockerContainerConfig container = new DockerContainerConfig();
+    dockerEnv.getContainers().put(machineName, container);
+
+    container.setImage(recipe.getContent());
+    for (ServerConfig server : machineConfig.getServers().values()) {
+      container.addExpose(server.getPort());
+    }
+    if (machineConfig.getAttributes().containsKey("memoryLimitBytes")) {
+      try {
+        container.setMemLimit(
+            Long.parseLong(machineConfig.getAttributes().get("memoryLimitBytes")));
+      } catch (NumberFormatException e) {
+        throw new ValidationException(
+            format("Value of attribute 'memoryLimitBytes' of machine '%s' is illegal", machineName));
+      }
+    }
+
+    return dockerEnv;
+  }
+
