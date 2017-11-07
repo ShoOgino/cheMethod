@@ -1,0 +1,45 @@
+  /**
+   * Registers a specified handler for handling events about changes in pods containers.
+   *
+   * @param handler pod container events handler
+   * @throws InfrastructureException if any error occurs while watcher starting
+   */
+  public void watchContainers(ContainerEventHandler handler) throws InfrastructureException {
+    if (containerWatch == null) {
+      final Watcher<Event> watcher =
+          new Watcher<Event>() {
+            @Override
+            public void eventReceived(Action action, Event event) {
+              ObjectReference involvedObject = event.getInvolvedObject();
+              String fieldPath = involvedObject.getFieldPath();
+
+              // check that event related to
+              if (POD_OBJECT_KIND.equals(involvedObject.getKind()) && fieldPath != null) {
+                Matcher containerFieldMatcher = CONTAINER_FIELD_PATH_PATTERN.matcher(fieldPath);
+                if (containerFieldMatcher.matches()) {
+
+                  String containerName = containerFieldMatcher.group(CONTAINER_NAME_GROUP);
+                  String podName = Names.originalPodName(involvedObject.getName(), workspaceId);
+
+                  ContainerEvent containerEvent =
+                      new ContainerEvent(
+                          Names.machineName(podName, containerName),
+                          event.getMessage(),
+                          event.getMetadata().getCreationTimestamp());
+                  containerEventsHandlers.forEach(h -> h.handle(containerEvent));
+                }
+              }
+            }
+
+            @Override
+            public void onClose(KubernetesClientException ignored) {}
+          };
+      try (OpenShiftClient client = clientFactory.create()) {
+        containerWatch = client.events().inNamespace(namespace).watch(watcher);
+      } catch (KubernetesClientException ex) {
+        throw new InfrastructureException(ex.getMessage());
+      }
+    }
+    containerEventsHandlers.add(handler);
+  }
+
