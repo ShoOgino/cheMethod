@@ -7,36 +7,46 @@
     Promise<DebugSessionDto> connect = service.connect(debuggerType, connectionProperties);
     final DebuggerDescriptor debuggerDescriptor = toDescriptor(connectionProperties);
 
-    Promise<Void> promise =
-        connect
-            .then(
-                (Function<DebugSessionDto, Void>)
-                    debugSession -> {
-                      DebuggerInfo debuggerInfo = debugSession.getDebuggerInfo();
-                      debuggerDescriptor.setInfo(
-                          debuggerInfo.getName() + " " + debuggerInfo.getVersion());
+    final StatusNotification notification =
+        notificationManager.notify(
+            constant.debuggerConnectingTitle(debuggerDescriptor.getAddress()),
+            PROGRESS,
+            FLOAT_MODE);
 
-                      setDebugSession(debugSession);
-                      preserveDebuggerState();
+    return connect
+        .then(
+            (Function<DebugSessionDto, Void>)
+                debugSession -> {
+                  DebuggerInfo debuggerInfo = debugSession.getDebuggerInfo();
+                  debuggerDescriptor.setInfo(
+                      debuggerInfo.getName() + " " + debuggerInfo.getVersion());
 
-                      subscribeToDebuggerEvents();
-                      startCheckingEvents();
+                  setDebugSession(debugSession);
+                  preserveDebuggerState();
 
-                      startDebugger(debugSession);
+                  subscribeToDebuggerEvents();
+                  startCheckingEvents();
 
-                      return null;
-                    })
-            .catchError(
-                (Operation<PromiseError>)
-                    error -> {
-                      Log.error(AbstractDebugger.class, error.getMessage());
-                      throw new OperationException(error.getCause());
-                    });
+                  for (DebuggerObserver observer : observers) {
+                    observer.onDebuggerAttached(debuggerDescriptor);
+                  }
 
-    for (DebuggerObserver observer : observers) {
-      observer.onDebuggerAttached(debuggerDescriptor, promise);
-    }
+                  startDebugger(debugSession);
 
-    return promise;
+                  notification.setTitle(constant.debuggerConnectedTitle());
+                  notification.setContent(
+                      constant.debuggerConnectedDescription(debuggerDescriptor.getAddress()));
+                  notification.setStatus(SUCCESS);
+
+                  return null;
+                })
+        .catchError(
+            error -> {
+              notification.setTitle(
+                  constant.failedToConnectToRemoteDebuggerDescription(
+                      debuggerDescriptor.getAddress(), error.getMessage()));
+              notification.setStatus(FAIL);
+              notification.setDisplayMode(FLOAT_MODE);
+            });
   }
 

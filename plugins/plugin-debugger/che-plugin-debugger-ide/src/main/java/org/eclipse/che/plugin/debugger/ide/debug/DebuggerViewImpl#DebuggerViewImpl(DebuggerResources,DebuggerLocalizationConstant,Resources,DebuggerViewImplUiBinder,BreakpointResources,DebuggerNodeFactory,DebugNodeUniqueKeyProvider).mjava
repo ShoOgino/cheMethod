@@ -1,0 +1,49 @@
+  @Inject
+  protected DebuggerViewImpl(
+      DebuggerResources resources,
+      DebuggerLocalizationConstant locale,
+      Resources coreRes,
+      DebuggerViewImplUiBinder uiBinder,
+      BreakpointResources breakpointResources,
+      DebuggerNodeFactory nodeFactory,
+      DebugNodeUniqueKeyProvider nodeKeyProvider) {
+    super();
+
+    this.locale = locale;
+    this.coreRes = coreRes;
+    this.breakpointResources = breakpointResources;
+    this.nodeKeyProvider = nodeKeyProvider;
+
+    StatusText<Tree> emptyTreeStatus = new StatusText<>();
+    emptyTreeStatus.setText("");
+
+    tree = new Tree(new NodeStorage(nodeKeyProvider), new NodeLoader(), emptyTreeStatus);
+    setContentWidget(uiBinder.createAndBindUi(this));
+
+    this.breakpoints = createBreakpointList();
+    this.breakpointsPanel.add(breakpoints);
+
+    this.frames = createFramesList();
+    this.framesPanel.add(frames);
+    this.nodeFactory = nodeFactory;
+
+    tree.ensureDebugId("debugger-tree");
+
+    tree.getSelectionModel().setSelectionMode(SINGLE);
+
+    tree.addExpandHandler(
+        event -> {
+          Node expandedNode = event.getNode();
+          if (expandedNode instanceof VariableNode) {
+            delegate.onExpandVariable(((VariableNode) expandedNode).getData());
+          }
+        });
+
+    tree.getNodeStorage()
+        .addSortInfo(new NodeStorage.StoreSortInfo(new DebugNodeTypeComparator(), ASC));
+    tree.getNodeStorage()
+        .addSortInfo(new NodeStorage.StoreSortInfo(new VariableNodeComparator(), ASC));
+
+    watchExpressionPanel.addStyleName(resources.getCss().watchExpressionsPanel());
+  }
+
