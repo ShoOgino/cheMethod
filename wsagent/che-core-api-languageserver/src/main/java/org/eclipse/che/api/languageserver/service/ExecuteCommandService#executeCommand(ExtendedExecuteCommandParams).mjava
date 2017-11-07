@@ -1,0 +1,48 @@
+  /**
+   * Sends a workspace/executeCommand request to the applicable language servers with custom
+   * command.
+   *
+   * @param extendedExecuteCommandParams command parameters describe custom command {@link
+   *     ExtendedExecuteCommandParams}
+   * @return result of executing workspace/executeCommand
+   */
+  public Object executeCommand(ExtendedExecuteCommandParams extendedExecuteCommandParams) {
+
+    final Object[] result = new Object[1];
+    try {
+      List<InitializedLanguageServer> servers =
+          registry
+              .getApplicableLanguageServers(extendedExecuteCommandParams.getFileUri())
+              .stream()
+              .flatMap(Collection::stream)
+              .collect(Collectors.toList());
+      OperationUtil.doInSequence(
+          servers,
+          new LSOperation<InitializedLanguageServer, Object>() {
+            @Override
+            public boolean canDo(InitializedLanguageServer element) {
+              return element.getServer().getWorkspaceService() != null;
+            }
+
+            @Override
+            public CompletableFuture<Object> start(InitializedLanguageServer element) {
+              return element
+                  .getServer()
+                  .getWorkspaceService()
+                  .executeCommand(extendedExecuteCommandParams);
+            }
+
+            @Override
+            public boolean handleResult(InitializedLanguageServer element, Object response) {
+              result[0] = response;
+              return true;
+            }
+          },
+          10_000);
+      return result[0];
+    } catch (LanguageServerException e) {
+      LOG.error("error executing command", e);
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+
