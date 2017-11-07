@@ -1,7 +1,6 @@
   @Override
   protected void configure() {
     // db related components modules
-    install(new com.google.inject.persist.jpa.JpaPersistModule("main"));
     install(new org.eclipse.che.account.api.AccountModule());
     install(new org.eclipse.che.api.ssh.server.jpa.SshJpaModule());
     install(new org.eclipse.che.api.core.jsonrpc.impl.JsonRpcModule());
@@ -121,6 +120,30 @@
     //
     // bind(org.eclipse.che.api.agent.server.filters.AddExecInstallerInWorkspaceFilter.class);
     //        bind(org.eclipse.che.api.agent.server.filters.AddExecInstallerInStackFilter.class);
+    final Map<String, String> persistenceProperties = new HashMap<>();
+    persistenceProperties.put(PersistenceUnitProperties.TARGET_SERVER, "None");
+    persistenceProperties.put(PersistenceUnitProperties.LOGGING_LOGGER, "DefaultLogger");
+    persistenceProperties.put(PersistenceUnitProperties.LOGGING_LEVEL, "SEVERE");
+
+    if (Boolean.valueOf(System.getenv("CHE_MULTIUSER"))) {
+      persistenceProperties.put(
+          PersistenceUnitProperties.EXCEPTION_HANDLER_CLASS,
+          "org.eclipse.che.core.db.postgresql.jpa.eclipselink.PostgreSqlExceptionHandler");
+      persistenceProperties.put(
+          PersistenceUnitProperties.NON_JTA_DATASOURCE, "java:/comp/env/jdbc/che-pg");
+      configureMultiUserMode();
+    } else {
+      persistenceProperties.put(
+          PersistenceUnitProperties.EXCEPTION_HANDLER_CLASS,
+          "org.eclipse.che.core.db.h2.jpa.eclipselink.H2ExceptionHandler");
+      persistenceProperties.put(
+          PersistenceUnitProperties.NON_JTA_DATASOURCE, "java:/comp/env/jdbc/che-h2");
+      configureSingleUserMode();
+    }
+
+    install(
+        new com.google.inject.persist.jpa.JpaPersistModule("main")
+            .properties(persistenceProperties));
 
     String infrastructure = System.getenv("CHE_INFRASTRUCTURE_ACTIVE");
     if ("openshift".equals(infrastructure)) {
