@@ -3,6 +3,8 @@
       final GetContainerLogsParams params, MessageProcessor<LogMessage> containerLogsProcessor)
       throws IOException {
     String container = params.getContainer(); // container ID
+    Subject subject = subjectForContainerId(container);
+
     Pod pod = getChePodByContainerId(container);
     if (pod != null) {
       String podName = pod.getMetadata().getName();
@@ -10,11 +12,12 @@
       ret[0] = false;
       OpenShiftClient openShiftClient =
           new DefaultOpenShiftClient(
-              openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+              openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig(subject));
       try (LogWatch watchLog =
           openShiftClient
               .pods()
-              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+              .inNamespace(
+                  openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace(subject))
               .withName(podName)
               .watchLog()) {
         Watcher<Pod> watcher =
@@ -34,7 +37,8 @@
             };
         openShiftClient
             .pods()
-            .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+            .inNamespace(
+                openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace(subject))
             .withName(podName)
             .watch(watcher);
         Thread.sleep(5000);

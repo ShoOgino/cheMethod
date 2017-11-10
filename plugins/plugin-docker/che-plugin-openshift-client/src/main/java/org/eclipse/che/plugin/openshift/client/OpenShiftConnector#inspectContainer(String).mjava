@@ -1,6 +1,6 @@
   @Override
   public ContainerInfo inspectContainer(String containerId) throws IOException {
-
+    Subject subject = subjectForContainerId(containerId);
     Pod pod = getChePodByContainerId(containerId);
     if (pod == null) {
       LOG.warn("No Pod found by container ID {}", containerId);
@@ -17,7 +17,7 @@
     Deployment deployment;
     try (OpenShiftClient client =
         new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig(subject))) {
       deployment = client.extensions().deployments().withName(deploymentName).get();
       if (deployment == null) {
         LOG.warn(
@@ -38,10 +38,14 @@
 
     String tagName = KubernetesStringUtils.getTagNameFromPullSpec(podPullSpec);
 
-    ImageStreamTag tag = getImageStreamTagFromRepo(tagName);
+    ImageStreamTag tag =
+        getImageStreamTagFromRepo(
+            tagName,
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig(subject),
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace(subject));
     ImageInfo imageInfo = getImageInfoFromTag(tag);
 
-    Service svc = getCheServiceBySelector(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
+    Service svc = getCheServiceBySelector(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName, subject);
     if (svc == null) {
       LOG.warn("No Service found by selector {}={}", OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
       return null;

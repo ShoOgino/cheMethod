@@ -1,12 +1,18 @@
   @Override
   public void removeImage(final RemoveImageParams params) throws IOException {
-    try (OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
+    Subject subject = subjectForImageId(params.getImage());
+    final Config openshiftConfig =
+        openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig(subject);
+    final String openshiftNamespace =
+        openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace(subject);
+
+    try (OpenShiftClient openShiftClient = new DefaultOpenShiftClient(openshiftConfig)) {
       String image = KubernetesStringUtils.getImageStreamNameFromPullSpec(params.getImage());
       String imageStreamTagName = KubernetesStringUtils.convertPullSpecToTagName(image);
-      ImageStreamTag imageStreamTag = getImageStreamTagFromRepo(imageStreamTagName);
+      ImageStreamTag imageStreamTag =
+          getImageStreamTagFromRepo(imageStreamTagName, openshiftConfig, openshiftNamespace);
       openShiftClient.resource(imageStreamTag).delete();
+      imageIdToWorkspaceId.remove(params.getImage());
     }
   }
 

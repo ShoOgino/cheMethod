@@ -13,6 +13,8 @@
     // imageForDocker is the docker version of the image repository. It's needed for other
     // OpenShiftConnector API methods, but is not acceptable as an OpenShift name
     String imageForDocker = createContainerParams.getContainerConfig().getImage();
+    imageIdToWorkspaceId.put(imageForDocker, getOriginalCheWorkspaceId(createContainerParams));
+
     // imageStreamTagName is imageForDocker converted into a form that can be used
     // in OpenShift
     String imageStreamTagName = KubernetesStringUtils.convertPullSpecToTagName(imageForDocker);
@@ -20,7 +22,11 @@
     // imageStreamTagName is not enough to fill out a pull spec; it is only the tag, so we
     // have to get the ImageStreamTag from the tag, and then get the full ImageStreamTag name
     // from that tag. This works because the tags used in Che are unique.
-    ImageStreamTag imageStreamTag = getImageStreamTagFromRepo(imageStreamTagName);
+    ImageStreamTag imageStreamTag =
+        getImageStreamTagFromRepo(
+            imageStreamTagName,
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig(),
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace());
     String imageStreamTagPullSpec = imageStreamTag.getMetadata().getName();
 
     // Next we need to get the address of the registry where the ImageStreamTag is stored
@@ -136,14 +142,15 @@
         throw new OpenShiftException(
             "Failed to get the ID of the container running in the OpenShift pod");
       }
-    } catch (IOException | KubernetesClientException e) {
+      containerIdToWorkspaceId.put(containerID, getOriginalCheWorkspaceId(createContainerParams));
+    } catch (Exception e) {
       // Make sure we clean up deployment and service in case of an error -- otherwise Che can end
       // up
       // in an inconsistent state.
       LOG.info("Error while creating Pod, removing deployment");
       LOG.info(e.getMessage());
-      openShiftDeploymentCleaner.cleanDeploymentResources(
-          deploymentName, openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace());
+      imageIdToWorkspaceId.remove(imageForDocker);
+      openShiftDeploymentCleaner.cleanDeploymentResources(deploymentName);
       openShiftClient.resource(imageStreamTag).delete();
       throw e;
     } finally {
