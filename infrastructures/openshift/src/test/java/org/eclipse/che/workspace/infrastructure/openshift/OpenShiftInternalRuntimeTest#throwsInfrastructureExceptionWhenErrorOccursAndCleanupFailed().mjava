@@ -1,13 +1,15 @@
   @Test(expectedExceptions = InfrastructureException.class)
   public void throwsInfrastructureExceptionWhenErrorOccursAndCleanupFailed() throws Exception {
     doNothing().doThrow(InfrastructureException.class).when(project).cleanUp();
-    doThrow(InfrastructureException.class).when(pvcs).get();
+    when(osEnv.getServices()).thenReturn(singletonMap("testService", mock(Service.class)));
+    when(services.create(any())).thenThrow(new InfrastructureException("service creation failed"));
+    doThrow(InfrastructureException.class).when(project).services();
 
     try {
       internalRuntime.internalStart(emptyMap());
     } catch (Exception rethrow) {
-      verify(project, times(1)).cleanUp();
-      verify(project, never()).services();
+      verify(project).cleanUp();
+      verify(project).services();
       verify(project, never()).routes();
       verify(project, never()).pods();
       throw rethrow;
