@@ -10,40 +10,38 @@
   protected void pullImage(
       DockerContainerConfig container, String machineImageName, ProgressMonitor progressMonitor)
       throws InternalInfrastructureException, SourceNotFoundException {
-    DockerMachineSource dockerMachineSource =
-        new DockerMachineSource(new MachineSourceImpl("image").setLocation(container.getImage()));
-    if (dockerMachineSource.getRepository() == null) {
+    final DockerImageIdentifier dockerImageIdentifier;
+    try {
+      dockerImageIdentifier = DockerImageIdentifierParser.parse(container.getImage());
+    } catch (DockerFileException e) {
+      throw new InternalInfrastructureException(
+          "Try to build a docker machine source with an invalid location/content. It is not in the expected format",
+          e);
+    }
+    if (dockerImageIdentifier.getRepository() == null) {
       throw new InternalInfrastructureException(
           format(
               "Machine creation failed. Machine source is invalid. No repository is defined. Found '%s'.",
-              dockerMachineSource));
+              dockerImageIdentifier.getRepository()));
     }
-
     try {
-      boolean isSnapshot =
-          SNAPSHOT_LOCATION_PATTERN.matcher(dockerMachineSource.getLocation()).matches();
-      boolean isImageExistLocally = isDockerImageExistLocally(dockerMachineSource.getRepository());
-      if ((!isSnapshot && (doForcePullImage || !isImageExistLocally))
-          || (isSnapshot && snapshotUseRegistry)) {
+      boolean isImageExistLocally =
+          isDockerImageExistLocally(dockerImageIdentifier.getRepository());
+      if (doForcePullImage || !isImageExistLocally) {
         PullParams pullParams =
-            PullParams.create(dockerMachineSource.getRepository())
-                .withTag(MoreObjects.firstNonNull(dockerMachineSource.getTag(), LATEST_TAG))
-                .withRegistry(dockerMachineSource.getRegistry())
+            PullParams.create(dockerImageIdentifier.getRepository())
+                .withTag(MoreObjects.firstNonNull(dockerImageIdentifier.getTag(), LATEST_TAG))
+                .withRegistry(dockerImageIdentifier.getRegistry())
                 .withAuthConfigs(dockerCredentials.getCredentials());
         docker.pull(pullParams, progressMonitor);
       }
 
-      String fullNameOfPulledImage = dockerMachineSource.getLocation(false);
+      String fullNameOfPulledImage = container.getImage();
       try {
         // tag image with generated name to allow sysadmin recognize it
         docker.tag(TagParams.create(fullNameOfPulledImage, machineImageName));
       } catch (ImageNotFoundException nfEx) {
         throw new SourceNotFoundException(nfEx.getLocalizedMessage(), nfEx);
-      }
-
-      // remove unneeded tag if restoring snapshot from registry
-      if (isSnapshot && snapshotUseRegistry) {
-        docker.removeImage(RemoveImageParams.create(fullNameOfPulledImage).withForce(false));
       }
     } catch (IOException e) {
       throw new InternalInfrastructureException(
