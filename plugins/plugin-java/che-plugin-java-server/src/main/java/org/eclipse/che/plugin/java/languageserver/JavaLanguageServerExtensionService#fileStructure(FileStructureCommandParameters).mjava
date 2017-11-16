@@ -1,0 +1,27 @@
+  private List<ExtendedSymbolInformationDto> fileStructure(FileStructureCommandParameters params) {
+    LOG.info("Requesting files structure for {}", params);
+    params.setUri(LanguageServiceUtils.prefixURI(params.getUri()));
+    CompletableFuture<Object> result =
+        getLanguageServer()
+            .getWorkspaceService()
+            .executeCommand(
+                new ExecuteCommandParams(
+                    Commands.FILE_STRUCTURE_COMMAND, Collections.singletonList(params)));
+    Type targetClassType = new TypeToken<ArrayList<ExtendedSymbolInformation>>() {}.getType();
+    try {
+      List<ExtendedSymbolInformation> symbols =
+          gson.fromJson(gson.toJson(result.get(10, TimeUnit.SECONDS)), targetClassType);
+      return symbols
+          .stream()
+          .map(
+              symbol -> {
+                fixLocation(symbol);
+                return symbol;
+              })
+          .map(ExtendedSymbolInformationDto::new)
+          .collect(Collectors.toList());
+    } catch (JsonSyntaxException | InterruptedException | ExecutionException | TimeoutException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+
