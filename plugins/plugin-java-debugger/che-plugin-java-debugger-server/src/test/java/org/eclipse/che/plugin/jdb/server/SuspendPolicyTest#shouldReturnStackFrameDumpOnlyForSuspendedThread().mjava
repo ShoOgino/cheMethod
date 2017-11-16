@@ -1,0 +1,26 @@
+  @Test(priority = 1)
+  public void shouldReturnStackFrameDumpOnlyForSuspendedThread() throws Exception {
+    debugger.addBreakpoint(
+        new BreakpointImpl(
+            new LocationImpl("/test/src/org/eclipse/SuspendPolicyTest.java", 16, "/test"),
+            true,
+            new BreakpointConfigurationImpl(SuspendPolicy.THREAD)));
+
+    DebuggerEvent debuggerEvent = events.take();
+    assertTrue(debuggerEvent instanceof BreakpointActivatedEvent);
+
+    debugger.resume(new ResumeActionImpl());
+
+    debuggerEvent = events.take();
+    assertTrue(debuggerEvent instanceof SuspendEvent);
+
+    long mainThreadId = findMainThreadId(debugger);
+    for (ThreadState threadState : debugger.getThreadDump()) {
+      if (threadState.getId() == mainThreadId) {
+        assertTrue(threadState.isSuspended());
+      } else {
+        assertFalse(threadState.isSuspended());
+      }
+    }
+  }
+
