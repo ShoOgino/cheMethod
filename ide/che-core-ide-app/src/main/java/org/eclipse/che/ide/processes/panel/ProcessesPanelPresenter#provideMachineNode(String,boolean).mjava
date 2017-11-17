@@ -32,22 +32,23 @@
       return null;
     }
 
-    final ProcessTreeNode newMachineNode =
+    ProcessTreeNode machineNode =
         new ProcessTreeNode(MACHINE_NODE, rootNode, machineName, null, children);
-    newMachineNode.setTerminalServerRunning(
-        isServerRunning(machineName, SERVER_TERMINAL_REFERENCE));
-    // TODO (spi ide): for now SSH server's status is always UNKNOWN.
-    // So check ws-agent's status till SSH server's status fixed.
-    newMachineNode.setSshServerRunning(
-        isServerRunning(machineName, SERVER_WS_AGENT_HTTP_REFERENCE));
+
+    machineNode.setTerminalServerRunning(isServerRunning(machineName, SERVER_TERMINAL_REFERENCE));
+
+    // rely on "wsagent" server's status since "ssh" server's status is always UNKNOWN
+    String wsAgentServerRef = wsAgentServerUtil.getWsAgentHttpServerReference();
+    machineNode.setSshServerRunning(isServerRunning(machineName, wsAgentServerRef));
+
     for (ProcessTreeNode child : children) {
-      child.setParent(newMachineNode);
+      child.setParent(machineNode);
     }
 
-    machineNodes.put(machineName, newMachineNode);
+    machineNodes.put(machineName, machineNode);
 
     // add to children
-    rootNode.getChildren().add(newMachineNode);
+    rootNode.getChildren().add(machineNode);
 
     // update the view
     view.setProcessesData(rootNode);
@@ -55,9 +56,9 @@
     // add output for the machine if it is not exist
     if (!consoles.containsKey(machineName)) {
       OutputConsole outputConsole = commandConsoleFactory.create(machineName);
-      addOutputConsole(machineName, newMachineNode, outputConsole, true);
+      addOutputConsole(machineName, machineNode, outputConsole, true);
     }
 
-    return newMachineNode;
+    return machineNode;
   }
 
