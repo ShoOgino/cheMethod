@@ -1,0 +1,51 @@
+  public Set<RegisteredProject> doImport(
+      Map<String, SourceStorage> projectLocations,
+      boolean rewrite,
+      BiConsumer<String, String> jsonRpcConsumer)
+      throws ServerException, ForbiddenException, UnauthorizedException, ConflictException,
+          NotFoundException {
+    for (Entry<String, SourceStorage> entry : projectLocations.entrySet()) {
+      String wsPath = entry.getKey();
+
+      String parentWsPath = wsPath.substring(0, wsPath.lastIndexOf(separator));
+      if (!fsManager.existsAsDir(parentWsPath)) {
+        throw new NotFoundException("Project parent does not exist: " + parentWsPath);
+      }
+
+      if (fsManager.exists(wsPath) && !rewrite) {
+        throw new ConflictException("Project already exists: " + wsPath);
+      }
+
+      String type = entry.getValue().getType();
+      if (projectImporterRegistry.isRegistered(type)) {
+        throw new NotFoundException("No corresponding importer found: " + type);
+      }
+    }
+
+    Set<RegisteredProject> importedProjects = new HashSet<>();
+    for (Entry<String, SourceStorage> entry : projectLocations.entrySet()) {
+      String wsPath = entry.getKey();
+      SourceStorage sourceStorage = entry.getValue();
+
+      try {
+        RegisteredProject project = doImport(wsPath, sourceStorage, rewrite, jsonRpcConsumer);
+        importedProjects.add(project);
+      } catch (ServerException
+          | ForbiddenException
+          | UnauthorizedException
+          | ConflictException
+          | NotFoundException e) {
+        for (RegisteredProject importedProject : importedProjects) {
+          String path = importedProject.getPath();
+          fsManager.delete(path);
+          projectConfigRegistry.remove(path);
+        }
+        projectSynchronizer.synchronize();
+
+        throw e;
+      }
+    }
+
+    return importedProjects;
+  }
+

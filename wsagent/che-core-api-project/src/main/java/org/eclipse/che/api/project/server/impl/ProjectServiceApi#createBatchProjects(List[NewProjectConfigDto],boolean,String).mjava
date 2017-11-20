@@ -1,0 +1,25 @@
+  public List<ProjectConfigDto> createBatchProjects(
+      List<NewProjectConfigDto> projectConfigs, boolean rewrite, String clientId)
+      throws ConflictException, ForbiddenException, ServerException, NotFoundException, IOException,
+          UnauthorizedException, BadRequestException {
+
+    Set<RegisteredProject> registeredProjects =
+        projectManager.doImport(
+            new HashSet<>(projectConfigs), rewrite, jsonRpcImportConsumer(clientId));
+
+    Set<ProjectConfigDto> result =
+        registeredProjects
+            .stream()
+            .map(ProjectDtoConverter::asDto)
+            .map(this::injectProjectLinks)
+            .collect(toSet());
+
+    registeredProjects
+        .stream()
+        .map(RegisteredProject::getPath)
+        .map(ProjectCreatedEvent::new)
+        .forEach(eventService::publish);
+
+    return new ArrayList<>(result);
+  }
+

@@ -1,0 +1,43 @@
+  void unzip(
+      Path fsPath, InputStream content, boolean overwrite, boolean withParents, boolean skipRoot)
+      throws ServerException {
+    try {
+      if (withParents) {
+        Files.createDirectories(fsPath);
+      }
+
+      try (ZipInputStream zis = new ZipInputStream(content)) {
+        ZipEntry zipEntry = zis.getNextEntry();
+
+        String prefixToSkip = null;
+        if (zipEntry.isDirectory() && skipRoot) {
+          prefixToSkip = zipEntry.getName();
+          zipEntry = zis.getNextEntry();
+        }
+
+        while (zipEntry != null) {
+          String name =
+              prefixToSkip != null
+                  ? zipEntry.getName().replaceFirst(prefixToSkip, "")
+                  : zipEntry.getName();
+          Path path = fsPath.resolve(name);
+
+          if (overwrite) {
+            Files.deleteIfExists(path);
+          }
+          if (zipEntry.isDirectory()) {
+            Files.createDirectory(path);
+          } else {
+            try (FileOutputStream fos = new FileOutputStream(path.toFile())) {
+              IOUtils.copy(zis, fos);
+            }
+          }
+
+          zipEntry = zis.getNextEntry();
+        }
+      }
+    } catch (IOException e) {
+      throw new ServerException("Failed to unzip item " + fsPath, e);
+    }
+  }
+

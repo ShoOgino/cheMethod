@@ -1,48 +1,40 @@
   @Override
   protected void configure() {
-    Multibinder<ProjectImporter> projectImportersMultibinder =
-        newSetBinder(binder(), ProjectImporter.class);
-    projectImportersMultibinder.addBinding().to(ZipProjectImporter.class);
+    bind(ProjectService.class);
+    bind(ProjectImportersService.class);
+    bind(ProjectTypeService.class);
+
+    bind(OnWorkspaceStartProjectInitializer.class);
+    bind(ProjectConfigRegistry.class);
+    bind(ProjectImporterRegistry.class);
+    bind(ProjectHandlerRegistry.class);
+
+    bind(ProjectManager.class).to(ValidatingProjectManager.class);
+    bind(ProjectSynchronizer.class).to(WorkspaceProjectSynchronizer.class);
+    bind(ProjectQualifier.class).to(SimpleProjectQualifier.class);
+    bind(ProjectTypeResolver.class).to(SimpleProjectTypeResolver.class);
+
+    newSetBinder(binder(), ProjectImporter.class).addBinding().to(ZipProjectImporter.class);
 
     newSetBinder(binder(), ProjectTypeDef.class).addBinding().to(BaseProjectType.class);
 
-    Multibinder<ProjectHandler> projectHandlersMultibinder =
-        newSetBinder(binder(), ProjectHandler.class);
-    projectHandlersMultibinder.addBinding().to(CreateBaseProjectTypeHandler.class);
-    projectHandlersMultibinder.addBinding().to(InitBaseProjectTypeHandler.class);
+    Multibinder<ProjectHandler> projectHandlers = newSetBinder(binder(), ProjectHandler.class);
+    projectHandlers.addBinding().to(CreateBaseProjectTypeHandler.class);
+    projectHandlers.addBinding().to(InitBaseProjectTypeHandler.class);
 
-    bind(ProjectRegistry.class).asEagerSingleton();
-    bind(ProjectService.class);
-    bind(ProjectTypeService.class);
-    bind(ProjectImportersService.class);
-    bind(ProjectImportOutputJsonRpcRegistrar.class);
+    install(
+        new FactoryModuleBuilder()
+            .implement(ProjectConfig.class, RegisteredProject.class)
+            .build(RegisteredProjectFactory.class));
 
-    bind(WorkspaceProjectsSyncer.class).to(WorkspaceHolder.class);
+    install(
+        new FactoryModuleBuilder()
+            .implement(ProjectTypes.class, ProjectTypes.class)
+            .build(ProjectTypesFactory.class));
 
-    // configure VFS
-    Multibinder<VirtualFileFilter> filtersMultibinder =
-        newSetBinder(binder(), VirtualFileFilter.class, Names.named("vfs.index_filter"));
-
-    filtersMultibinder.addBinding().to(MediaTypeFilter.class);
-
-    Multibinder<PathMatcher> excludeMatcher =
-        newSetBinder(binder(), PathMatcher.class, Names.named("vfs.index_filter_matcher"));
-    Multibinder<PathMatcher> fileWatcherExcludes =
-        newSetBinder(
-            binder(), PathMatcher.class, Names.named("che.user.workspaces.storage.excludes"));
-
-    bind(SearcherProvider.class).to(FSLuceneSearcherProvider.class);
-    bind(VirtualFileSystemProvider.class).to(LocalVirtualFileSystemProvider.class);
-
-    bind(FileWatcherNotificationHandler.class).to(DefaultFileWatcherNotificationHandler.class);
-
-    bind(EditorChangesTracker.class).asEagerSingleton();
-    bind(EditorWorkingCopyManager.class).asEagerSingleton();
-    bind(FileWatcherIgnoreFileTracker.class).asEagerSingleton();
-
-    configureVfsFilters(excludeMatcher);
-    configureVfsFilters(fileWatcherExcludes);
-    configureVfsEvent();
-    configureTreeWalker();
+    install(
+        new FactoryModuleBuilder()
+            .implement(ProjectServiceApi.class, ProjectServiceApi.class)
+            .build(ProjectServiceApiFactory.class));
   }
 

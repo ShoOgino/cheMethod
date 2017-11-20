@@ -1,0 +1,53 @@
+  @Override
+  public ProjectTypeResolution resolve(ProjectType type, String wsPath) {
+    Map<String, Value> matchAttrs = new HashMap<>();
+    for (Attribute attribute : type.getAttributes()) {
+      String name = attribute.getName();
+      if (attribute.isVariable()) {
+        Variable var = (Variable) attribute;
+        ValueProviderFactory factory = var.getValueProviderFactory();
+        if (factory != null) {
+
+          Value value;
+          String errorMessage = "";
+          try {
+            value = new AttributeValue(factory.newInstance(wsPath).getValues(name));
+          } catch (ValueStorageException e) {
+            value = null;
+            errorMessage = e.getLocalizedMessage();
+          }
+
+          if (value == null || value.isEmpty()) {
+            if (var.isRequired()) {
+              // this PT is not match
+              errorMessage =
+                  errorMessage.isEmpty()
+                      ? format("Value for required attribute %s is not initialized", name)
+                      : errorMessage;
+              return new ProjectTypeResolution(type.getId(), emptyMap(), errorMessage) {
+                @Override
+                public boolean matched() {
+                  return false;
+                }
+              };
+            }
+          } else {
+            // add one more matched attribute
+            matchAttrs.put(name, value);
+          }
+        }
+      }
+    }
+
+    return new ProjectTypeResolution(type.getId(), matchAttrs) {
+      @Override
+      public boolean matched() {
+        // this is due to inability to properly resolve project type
+        // for some configurations (e.g. maven project)
+        // must be fixed in future updates
+        // return !matchAttrs.isEmpty();
+        return true;
+      }
+    };
+  }
+

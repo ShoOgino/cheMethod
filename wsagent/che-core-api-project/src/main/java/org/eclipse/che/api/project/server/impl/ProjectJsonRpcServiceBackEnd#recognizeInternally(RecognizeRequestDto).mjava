@@ -1,0 +1,35 @@
+  private RecognizeResponseDto recognizeInternally(RecognizeRequestDto request)
+      throws ServerException, ConflictException, ForbiddenException, BadRequestException,
+          NotFoundException {
+
+    String projectWsPath = request.getWsPath();
+
+    List<SourceEstimation> mutableSourceEstimations =
+        projectManager
+            .recognize(projectWsPath)
+            .stream()
+            .filter(ProjectTypeResolution::matched)
+            .map(
+                resolution -> {
+                  Map<String, List<String>> attributes =
+                      resolution
+                          .getProvidedAttributes()
+                          .entrySet()
+                          .stream()
+                          .collect(toMap(Entry::getKey, it -> it.getValue().getList()));
+
+                  return newDto(SourceEstimation.class)
+                      .withType(resolution.getType())
+                      .withMatched(resolution.matched())
+                      .withAttributes(attributes);
+                })
+            .collect(toList());
+    List<SourceEstimation> immutableSourceEstimations =
+        Collections.unmodifiableList(mutableSourceEstimations);
+
+    RecognizeResponseDto response = newDto(RecognizeResponseDto.class);
+    response.setSourceEstimations(immutableSourceEstimations);
+
+    return response;
+  }
+

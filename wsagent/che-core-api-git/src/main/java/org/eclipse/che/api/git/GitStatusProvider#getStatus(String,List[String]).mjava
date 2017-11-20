@@ -1,27 +1,25 @@
   @Override
-  public Map<String, VcsStatus> getStatus(String project, List<String> paths)
+  public Map<String, VcsStatus> getStatus(String wsPath, List<String> paths)
       throws ServerException {
     Map<String, VcsStatus> statusMap = new HashMap<>();
     try {
-      String projectPath =
-          projectManagerProvider
-              .get()
-              .getProject(project)
-              .getBaseFolder()
-              .getVirtualFile()
-              .toIoFile()
-              .getAbsolutePath();
-      Status status = gitConnectionFactory.getConnection(projectPath).status(paths);
+      RegisteredProject project =
+          projectManager
+              .getClosest(wsPath)
+              .orElseThrow(() -> new NotFoundException("Can't find project"));
+      String projectFsPath = pathTransformer.transform(project.getPath()).toString();
+      Status status = gitConnectionFactory.getConnection(projectFsPath).status(paths);
       paths.forEach(
           path -> {
+            String itemWsPath = resolve(project.getPath(), path);
             if (status.getUntracked().contains(path)) {
-              statusMap.put("/" + project + "/" + path, VcsStatus.UNTRACKED);
+              statusMap.put(itemWsPath, UNTRACKED);
             } else if (status.getAdded().contains(path)) {
-              statusMap.put("/" + project + "/" + path, VcsStatus.ADDED);
+              statusMap.put(itemWsPath, ADDED);
             } else if (status.getModified().contains(path) || status.getChanged().contains(path)) {
-              statusMap.put("/" + project + "/" + path, VcsStatus.MODIFIED);
+              statusMap.put(itemWsPath, MODIFIED);
             } else {
-              statusMap.put("/" + project + "/" + path, VcsStatus.NOT_MODIFIED);
+              statusMap.put(itemWsPath, NOT_MODIFIED);
             }
           });
 

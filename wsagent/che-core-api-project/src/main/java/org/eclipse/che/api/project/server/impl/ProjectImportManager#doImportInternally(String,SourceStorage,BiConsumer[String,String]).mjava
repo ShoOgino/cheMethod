@@ -1,0 +1,43 @@
+  private RegisteredProject doImportInternally(
+      String wsPath, SourceStorage sourceStorage, BiConsumer<String, String> jsonRpcConsumer)
+      throws ServerException, ForbiddenException, UnauthorizedException, ConflictException,
+          NotFoundException {
+    String type = sourceStorage.getType();
+    ProjectImporter importer = projectImporterRegistry.getOrNull(type);
+
+    fsManager.createDir(wsPath);
+
+    try {
+      importer.doImport(sourceStorage, wsPath, jsonRpcConsumer(wsPath, jsonRpcConsumer));
+    } catch (IOException e) {
+      throw new ServerException(e);
+    }
+
+    if (projectSynchronizer
+        .getAll()
+        .stream()
+        .anyMatch(it -> Objects.equals(it.getPath(), wsPath))) {
+      Set<ProjectConfig> newProjectConfigs =
+          projectSynchronizer
+              .getAll()
+              .stream()
+              .filter(it -> wsPath.startsWith(it.getPath()))
+              .collect(toSet());
+
+      for (ProjectConfig newProjectConfig : newProjectConfigs) {
+        projectConfigRegistry.put(newProjectConfig, true, false);
+      }
+
+      return projectConfigRegistry
+          .get(wsPath)
+          .orElseThrow(() -> new ServerException("Unexpected error"));
+    }
+
+    String name = wsPath.substring(wsPath.lastIndexOf(separator));
+    NewProjectConfigImpl newProjectConfig =
+        new NewProjectConfigImpl(wsPath, name, BaseProjectType.ID, sourceStorage);
+    RegisteredProject registeredProject = projectConfigRegistry.put(newProjectConfig, true, false);
+    projectSynchronizer.synchronize();
+    return registeredProject;
+  }
+

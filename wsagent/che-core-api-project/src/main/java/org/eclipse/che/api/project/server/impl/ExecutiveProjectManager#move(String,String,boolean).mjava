@@ -1,0 +1,25 @@
+  @Override
+  public RegisteredProject move(String srcWsPath, String dstWsPath, boolean overwrite)
+      throws ServerException, NotFoundException, ConflictException, ForbiddenException {
+    fsManager.move(srcWsPath, dstWsPath);
+
+    RegisteredProject oldProjectConfig =
+        projectConfigRegistry.remove(srcWsPath).orElseThrow(IllegalStateException::new);
+
+    String dstName = nameOf(dstWsPath);
+    NewProjectConfig newProjectConfig =
+        new NewProjectConfigImpl(
+            dstWsPath,
+            oldProjectConfig.getType(),
+            oldProjectConfig.getMixins(),
+            dstName,
+            oldProjectConfig.getDescription(),
+            oldProjectConfig.getAttributes(),
+            emptyMap(),
+            oldProjectConfig.getSource());
+
+    RegisteredProject movedProject = projectConfigRegistry.put(newProjectConfig, true, false);
+    fireInitHandlers(movedProject);
+    return movedProject;
+  }
+

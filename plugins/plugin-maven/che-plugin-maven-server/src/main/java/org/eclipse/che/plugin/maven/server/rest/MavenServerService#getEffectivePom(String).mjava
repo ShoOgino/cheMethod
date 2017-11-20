@@ -12,22 +12,24 @@
   @Produces(TEXT_XML)
   public String getEffectivePom(@QueryParam("projectpath") String projectPath)
       throws ServerException, NotFoundException, ForbiddenException {
-    RegisteredProject project = projectRegistry.getProject(projectPath);
-    if (project == null) {
-      throw new NotFoundException("Project " + projectPath + " doesn't exist");
-    }
+    String projectWsPath = absolutize(projectPath);
+
+    RegisteredProject project =
+        projectManager
+            .get(projectWsPath)
+            .orElseThrow(() -> new NotFoundException("Can't find project: " + projectWsPath));
 
     MavenServerWrapper mavenServer =
         wrapperManager.getMavenServer(MavenWrapperManager.ServerType.DOWNLOAD);
 
     try {
-      mavenServer.customize(projectManager.copyWorkspaceCache(), terminal, notifier, false, false);
-      VirtualFileEntry pomFile = project.getBaseFolder().getChild("pom.xml");
-      if (pomFile == null) {
+      mavenServer.customize(
+          mavenProjectManager.copyWorkspaceCache(), terminal, notifier, false, false);
+      String pomWsPath = resolve(projectWsPath, "pom.xml");
+      if (!fsManager.existsAsFile(pomWsPath)) {
         throw new NotFoundException("pom.xml doesn't exist");
       }
-      return mavenServer.getEffectivePom(
-          pomFile.getVirtualFile().toIoFile(), Collections.emptyList(), Collections.emptyList());
+      return mavenServer.getEffectivePom(fsManager.toIoFile(pomWsPath), emptyList(), emptyList());
     } finally {
       wrapperManager.release(mavenServer);
     }

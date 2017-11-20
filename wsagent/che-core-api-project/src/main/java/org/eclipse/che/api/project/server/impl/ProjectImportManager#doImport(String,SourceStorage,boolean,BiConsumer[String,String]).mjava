@@ -1,0 +1,36 @@
+  public RegisteredProject doImport(
+      String wsPath,
+      SourceStorage sourceStorage,
+      boolean rewrite,
+      BiConsumer<String, String> jsonRpcConsumer)
+      throws ServerException, ForbiddenException, UnauthorizedException, ConflictException,
+          NotFoundException {
+    String type = sourceStorage.getType();
+
+    String parentWsPath = parentOf(wsPath);
+    if (!fsManager.existsAsDir(parentWsPath)) {
+      throw new NotFoundException("Project parent does not exist: " + parentWsPath);
+    }
+
+    if (fsManager.exists(wsPath) && !rewrite) {
+      throw new ConflictException("Project already exists: " + wsPath);
+    }
+
+    if (!projectImporterRegistry.isRegistered(type)) {
+      throw new NotFoundException("No corresponding importer found: " + type);
+    }
+    try {
+      return doImportInternally(wsPath, sourceStorage, jsonRpcConsumer);
+    } catch (ServerException
+        | ForbiddenException
+        | UnauthorizedException
+        | ConflictException
+        | NotFoundException e) {
+      fsManager.delete(wsPath);
+      projectConfigRegistry.remove(wsPath);
+      projectSynchronizer.synchronize();
+
+      throw e;
+    }
+  }
+
