@@ -115,6 +115,18 @@
       commitCommand.setInsertChangeId(isGerritSupportConfigured);
       RevCommit result = commitCommand.call();
 
+      Map<String, List<EditedRegion>> modifiedFiles = new HashMap<>();
+      for (String file : status.getChanged()) {
+        modifiedFiles.put(file, getEditedRegions(file));
+      }
+      // Need to fire this event because with the help of the file watchers we can not detect JGit's
+      // commit operation completion.
+      eventService.publish(
+          newDto(StatusChangedEventDto.class)
+              .withStatus(status(emptyList()))
+              .withModifiedFiles(modifiedFiles)
+              .withProjectName(repository.getWorkTree().getName()));
+
       GitUser gitUser = newDto(GitUser.class).withName(committerName).withEmail(committerEmail);
 
       return newDto(Revision.class)
