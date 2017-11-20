@@ -1,24 +1,13 @@
   private Promise<Optional<Resource>> findResource(final Path absolutePath, boolean quiet) {
-    return ps.getItem(absolutePath)
-        .thenPromise(
-            itemReference -> {
-              final Resource resource = newResourceFrom(itemReference);
+    String[] segments = absolutePath.segments();
 
-              store.register(resource);
+    Promise<Optional<Resource>> chain = promises.resolve(null);
 
-              if (resource.isProject()) {
-                inspectProject(resource.asProject());
-              }
+    for (int i = 0; i <= segments.length; i++) {
+      Path pathToRetrieve = absolutePath.removeLastSegments(segments.length - i);
+      chain = chain.thenPromise(__ -> doFindResource(pathToRetrieve));
+    }
 
-              return promises.resolve(fromNullable(resource));
-            })
-        .catchErrorPromise(
-            arg -> {
-              if (!quiet) {
-                throw new IllegalStateException(arg.getCause());
-              }
-
-              return promises.resolve(absent());
-            });
+    return chain;
   }
 
