@@ -1,0 +1,25 @@
+  @Test
+  public void shouldUseNormalizedServersWhileInternalEnvironmentCreation() throws Exception {
+    // given
+    ServerConfigImpl server = new ServerConfigImpl("8080", "http", "/api");
+
+    Map<String, ServerConfig> normalizedServers =
+        ImmutableMap.of("server", mock(ServerConfig.class));
+    doReturn(normalizedServers).when(environmentFactory).normalizeServers(any());
+
+    ImmutableMap<String, ServerConfigImpl> sourceServers = ImmutableMap.of("server", server);
+    MachineConfigImpl machineConfig = new MachineConfigImpl(null, sourceServers, null, null);
+
+    EnvironmentImpl env =
+        new EnvironmentImpl(null, ImmutableMap.of("machine", machineConfig), null);
+
+    // when
+    environmentFactory.create(env);
+
+    // then
+    verify(environmentFactory).normalizeServers(sourceServers);
+    verify(environmentFactory).doCreate(any(), machinesCaptor.capture(), any());
+    Map<String, InternalMachineConfig> internalMachines = machinesCaptor.getValue();
+    assertEquals(internalMachines.get("machine").getServers(), normalizedServers);
+  }
+

@@ -1,0 +1,79 @@
+  @Override
+  protected OpenShiftEnvironment doCreate(
+      InternalRecipe recipe,
+      Map<String, InternalMachineConfig> machines,
+      List<Warning> sourceWarnings)
+      throws InfrastructureException, ValidationException {
+    List<Warning> warnings = new ArrayList<>();
+    if (sourceWarnings != null) {
+      warnings.addAll(sourceWarnings);
+    }
+    String content = recipe.getContent();
+    String contentType = recipe.getContentType();
+    checkNotNull(contentType, "OpenShift Recipe content type should not be null");
+
+    switch (contentType) {
+      case "application/x-yaml":
+      case "text/yaml":
+      case "text/x-yaml":
+        break;
+      default:
+        throw new ValidationException(
+            "Provided environment recipe content type '"
+                + contentType
+                + "' is unsupported. Supported values are: "
+                + "application/x-yaml, text/yaml, text/x-yaml");
+    }
+
+    KubernetesList list;
+    try (OpenShiftClient client = clientFactory.create()) {
+      list = client.lists().load(new ByteArrayInputStream(content.getBytes())).get();
+    }
+
+    Map<String, Pod> pods = new HashMap<>();
+    Map<String, Service> services = new HashMap<>();
+    Map<String, PersistentVolumeClaim> pvcs = new HashMap<>();
+    boolean isAnyRoutePresent = false;
+    boolean isAnyPVCPresent = false;
+    for (HasMetadata object : list.getItems()) {
+      if (object instanceof DeploymentConfig) {
+        throw new ValidationException("Supporting of deployment configs is not implemented yet.");
+      } else if (object instanceof Pod) {
+        Pod pod = (Pod) object;
+        pods.put(pod.getMetadata().getName(), pod);
+      } else if (object instanceof Service) {
+        Service service = (Service) object;
+        services.put(service.getMetadata().getName(), service);
+      } else if (object instanceof Route) {
+        isAnyRoutePresent = true;
+      } else if (object instanceof PersistentVolumeClaim) {
+        isAnyPVCPresent = true;
+      } else {
+        throw new ValidationException(
+            format("Found unknown object type '%s'", object.getMetadata()));
+      }
+    }
+
+    if (isAnyRoutePresent) {
+      warnings.add(new WarningImpl(ROUTE_IGNORED_WARNING_CODE, ROUTES_IGNORED_WARNING_MESSAGE));
+    }
+
+    if (isAnyPVCPresent) {
+      warnings.add(new WarningImpl(PVC_IGNORED_WARNING_CODE, PVC_IGNORED_WARNING_MESSAGE));
+    }
+
+    OpenShiftEnvironment osEnv =
+        OpenShiftEnvironment.builder()
+            .setInternalRecipe(recipe)
+            .setMachines(machines)
+            .setWarnings(warnings)
+            .setPods(pods)
+            .setServices(services)
+            .setPersistentVolumeClaims(pvcs)
+            .build();
+
+    envValidator.validate(osEnv);
+
+    return osEnv;
+  }
+
