@@ -1,0 +1,31 @@
+  private ProcessHandler startTestProcess(TestExecutionContext context) throws ExecutionException {
+    File suiteFile = createSuite(context);
+    if (suiteFile == null) {
+      throw new RuntimeException("Can't create TestNG suite xml file.");
+    }
+
+    JavaParameters parameters = new JavaParameters();
+    parameters.setJavaExecutable(System.getProperty("java.home") + "/bin/java");
+    parameters.setMainClassName("org.testng.CheTestNGLauncher");
+    String outputDirectory = getOutputDirectory(context);
+    parameters.getParametersList().add("-d", outputDirectory);
+    parameters.setWorkingDirectory(workspacePath + context.getProjectPath());
+    List<String> classPath = new ArrayList<>();
+    List<String> resolvedClassPaths = getResolvedClassPaths(context);
+    classPath.addAll(resolvedClassPaths);
+    classPath.add(ClasspathUtil.getJarPathForClass(org.testng.CheTestNG.class));
+    classPath.add(ClasspathUtil.getJarPathForClass(JCommander.class));
+    parameters.getClassPath().addAll(classPath);
+
+    parameters.getParametersList().add("-suiteFile", suiteFile.getAbsolutePath());
+    if (context.isDebugModeEnable()) {
+      generateDebuggerPort();
+      parameters.getVmParameters().add("-Xdebug");
+      parameters
+          .getVmParameters()
+          .add("-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=" + getDebugPort());
+    }
+    CommandLine command = parameters.createCommand();
+    return new ProcessHandler(command.createProcess());
+  }
+
