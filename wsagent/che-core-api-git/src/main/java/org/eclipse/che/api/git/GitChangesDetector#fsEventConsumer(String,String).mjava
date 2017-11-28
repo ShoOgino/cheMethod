@@ -1,16 +1,13 @@
-  private Consumer<String> transmitConsumer(String wsPath) {
-    return id -> {
+  private Consumer<String> fsEventConsumer(String endpointId, String wsPath) {
+    return it -> {
       try {
         String normalizedPath = wsPath.startsWith("/") ? wsPath.substring(1) : wsPath;
         String itemPath = normalizedPath.substring(normalizedPath.indexOf("/") + 1);
-
-        RegisteredProject project =
-            projectManager
-                .getClosest(wsPath)
-                .orElseThrow(() -> new NotFoundException("Can't find project"));
-
-        String projectWsPath = project.getPath();
-        String projectFsPath = pathTransformer.transform(projectWsPath).toString();
+        String projectName = normalizedPath.split("/")[0];
+        if (!projectManager.isRegistered(absolutize(projectName))) {
+          throw new NotFoundException("Project '" + projectName + "' is not found");
+        }
+        String projectFsPath = pathTransformer.transform(projectName).toString();
         GitConnection gitConnection = gitConnectionFactory.getConnection(projectFsPath);
         Status status = gitConnection.status(singletonList(itemPath));
         FileChangedEventDto.Status fileStatus;
@@ -27,7 +24,7 @@
 
         transmitter
             .newRequest()
-            .endpointId(id)
+            .endpointId(endpointId)
             .methodName(OUTGOING_METHOD)
             .paramsAsDto(
                 newDto(FileChangedEventDto.class)
