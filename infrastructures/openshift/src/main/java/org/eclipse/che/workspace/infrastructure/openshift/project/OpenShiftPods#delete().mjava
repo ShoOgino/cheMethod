@@ -5,13 +5,15 @@
    * pods will be killed.
    *
    * @throws InfrastructureException when {@link Thread} is interrupted while command executing
+   * @throws InfrastructureException when pods removal timeout is reached
    * @throws InfrastructureException when any other exception occurs
    */
   public void delete() throws InfrastructureException {
-    try (OpenShiftClient client = clientFactory.create()) {
+    try {
       // pods are removed with some delay related to stopping of containers. It is need to wait them
       List<Pod> pods =
-          client
+          clientFactory
+              .create()
               .pods()
               .inNamespace(namespace)
               .withLabel(CHE_WORKSPACE_ID_LABEL, workspaceId)
@@ -24,7 +26,7 @@
       final CompletableFuture<Void> removed =
           allOf(deleteFutures.toArray(new CompletableFuture[deleteFutures.size()]));
       try {
-        removed.get();
+        removed.get(POD_REMOVAL_TIMEOUT_MIN, TimeUnit.MINUTES);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new InfrastructureException(
@@ -32,6 +34,8 @@
       } catch (ExecutionException e) {
         throw new InfrastructureException(
             "Error occurred while waiting for pod removing. " + e.getMessage());
+      } catch (TimeoutException ex) {
+        throw new InfrastructureException("Pods removal timeout reached " + ex.getMessage());
       }
     } catch (KubernetesClientException e) {
       throw new InfrastructureException(e.getMessage(), e);
