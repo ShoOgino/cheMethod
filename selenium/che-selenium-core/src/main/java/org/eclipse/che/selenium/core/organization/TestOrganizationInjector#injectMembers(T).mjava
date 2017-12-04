@@ -1,0 +1,30 @@
+  @Override
+  public void injectMembers(T instance) {
+    Injector injector = injectorProvider.get();
+
+    String name = generateName();
+    String parentPrefix = injectTestOrganization.parentPrefix();
+
+    TestOrganizationServiceClient testOrganizationServiceClient =
+        injector.getInstance(Key.get(TestOrganizationServiceClient.class, Names.named("admin")));
+
+    TestOrganization testOrganization;
+    try {
+      if (parentPrefix.isEmpty()) {
+        testOrganization = new TestOrganization(name, testOrganizationServiceClient);
+      } else {
+        String parentId = findInjectedOrganization(instance, parentPrefix);
+        testOrganization = new TestOrganization(name, parentId, testOrganizationServiceClient);
+      }
+
+      field.setAccessible(true);
+      field.set(instance, testOrganization);
+    } catch (Exception e) {
+      throw new RuntimeException(
+          format(
+              "Failed to instantiate organization with name '%s' in class '%s'",
+              injectTestOrganization.prefix(), instance.getClass().getName()),
+          e);
+    }
+  }
+
