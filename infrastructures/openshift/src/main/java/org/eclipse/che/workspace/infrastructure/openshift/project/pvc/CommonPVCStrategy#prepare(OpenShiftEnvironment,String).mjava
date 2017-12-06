@@ -2,12 +2,8 @@
   public void prepare(OpenShiftEnvironment osEnv, String workspaceId)
       throws InfrastructureException {
     Set<String> subPaths = new HashSet<>();
-    osEnv.getPersistentVolumeClaims().put(pvcName, newPVC(pvcName, pvcAccessMode, pvcQuantity));
-    factory
-        .create(workspaceId)
-        .persistentVolumeClaims()
-        .createIfNotExist(osEnv.getPersistentVolumeClaims().values());
-
+    final PersistentVolumeClaim pvc = newPVC(pvcName, pvcAccessMode, pvcQuantity);
+    osEnv.getPersistentVolumeClaims().put(pvcName, pvc);
     for (Pod pod : osEnv.getPods().values()) {
       PodSpec podSpec = pod.getSpec();
       for (Container container : podSpec.getContainers()) {
@@ -17,7 +13,9 @@
       }
     }
     if (!subPaths.isEmpty()) {
-      pvcSubPathHelper.createDirs(workspaceId, subPaths.toArray(new String[subPaths.size()]));
+      pvc.setAdditionalProperty(
+          format(SUBPATHS_PROPERTY_FMT, workspaceId),
+          subPaths.toArray(new String[subPaths.size()]));
     }
   }
 
