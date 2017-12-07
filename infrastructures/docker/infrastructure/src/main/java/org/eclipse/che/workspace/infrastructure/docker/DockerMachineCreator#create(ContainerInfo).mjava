@@ -1,5 +1,5 @@
   /** Creates new docker machine instance from the full container description. */
-  public DockerMachine create(ContainerInfo container) {
+  public DockerMachine create(ContainerInfo container) throws InfrastructureException {
     NetworkSettings networkSettings = container.getNetworkSettings();
     String hostname;
     if (internalDockerIP != null) {
@@ -7,14 +7,15 @@
     } else {
       hostname = networkSettings.getGateway();
     }
-    Map<String, ServerConfig> configs =
-        Labels.newDeserializer(container.getConfig().getLabels()).servers();
+    Deserializer deserializer = Labels.newDeserializer(container.getConfig().getLabels());
+    Map<String, ServerConfig> configs = deserializer.servers();
 
     return new DockerMachine(
         container.getId(),
         container.getConfig().getImage(),
         docker,
-        new ServersMapper(hostname).map(networkSettings.getPorts(), configs),
+        new ServersMapper(hostname, deserializer.machineName())
+            .map(networkSettings.getPorts(), configs),
         registry,
         dockerMachineStopDetector);
   }
