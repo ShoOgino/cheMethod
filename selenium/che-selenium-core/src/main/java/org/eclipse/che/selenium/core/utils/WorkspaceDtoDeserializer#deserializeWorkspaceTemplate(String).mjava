@@ -1,25 +1,21 @@
   public WorkspaceConfigDto deserializeWorkspaceTemplate(String templateName) {
     requireNonNull(templateName);
 
-    String pathToTemplate =
-        TestWorkspaceImpl.class
-            .getResource(format("/templates/workspace/%s/%s", infrastructure, templateName))
-            .getPath();
-
-    File templateFile = new File(pathToTemplate);
-    if (!templateFile.isFile()) {
-      throw new RuntimeException(
-          format(
-              "Workspace template %s file %s doesn't exist or not a file",
-              templateName, templateFile));
-    }
-
-    String json;
     try {
-      json = FileUtils.readFileToString(templateFile, Charset.forName("UTF-8"));
-    } catch (IOException e) {
-      throw new RuntimeException("Could not read template " + templateName);
+
+      URL url =
+          Resources.getResource(
+              WorkspaceDtoDeserializer.class,
+              format("/templates/workspace/%s/%s", infrastructure, templateName));
+      return DtoFactory.getInstance()
+          .createDtoFromJson(Resources.toString(url, Charsets.UTF_8), WorkspaceConfigDto.class);
+    } catch (IOException | IllegalArgumentException | JsonSyntaxException e) {
+      LOG.error(
+          "Fail to read workspace template {} for infrastructure {} because {} ",
+          templateName,
+          infrastructure,
+          e.getMessage());
+      throw new RuntimeException(e.getLocalizedMessage(), e);
     }
-    return DtoFactory.getInstance().createDtoFromJson(json, WorkspaceConfigDto.class);
   }
 
