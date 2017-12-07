@@ -1,28 +1,31 @@
   @NotNull
   @Override
   protected Promise<List<Node>> getChildrenImpl() {
+    ExternalLibrariesParameters params = dtoFactory.createDto(ExternalLibrariesParameters.class);
+    params.setProjectUri(project.toString());
+    params.setNodeId(getData().getId());
     return service
-        .getLibraryChildren(project, getData().getId())
+        .libraryChildren(params)
         .then(
-            new Function<List<JarEntry>, List<Node>>() {
-              @Override
-              public List<Node> apply(List<JarEntry> entries) throws FunctionException {
-                List<Node> nodes = new ArrayList<>();
+            (Function<List<JarEntry>, List<Node>>)
+                entries -> {
+                  List<Node> nodes = new ArrayList<>();
 
-                for (JarEntry entry : entries) {
-                  if (entry.getType() == FOLDER || entry.getType() == PACKAGE) {
-                    nodes.add(
-                        nodeFactory.newJarFolderNode(
-                            entry, getData().getId(), project, getSettings()));
-                  } else if (entry.getType() == FILE || entry.getType() == CLASS_FILE) {
-                    nodes.add(
-                        nodeFactory.newJarFileNode(
-                            entry, getData().getId(), project, getSettings()));
+                  for (JarEntry entry : entries) {
+                    if (FOLDER.name().equals(entry.getEntryType())
+                        || PACKAGE.name().equals(entry.getEntryType())) {
+                      nodes.add(
+                          nodeFactory.newJarFolderNode(
+                              entry, getData().getId(), project, getSettings()));
+                    } else if (FILE.name().equals(entry.getEntryType())
+                        || CLASS_FILE.name().equals(entry.getEntryType())) {
+                      nodes.add(
+                          nodeFactory.newJarFileNode(
+                              entry, getData().getId(), project, getSettings()));
+                    }
                   }
-                }
 
-                return nodes;
-              }
-            });
+                  return nodes;
+                });
   }
 

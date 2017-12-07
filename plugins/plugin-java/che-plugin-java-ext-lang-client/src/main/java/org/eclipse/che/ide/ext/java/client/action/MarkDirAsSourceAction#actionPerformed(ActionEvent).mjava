@@ -8,24 +8,18 @@
 
     checkState(project.isPresent());
 
-    classpathService
-        .getClasspath(project.get().getLocation().toString())
+    extensionService
+        .classpathTree(project.get().getLocation().toString())
         .then(
-            new Operation<List<ClasspathEntryDto>>() {
-              @Override
-              public void apply(List<ClasspathEntryDto> arg) throws OperationException {
-                classpathResolver.resolveClasspathEntries(arg);
-                classpathResolver.getSources().add(resource.getLocation().toString());
-                classpathResolver.updateClasspath();
-              }
+            classpathEntries -> {
+              classpathResolver.resolveClasspathEntries(classpathEntries);
+              classpathResolver.getSources().add(resource.getLocation().toString());
+              classpathResolver.updateClasspath();
             })
         .catchError(
-            new Operation<PromiseError>() {
-              @Override
-              public void apply(PromiseError arg) throws OperationException {
-                notificationManager.notify(
-                    "Can't get classpath", arg.getMessage(), FAIL, EMERGE_MODE);
-              }
+            error -> {
+              notificationManager.notify(
+                  "Can't get classpath", error.getMessage(), FAIL, EMERGE_MODE);
             });
   }
 
