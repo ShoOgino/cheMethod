@@ -1,0 +1,22 @@
+  @Override
+  public void provision(OpenShiftEnvironment osEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+    final String workspaceId = identity.getWorkspaceId();
+    final Set<String> subPaths = new HashSet<>();
+    final PersistentVolumeClaim pvc = newPVC(pvcName, pvcAccessMode, pvcQuantity);
+    osEnv.getPersistentVolumeClaims().put(pvcName, pvc);
+    for (Pod pod : osEnv.getPods().values()) {
+      PodSpec podSpec = pod.getSpec();
+      for (Container container : podSpec.getContainers()) {
+        String machineName = Names.machineName(pod, container);
+        InternalMachineConfig machineConfig = osEnv.getMachines().get(machineName);
+        addMachineVolumes(workspaceId, subPaths, podSpec, container, machineConfig);
+      }
+    }
+    if (preCreateDirs && !subPaths.isEmpty()) {
+      pvc.setAdditionalProperty(
+          format(SUBPATHS_PROPERTY_FMT, workspaceId),
+          subPaths.toArray(new String[subPaths.size()]));
+    }
+  }
+
