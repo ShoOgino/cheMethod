@@ -2,7 +2,7 @@
       final Resource source, final Path destination, final boolean force) {
     checkArgument(!source.getLocation().isRoot(), "Workspace root is not allowed to be moved");
 
-    return findResource(destination, true)
+    return findResource(destination)
         .thenPromise(
             resource -> {
               checkState(
@@ -26,80 +26,34 @@
                                 destination.lastSegment(),
                                 force)
                             .thenPromise(
-                                ignored -> {
-                                  if (source.isProject()
-                                      && source.getLocation().segmentCount() == 1) {
-                                    return ps.getProjects()
+                                ignored ->
+                                    findResource(destination)
                                         .then(
-                                            (Function<List<ProjectConfigDto>, Resource>)
-                                                updatedConfigs -> {
+                                            (Function<Optional<Resource>, Resource>)
+                                                movedResource -> {
+                                                  if (movedResource.isPresent()) {
+                                                    eventBus.fireEvent(
+                                                        new ResourceChangedEvent(
+                                                            new ResourceDeltaImpl(
+                                                                movedResource.get(),
+                                                                source,
+                                                                ADDED
+                                                                    | MOVED_FROM
+                                                                    | MOVED_TO
+                                                                    | DERIVED)));
+
+                                                    clientServerEventService
+                                                        .sendFileTrackingResumeEvent();
+
+                                                    return movedResource.get();
+                                                  }
+
                                                   clientServerEventService
                                                       .sendFileTrackingResumeEvent();
-
-                                                  // cache new configs
-                                                  cachedConfigs =
-                                                      updatedConfigs.toArray(
-                                                          new ProjectConfigDto
-                                                              [updatedConfigs.size()]);
-                                                  store.dispose(source.getLocation(), true);
-
-                                                  for (ProjectConfigDto projectConfigDto :
-                                                      cachedConfigs) {
-                                                    if (projectConfigDto
-                                                        .getPath()
-                                                        .equals(destination.toString())) {
-                                                      final Project newResource =
-                                                          resourceFactory.newProjectImpl(
-                                                              projectConfigDto,
-                                                              ResourceManager.this);
-                                                      store.register(newResource);
-                                                      eventBus.fireEvent(
-                                                          new ResourceChangedEvent(
-                                                              new ResourceDeltaImpl(
-                                                                  newResource,
-                                                                  source,
-                                                                  ADDED
-                                                                      | MOVED_FROM
-                                                                      | MOVED_TO
-                                                                      | DERIVED)));
-
-                                                      return newResource;
-                                                    }
-                                                  }
 
                                                   throw new IllegalStateException(
                                                       "Resource not found");
-                                                });
-                                  }
-
-                                  return findResource(destination, false)
-                                      .then(
-                                          (Function<Optional<Resource>, Resource>)
-                                              movedResource -> {
-                                                if (movedResource.isPresent()) {
-                                                  eventBus.fireEvent(
-                                                      new ResourceChangedEvent(
-                                                          new ResourceDeltaImpl(
-                                                              movedResource.get(),
-                                                              source,
-                                                              ADDED
-                                                                  | MOVED_FROM
-                                                                  | MOVED_TO
-                                                                  | DERIVED)));
-
-                                                  clientServerEventService
-                                                      .sendFileTrackingResumeEvent();
-
-                                                  return movedResource.get();
-                                                }
-
-                                                clientServerEventService
-                                                    .sendFileTrackingResumeEvent();
-
-                                                throw new IllegalStateException(
-                                                    "Resource not found");
-                                              });
-                                });
+                                                }));
                       });
             });
   }
