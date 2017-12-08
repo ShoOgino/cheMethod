@@ -1,0 +1,28 @@
+  public Location findResourcesByFqn(String fqn, int lineNumber) {
+    CompletableFuture<Object> result =
+        getLanguageServer()
+            .getWorkspaceService()
+            .executeCommand(
+                new ExecuteCommandParams(
+                    Commands.FIND_RESOURCES_BY_FQN,
+                    ImmutableList.of(fqn, String.valueOf(lineNumber))));
+
+    try {
+      List<Either<String, ResourceLocation>> location =
+          gson.fromJson(
+              gson.toJson(result.get(10, TimeUnit.SECONDS)),
+              new com.google.common.reflect.TypeToken<
+                  List<Either<String, ResourceLocation>>>() {}.getType());
+      Either<String, ResourceLocation> l = location.get(0);
+
+      if (l.isLeft()) {
+        return new LocationImpl(l.getLeft(), lineNumber, null);
+      } else {
+        return new LocationImpl(
+            l.getRight().getFqn(), lineNumber, true, l.getRight().getLibId(), null);
+      }
+    } catch (JsonSyntaxException | InterruptedException | ExecutionException | TimeoutException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+

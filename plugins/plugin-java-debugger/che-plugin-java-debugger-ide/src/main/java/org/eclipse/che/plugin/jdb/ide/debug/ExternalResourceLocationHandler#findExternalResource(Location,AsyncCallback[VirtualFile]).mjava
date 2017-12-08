@@ -3,10 +3,21 @@
 
     final String className = extractOuterClassFqn(location.getTarget());
     final String libId = location.getExternalResourceId();
-    final Path projectPath = new Path(location.getResourceProjectPath());
+
+    Resource resource = appContext.getResource();
+    if (resource == null) {
+      callback.onFailure(new IllegalStateException("Resource is undefined"));
+      return;
+    }
+
+    Project project = resource.getProject();
+    if (project == null) {
+      callback.onFailure(new IllegalStateException("Project is undefined"));
+      return;
+    }
 
     ExternalLibrariesParameters params = dtoFactory.createDto(ExternalLibrariesParameters.class);
-    params.setProjectUri(location.getResourceProjectPath());
+    params.setProjectUri(project.getPath());
     params.setNodeId(libId);
     params.setNodePath(className);
     service
@@ -14,7 +25,8 @@
         .then(
             jarEntry -> {
               final JarFileNode file =
-                  nodeFactory.newJarFileNode(jarEntry, libId, projectPath, null);
+                  nodeFactory.newJarFileNode(
+                      jarEntry, libId, Path.valueOf(project.getPath()), null);
               callback.onSuccess(file);
             })
         .catchError(
