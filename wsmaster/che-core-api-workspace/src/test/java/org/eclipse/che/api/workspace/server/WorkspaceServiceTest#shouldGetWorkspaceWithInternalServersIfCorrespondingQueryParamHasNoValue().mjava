@@ -1,0 +1,51 @@
+  @Test
+  public void shouldGetWorkspaceWithInternalServersIfCorrespondingQueryParamHasNoValue()
+      throws Exception {
+    // given
+    WorkspaceImpl workspace = createWorkspace(createConfigDto());
+    String externalServerKey = "server2";
+    String internalServerKey = "server1";
+    ServerImpl externalServer = createExternalServer();
+    ServerImpl internalServer = createInternalServer();
+    Map<String, Server> servers =
+        ImmutableMap.of(
+            internalServerKey, createInternalServer(), externalServerKey, externalServer);
+    Map<String, Machine> machines =
+        singletonMap("machine1", new MachineImpl(singletonMap("key", "value"), servers));
+    workspace.setRuntime(new RuntimeImpl("activeEnv", machines, "user123"));
+    when(wsManager.getWorkspace(workspace.getId())).thenReturn(workspace);
+
+    Map<String, MachineDto> expected =
+        singletonMap(
+            "machine1",
+            newDto(MachineDto.class)
+                .withAttributes(singletonMap("key", "value"))
+                .withServers(
+                    ImmutableMap.of(
+                        externalServerKey,
+                        newDto(ServerDto.class)
+                            .withUrl(externalServer.getUrl())
+                            .withStatus(externalServer.getStatus())
+                            .withAttributes(externalServer.getAttributes()),
+                        internalServerKey,
+                        newDto(ServerDto.class)
+                            .withUrl(createInternalServer().getUrl())
+                            .withStatus(internalServer.getStatus())
+                            .withAttributes(internalServer.getAttributes()))));
+
+    // when
+    Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .queryParameter("includeInternalServers")
+            .when()
+            .get(SECURE_PATH + "/workspace/" + workspace.getId());
+
+    // then
+    assertEquals(response.getStatusCode(), 200);
+    RuntimeDto retrievedRuntime = unwrapDto(response, WorkspaceDto.class).getRuntime();
+    assertNotNull(retrievedRuntime);
+    assertEquals(expected, retrievedRuntime.getMachines());
+  }
+
