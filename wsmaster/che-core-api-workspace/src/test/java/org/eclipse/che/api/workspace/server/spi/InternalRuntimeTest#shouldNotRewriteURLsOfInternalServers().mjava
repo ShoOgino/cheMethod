@@ -1,0 +1,30 @@
+  @Test
+  public void shouldNotRewriteURLsOfInternalServers() throws Exception {
+    // given
+    ServerImpl internalServer =
+        createServer(singletonMap(ServerConfig.INTERNAL_SERVER_ATTRIBUTE, "true"));
+    ServerImpl regularServer = createServer(RUNNING);
+    MachineImpl machineWithInternalServer =
+        new MachineImpl(
+            createAttributes(),
+            ImmutableMap.of("server1", regularServer, "server2", internalServer));
+    ImmutableMap<String, MachineImpl> internalMachines =
+        ImmutableMap.of("m1", createMachine(), "m2", machineWithInternalServer);
+    ImmutableMap<String, MachineImpl> expected =
+        ImmutableMap.of(
+            "m1",
+            rewriteURLs(createMachine()),
+            "m2",
+            new MachineImpl(
+                createAttributes(),
+                ImmutableMap.of("server1", rewriteURL(regularServer), "server2", internalServer)));
+    setRunningRuntime();
+    doReturn(internalMachines).when(internalRuntime).getInternalMachines();
+
+    // when
+    Map<String, ? extends Machine> actual = internalRuntime.getMachines();
+
+    // then
+    assertEquals(actual, expected);
+  }
+
