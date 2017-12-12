@@ -10,29 +10,28 @@
         Collections.singletonMap(OPENSHIFT_DEPLOYMENT_LABEL, deploymentName);
     List<ServicePort> ports = KubernetesService.getServicePortsFrom(exposedPorts, portsToRefName);
 
-    try (OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
-      Service service =
-          openShiftClient
-              .services()
-              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-              .createNew()
-              .withNewMetadata()
-              .withName(serviceName)
-              .withAnnotations(KubernetesLabelConverter.labelsToNames(additionalLabels))
-              .endMetadata()
-              .withNewSpec()
-              .withSelector(selector)
-              .withPorts(ports)
-              .endSpec()
-              .done();
+    DefaultKubernetesClient kubeClient =
+        ocFactory.newKubeClient(
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+    Service service =
+        kubeClient
+            .services()
+            .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+            .createNew()
+            .withNewMetadata()
+            .withName(serviceName)
+            .withAnnotations(KubernetesLabelConverter.labelsToNames(additionalLabels))
+            .endMetadata()
+            .withNewSpec()
+            .withSelector(selector)
+            .withPorts(ports)
+            .endSpec()
+            .done();
 
-      LOG.info("OpenShift service {} created", service.getMetadata().getName());
+    LOG.info("OpenShift service {} created", service.getMetadata().getName());
 
-      for (ServicePort port : ports) {
-        createOpenShiftRoute(serviceName, deploymentName, port.getName());
-      }
+    for (ServicePort port : ports) {
+      createOpenShiftRoute(serviceName, deploymentName, port.getName());
     }
   }
 

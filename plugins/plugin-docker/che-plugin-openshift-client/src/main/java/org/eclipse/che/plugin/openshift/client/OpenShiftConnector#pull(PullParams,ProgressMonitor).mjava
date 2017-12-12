@@ -17,39 +17,33 @@
     String imageStreamName = KubernetesStringUtils.convertPullSpecToImageStreamName(repo);
     ImageStream existingImageStream;
 
-    try (OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
-      existingImageStream =
-          openShiftClient
-              .imageStreams()
-              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-              .withName(imageStreamName)
-              .get();
-    }
-
-    if (existingImageStream == null) {
-      try (OpenShiftClient openShiftClient =
-          new DefaultOpenShiftClient(
-              openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
+    OpenShiftClient openShiftClient =
+        ocFactory.newOcClient(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+    existingImageStream =
         openShiftClient
             .imageStreams()
             .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-            .createNew()
-            .withNewMetadata()
-            .withName(imageStreamName) // imagestream id
-            .endMetadata()
-            .withNewSpec()
-            .addNewTag()
-            .withName(tag)
-            .endTag()
-            .withDockerImageRepository(repo) // tracking repo
-            .endSpec()
-            .withNewStatus()
-            .withDockerImageRepository("")
-            .endStatus()
-            .done();
-      }
+            .withName(imageStreamName)
+            .get();
+
+    if (existingImageStream == null) {
+      openShiftClient
+          .imageStreams()
+          .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+          .createNew()
+          .withNewMetadata()
+          .withName(imageStreamName) // imagestream id
+          .endMetadata()
+          .withNewSpec()
+          .addNewTag()
+          .withName(tag)
+          .endTag()
+          .withDockerImageRepository(repo) // tracking repo
+          .endSpec()
+          .withNewStatus()
+          .withDockerImageRepository("")
+          .endStatus()
+          .done();
     }
 
     // Wait for Image metadata to be obtained.
@@ -61,17 +55,15 @@
         Thread.currentThread().interrupt();
       }
 
-      try (OpenShiftClient openShiftClient =
-          new DefaultOpenShiftClient(
-              openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
-        createdImageStream =
-            openShiftClient
-                .imageStreams()
-                .inNamespace(
-                    openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-                .withName(imageStreamName)
-                .get();
-      }
+      OpenShiftClient waitOpenShiftClient =
+          ocFactory.newOcClient(
+              openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+      createdImageStream =
+          openShiftClient
+              .imageStreams()
+              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+              .withName(imageStreamName)
+              .get();
 
       if (createdImageStream != null
           && createdImageStream.getStatus().getDockerImageRepository() != null) {

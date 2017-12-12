@@ -95,19 +95,20 @@
             .endSpec()
             .build();
 
-    try (OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(openshiftUserAccountProvider.getWorkspacesOpenshiftConfig())) {
-      openShiftClient.pods().inNamespace(projectNamespace).create(podSpec);
+    try {
+      DefaultKubernetesClient kubeClient =
+          ocFactory.newKubeClient(openshiftUserAccountProvider.getWorkspacesOpenshiftConfig());
+      kubeClient.pods().inNamespace(projectNamespace).create(podSpec);
       boolean completed = false;
       while (!completed) {
-        Pod pod = openShiftClient.pods().inNamespace(projectNamespace).withName(podName).get();
+        Pod pod = kubeClient.pods().inNamespace(projectNamespace).withName(podName).get();
         String phase = pod.getStatus().getPhase();
         switch (phase) {
           case POD_PHASE_FAILED:
             LOG.info("Pod command {} failed", Arrays.toString(jobCommand));
             // fall through
           case POD_PHASE_SUCCEEDED:
-            openShiftClient.resource(pod).delete();
+            kubeClient.resource(pod).delete();
             updateCreatedDirs(command, phase, allDirsArray);
             return POD_PHASE_SUCCEEDED.equals(phase);
           default:

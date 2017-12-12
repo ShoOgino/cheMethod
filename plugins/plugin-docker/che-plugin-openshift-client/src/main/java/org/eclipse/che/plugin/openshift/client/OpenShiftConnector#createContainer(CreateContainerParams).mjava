@@ -34,18 +34,16 @@
         KubernetesStringUtils.getImageStreamNameFromPullSpec(imageStreamTagPullSpec);
 
     ImageStream imageStream;
-    try (OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
-      imageStream =
-          openShiftClient
-              .imageStreams()
-              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-              .withName(imageStreamName)
-              .get();
-      if (imageStream == null) {
-        throw new OpenShiftException("ImageStream not found");
-      }
+    OpenShiftClient openShiftClient =
+        ocFactory.newOcClient(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+    imageStream =
+        openShiftClient
+            .imageStreams()
+            .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+            .withName(imageStreamName)
+            .get();
+    if (imageStream == null) {
+      throw new OpenShiftException("ImageStream not found");
     }
     String registryAddress = imageStream.getStatus().getDockerImageRepository().split("/")[0];
 
@@ -115,9 +113,6 @@
     }
 
     String containerID;
-    OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
     try {
       createOpenShiftService(
           deploymentName,
@@ -151,10 +146,16 @@
       LOG.info(e.getMessage());
       imageIdToWorkspaceId.remove(imageForDocker);
       openShiftDeploymentCleaner.cleanDeploymentResources(deploymentName);
-      openShiftClient.resource(imageStreamTag).delete();
+      try {
+        openShiftClient =
+            ocFactory.newOcClient(
+                openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+        openShiftClient.resource(imageStreamTag).delete();
+      } catch (Exception ee) {
+        LOG.info("Error while cleaning image stream tag {}", imageStreamTag.toString());
+        LOG.info(e.getMessage());
+      }
       throw e;
-    } finally {
-      openShiftClient.close();
     }
 
     return new ContainerCreated(containerID, null);

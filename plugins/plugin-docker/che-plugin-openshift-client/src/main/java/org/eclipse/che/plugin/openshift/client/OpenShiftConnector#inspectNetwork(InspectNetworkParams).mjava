@@ -3,15 +3,14 @@
     String netId = params.getNetworkId();
     ServiceList services;
 
-    try (OpenShiftClient openShiftClient =
-        new DefaultOpenShiftClient(
-            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
-      services =
-          openShiftClient
-              .services()
-              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-              .list();
-    }
+    DefaultKubernetesClient kubeClient =
+        ocFactory.newKubeClient(
+            openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig());
+    services =
+        kubeClient
+            .services()
+            .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+            .list();
 
     Map<String, ContainerInNetwork> containers = new HashMap<>();
     for (Service svc : services.getItems()) {
@@ -20,18 +19,12 @@
         continue;
       }
 
-      PodList pods;
-      try (OpenShiftClient openShiftClient =
-          new DefaultOpenShiftClient(
-              openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftConfig())) {
-        pods =
-            openShiftClient
-                .pods()
-                .inNamespace(
-                    openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
-                .withLabel(OPENSHIFT_DEPLOYMENT_LABEL, selector)
-                .list();
-      }
+      PodList pods =
+          kubeClient
+              .pods()
+              .inNamespace(openshiftWorkspaceEnvironmentProvider.getWorkspacesOpenshiftNamespace())
+              .withLabel(OPENSHIFT_DEPLOYMENT_LABEL, selector)
+              .list();
 
       for (Pod pod : pods.getItems()) {
         String podName = pod.getMetadata().getName();
