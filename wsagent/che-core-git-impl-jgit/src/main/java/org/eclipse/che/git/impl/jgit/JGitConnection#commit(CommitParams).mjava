@@ -113,8 +113,12 @@
       boolean isGerritSupportConfigured =
           gerritSupportConfigValue != null ? Boolean.valueOf(gerritSupportConfigValue) : false;
       commitCommand.setInsertChangeId(isGerritSupportConfigured);
+      String repositoryPath = getRepository().getDirectory().getPath();
+      COMMITTING_REPOSITORIES.add(repositoryPath);
       RevCommit result = commitCommand.call();
+      COMMITTING_REPOSITORIES.remove(repositoryPath);
 
+      status = status(emptyList());
       Map<String, List<EditedRegion>> modifiedFiles = new HashMap<>();
       for (String file : status.getChanged()) {
         modifiedFiles.put(file, getEditedRegions(file));
@@ -123,7 +127,7 @@
       // commit operation completion.
       eventService.publish(
           newDto(StatusChangedEventDto.class)
-              .withStatus(status(emptyList()))
+              .withStatus(status)
               .withModifiedFiles(modifiedFiles)
               .withProjectName(repository.getWorkTree().getName()));
 
@@ -137,6 +141,8 @@
           .withCommitter(gitUser);
     } catch (GitAPIException exception) {
       throw new GitException(exception.getMessage(), exception);
+    } finally {
+      COMMITTING_REPOSITORIES.remove(getRepository().getDirectory().getPath());
     }
   }
 
