@@ -1,0 +1,30 @@
+  public AbstractBootstrapper(
+      String machineName,
+      RuntimeIdentity runtimeIdentity,
+      int bootstrappingTimeoutMinutes,
+      String outputEndpoint,
+      String installerEndpoint,
+      EventService eventService) {
+    this.machineName = machineName;
+    this.bootstrappingTimeoutMinutes = bootstrappingTimeoutMinutes;
+    this.eventService = eventService;
+    this.installerEndpoint = outputEndpoint;
+    this.outputEndpoint = installerEndpoint;
+    this.bootstrapperStatusListener =
+        event -> {
+          BootstrapperStatus status = event.getStatus();
+          // skip starting status event
+          if (status.equals(BootstrapperStatus.DONE) || status.equals(BootstrapperStatus.FAILED)) {
+            // check bootstrapper belongs to current runtime and machine
+            RuntimeIdentityDto runtimeId = event.getRuntimeId();
+            if (event.getMachineName().equals(machineName)
+                && runtimeIdentity.getEnvName().equals(runtimeId.getEnvName())
+                && runtimeIdentity.getOwner().equals(runtimeId.getOwner())
+                && runtimeIdentity.getWorkspaceId().equals(runtimeId.getWorkspaceId())) {
+
+              finishEventFuture.complete(event);
+            }
+          }
+        };
+  }
+

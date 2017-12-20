@@ -1,0 +1,34 @@
+  private void startMachine(String name, DockerContainerConfig containerConfig)
+      throws InfrastructureException, InterruptedException {
+    InternalMachineConfig machineCfg = getContext().getEnvironment().getMachines().get(name);
+
+    DockerMachine machine =
+        containerStarter.startContainer(
+            getContext().getEnvironment().getNetwork(),
+            name,
+            containerConfig,
+            getContext().getIdentity(),
+            new AbnormalMachineStopHandlerImpl());
+    try {
+      startSynchronizer.addMachine(name, machine);
+    } catch (InfrastructureException e) {
+      // destroy machine only in case its addition fails
+      // in other cases cleanup of whole runtime will be performed
+      destroyMachineQuietly(name, machine);
+      throw e;
+    }
+    if (machineCfg != null && !machineCfg.getInstallers().isEmpty()) {
+      bootstrapperFactory
+          .create(name, getContext().getIdentity(), machineCfg.getInstallers(), machine)
+          .bootstrap();
+    }
+
+    checkInterruption();
+    ServersChecker readinessChecker =
+        serverCheckerFactory.create(getContext().getIdentity(), name, machine.getServers());
+    readinessChecker.startAsync(new ServerReadinessHandler(name));
+    readinessChecker.await();
+
+    machine.setStatus(MachineStatus.RUNNING);
+  }
+

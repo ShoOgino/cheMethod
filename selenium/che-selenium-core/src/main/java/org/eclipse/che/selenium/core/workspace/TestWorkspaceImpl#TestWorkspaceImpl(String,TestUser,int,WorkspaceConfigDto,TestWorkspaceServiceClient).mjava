@@ -1,0 +1,45 @@
+  public TestWorkspaceImpl(
+      String name,
+      TestUser owner,
+      int memoryInGB,
+      WorkspaceConfigDto template,
+      TestWorkspaceServiceClient testWorkspaceServiceClient) {
+    if (template == null) {
+      throw new IllegalStateException("Workspace template cannot be null");
+    }
+    this.name = name;
+    this.owner = owner;
+    this.id = new AtomicReference<>();
+    this.workspaceServiceClient = testWorkspaceServiceClient;
+
+    this.future =
+        CompletableFuture.runAsync(
+            () -> {
+              try {
+
+                final Workspace ws =
+                    workspaceServiceClient.createWorkspace(name, memoryInGB, GB, template);
+                long start = System.currentTimeMillis();
+                workspaceServiceClient.start(id.updateAndGet((s) -> ws.getId()), name, owner);
+                LOG.info(
+                    "Workspace name='{}' id='{}' started in {} sec.",
+                    name,
+                    ws.getId(),
+                    (System.currentTimeMillis() - start) / 1000);
+              } catch (Exception e) {
+                String errorMessage = format("Workspace name='%s' start failed.", name);
+                LOG.error(errorMessage, e);
+
+                try {
+                  workspaceServiceClient.delete(name, owner.getName());
+                } catch (Exception e1) {
+                  throw new IllegalStateException(
+                      format("Failed to remove workspace name='%s' when start is failed.", name),
+                      e);
+                }
+
+                throw new IllegalStateException(errorMessage, e);
+              }
+            });
+  }
+

@@ -1,7 +1,6 @@
   @POST
   @Consumes(APPLICATION_JSON)
   @Produces(APPLICATION_JSON)
-  @GenerateLink(rel = LINK_REL_CREATE_WORKSPACE)
   @ApiOperation(
     value = "Create a new workspace based on the configuration",
     notes =
@@ -48,18 +47,21 @@
           NotFoundException {
     requiredNotNull(config, "Workspace configuration");
     final Map<String, String> attributes = parseAttrs(attrsList);
-    validator.validateAttributes(attributes);
-    validator.validateConfig(config);
     relativizeRecipeLinks(config);
     if (namespace == null) {
       namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
     }
-    final WorkspaceImpl workspace = workspaceManager.createWorkspace(config, namespace, attributes);
-    if (startAfterCreate) {
-      workspaceManager.startWorkspace(workspace.getId(), null, false);
+
+    WorkspaceImpl workspace;
+    try {
+      workspace = workspaceManager.createWorkspace(config, namespace, attributes);
+    } catch (ValidationException x) {
+      throw new BadRequestException(x.getMessage());
     }
-    return Response.status(201)
-        .entity(linksInjector.injectLinks(asDto(workspace), getServiceContext()))
-        .build();
+
+    if (startAfterCreate) {
+      workspaceManager.startWorkspace(workspace.getId(), null, new HashMap<>());
+    }
+    return Response.status(201).entity(asDtoWithLinksAndToken(workspace)).build();
   }
 

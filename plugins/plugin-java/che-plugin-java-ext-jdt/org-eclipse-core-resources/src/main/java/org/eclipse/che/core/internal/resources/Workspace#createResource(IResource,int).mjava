@@ -4,30 +4,34 @@
       switch (resource.getType()) {
         case IResource.FILE:
           String newName = path.lastSegment();
-          VirtualFileEntry child =
-              getProjectsRoot().getChild(path.removeLastSegments(1).toOSString());
-          if (child == null) {
+          String childWsPath = absolutize(path.removeLastSegments(1).toOSString());
+
+          if (!fsManagerProvider.get().exists(childWsPath)) {
             throw new NotFoundException(
                 "Can't find parent folder: " + path.removeLastSegments(1).toOSString());
           }
-          FolderEntry entry = (FolderEntry) child;
-
-          entry.createFile(newName, new byte[0]);
+          String newFileWsPath = resolve(childWsPath, newName);
+          fsManagerProvider.get().createFile(newFileWsPath);
           break;
         case IResource.FOLDER:
-          getProjectsRoot().createFolder(path.toOSString());
+          String directoryWsPath = absolutize(path.toOSString());
+          fsManagerProvider.get().createDir(directoryWsPath);
           break;
         case IResource.PROJECT:
           ProjectConfigImpl projectConfig = new ProjectConfigImpl();
           projectConfig.setPath(resource.getName());
           projectConfig.setName(resource.getName());
           projectConfig.setType(BaseProjectType.ID);
-          projectManager.get().createProject(projectConfig, new HashMap<>());
+          projectManager.get().create(projectConfig, new HashMap<>());
           break;
         default:
           throw new UnsupportedOperationException();
       }
-    } catch (ForbiddenException | ConflictException | ServerException | NotFoundException e) {
+    } catch (ForbiddenException
+        | ConflictException
+        | ServerException
+        | NotFoundException
+        | BadRequestException e) {
       throw new CoreException(new Status(0, ResourcesPlugin.getPluginId(), e.getMessage(), e));
     }
   }

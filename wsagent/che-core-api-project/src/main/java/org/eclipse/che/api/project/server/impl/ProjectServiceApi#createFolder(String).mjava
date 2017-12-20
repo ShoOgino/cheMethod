@@ -1,0 +1,29 @@
+  /** Create folder under specified path */
+  public Response createFolder(String wsPath)
+      throws ConflictException, ForbiddenException, ServerException, NotFoundException {
+    wsPath = absolutize(wsPath);
+    fsManager.createDir(wsPath);
+
+    final URI location =
+        serviceContext
+            .getBaseUriBuilder()
+            .clone()
+            .path(ProjectService.class)
+            .path(ProjectService.class, "getChildren")
+            .build(new String[] {wsPath.substring(1)}, false);
+
+    String project =
+        projectManager
+            .getClosest(wsPath)
+            .orElseThrow(() -> new NotFoundException("Can't find parent project"))
+            .getPath();
+
+    eventService.publish(
+        new ProjectItemModifiedEvent(
+            ProjectItemModifiedEvent.EventType.CREATED, project, wsPath, true));
+
+    return Response.created(location)
+        .entity(injectFolderLinks(fsDtoConverter.asDto(wsPath)))
+        .build();
+  }
+

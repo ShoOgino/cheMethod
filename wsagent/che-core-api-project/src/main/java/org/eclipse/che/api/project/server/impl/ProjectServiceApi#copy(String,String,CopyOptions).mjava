@@ -1,0 +1,29 @@
+  /** Copy file system item from specified source location to specified destination location */
+  public Response copy(String wsPath, String newParentWsPath, CopyOptions copyOptions)
+      throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+    String srcWsPath = absolutize(wsPath);
+    newParentWsPath = absolutize(newParentWsPath);
+    String name = getNameValue(copyOptions, wsPath);
+    boolean overwrite = getOverwriteValue(copyOptions);
+
+    String dstWsPath = resolve(newParentWsPath, name);
+
+    if (projectManager.isRegistered(srcWsPath)) {
+      projectManager.copy(srcWsPath, dstWsPath, overwrite);
+    } else {
+      fsManager.copy(srcWsPath, dstWsPath, overwrite, true);
+    }
+
+    String method = fsManager.existsAsFile(srcWsPath) ? "getFile" : "getChildren";
+
+    URI location =
+        serviceContext
+            .getBaseUriBuilder()
+            .clone()
+            .path(ProjectService.class)
+            .path(ProjectService.class, method)
+            .build(new String[] {dstWsPath.substring(1)}, false);
+
+    return Response.created(location).build();
+  }
+

@@ -1,0 +1,57 @@
+  @Override
+  protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
+    try {
+      final OpenShiftEnvironment osEnv = getContext().getEnvironment();
+      volumesStrategy.prepare(osEnv, getContext().getIdentity().getWorkspaceId());
+
+      List<Service> createdServices = new ArrayList<>();
+      for (Service service : osEnv.getServices().values()) {
+        createdServices.add(project.services().create(service));
+      }
+
+      List<Route> createdRoutes = new ArrayList<>();
+      for (Route route : osEnv.getRoutes().values()) {
+        createdRoutes.add(project.routes().create(route));
+      }
+      // TODO https://github.com/eclipse/che/issues/7653
+      // project.pods().watch(new AbnormalStopHandler());
+      // project.pods().watchContainers(new MachineLogsPublisher());
+
+      createPods(createdServices, createdRoutes);
+
+      // TODO Rework it to parallel waiting https://github.com/eclipse/che/issues/7067
+      for (OpenShiftMachine machine : machines.values()) {
+        try {
+          machine.waitRunning(machineStartTimeoutMin);
+          bootstrapMachine(machine);
+          checkMachineServers(machine);
+          machine.setStatus(MachineStatus.RUNNING);
+          sendRunningEvent(machine.getName());
+        } catch (InfrastructureException rethrow) {
+          sendFailedEvent(machine.getName(), rethrow.getMessage());
+          throw rethrow;
+        }
+      }
+    } catch (InfrastructureException | RuntimeException | InterruptedException e) {
+      LOG.warn(
+          "Failed to start OpenShift runtime of workspace {}. Cause: {}",
+          getContext().getIdentity().getWorkspaceId(),
+          e.getMessage());
+      boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+      try {
+        project.cleanUp();
+      } catch (InfrastructureException ignored) {
+      }
+      if (interrupted) {
+        throw new InfrastructureException("OpenShift environment start was interrupted");
+      }
+      try {
+        throw e;
+      } catch (InfrastructureException rethrow) {
+        throw rethrow;
+      } catch (Exception wrap) {
+        throw new InternalInfrastructureException(e.getMessage(), wrap);
+      }
+    }
+  }
+

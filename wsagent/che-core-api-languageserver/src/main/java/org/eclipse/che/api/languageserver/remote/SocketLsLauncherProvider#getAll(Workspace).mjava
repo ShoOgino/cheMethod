@@ -1,0 +1,45 @@
+  @Override
+  public Set<LanguageServerLauncher> getAll(Workspace workspace) {
+    Runtime runtime = workspace.getRuntime();
+    if (runtime == null) {
+      return emptySet();
+    }
+
+    for (Map.Entry<String, ? extends Machine> machineEntry : runtime.getMachines().entrySet()) {
+      String machineName = machineEntry.getKey();
+      Machine machine = machineEntry.getValue();
+      Map<String, ? extends Server> servers = machine.getServers();
+
+      for (Map.Entry<String, ? extends Server> serverEntry : servers.entrySet()) {
+        String serverName = serverEntry.getKey();
+        Server server = serverEntry.getValue();
+        String serverUrl = server.getUrl();
+        Map<String, String> serverAttributes = server.getAttributes();
+
+        if (lslRegistry.keySet().contains(machineName + serverName)) {
+          continue;
+        }
+
+        if (!lsConfigurationDetector.isDetected(serverAttributes)) {
+          continue;
+        }
+
+        LanguageServerDescription description = lsConfigurationExtractor.extract(serverAttributes);
+
+        try {
+          URI uri = new URI(serverUrl);
+          String host = uri.getHost();
+          int port = uri.getPort();
+
+          SocketLanguageServerLauncher launcher =
+              new SocketLanguageServerLauncher(description, host, port);
+          lslRegistry.put(machineName + serverName, launcher);
+        } catch (URISyntaxException e) {
+          LOG.error("Can't parse server url: {}", serverUrl, e);
+        }
+      }
+    }
+
+    return unmodifiableSet(new HashSet<>(lslRegistry.values()));
+  }
+

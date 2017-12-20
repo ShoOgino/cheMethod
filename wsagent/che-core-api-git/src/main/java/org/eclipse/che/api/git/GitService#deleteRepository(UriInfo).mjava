@@ -1,10 +1,16 @@
   @DELETE
   @Path("repository")
   public void deleteRepository(@Context UriInfo uriInfo) throws ApiException {
-    final RegisteredProject project = projectRegistry.getProject(projectPath);
-    final FolderEntry gitFolder = project.getBaseFolder().getChildFolder(".git");
-    gitFolder.getVirtualFile().delete();
-    projectRegistry.removeProjectType(projectPath, GitProjectType.TYPE_ID);
-    eventService.publish(newDto(GitRepositoryDeletedEvent.class));
+    RegisteredProject project =
+        projectManager
+            .get(projectPath)
+            .orElseThrow(() -> new NotFoundException("Can't find project"));
+
+    String dotGitWsPath = resolve(absolutize(projectPath), ".git");
+    fsManager.delete(dotGitWsPath);
+    eventService.publish(
+        newDto(GitRepositoryDeletedEvent.class)
+            .withProjectName(project.getName())
+            .withProjectPath(projectPath));
   }
 

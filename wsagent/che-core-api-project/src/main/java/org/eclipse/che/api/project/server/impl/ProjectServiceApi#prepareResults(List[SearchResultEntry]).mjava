@@ -1,0 +1,36 @@
+  /**
+   * Prepare result for client, add additional information like line number and line content where
+   * found given text
+   */
+  private List<SearchResultDto> prepareResults(List<SearchResultEntry> searchResultEntries)
+      throws ServerException, NotFoundException {
+    List<SearchResultDto> results = new ArrayList<>(searchResultEntries.size());
+    for (SearchResultEntry searchResultEntry : searchResultEntries) {
+      String path = searchResultEntry.getFilePath();
+      if (fsManager.existsAsFile(path)) {
+        ItemReference asDto = fsDtoConverter.asDto(path);
+        ItemReference itemReference = injectFileLinks(asDto);
+        List<LuceneSearcher.OffsetData> datas = searchResultEntry.getData();
+        List<SearchOccurrenceDto> searchOccurrences = new ArrayList<>(datas.size());
+        for (LuceneSearcher.OffsetData data : datas) {
+          SearchOccurrenceDto searchOccurrenceDto =
+              DtoFactory.getInstance()
+                  .createDto(SearchOccurrenceDto.class)
+                  .withPhrase(data.phrase)
+                  .withScore(data.score)
+                  .withStartOffset(data.startOffset)
+                  .withEndOffset(data.endOffset)
+                  .withLineNumber(data.lineNum)
+                  .withLineContent(data.line);
+          searchOccurrences.add(searchOccurrenceDto);
+        }
+        SearchResultDto searchResultDto = DtoFactory.getInstance().createDto(SearchResultDto.class);
+        results.add(
+            searchResultDto
+                .withItemReference(itemReference)
+                .withSearchOccurrences(searchOccurrences));
+      }
+    }
+    return results;
+  }
+

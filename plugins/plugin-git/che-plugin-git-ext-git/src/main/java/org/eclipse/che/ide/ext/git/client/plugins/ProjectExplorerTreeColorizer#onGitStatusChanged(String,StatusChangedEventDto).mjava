@@ -1,0 +1,33 @@
+  @Override
+  public void onGitStatusChanged(String endpointId, StatusChangedEventDto statusChangedEventDto) {
+    Tree tree = projectExplorerPresenterProvider.get().getTree();
+    Status status = statusChangedEventDto.getStatus();
+    tree.getNodeStorage()
+        .getAll()
+        .stream()
+        .filter(node -> node instanceof FileNode)
+        .forEach(
+            node -> {
+              Resource resource = ((ResourceNode) node).getData();
+              File file = resource.asFile();
+              String nodeLocation = resource.getLocation().removeFirstSegments(1).toString();
+
+              VcsStatus newVcsStatus;
+              if (status.getUntracked().contains(nodeLocation)) {
+                newVcsStatus = UNTRACKED;
+              } else if (status.getModified().contains(nodeLocation)
+                  || status.getChanged().contains(nodeLocation)) {
+                newVcsStatus = MODIFIED;
+              } else if (status.getAdded().contains(nodeLocation)) {
+                newVcsStatus = ADDED;
+              } else {
+                newVcsStatus = NOT_MODIFIED;
+              }
+
+              if (file.getVcsStatus() != newVcsStatus) {
+                file.setVcsStatus(newVcsStatus);
+                tree.refresh(node);
+              }
+            });
+  }
+

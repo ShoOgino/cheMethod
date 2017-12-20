@@ -10,31 +10,11 @@
     @ApiResponse(code = 500, message = "Internal Server Error")
   })
   public Response importZip(
-      @ApiParam(value = "Path to a location (where import to?)") @PathParam("path") String path,
+      @ApiParam(value = "Path to a location (where import to?)") @PathParam("path") String wsPath,
       InputStream zip,
       @DefaultValue("false") @QueryParam("skipFirstLevel") Boolean skipFirstLevel)
       throws NotFoundException, ConflictException, ForbiddenException, ServerException {
-    final FolderEntry parent = projectManager.asFolder(path);
 
-    if (parent == null) {
-      throw new NotFoundException("Parent not found for " + path);
-    }
-
-    importZip(parent.getVirtualFile(), zip, true, skipFirstLevel);
-
-    try {
-      final RegisteredProject project = projectManager.getProject(path);
-      eventService.publish(new ProjectCreatedEvent(workspace, project.getPath()));
-      final String projectType = project.getProjectType().getId();
-      logProjectCreatedEvent(path, projectType);
-    } catch (NotFoundException ignore) {
-    }
-
-    return Response.created(
-            getServiceContext()
-                .getServiceUriBuilder()
-                .path(getClass(), "getChildren")
-                .build(new String[] {parent.getPath().toString().substring(1)}, false))
-        .build();
+    return getProjectServiceApi().importZip(wsPath, zip, skipFirstLevel);
   }
 

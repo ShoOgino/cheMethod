@@ -1,0 +1,84 @@
+  /**
+   * Starts all machines from specified workspace environment, creates workspace runtime instance
+   * based on that environment.
+   *
+   * <p>During the start of the workspace its runtime is visible with {@link
+   * WorkspaceStatus#STARTING} status.
+   *
+   * @param workspace workspace which environment should be started
+   * @param envName the name of the environment to start
+   * @param options whether machines should be recovered(true) or not(false)
+   * @return completable future of start execution.
+   * @throws ConflictException when workspace is already running
+   * @throws ConflictException when start is interrupted
+   * @throws NotFoundException when any not found exception occurs during environment start
+   * @throws ServerException other error occurs during environment start
+   * @see WorkspaceStatus#STARTING
+   * @see WorkspaceStatus#RUNNING
+   */
+  public CompletableFuture<Void> startAsync(
+      Workspace workspace, String envName, Map<String, String> options)
+      throws ConflictException, NotFoundException, ServerException {
+
+    final EnvironmentImpl environment = copyEnv(workspace, envName);
+    final String workspaceId = workspace.getId();
+
+    requireNonNull(environment, "Environment should not be null " + workspaceId);
+    requireNonNull(environment.getRecipe(), "Recipe should not be null " + workspaceId);
+    requireNonNull(
+        environment.getRecipe().getType(), "Recipe type should not be null " + workspaceId);
+
+    RuntimeState existingState = runtimes.get(workspaceId);
+    if (existingState != null) {
+      throw new ConflictException(
+          format(
+              "Could not start workspace '%s' because its state is '%s'",
+              workspaceId, existingState.status));
+    }
+
+    Subject subject = EnvironmentContext.getCurrent().getSubject();
+    RuntimeIdentity runtimeId =
+        new RuntimeIdentityImpl(workspaceId, envName, subject.getUserName());
+    try {
+      InternalEnvironment internalEnv = createInternalEnvironment(environment);
+      RuntimeContext runtimeContext = infrastructure.prepare(runtimeId, internalEnv);
+
+      InternalRuntime runtime = runtimeContext.getRuntime();
+      if (runtime == null) {
+        throw new IllegalStateException(
+            "SPI contract violated. RuntimeInfrastructure.start(...) must not return null: "
+                + RuntimeInfrastructure.class);
+      }
+      RuntimeState state = new RuntimeState(runtime, STARTING);
+      if (isStartRefused.get()) {
+        throw new ConflictException(
+            format(
+                "Start of the workspace '%s' is rejected by the system, "
+                    + "no more workspaces are allowed to start",
+                workspace.getConfig().getName()));
+      }
+      if (runtimes.putIfAbsent(workspaceId, state) != null) {
+        throw new ConflictException(
+            "Could not start workspace '" + workspaceId + "' because it is not in 'STOPPED' state");
+      }
+      LOG.info(
+          "Starting workspace '{}/{}' with id '{}' by user '{}'",
+          workspace.getNamespace(),
+          workspace.getConfig().getName(),
+          workspace.getId(),
+          sessionUserNameOr("undefined"));
+
+      publishWorkspaceStatusEvent(workspaceId, STARTING, STOPPED, null);
+
+      return CompletableFuture.runAsync(
+          ThreadLocalPropagateContext.wrap(new StartRuntimeTask(workspace, options, runtime)),
+          sharedPool.getExecutor());
+    } catch (ValidationException e) {
+      LOG.error(e.getLocalizedMessage(), e);
+      throw new ConflictException(e.getLocalizedMessage());
+    } catch (InfrastructureException e) {
+      LOG.error(e.getLocalizedMessage(), e);
+      throw new ServerException(e.getLocalizedMessage(), e);
+    }
+  }
+

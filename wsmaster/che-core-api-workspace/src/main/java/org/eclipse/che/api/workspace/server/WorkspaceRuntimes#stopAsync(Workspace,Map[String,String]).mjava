@@ -1,0 +1,49 @@
+  /**
+   * Stops running workspace runtime asynchronously.
+   *
+   * <p>Stops environment in an implementation specific way. During the stop of the workspace its
+   * runtime is accessible with {@link WorkspaceStatus#STOPPING stopping} status. Workspace may be
+   * stopped only if its status is {@link WorkspaceStatus#RUNNING} or {@link
+   * WorkspaceStatus#STARTING}.
+   *
+   * @param workspace workspace which runtime should be stopped
+   * @throws NotFoundException when workspace with specified identifier does not have runtime
+   * @throws ConflictException when running workspace status is different from {@link
+   *     WorkspaceStatus#RUNNING} or {@link WorkspaceStatus#STARTING}
+   * @see WorkspaceStatus#STOPPING
+   */
+  public CompletableFuture<Void> stopAsync(Workspace workspace, Map<String, String> options)
+      throws NotFoundException, ConflictException {
+    String workspaceId = workspace.getId();
+    RuntimeState state = runtimes.get(workspaceId);
+    if (state == null) {
+      throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
+    }
+    if (state.status != RUNNING && state.status != STARTING) {
+      throw new ConflictException(
+          format(
+              "Could not stop workspace '%s' because its state is '%s'",
+              workspaceId, state.status));
+    }
+    if (!runtimes.replace(workspaceId, state, new RuntimeState(state.runtime, STOPPING))) {
+      RuntimeState newState = runtimes.get(workspaceId);
+      WorkspaceStatus status = newState != null ? newState.status : STOPPED;
+      throw new ConflictException(
+          format("Could not stop workspace '%s' because its state is '%s'", workspaceId, status));
+    }
+    String stoppedBy =
+        firstNonNull(
+            sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY)), "undefined");
+    LOG.info(
+        "Workspace '{}/{}' with id '{}' is being stopped by user '{}'",
+        workspace.getNamespace(),
+        workspace.getConfig().getName(),
+        workspace.getId(),
+        stoppedBy);
+    publishWorkspaceStatusEvent(workspaceId, STOPPING, state.status, null);
+
+    return CompletableFuture.runAsync(
+        ThreadLocalPropagateContext.wrap(new StopRuntimeTask(workspace, options, stoppedBy, state)),
+        sharedPool.getExecutor());
+  }
+

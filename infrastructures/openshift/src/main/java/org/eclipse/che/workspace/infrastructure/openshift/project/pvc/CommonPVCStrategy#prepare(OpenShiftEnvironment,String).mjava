@@ -1,0 +1,23 @@
+  @Override
+  public void prepare(OpenShiftEnvironment osEnv, String workspaceId)
+      throws InfrastructureException {
+    final Collection<PersistentVolumeClaim> claims = osEnv.getPersistentVolumeClaims().values();
+    if (!claims.isEmpty()) {
+      final OpenShiftProject project = factory.create(workspaceId);
+      final OpenShiftPersistentVolumeClaims pvcs = project.persistentVolumeClaims();
+      final Set<String> existing =
+          pvcs.get().stream().map(p -> p.getMetadata().getName()).collect(toSet());
+      for (PersistentVolumeClaim pvc : claims) {
+        final String[] subpaths =
+            (String[])
+                pvc.getAdditionalProperties().remove(format(SUBPATHS_PROPERTY_FMT, workspaceId));
+        if (!existing.contains(pvc.getMetadata().getName())) {
+          pvcs.create(pvc);
+        }
+        if (preCreateDirs && subpaths != null) {
+          pvcSubPathHelper.createDirs(workspaceId, subpaths);
+        }
+      }
+    }
+  }
+

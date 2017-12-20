@@ -1,0 +1,39 @@
+  /**
+   * Workspace may be running "immediately" (~500 msec) on some infrastructures. And IDE may
+   * subscribe to statuses really late. So need to check whether we missed any status event.
+   */
+  private void checkStatuses() {
+    workspaceServiceClient
+        .getWorkspace(appContext.getWorkspaceId())
+        .then(
+            workspace -> {
+              WorkspaceImpl workspacePrev = appContext.getWorkspace();
+
+              // Update workspace model in AppContext before firing an event.
+              // Because AppContext always must return an actual workspace model.
+              ((AppContextImpl) appContext).setWorkspace(workspace);
+
+              if (workspace.getStatus() != workspacePrev.getStatus()) {
+                if (workspace.getStatus() == WorkspaceStatus.RUNNING) {
+                  eventBus.fireEvent(new WorkspaceRunningEvent());
+                }
+              }
+
+              for (MachineImpl machine : workspace.getRuntime().getMachines().values()) {
+                for (ServerImpl server : machine.getServers().values()) {
+                  Optional<MachineImpl> machinePrev =
+                      workspacePrev.getRuntime().getMachineByName(machine.getName());
+                  if (machinePrev.isPresent()) {
+                    Optional<ServerImpl> serverPrev =
+                        machinePrev.get().getServerByName(server.getName());
+                    if (serverPrev.isPresent()) {
+                      if (server.getStatus() != serverPrev.get().getStatus()) {
+                        checkServerStatus(server, machine);
+                      }
+                    }
+                  }
+                }
+              }
+            });
+  }
+

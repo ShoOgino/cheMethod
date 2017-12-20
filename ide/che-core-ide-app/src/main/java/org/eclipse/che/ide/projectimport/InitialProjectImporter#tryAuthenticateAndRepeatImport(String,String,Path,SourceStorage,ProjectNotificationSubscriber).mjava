@@ -1,0 +1,31 @@
+  private Promise<Project> tryAuthenticateAndRepeatImport(
+      String providerName,
+      String authenticateUrl,
+      Path pathToProject,
+      SourceStorage sourceStorage,
+      ProjectNotificationSubscriber subscriber) {
+    OAuth2Authenticator authenticator = oAuth2AuthenticatorRegistry.getAuthenticator(providerName);
+    if (authenticator == null) {
+      authenticator = oAuth2AuthenticatorRegistry.getAuthenticator("default");
+    }
+
+    return authenticator
+        .authenticate(
+            OAuth2AuthenticatorUrlProvider.get(appContext.getMasterApiEndpoint(), authenticateUrl))
+        .thenPromise(
+            result -> {
+              if (!result.equals(OAuthStatus.NOT_PERFORMED)) {
+                return doImport(pathToProject, sourceStorage);
+              } else {
+                subscriber.onFailure("Authentication cancelled");
+                callback.onSuccess(null);
+              }
+
+              return promises.resolve(null);
+            })
+        .catchError(
+            caught -> {
+              callback.onFailure(caught.getCause());
+            });
+  }
+

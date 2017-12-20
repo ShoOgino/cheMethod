@@ -1,0 +1,31 @@
+  /** Create projects with specified configurations for a client with specified identifier */
+  public List<ProjectConfigDto> createBatchProjects(
+      List<NewProjectConfigDto> projectConfigs, boolean rewrite, String clientId)
+      throws ConflictException, ForbiddenException, ServerException, NotFoundException, IOException,
+          UnauthorizedException, BadRequestException {
+
+    projectManager.doImport(
+        new HashSet<>(projectConfigs), rewrite, jsonRpcImportConsumer(clientId));
+
+    Set<RegisteredProject> registeredProjects = new HashSet<>(projectConfigs.size());
+
+    for (NewProjectConfigDto projectConfig : projectConfigs) {
+      registeredProjects.add(projectManager.update(projectConfig));
+    }
+
+    Set<ProjectConfigDto> result =
+        registeredProjects
+            .stream()
+            .map(ProjectDtoConverter::asDto)
+            .map(this::injectProjectLinks)
+            .collect(toSet());
+
+    registeredProjects
+        .stream()
+        .map(RegisteredProject::getPath)
+        .map(ProjectCreatedEvent::new)
+        .forEach(eventService::publish);
+
+    return new ArrayList<>(result);
+  }
+

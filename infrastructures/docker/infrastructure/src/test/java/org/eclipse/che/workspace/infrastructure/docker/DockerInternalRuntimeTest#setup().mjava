@@ -1,0 +1,37 @@
+  @BeforeMethod
+  public void setup() throws Exception {
+    MockitoAnnotations.initMocks(this);
+    final DockerContainerConfig config1 = new DockerContainerConfig();
+    final DockerContainerConfig config2 = new DockerContainerConfig();
+    final InternalMachineConfig internalMachineCfg1 = mock(InternalMachineConfig.class);
+    when(internalMachineCfg1.getInstallers()).thenReturn(singletonList(newInstaller(1)));
+    final InternalMachineConfig internalMachineCfg2 = mock(InternalMachineConfig.class);
+    when(internalMachineCfg2.getInstallers()).thenReturn(singletonList(newInstaller(2)));
+
+    ImmutableMap<String, InternalMachineConfig> machines =
+        ImmutableMap.of(DEV_MACHINE, internalMachineCfg1, DB_MACHINE, internalMachineCfg2);
+    final DockerEnvironment environment = new DockerEnvironment(null, machines, emptyList());
+    environment.setContainers(
+        Maps.newLinkedHashMap(ImmutableMap.of(DEV_MACHINE, config1, DB_MACHINE, config2)));
+
+    when(runtimeContext.getEnvironment()).thenReturn(environment);
+
+    doNothing().when(networks).createNetwork(nullable(String.class));
+    when(runtimeContext.getIdentity()).thenReturn(IDENTITY);
+    when(runtimeContext.getEnvironment()).thenReturn(environment);
+    ServersCheckerFactory serversCheckerFactory = mock(ServersCheckerFactory.class);
+    when(serversCheckerFactory.create(any(), nullable(String.class), any()))
+        .thenReturn(mock(ServersChecker.class));
+    dockerRuntime =
+        new DockerInternalRuntime(
+            runtimeContext,
+            emptyList(),
+            mock(ExternalIpURLRewriter.class),
+            networks,
+            starter,
+            eventService,
+            bootstrapperFactory,
+            serversCheckerFactory,
+            mock(MachineLoggersFactory.class));
+  }
+

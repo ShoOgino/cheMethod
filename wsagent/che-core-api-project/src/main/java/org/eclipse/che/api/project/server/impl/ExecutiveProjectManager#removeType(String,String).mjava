@@ -1,0 +1,54 @@
+  @Override
+  public synchronized RegisteredProject removeType(String wsPath, String type)
+      throws ConflictException, NotFoundException, ServerException, BadRequestException,
+          ForbiddenException {
+
+    RegisteredProject project =
+        get(wsPath).orElseThrow(() -> new NotFoundException("Can't find project"));
+
+    List<String> mixins = project.getMixins();
+
+    if (mixins.contains(type)) {
+      mixins.remove(type);
+
+      NewProjectConfigImpl projectConfig =
+          new NewProjectConfigImpl(
+              project.getPath(),
+              project.getType(),
+              mixins,
+              project.getName(),
+              project.getDescription(),
+              project.getAttributes(),
+              null,
+              project.getSource());
+
+      projectConfigRegistry.put(projectConfig, true, false);
+
+      return projectConfigRegistry.getOrNull(wsPath);
+    }
+
+    if (project.getType().equals(type) && !project.isDetected()) {
+
+      NewProjectConfigImpl projectConfig =
+          new NewProjectConfigImpl(
+              project.getPath(),
+              BaseProjectType.ID,
+              project.getMixins(),
+              project.getName(),
+              project.getDescription(),
+              project.getAttributes(),
+              null,
+              project.getSource());
+
+      projectConfigRegistry.put(projectConfig, true, false);
+
+      return projectConfigRegistry.getOrNull(wsPath);
+    }
+
+    if (project.getType().equals(type) && project.isDetected()) {
+      return projectConfigRegistry.removeOrNull(project.getPath());
+    }
+
+    return project;
+  }
+

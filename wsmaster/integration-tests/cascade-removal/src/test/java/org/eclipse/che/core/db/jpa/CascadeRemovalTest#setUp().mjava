@@ -20,15 +20,14 @@
                             WorkspaceConfigImpl.class,
                             ProjectConfigImpl.class,
                             EnvironmentImpl.class,
-                            EnvironmentRecipeImpl.class,
-                            ExtendedMachineImpl.class,
+                            MachineConfigImpl.class,
                             SourceStorageImpl.class,
-                            ServerConf2Impl.class,
+                            ServerConfigImpl.class,
                             StackImpl.class,
                             CommandImpl.class,
-                            SnapshotImpl.class,
                             RecipeImpl.class,
-                            SshPairImpl.class)
+                            SshPairImpl.class,
+                            VolumeImpl.class)
                         .addEntityClass(
                             "org.eclipse.che.api.workspace.server.model.impl.ProjectConfigImpl$Attribute")
                         .setExceptionHandler(H2ExceptionHandler.class)
@@ -49,18 +48,24 @@
                 install(new AccountModule());
                 install(new SshJpaModule());
                 install(new WorkspaceJpaModule());
-                install(new MachineJpaModule());
                 bind(WorkspaceManager.class);
-                final WorkspaceRuntimes wR = mock(WorkspaceRuntimes.class);
+
+                RuntimeInfrastructure infra = mock(RuntimeInfrastructure.class);
+                doReturn(emptySet()).when(infra).getRecipeTypes();
+                bind(RuntimeInfrastructure.class).toInstance(infra);
+
+                WorkspaceRuntimes wR =
+                    spy(
+                        new WorkspaceRuntimes(
+                            mock(EventService.class),
+                            Collections.emptyMap(),
+                            infra,
+                            mock(WorkspaceSharedPool.class),
+                            mock(WorkspaceDao.class),
+                            mock(DBInitializer.class)));
                 when(wR.hasRuntime(anyString())).thenReturn(false);
                 bind(WorkspaceRuntimes.class).toInstance(wR);
                 bind(AccountManager.class);
-                bind(Boolean.class)
-                    .annotatedWith(Names.named("che.workspace.auto_snapshot"))
-                    .toInstance(false);
-                bind(Boolean.class)
-                    .annotatedWith(Names.named("che.workspace.auto_restore"))
-                    .toInstance(false);
                 bind(WorkspaceSharedPool.class)
                     .toInstance(new WorkspaceSharedPool("cached", null, null));
               }
@@ -74,7 +79,6 @@
     preferenceDao = injector.getInstance(PreferenceDao.class);
     profileDao = injector.getInstance(ProfileDao.class);
     sshDao = injector.getInstance(SshDao.class);
-    snapshotDao = injector.getInstance(SnapshotDao.class);
     workspaceDao = injector.getInstance(WorkspaceDao.class);
   }
 

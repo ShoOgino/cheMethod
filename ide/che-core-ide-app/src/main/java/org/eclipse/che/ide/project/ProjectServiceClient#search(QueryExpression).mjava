@@ -1,0 +1,52 @@
+  /**
+   * Searches an item(s) with the specified criteria given by {@code expression}.
+   *
+   * @param expression search query expression
+   * @return {@link Promise} with the list of found items
+   * @see QueryExpression
+   * @see ItemReference
+   * @since 4.4.0
+   */
+  public Promise<SearchResult> search(QueryExpression expression) {
+    Path prjPath = isNullOrEmpty(expression.getPath()) ? Path.ROOT : new Path(expression.getPath());
+    final String url = getBaseUrl() + SEARCH + encodePath(prjPath.addLeadingSeparator());
+
+    StringBuilder queryParameters = new StringBuilder();
+    if (expression.getName() != null && !expression.getName().isEmpty()) {
+      queryParameters.append("&name=").append(encodeQueryString(expression.getName()));
+    }
+    if (expression.getText() != null && !expression.getText().isEmpty()) {
+      queryParameters.append("&text=").append(encodeQueryString(expression.getText()));
+    }
+    if (expression.getMaxItems() == 0) {
+      expression.setMaxItems(
+          100); // for avoiding block client by huge response until search not support pagination
+      // will limit result here
+    }
+    queryParameters.append("&maxItems=").append(expression.getMaxItems());
+    if (expression.getSkipCount() != 0) {
+      queryParameters.append("&skipCount=").append(expression.getSkipCount());
+    }
+
+    return reqFactory
+        .createGetRequest(url + queryParameters.toString().replaceFirst("&", "?"))
+        .header(ACCEPT, APPLICATION_JSON)
+        .loader(loaderFactory.newLoader("Searching..."))
+        .send(unmarshaller.newUnmarshaller(ProjectSearchResponseDto.class))
+        .then(
+            (Function<ProjectSearchResponseDto, SearchResult>)
+                searchResultDto -> {
+                  List<SearchResultDto> itemReferences = searchResultDto.getItemReferences();
+                  if (itemReferences == null || itemReferences.isEmpty()) {
+                    return new SearchResult(
+                        Collections.emptyList(), searchResultDto.getTotalHits());
+                  }
+                  return new SearchResult(
+                      itemReferences
+                          .stream()
+                          .map(SearchItemReference::new)
+                          .collect(Collectors.toList()),
+                      searchResultDto.getTotalHits());
+                });
+  }
+

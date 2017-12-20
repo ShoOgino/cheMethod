@@ -1,0 +1,78 @@
+  @AssistedInject
+  public ProjectTypes(
+      @Assisted("type") String type,
+      @Assisted("mixinTypes") List<String> mixinTypes,
+      ProjectTypeRegistry projectTypeRegistry,
+      ProjectTypeResolver projectTypeResolver) {
+    this.projectTypeResolver = projectTypeResolver;
+    mixins = new HashMap<>();
+    all = new HashMap<>();
+    attributeDefs = new HashMap<>();
+
+    this.projectTypeRegistry = projectTypeRegistry;
+
+    ProjectTypeDef tmpPrimary;
+    if (type == null) {
+      tmpPrimary = ProjectTypeRegistry.BASE_TYPE;
+    } else {
+      try {
+        tmpPrimary = projectTypeRegistry.getProjectType(type);
+      } catch (NotFoundException e) {
+        tmpPrimary = ProjectTypeRegistry.BASE_TYPE;
+      }
+
+      if (!tmpPrimary.isPrimaryable()) {
+        tmpPrimary = ProjectTypeRegistry.BASE_TYPE;
+      }
+    }
+
+    this.primary = tmpPrimary;
+    all.put(primary.getId(), primary);
+
+    List<String> mixinsFromConfig = mixinTypes;
+
+    if (mixinsFromConfig == null) {
+      mixinsFromConfig = new ArrayList<>();
+    }
+
+    for (Attribute attr : primary.getAttributes()) {
+      attributeDefs.put(attr.getName(), attr);
+    }
+
+    for (String mixinFromConfig : mixinsFromConfig) {
+      if (mixinFromConfig.equals(primary.getId())) {
+        continue;
+      }
+
+      final ProjectTypeDef mixin;
+      try {
+        mixin = projectTypeRegistry.getProjectType(mixinFromConfig);
+      } catch (NotFoundException e) {
+        continue;
+      }
+
+      if (!mixin.isMixable()) {
+        continue;
+      }
+
+      if (!mixin.isPersisted()) {
+        continue;
+      }
+
+      // detect duplicated attributes
+      for (Attribute attr : mixin.getAttributes()) {
+        final String attrName = attr.getName();
+        final Attribute attribute = attributeDefs.get(attrName);
+        if (attribute != null && !attribute.getProjectType().equals(attr.getProjectType())) {
+          continue;
+        }
+
+        attributeDefs.put(attrName, attr);
+      }
+
+      // Silently remove repeated items from mixins if any
+      mixins.put(mixinFromConfig, mixin);
+      all.put(mixinFromConfig, mixin);
+    }
+  }
+

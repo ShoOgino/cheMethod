@@ -1,0 +1,20 @@
+  private CompletableFuture<Void> doDelete(String name) throws InfrastructureException {
+    try {
+      final PodResource<Pod, DoneablePod> podResource =
+          clientFactory.create().pods().inNamespace(namespace).withName(name);
+      final CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
+      final Watch watch = podResource.watch(new DeleteWatcher(deleteFuture));
+
+      podResource.delete();
+      return deleteFuture.whenComplete(
+          (v, e) -> {
+            if (e != null) {
+              LOG.warn("Failed to remove pod {} cause {}", name, e.getMessage());
+            }
+            watch.close();
+          });
+    } catch (KubernetesClientException ex) {
+      throw new InfrastructureException(ex.getMessage(), ex);
+    }
+  }
+

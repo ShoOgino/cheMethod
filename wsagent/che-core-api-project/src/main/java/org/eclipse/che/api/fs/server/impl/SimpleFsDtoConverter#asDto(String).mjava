@@ -1,0 +1,51 @@
+  @Override
+  public ItemReference asDto(String wsPath) throws NotFoundException {
+    if (!fsManager.exists(wsPath)) {
+      throw new NotFoundException("Can't find item " + wsPath);
+    }
+
+    String name = nameOf(wsPath);
+
+    Long length;
+    if (fsManager.isFile(wsPath)) {
+      length = fsManager.length(wsPath);
+    } else {
+      length = null;
+    }
+
+    RegisteredProject project;
+    if (isRoot(wsPath)) {
+      project = null;
+    } else {
+      project =
+          projectManager
+              .getClosest(wsPath)
+              .orElseThrow(() -> new NotFoundException("Can't find project for item " + wsPath));
+    }
+
+    String type;
+    if (projectManager.isRegistered(wsPath)) {
+      type = "project";
+    } else if (fsManager.isDir(wsPath)) {
+      type = "folder";
+    } else {
+      type = "file";
+    }
+
+    ItemReference itemReference =
+        newDto(ItemReference.class).withName(name).withPath(wsPath).withType(type);
+
+    if (project != null) {
+      itemReference.withProject(project.getPath());
+      if (wsPath.equals(project.getPath())) {
+        itemReference.setProjectConfig(ProjectDtoConverter.asDto(project));
+      }
+    }
+
+    if (length != null) {
+      itemReference.withContentLength(length);
+    }
+
+    return itemReference;
+  }
+

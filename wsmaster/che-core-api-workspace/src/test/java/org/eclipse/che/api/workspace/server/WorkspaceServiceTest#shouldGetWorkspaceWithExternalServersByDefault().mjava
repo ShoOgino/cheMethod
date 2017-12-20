@@ -1,0 +1,41 @@
+  @Test
+  public void shouldGetWorkspaceWithExternalServersByDefault() throws Exception {
+    // given
+    WorkspaceImpl workspace = createWorkspace(createConfigDto());
+    String externalServerKey = "server2";
+    ServerImpl externalServer = createExternalServer();
+    Map<String, Server> servers =
+        ImmutableMap.of("server1", createInternalServer(), externalServerKey, externalServer);
+    Map<String, Machine> machines =
+        singletonMap("machine1", new MachineImpl(singletonMap("key", "value"), servers, RUNNING));
+    workspace.setRuntime(new RuntimeImpl("activeEnv", machines, "user123"));
+    when(wsManager.getWorkspace(workspace.getId())).thenReturn(workspace);
+    Map<String, MachineDto> expected =
+        singletonMap(
+            "machine1",
+            newDto(MachineDto.class)
+                .withAttributes(singletonMap("key", "value"))
+                .withStatus(RUNNING)
+                .withServers(
+                    singletonMap(
+                        externalServerKey,
+                        newDto(ServerDto.class)
+                            .withUrl(externalServer.getUrl())
+                            .withStatus(externalServer.getStatus())
+                            .withAttributes(externalServer.getAttributes()))));
+
+    // when
+    Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .when()
+            .get(SECURE_PATH + "/workspace/" + workspace.getId());
+
+    // then
+    assertEquals(response.getStatusCode(), 200);
+    RuntimeDto retrievedRuntime = unwrapDto(response, WorkspaceDto.class).getRuntime();
+    assertNotNull(retrievedRuntime);
+    assertEquals(expected, retrievedRuntime.getMachines());
+  }
+

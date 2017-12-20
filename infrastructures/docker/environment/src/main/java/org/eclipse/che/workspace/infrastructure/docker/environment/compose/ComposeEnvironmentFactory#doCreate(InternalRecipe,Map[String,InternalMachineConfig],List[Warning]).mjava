@@ -1,0 +1,36 @@
+  @Override
+  protected ComposeEnvironment doCreate(
+      InternalRecipe recipe, Map<String, InternalMachineConfig> machines, List<Warning> warnings)
+      throws InfrastructureException, ValidationException {
+    String contentType = recipe.getContentType();
+    checkNotNull(contentType, "Recipe content type should not be null");
+
+    String recipeContent = recipe.getContent();
+
+    if (!ComposeEnvironment.TYPE.equals(recipe.getType())) {
+      throw new ValidationException(
+          format("Compose environment parser doesn't support recipe type '%s'", recipe.getType()));
+    }
+
+    if (!YAML_CONTENT_TYPES.contains(contentType)) {
+      throw new ValidationException(
+          format(
+              "Provided environment recipe content type '%s' is "
+                  + "unsupported. Supported values are: %s",
+              contentType, YAML_CONTENT_TYPES.stream().collect(joining(", "))));
+    }
+    ComposeRecipe composeRecipe = doParse(recipeContent);
+
+    ComposeEnvironment composeEnvironment =
+        new ComposeEnvironment(
+            composeRecipe.getVersion(),
+            startStrategy.order(composeRecipe.getServices()),
+            recipe,
+            machines,
+            warnings);
+
+    composeValidator.validate(composeEnvironment);
+
+    return composeEnvironment;
+  }
+

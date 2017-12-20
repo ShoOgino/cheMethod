@@ -1,17 +1,25 @@
   @Override
   public void onPreviewSsh(String machineId) {
     ProcessTreeNode machineTreeNode = findTreeNodeById(machineId);
-    if (machineTreeNode == null) {
+    if (machineTreeNode == null || machineTreeNode.getType() != MACHINE_NODE) {
       return;
     }
 
-    Machine machine = (Machine) machineTreeNode.getData();
+    String machineName = (String) machineTreeNode.getData();
+    RuntimeImpl runtime = appContext.getWorkspace().getRuntime();
+    if (runtime == null) {
+      return;
+    }
+
+    Optional<MachineImpl> machine = runtime.getMachineByName(machineName);
+    if (!machine.isPresent()) {
+      return;
+    }
 
     final OutputConsole defaultConsole = commandConsoleFactory.create("SSH");
-    addCommandOutput(machineId, defaultConsole);
+    addCommandOutput(machineId, defaultConsole, true);
 
-    final String machineName = machine.getConfig().getName();
-    String sshServiceAddress = getSshServerAddress(machine);
+    String sshServiceAddress = getSshServerAddress(machine.get());
     final String machineHost;
     final String sshPort;
     if (sshServiceAddress != null) {
@@ -25,7 +33,7 @@
 
     // user
     final String userName;
-    String user = machine.getRuntime().getProperties().get("config.user");
+    String user = machine.get().getAttributes().get("config.user");
     if (isNullOrEmpty(user)) {
       userName = "root";
     } else {
@@ -35,7 +43,7 @@
     // ssh key
     final String workspaceName = appContext.getWorkspace().getConfig().getName();
     Promise<SshPairDto> sshPairDtoPromise =
-        sshServiceClient.getPair("workspace", machine.getWorkspaceId());
+        sshServiceClient.getPair("workspace", appContext.getWorkspaceId());
 
     sshPairDtoPromise
         .then(

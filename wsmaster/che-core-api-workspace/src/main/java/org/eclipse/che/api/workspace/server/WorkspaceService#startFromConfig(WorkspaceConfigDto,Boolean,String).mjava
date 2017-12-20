@@ -27,20 +27,26 @@
   public WorkspaceDto startFromConfig(
       @ApiParam(value = "The configuration to start the workspace from", required = true)
           WorkspaceConfigDto config,
-      @ApiParam("Weather this workspace is temporary or not") @QueryParam("temporary")
+      @ApiParam("Weather this workspace is temporary or not")
+          @QueryParam("temporary")
+          @DefaultValue("false")
           Boolean isTemporary,
       @ApiParam("Namespace where workspace should be created") @QueryParam("namespace")
           String namespace)
       throws BadRequestException, ForbiddenException, NotFoundException, ServerException,
           ConflictException {
     requiredNotNull(config, "Workspace configuration");
-    validator.validateConfig(config);
     relativizeRecipeLinks(config);
     if (namespace == null) {
       namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
     }
-    return linksInjector.injectLinks(
-        asDto(workspaceManager.startWorkspace(config, namespace, firstNonNull(isTemporary, false))),
-        getServiceContext());
+
+    try {
+      Workspace workspace =
+          workspaceManager.startWorkspace(config, namespace, isTemporary, new HashMap<>());
+      return asDtoWithLinksAndToken(workspace);
+    } catch (ValidationException x) {
+      throw new BadRequestException(x.getMessage());
+    }
   }
 

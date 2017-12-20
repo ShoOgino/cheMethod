@@ -1,17 +1,25 @@
   /**
    * Convert DBG specific location to VFS one.
    *
-   * @param dbgLocation
    * @return VFS specific location.
    */
   public Location convertToVFS(Location dbgLocation) {
-    VirtualFileEntry localFileEntry =
-        ZendDbgFileUtils.findVirtualFileEntry(dbgLocation.getResourceProjectPath());
-    if (localFileEntry == null) {
+    String remotePath = dbgLocation.getResourceProjectPath();
+    String wsPath = absolutize(remotePath);
+    if (wsPath.startsWith("/projects")) {
+      wsPath = wsPath.substring("/projects".length());
+    }
+
+    if (!fsManager.exists(wsPath)) {
       return null;
     }
-    String resourceProjectPath = localFileEntry.getProject();
-    String target = localFileEntry.getName();
+
+    String resourceProjectPath =
+        projectManager
+            .getClosest(wsPath)
+            .orElseThrow(() -> new IllegalArgumentException("Can't find project"))
+            .getPath();
+    String target = nameOf(wsPath);
     int lineNumber = dbgLocation.getLineNumber();
     return new LocationImpl(
         target,

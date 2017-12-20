@@ -59,7 +59,9 @@
 
     DefaultActionGroup newGroup = new DefaultActionGroup("New", true, actionManager);
     newGroup.getTemplatePresentation().setDescription("Create...");
-    newGroup.getTemplatePresentation().setSVGResource(resources.newResource());
+    newGroup
+        .getTemplatePresentation()
+        .setImageElement(new SVGImage(resources.newResource()).getElement());
     actionManager.registerAction(GROUP_FILE_NEW, newGroup);
     projectGroup.add(newGroup);
 
@@ -74,7 +76,9 @@
     newGroup.addSeparator();
 
     actionManager.registerAction("newXmlFile", newXmlFileAction);
-    newXmlFileAction.getTemplatePresentation().setSVGResource(xmlFile.getImage());
+    newXmlFileAction
+        .getTemplatePresentation()
+        .setImageElement(new SVGImage(xmlFile.getImage()).getElement());
     newGroup.addAction(newXmlFileAction);
 
     actionManager.registerAction("uploadFile", uploadFileAction);
@@ -153,9 +157,6 @@
     editGroup.add(switchPreviousEditorAction);
     editGroup.add(switchNextEditorAction);
 
-    editGroup.addSeparator();
-    editGroup.add(revealResourceAction);
-
     // Assistant (New Menu)
     DefaultActionGroup assistantGroup =
         (DefaultActionGroup) actionManager.getAction(GROUP_ASSISTANT);
@@ -171,12 +172,44 @@
 
     assistantGroup.addSeparator();
 
+    // Switching of parts
+    DefaultActionGroup toolWindowsGroup =
+        new DefaultActionGroup("Tool Windows", true, actionManager);
+    actionManager.registerAction(TOOL_WINDOWS_GROUP, toolWindowsGroup);
+
+    actionManager.registerAction(
+        PROJECT_EXPLORER_DISPLAYING_MODE, projectExplorerDisplayingModeAction);
+    actionManager.registerAction(FIND_RESULT_DISPLAYING_MODE, findResultDisplayingModeAction);
+    actionManager.registerAction(EVENT_LOGS_DISPLAYING_MODE, eventLogsDisplayingModeAction);
+    actionManager.registerAction(
+        COMMAND_EXPLORER_DISPLAYING_MODE, commandsExplorerDisplayingModeAction);
+    actionManager.registerAction(EDITOR_DISPLAYING_MODE, editorDisplayingModeAction);
+    actionManager.registerAction(TERMINAL_DISPLAYING_MODE, terminalDisplayingModeAction);
+    toolWindowsGroup.add(projectExplorerDisplayingModeAction, FIRST);
+    toolWindowsGroup.add(
+        eventLogsDisplayingModeAction, new Constraints(AFTER, PROJECT_EXPLORER_DISPLAYING_MODE));
+    toolWindowsGroup.add(
+        findResultDisplayingModeAction, new Constraints(AFTER, EVENT_LOGS_DISPLAYING_MODE));
+    toolWindowsGroup.add(
+        commandsExplorerDisplayingModeAction, new Constraints(AFTER, FIND_RESULT_DISPLAYING_MODE));
+    toolWindowsGroup.add(editorDisplayingModeAction);
+    toolWindowsGroup.add(terminalDisplayingModeAction);
+
+    assistantGroup.add(toolWindowsGroup);
+    assistantGroup.addSeparator();
+
     actionManager.registerAction("callCompletion", completeAction);
     assistantGroup.add(completeAction);
 
     actionManager.registerAction("downloadItemAction", downloadResourceAction);
     actionManager.registerAction(NAVIGATE_TO_FILE, navigateToFileAction);
     assistantGroup.add(navigateToFileAction);
+
+    assistantGroup.addSeparator();
+    actionManager.registerAction("devModeSetUpAction", devModeSetUpAction);
+    actionManager.registerAction("devModeOffAction", devModeOffAction);
+    assistantGroup.add(devModeSetUpAction);
+    assistantGroup.add(devModeOffAction);
 
     // Compose Profile menu
     DefaultActionGroup profileGroup = (DefaultActionGroup) actionManager.getAction(GROUP_PROFILE);
@@ -198,6 +231,8 @@
     actionManager.registerAction("resourceOperation", resourceOperation);
     actionManager.registerAction("refreshPathAction", refreshPathAction);
     actionManager.registerAction("linkWithEditor", linkWithEditorAction);
+    actionManager.registerAction("showToolbar", showToolbarAction);
+
     resourceOperation.addSeparator();
     resourceOperation.add(previewImageAction);
     resourceOperation.add(showReferenceAction);
@@ -214,6 +249,7 @@
     resourceOperation.add(downloadResourceAction);
     resourceOperation.add(refreshPathAction);
     resourceOperation.add(linkWithEditorAction);
+    resourceOperation.add(collapseAllAction);
     resourceOperation.addSeparator();
     resourceOperation.add(convertFolderToProjectAction);
     resourceOperation.addSeparator();
@@ -224,16 +260,24 @@
 
     DefaultActionGroup mainContextMenuGroup =
         (DefaultActionGroup) actionManager.getAction(GROUP_MAIN_CONTEXT_MENU);
-    mainContextMenuGroup.add(newGroup, Constraints.FIRST);
+    mainContextMenuGroup.add(newGroup, FIRST);
     mainContextMenuGroup.addSeparator();
     mainContextMenuGroup.add(resourceOperation);
 
     DefaultActionGroup partMenuGroup =
         (DefaultActionGroup) actionManager.getAction(GROUP_PART_MENU);
     partMenuGroup.add(maximizePartAction);
-    partMenuGroup.add(minimizePartAction);
+    partMenuGroup.add(hidePartAction);
     partMenuGroup.add(restorePartAction);
     partMenuGroup.add(showConsoleTreeAction);
+    partMenuGroup.add(revealResourceAction);
+    partMenuGroup.add(collapseAllAction);
+    partMenuGroup.add(refreshPathAction);
+    partMenuGroup.add(linkWithEditorAction);
+
+    DefaultActionGroup toolbarControllerGroup =
+        (DefaultActionGroup) actionManager.getAction(GROUP_TOOLBAR_CONTROLLER);
+    toolbarControllerGroup.add(showToolbarAction);
 
     actionManager.registerAction("expandEditor", expandEditorAction);
     DefaultActionGroup rightMenuGroup =
@@ -247,12 +291,12 @@
     actionManager.registerAction("goInto", goIntoAction);
     actionManager.registerAction(SHOW_REFERENCE, showReferenceAction);
 
-    actionManager.registerAction("collapseAll", collapseAllAction);
+    actionManager.registerAction(REVEAL_RESOURCE, revealResourceAction);
+    actionManager.registerAction(COLLAPSE_ALL, collapseAllAction);
 
     actionManager.registerAction("openFile", openFileAction);
     actionManager.registerAction(SWITCH_LEFT_TAB, switchPreviousEditorAction);
     actionManager.registerAction(SWITCH_RIGHT_TAB, switchNextEditorAction);
-    actionManager.registerAction("scrollFromSource", revealResourceAction);
 
     changeResourceGroup.add(cutResourceAction);
     changeResourceGroup.add(copyResourceAction);
@@ -325,6 +369,9 @@
     editorContextMenuGroup.add(fullTextSearchAction);
     editorContextMenuGroup.add(closeActiveEditorAction);
 
+    editorContextMenuGroup.addSeparator();
+    editorContextMenuGroup.add(revealResourceAction);
+
     // Define hot-keys
     keyBinding
         .getGlobal()
@@ -371,6 +418,41 @@
     keyBinding.getGlobal().addKey(new KeyBuilder().action().charCode('z').build(), UNDO);
     keyBinding.getGlobal().addKey(new KeyBuilder().action().charCode('y').build(), REDO);
 
+    keyBinding
+        .getGlobal()
+        .addKey(
+            new KeyBuilder().action().alt().charCode('1').build(),
+            PROJECT_EXPLORER_DISPLAYING_MODE);
+
+    keyBinding
+        .getGlobal()
+        .addKey(new KeyBuilder().action().alt().charCode('2').build(), EVENT_LOGS_DISPLAYING_MODE);
+
+    keyBinding
+        .getGlobal()
+        .addKey(new KeyBuilder().action().alt().charCode('3').build(), FIND_RESULT_DISPLAYING_MODE);
+
+    keyBinding
+        .getGlobal()
+        .addKey(
+            new KeyBuilder().action().alt().charCode('4').build(),
+            COMMAND_EXPLORER_DISPLAYING_MODE);
+
+    keyBinding
+        .getGlobal()
+        .addKey(new KeyBuilder().alt().charCode('E').build(), EDITOR_DISPLAYING_MODE);
+
+    keyBinding
+        .getGlobal()
+        .addKey(new KeyBuilder().alt().charCode('T').build(), TERMINAL_DISPLAYING_MODE);
+
+    keyBinding
+        .getGlobal()
+        .addKey(new KeyBuilder().action().charCode(ARROW_DOWN).build(), REVEAL_RESOURCE);
+    keyBinding
+        .getGlobal()
+        .addKey(new KeyBuilder().action().charCode(ARROW_UP).build(), COLLAPSE_ALL);
+
     if (UserAgent.isMac()) {
       keyBinding
           .getGlobal()
@@ -397,8 +479,8 @@
           (DefaultActionGroup) actionManager.getAction(GROUP_MAIN_MENU);
       mainMenu.add(windowMenu);
       for (Perspective perspective : perspectives.values()) {
-        final Action action =
-            new Action(perspective.getPerspectiveName()) {
+        final BaseAction action =
+            new BaseAction(perspective.getPerspectiveName()) {
               @Override
               public void actionPerformed(ActionEvent e) {
                 perspectiveManager.setPerspectiveId(perspective.getPerspectiveId());

@@ -1,0 +1,25 @@
+  @Override
+  public synchronized RegisteredProject copy(String srcWsPath, String dstWsPath, boolean overwrite)
+      throws ServerException, NotFoundException, ConflictException, ForbiddenException {
+    fsManager.copy(srcWsPath, dstWsPath);
+
+    RegisteredProject oldProjectConfig =
+        projectConfigRegistry.get(srcWsPath).orElseThrow(IllegalStateException::new);
+
+    String newProjectName = dstWsPath.substring(dstWsPath.lastIndexOf(separator));
+    NewProjectConfig newProjectConfig =
+        new NewProjectConfigImpl(
+            dstWsPath,
+            oldProjectConfig.getType(),
+            oldProjectConfig.getMixins(),
+            newProjectName,
+            oldProjectConfig.getDescription(),
+            oldProjectConfig.getAttributes(),
+            emptyMap(),
+            oldProjectConfig.getSource());
+
+    RegisteredProject copiedProject = projectConfigRegistry.put(newProjectConfig, true, false);
+    fireInitHandlers(copiedProject);
+    return copiedProject;
+  }
+

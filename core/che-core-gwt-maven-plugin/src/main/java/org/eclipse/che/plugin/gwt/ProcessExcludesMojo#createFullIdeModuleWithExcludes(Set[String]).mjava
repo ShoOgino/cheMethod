@@ -1,0 +1,34 @@
+  /** Creates copy of the Full.gwt.xml with removed '<inherits>' for the excluded GWT modules. */
+  private void createFullIdeModuleWithExcludes(Set<String> modulesToExclude)
+      throws XmlPullParserException, IOException {
+    String fullIdeGwtModulePath = fullIdeGwtModule.replace('.', '/') + ".gwt.xml";
+    String fullIdeGwtModuleContent =
+        getFileContent(new ZipFile(fullIdeArtifact.getFile()), fullIdeGwtModulePath);
+
+    InputStream in = new ByteArrayInputStream(fullIdeGwtModuleContent.getBytes(UTF_8.name()));
+    Xpp3Dom module = Xpp3DomBuilder.build(in, UTF_8.name());
+
+    for (int i = module.getChildCount() - 1; i >= 0; i--) {
+      Xpp3Dom child = module.getChild(i);
+
+      if ("inherits".equals(child.getName())) {
+        String moduleName = child.getAttribute("name");
+
+        if (modulesToExclude.contains(moduleName)) {
+          module.removeChild(i);
+        }
+      }
+    }
+
+    String moduleRelPath =
+        fullIdeGwtModulePath.replace(".gwt.xml", FULL_IDE_GWT_MODULE_SUFFIX + ".gwt.xml");
+
+    Path modulePath = Paths.get(outputDirectory.getPath(), moduleRelPath);
+
+    try (Writer writer = new StringWriter()) {
+      XMLWriter xmlWriter = new PrettyPrintXMLWriter(writer);
+      Xpp3DomWriter.write(xmlWriter, module);
+      Files.write(modulePath, writer.toString().getBytes());
+    }
+  }
+

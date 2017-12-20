@@ -1,0 +1,23 @@
+  private ServerChecker getChecker(String serverRef, Server server) throws InfrastructureException {
+    // TODO replace with correct behaviour
+    // workaround needed because we don't have server readiness check in the model
+    String livenessCheckPath = LIVENESS_CHECKS_PATHS.get(serverRef);
+    // Create server readiness endpoint URL
+    URL url;
+    try {
+      // TODO: ws -> http is workaround used for terminal websocket server,
+      // should be removed after server checks added to model
+      url =
+          UriBuilder.fromUri(server.getUrl().replaceFirst("^ws", "http"))
+              .replacePath(livenessCheckPath)
+              .queryParam("token", machineTokenProvider.getToken(runtimeIdentity.getWorkspaceId()))
+              .build()
+              .toURL();
+    } catch (MalformedURLException e) {
+      throw new InternalInfrastructureException(
+          "Server " + serverRef + " URL is invalid. Error: " + e.getMessage(), e);
+    }
+
+    return doCreateChecker(url, serverRef);
+  }
+

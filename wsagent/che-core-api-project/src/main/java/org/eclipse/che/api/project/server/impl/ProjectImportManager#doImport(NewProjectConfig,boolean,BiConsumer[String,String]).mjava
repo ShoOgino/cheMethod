@@ -1,0 +1,92 @@
+  public RegisteredProject doImport(
+      NewProjectConfig projectConfig, boolean rewrite, BiConsumer<String, String> consumer)
+      throws ServerException, ForbiddenException, UnauthorizedException, ConflictException,
+          NotFoundException, BadRequestException {
+    String wsPath = projectConfig.getPath();
+    if (isNullOrEmpty(wsPath)) {
+      throw new BadRequestException("Path for new project should be defined");
+    }
+
+    if (projectConfigRegistry.getOrNull(wsPath) != null && !rewrite) {
+      throw new ConflictException("Project already registered: " + wsPath);
+    }
+
+    fsManager.delete(wsPath);
+    projectConfigRegistry.remove(wsPath);
+
+    if (isNullOrEmpty(projectConfig.getType())) {
+      projectConfig.setType(BaseProjectType.ID);
+    }
+
+    try {
+      SourceStorage sourceStorage = projectConfig.getSource();
+      if (sourceStorage != null && !isNullOrEmpty(sourceStorage.getLocation())) {
+        return doImportInternally(wsPath, sourceStorage, consumer);
+      } else {
+        String projectWsPath = projectConfig.getPath();
+        if (projectWsPath == null) {
+          throw new BadRequestException("Path is not defined.");
+        }
+
+        String projectParentWsPath = parentOf(projectWsPath);
+        if (!fsManager.existsAsDir(projectParentWsPath)) {
+          throw new NotFoundException("The parent '" + projectParentWsPath + "' does not exist.");
+        }
+
+        String type = projectConfig.getType();
+        if (type == null) {
+          throw new ConflictException("Project type is not defined: " + projectWsPath);
+        }
+
+        if (projectConfigRegistry.get(projectWsPath).isPresent()) {
+          throw new ConflictException("Project config already exists for: " + projectWsPath);
+        }
+
+        Optional<CreateProjectHandler> cphOptional = projectHandlerRegistry.getCreateHandler(type);
+
+        if (cphOptional.isPresent()) {
+          CreateProjectHandler generator = cphOptional.get();
+          Map<String, AttributeValue> valueMap = new HashMap<>();
+          Map<String, List<String>> attributes = projectConfig.getAttributes();
+          if (attributes != null) {
+            for (Entry<String, List<String>> entry : attributes.entrySet()) {
+              valueMap.put(entry.getKey(), new AttributeValue(entry.getValue()));
+            }
+          }
+
+          Map<String, String> options =
+              projectConfig.getOptions() == null ? new HashMap<>() : projectConfig.getOptions();
+
+          generator.onCreateProject(projectWsPath, valueMap, options);
+        } else {
+          fsManager.createDir(projectWsPath);
+        }
+
+        RegisteredProject project = projectConfigRegistry.put(projectConfig, true, false);
+        projectSynchronizer.synchronize();
+        List<String> types = new ArrayList<>(project.getMixins());
+        types.add(project.getType());
+
+        for (String item : types) {
+          Optional<ProjectInitHandler> hOptional =
+              projectHandlerRegistry.getProjectInitHandler(item);
+          if (hOptional.isPresent()) {
+            hOptional.get().onProjectInitialized(project.getBaseFolder());
+          }
+        }
+
+        return project;
+      }
+    } catch (ServerException
+        | ForbiddenException
+        | UnauthorizedException
+        | ConflictException
+        | NotFoundException e) {
+      fsManager.delete(wsPath);
+      projectConfigRegistry.remove(wsPath);
+      projectSynchronizer.synchronize();
+
+      throw e;
+    }
+  }
+

@@ -1,6 +1,8 @@
   /**
    * Updates an existing workspace with a new configuration.
    *
+   * <p>
+   *
    * <p>Replace strategy is used for workspace update, it means that existing workspace data will be
    * replaced with given {@code update}.
    *
@@ -13,16 +15,19 @@
    * @throws ServerException when any other error occurs
    */
   public WorkspaceImpl updateWorkspace(String id, Workspace update)
-      throws ConflictException, ServerException, NotFoundException {
+      throws ConflictException, ServerException, NotFoundException, ValidationException {
     requireNonNull(id, "Required non-null workspace id");
     requireNonNull(update, "Required non-null workspace update");
+    requireNonNull(update.getConfig(), "Required non-null workspace configuration update");
+    validator.validateConfig(update.getConfig());
+    validator.validateAttributes(update.getAttributes());
+
     WorkspaceImpl workspace = workspaceDao.get(id);
     workspace.setConfig(new WorkspaceConfigImpl(update.getConfig()));
-    update.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
     workspace.setAttributes(update.getAttributes());
+    workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
     workspace.setTemporary(update.isTemporary());
-    WorkspaceImpl updated = workspaceDao.update(workspace);
-    runtimes.injectRuntime(updated);
-    return updated;
+
+    return normalizeState(workspaceDao.update(workspace), true);
   }
 

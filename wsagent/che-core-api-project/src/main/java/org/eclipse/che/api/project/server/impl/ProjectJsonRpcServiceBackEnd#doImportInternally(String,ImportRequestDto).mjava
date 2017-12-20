@@ -1,0 +1,28 @@
+  private ImportResponseDto doImportInternally(String endpointId, ImportRequestDto request)
+      throws ServerException, ConflictException, ForbiddenException, BadRequestException,
+          NotFoundException, UnauthorizedException {
+    String wsPath = request.getWsPath();
+    SourceStorageDto sourceStorage = request.getSourceStorage();
+
+    BiConsumer<String, String> consumer =
+        (projectName, message) -> {
+          ImportProgressRecordDto progressRecord =
+              newDto(ImportProgressRecordDto.class).withProjectName(projectName).withLine(message);
+
+          requestTransmitter
+              .newRequest()
+              .endpointId(endpointId)
+              .methodName(EVENT_IMPORT_OUTPUT_PROGRESS)
+              .paramsAsDto(progressRecord)
+              .sendAndSkipResult();
+        };
+
+    RegisteredProject registeredProject =
+        projectManager.doImport(wsPath, sourceStorage, false, consumer);
+    ProjectConfigDto projectConfigDto = asDto(registeredProject);
+    ImportResponseDto response = newDto(ImportResponseDto.class);
+    response.setConfig(projectConfigDto);
+
+    return response;
+  }
+

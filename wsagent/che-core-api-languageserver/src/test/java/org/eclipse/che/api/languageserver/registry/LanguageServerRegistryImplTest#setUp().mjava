@@ -1,15 +1,17 @@
   @BeforeMethod
   public void setUp() throws Exception {
+
     this.serverCapabilities = new ServerCapabilities();
     serverDescription =
         new LanguageServerDescription(
             "foo", Collections.singletonList("id"), Collections.emptyList());
     initializeResult = new InitializeResult(serverCapabilities);
 
-    completableFuture = CompletableFuture.completedFuture(initializeResult);
+    completableFuture = completedFuture(initializeResult);
 
     when(languageServerLauncher.isAbleToLaunch()).thenReturn(true);
     when(languageServerLauncher.getDescription()).thenReturn(serverDescription);
+    when(languageServerLauncher.isLocal()).thenReturn(true);
     when(languageDescription.getLanguageId()).thenReturn("id");
     when(languageDescription.getFileExtensions()).thenReturn(Collections.singletonList("txt"));
     when(languageDescription.getMimeType()).thenReturn("plain/text");
@@ -18,14 +20,21 @@
     when(languageServer.initialize(any(InitializeParams.class))).thenReturn(completableFuture);
 
     when(pmp.get()).thenReturn(pm);
-    when(projectsRoot.getPath()).thenReturn(Path.of(PROJECTS_ROOT));
-    when(pm.getProjectsRoot()).thenReturn(projectsRoot);
 
     when(clientFactory.create(anyString())).thenReturn(languageClient);
+
+    when(httpJsonRequestFactory.fromUrl(any(String.class))).thenReturn(httpJsonRequest);
+    when(httpJsonRequest.useGetMethod()).thenReturn(httpJsonRequest);
+    when(httpJsonRequest.request()).thenReturn(httpJsonResponse);
+    when(httpJsonResponse.asDto(any())).thenReturn(workspace);
 
     registry =
         spy(
             new LanguageServerRegistryImpl(
+                "",
+                "",
+                httpJsonRequestFactory,
+                new HashSet<>(),
                 Collections.singleton(languageServerLauncher),
                 Collections.singleton(languageDescription),
                 pmp,
@@ -40,9 +49,6 @@
 
     when(initializer.initialize(
             any(LanguageServerLauncher.class), any(LanguageClient.class), anyString()))
-        .thenAnswer(
-            invocation -> {
-              return CompletableFuture.completedFuture(Pair.of(languageServer, initializeResult));
-            });
+        .thenAnswer(invocation -> completedFuture(Pair.of(languageServer, initializeResult)));
   }
 

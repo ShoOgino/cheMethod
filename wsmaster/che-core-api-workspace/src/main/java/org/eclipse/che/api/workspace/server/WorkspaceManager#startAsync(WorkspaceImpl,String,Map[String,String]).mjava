@@ -1,0 +1,24 @@
+  /** Asynchronously starts given workspace. */
+  private void startAsync(WorkspaceImpl workspace, String envName, Map<String, String> options)
+      throws ConflictException, NotFoundException, ServerException {
+    if (envName != null && !workspace.getConfig().getEnvironments().containsKey(envName)) {
+      throw new NotFoundException(
+          format(
+              "Workspace '%s:%s' doesn't contain environment '%s'",
+              workspace.getNamespace(), workspace.getConfig().getName(), envName));
+    }
+    workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
+    workspaceDao.update(workspace);
+    final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
+
+    runtimes
+        .startAsync(workspace, env, firstNonNull(options, Collections.emptyMap()))
+        .exceptionally(
+            ex -> {
+              if (workspace.isTemporary()) {
+                removeWorkspaceQuietly(workspace);
+              }
+              return null;
+            });
+  }
+

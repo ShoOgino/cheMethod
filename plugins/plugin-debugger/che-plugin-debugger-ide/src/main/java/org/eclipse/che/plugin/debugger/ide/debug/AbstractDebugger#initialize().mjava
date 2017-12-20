@@ -1,0 +1,59 @@
+  private void initialize() {
+    subscribeToDebuggerEvents();
+
+    if (!isConnected()) {
+      return;
+    }
+    Promise<DebugSessionDto> promise = service.getSessionInfo(debugSessionDto.getId());
+    promise
+        .then(
+            debugSessionDto -> {
+              debuggerManager.setActiveDebugger(AbstractDebugger.this);
+              setDebugSession(debugSessionDto);
+
+              DebuggerInfo debuggerInfo = debugSessionDto.getDebuggerInfo();
+              String info = debuggerInfo.getName() + " " + debuggerInfo.getVersion();
+              String address = debuggerInfo.getHost() + ":" + debuggerInfo.getPort();
+              DebuggerDescriptor debuggerDescriptor = new DebuggerDescriptor(info, address);
+
+              for (DebuggerObserver observer : observers) {
+                observer.onDebuggerAttached(debuggerDescriptor);
+              }
+
+              for (BreakpointDto breakpoint : debugSessionDto.getBreakpoints()) {
+                onBreakpointActivated(breakpoint.getLocation());
+              }
+
+              if (suspendEventDto != null) {
+                debuggerLocationHandlerManager
+                    .getOrDefault(suspendEventDto.getLocation())
+                    .find(
+                        suspendEventDto.getLocation(),
+                        new AsyncCallback<VirtualFile>() {
+                          @Override
+                          public void onFailure(Throwable caught) {
+                            for (DebuggerObserver observer : observers) {
+                              observer.onBreakpointStopped(
+                                  suspendEventDto.getLocation().getTarget(),
+                                  suspendEventDto.getLocation());
+                            }
+                          }
+
+                          @Override
+                          public void onSuccess(VirtualFile result) {
+                            for (DebuggerObserver observer : observers) {
+                              observer.onBreakpointStopped(
+                                  result.getLocation().toString(), suspendEventDto.getLocation());
+                            }
+                          }
+                        });
+              }
+
+              startCheckingEvents();
+            })
+        .catchError(
+            error -> {
+              disconnect();
+            });
+  }
+

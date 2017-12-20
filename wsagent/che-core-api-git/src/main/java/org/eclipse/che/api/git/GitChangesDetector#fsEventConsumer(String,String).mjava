@@ -1,17 +1,15 @@
-  private Consumer<String> fsEventConsumer(String endpointId, String path) {
+  private Consumer<String> fsEventConsumer(String endpointId, String wsPath) {
     return it -> {
       try {
-        String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+        String normalizedPath = wsPath.startsWith("/") ? wsPath.substring(1) : wsPath;
         String itemPath = normalizedPath.substring(normalizedPath.indexOf("/") + 1);
-        String projectPath =
-            projectManager
-                .getProject(normalizedPath.split("/")[0])
-                .getBaseFolder()
-                .getVirtualFile()
-                .toIoFile()
-                .getAbsolutePath();
-        GitConnection connection = gitConnectionFactory.getConnection(projectPath);
-        Status status = connection.status(singletonList(itemPath));
+        String projectName = normalizedPath.split("/")[0];
+        if (!projectManager.isRegistered(absolutize(projectName))) {
+          throw new NotFoundException("Project '" + projectName + "' is not found");
+        }
+        String projectFsPath = pathTransformer.transform(projectName).toString();
+        GitConnection gitConnection = gitConnectionFactory.getConnection(projectFsPath);
+        Status status = gitConnection.status(singletonList(itemPath));
         FileChangedEventDto.Status fileStatus;
         if (status.getAdded().contains(itemPath)) {
           fileStatus = ADDED;
@@ -27,19 +25,17 @@
         transmitter
             .newRequest()
             .endpointId(endpointId)
-            .methodName(OUTGOING_METHOD)
+            .methodName(EVENT_GIT_FILE_CHANGED)
             .paramsAsDto(
                 newDto(FileChangedEventDto.class)
-                    .withPath(path)
+                    .withPath(wsPath)
                     .withStatus(fileStatus)
-                    .withEditedRegions(
-                        gitConnectionFactory.getConnection(projectPath).getEditedRegions(itemPath)))
+                    .withEditedRegions(gitConnection.getEditedRegions(itemPath)))
             .sendAndSkipResult();
-      } catch (NotFoundException | ServerException e) {
-        String errorMessage = e.getMessage();
-        if (!("Not a git repository".equals(errorMessage))) {
-          LOG.error(errorMessage);
-        }
+      } catch (GitCommitInProgressException | GitInvalidRepositoryException e) {
+        // Silent ignore
+      } catch (ServerException | NotFoundException e) {
+        LOG.error(e.getMessage());
       }
     };
   }

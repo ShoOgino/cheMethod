@@ -1,0 +1,63 @@
+  /**
+   * Either root folder or config can be null, in this case Project is configured with problem.
+   *
+   * @param folder root local folder or null
+   * @param config project configuration in workspace
+   * @param updated if this object was updated, i.e. no more synchronized with workspace master
+   * @param detected if this project was detected, initialized when "parent" project initialized
+   * @param projectTypesFactory project types factory
+   * @throws ServerException when path for project is undefined
+   */
+  @AssistedInject
+  public RegisteredProject(
+      @Assisted("folder") String folder,
+      @Assisted("config") @Nullable ProjectConfig config,
+      @Assisted("updated") boolean updated,
+      @Assisted("detected") boolean detected,
+      ProjectTypesFactory projectTypesFactory,
+      FsManager fsManager)
+      throws ServerException {
+    problems = new ArrayList<>();
+    attributes = new HashMap<>();
+
+    String wsPath;
+    if (folder != null) {
+      wsPath = folder;
+    } else if (config != null) {
+      wsPath = config.getPath();
+    } else {
+      throw new ServerException("Invalid Project Configuration. Path undefined.");
+    }
+
+    this.folder = folder;
+    this.config = config == null ? new NewProjectConfigImpl(wsPath) : config;
+    this.updated = updated;
+    this.detected = detected;
+
+    if (wsPath == null || !fsManager.existsAsDir(wsPath)) {
+      problems.add(
+          new ProjectProblemImpl(
+              NO_PROJECT_ON_FILE_SYSTEM,
+              "No project folder on file system " + this.config.getPath()));
+    }
+
+    if (config == null) {
+      problems.add(
+          new ProjectProblemImpl(
+              NO_PROJECT_CONFIGURED_IN_WS,
+              "No project configured in workspace " + this.config.getPath()));
+    }
+
+    // 1. init project types
+    this.types =
+        projectTypesFactory.create(
+            this.config.getType() == null ? BaseProjectType.ID : this.config.getType(),
+            this.config.getMixins());
+
+    // 2. init transient (implicit, like git) project types.
+    types.addTransient(folder);
+
+    // 3. initialize attributes
+    initAttributes();
+  }
+

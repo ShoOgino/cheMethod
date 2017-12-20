@@ -1,0 +1,41 @@
+  private void doSort(
+      InstallerFqn installerFqn,
+      LinkedHashMap<InstallerFqn, Installer> sorted,
+      Set<InstallerFqn> pending)
+      throws InstallerException {
+    if (sorted.keySet().contains(installerFqn)) {
+      return;
+    }
+    pending.add(installerFqn);
+
+    Installer installer = doGet(installerFqn);
+    for (String dependencyKey : installer.getDependencies()) {
+      InstallerFqn dependencyFqn = stripOffLatestTag(InstallerFqn.parse(dependencyKey));
+      if (pending.contains(dependencyFqn)) {
+        throw new InstallerException(
+            format(
+                "Installers circular dependency found between '%s' and '%s'",
+                dependencyFqn, installerFqn));
+      }
+
+      doSort(dependencyFqn, sorted, pending);
+    }
+
+    if (InstallerFqn.idInFqnList(installerFqn.getId(), sorted.keySet())) {
+      throw new InstallerException(
+          format(
+              "Installers dependencies conflict. Several version '%s' and '%s' of the some id '%s",
+              installerFqn.getVersion(),
+              sorted
+                  .keySet()
+                  .stream()
+                  .filter(i -> i.getId().equals(installerFqn.getId()))
+                  .findFirst()
+                  .get()
+                  .getVersion(),
+              installerFqn.getId()));
+    }
+    sorted.put(installerFqn, installer);
+    pending.remove(InstallerFqn.of(installer));
+  }
+

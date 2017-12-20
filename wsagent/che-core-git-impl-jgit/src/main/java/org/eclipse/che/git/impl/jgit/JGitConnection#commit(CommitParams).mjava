@@ -113,15 +113,23 @@
       boolean isGerritSupportConfigured =
           gerritSupportConfigValue != null ? Boolean.valueOf(gerritSupportConfigValue) : false;
       commitCommand.setInsertChangeId(isGerritSupportConfigured);
+      String repositoryPath = getRepository().getDirectory().getPath();
+      COMMITTING_REPOSITORIES.add(repositoryPath);
       RevCommit result = commitCommand.call();
+      COMMITTING_REPOSITORIES.remove(repositoryPath);
+
+      status = status(emptyList());
       Map<String, List<EditedRegion>> modifiedFiles = new HashMap<>();
       for (String file : status.getChanged()) {
         modifiedFiles.put(file, getEditedRegions(file));
       }
+      // Need to fire this event because with the help of the file watchers we can not detect JGit's
+      // commit operation completion.
       eventService.publish(
-          newDto(GitCommitEvent.class)
-              .withStatus(status(emptyList()))
-              .withModifiedFiles(modifiedFiles));
+          newDto(StatusChangedEventDto.class)
+              .withStatus(status)
+              .withModifiedFiles(modifiedFiles)
+              .withProjectName(repository.getWorkTree().getName()));
 
       GitUser gitUser = newDto(GitUser.class).withName(committerName).withEmail(committerEmail);
 
@@ -133,6 +141,8 @@
           .withCommitter(gitUser);
     } catch (GitAPIException exception) {
       throw new GitException(exception.getMessage(), exception);
+    } finally {
+      COMMITTING_REPOSITORIES.remove(getRepository().getDirectory().getPath());
     }
   }
 

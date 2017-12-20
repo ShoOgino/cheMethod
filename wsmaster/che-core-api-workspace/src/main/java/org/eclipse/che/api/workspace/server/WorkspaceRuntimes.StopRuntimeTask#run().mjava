@@ -1,0 +1,40 @@
+    @Override
+    public void run() {
+      String workspaceId = workspace.getId();
+      try {
+        state.runtime.stop(options);
+
+        // remove before firing an event to have consistency between state and the event
+        runtimes.remove(workspaceId);
+        LOG.info(
+            "Workspace '{}/{}' with id '{}' stopped by user '{}'",
+            workspace.getNamespace(),
+            workspace.getConfig().getName(),
+            workspaceId,
+            stoppedBy);
+        publishWorkspaceStatusEvent(workspaceId, STOPPED, STOPPING, null);
+      } catch (InfrastructureException e) {
+        // remove before firing an event to have consistency between state and the event
+        runtimes.remove(workspaceId);
+        LOG.info(
+            "Error occurs on workspace '{}/{}' with id '{}' stopped by user '{}'. Error: {}",
+            workspace.getNamespace(),
+            workspace.getConfig().getName(),
+            workspaceId,
+            stoppedBy,
+            e);
+        publishWorkspaceStatusEvent(
+            workspaceId,
+            STOPPED,
+            STOPPING,
+            "Error occurs on workspace runtime stop. Error: " + e.getMessage());
+        // InfrastructureException is supposed to be an exception that can't be solved
+        // by Che admin, so should not be logged (but not InternalInfrastructureException).
+        // It will prevent bothering the admin when user made a mistake in WS configuration.
+        if (e instanceof InternalInfrastructureException) {
+          LOG.error(e.getLocalizedMessage(), e);
+        }
+        throw new RuntimeException(e);
+      }
+    }
+

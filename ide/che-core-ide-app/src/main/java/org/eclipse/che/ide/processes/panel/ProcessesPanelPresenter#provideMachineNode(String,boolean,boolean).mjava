@@ -1,0 +1,66 @@
+  /**
+   * Provides machine node:
+   * <li>creates new machine node when this one not exist or {@code replace} is {@code true}
+   * <li>returns old machine node when this one exist and {@code replace} is {@code false}
+   *
+   * @param machineName name of the machine to creating node
+   * @param replace existed node will be replaced when {@code replace} is {@code true}
+   * @param activate activate machine node
+   * @return machine node
+   */
+  @Nullable
+  private ProcessTreeNode provideMachineNode(
+      String machineName, boolean replace, boolean activate) {
+    final ProcessTreeNode existedMachineNode = findTreeNodeById(machineName);
+    if (!replace && existedMachineNode != null) {
+      return existedMachineNode;
+    }
+
+    // we need to keep old machine node children
+    ArrayList<ProcessTreeNode> children = new ArrayList<>();
+
+    // remove existed node
+    for (ProcessTreeNode node : rootNode.getChildren()) {
+      if (machineName.equals(node.getName())) {
+        children.addAll(node.getChildren());
+        rootNode.getChildren().remove(node);
+        break;
+      }
+    }
+
+    // create new node
+    RuntimeImpl runtime = appContext.getWorkspace().getRuntime();
+    if (runtime == null) {
+      return null;
+    }
+
+    ProcessTreeNode machineNode =
+        new ProcessTreeNode(MACHINE_NODE, rootNode, machineName, null, children);
+
+    machineNode.setTerminalServerRunning(isServerRunning(machineName, SERVER_TERMINAL_REFERENCE));
+
+    // rely on "wsagent" server's status since "ssh" server's status is always UNKNOWN
+    String wsAgentServerRef = wsAgentServerUtil.getWsAgentHttpServerReference();
+    machineNode.setSshServerRunning(isServerRunning(machineName, wsAgentServerRef));
+
+    for (ProcessTreeNode child : children) {
+      child.setParent(machineNode);
+    }
+
+    machineNodes.put(machineName, machineNode);
+
+    // add to children
+    rootNode.getChildren().add(machineNode);
+
+    // update the view
+    view.setProcessesData(rootNode);
+
+    // add output for the machine if it is not exist
+    if (!consoles.containsKey(machineName)) {
+      OutputConsole outputConsole = commandConsoleFactory.create(machineName);
+      addOutputConsole(machineName, machineNode, outputConsole, true, activate);
+    }
+
+    return machineNode;
+  }
+

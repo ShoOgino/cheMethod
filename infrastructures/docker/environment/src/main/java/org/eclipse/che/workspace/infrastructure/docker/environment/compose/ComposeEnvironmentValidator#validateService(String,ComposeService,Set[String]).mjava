@@ -1,0 +1,108 @@
+  private void validateService(
+      String serviceName, ComposeService service, Set<String> servicesNames)
+      throws ValidationException {
+
+    checkArgument(
+        SERVICE_NAME_PATTERN.matcher(serviceName).matches(),
+        "Name of service '%s' in environment is invalid",
+        serviceName);
+
+    checkArgument(
+        !isNullOrEmpty(service.getImage())
+            || (service.getBuild() != null
+                && (!isNullOrEmpty(service.getBuild().getContext())
+                    || !isNullOrEmpty(service.getBuild().getDockerfile()))),
+        "Field 'image' or 'build.context' is required in service '%s' in environment",
+        serviceName);
+
+    checkArgument(
+        service.getBuild() == null
+            || (isNullOrEmpty(service.getBuild().getContext())
+                != isNullOrEmpty(service.getBuild().getDockerfile())),
+        "Service '%s' in environment contains mutually exclusive dockerfile content and build context.",
+        serviceName);
+
+    for (String expose : service.getExpose()) {
+      checkArgument(
+          EXPOSE_PATTERN.matcher(expose).matches(),
+          "Exposed port '%s' in service '%s' in environment is invalid",
+          expose,
+          serviceName);
+    }
+
+    for (String link : service.getLinks()) {
+      Matcher matcher = LINK_PATTERN.matcher(link);
+
+      checkArgument(
+          matcher.matches(),
+          "Link '%s' in service '%s' in environment is invalid",
+          link,
+          serviceName);
+
+      String containerFromLink = matcher.group("containerName");
+      checkArgument(
+          !serviceName.equals(containerFromLink),
+          "Container '%s' has illegal link to itself",
+          serviceName);
+      checkArgument(
+          servicesNames.contains(containerFromLink),
+          "Service '%s' in environment contains link to non existing service '%s'",
+          serviceName,
+          containerFromLink);
+    }
+
+    for (String depends : service.getDependsOn()) {
+      checkArgument(
+          SERVICE_NAME_PATTERN.matcher(depends).matches(),
+          "Dependency '%s' in service '%s' in environment is invalid",
+          depends,
+          serviceName);
+
+      checkArgument(
+          !serviceName.equals(depends),
+          "Container '%s' has illegal dependency to itself",
+          serviceName);
+      checkArgument(
+          servicesNames.contains(depends),
+          "Service '%s' in environment contains dependency to non existing service '%s'",
+          serviceName,
+          depends);
+    }
+
+    for (String volumesFrom : service.getVolumesFrom()) {
+      Matcher matcher = VOLUME_FROM_PATTERN.matcher(volumesFrom);
+
+      checkArgument(
+          matcher.matches(),
+          "Service name '%s' in field 'volumes_from' of service '%s' in environment is invalid",
+          volumesFrom,
+          serviceName);
+
+      String containerFromVolumesFrom = matcher.group("containerName");
+      checkArgument(
+          !serviceName.equals(containerFromVolumesFrom),
+          "Container '%s' can not mount volume from itself",
+          serviceName);
+      checkArgument(
+          servicesNames.contains(containerFromVolumesFrom),
+          "Service '%s' in environment contains non existing service '%s' in 'volumes_from' field",
+          serviceName,
+          containerFromVolumesFrom);
+    }
+
+    checkArgument(
+        service.getPorts() == null || service.getPorts().isEmpty(),
+        "Ports binding is forbidden but found in service '%s' of environment",
+        serviceName);
+
+    checkArgument(
+        service.getVolumes() == null || service.getVolumes().isEmpty(),
+        "Volumes binding is forbidden but found in service '%s' of environment",
+        serviceName);
+
+    checkArgument(
+        service.getNetworks() == null || service.getNetworks().isEmpty(),
+        "Networks configuration is forbidden but found in service '%s' of environment",
+        serviceName);
+  }
+

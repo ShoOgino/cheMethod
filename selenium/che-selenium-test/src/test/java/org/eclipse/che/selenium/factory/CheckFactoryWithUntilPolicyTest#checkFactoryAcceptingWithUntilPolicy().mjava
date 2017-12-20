@@ -1,25 +1,26 @@
   @Test
   public void checkFactoryAcceptingWithUntilPolicy() throws Exception {
-    // first
     dashboard.open();
     testFactory.open(seleniumWebDriver);
     seleniumWebDriver.switchFromDashboardIframeToIde();
-    projectExplorer.waitProjectExplorer();
-    while (System.currentTimeMillis() <= INIT_TIME + ADDITIONAL_TIME) {
-      if (popupDialogsBrowser.isAlertPresent()) {
-        popupDialogsBrowser.acceptAlert();
+
+    if (System.currentTimeMillis() > initTime + FACTORY_INACTIVITY_TIME) {
+      fail("Factory started longer then additional time and next test steps does not make sense");
+    }
+
+    // first
+    while (System.currentTimeMillis() <= initTime + FACTORY_INACTIVITY_TIME + ADDITIONAL_TIME) {
+      if (warningDialog.isPresent()) {
+        warningDialog.clickOkBtn();
         fail("Factory expired before the until period");
       }
+      projectExplorer.waitProjectExplorer();
       WaitUtils.sleepQuietly(1);
     }
 
     // second
     testFactory.open(seleniumWebDriver);
-    new WebDriverWait(seleniumWebDriver, PREPARING_WS_TIMEOUT_SEC)
-        .until(ExpectedConditions.alertIsPresent());
-    assertTrue(
-        seleniumWebDriver.switchTo().alert().getText().contains(ALERT_EXPIRE_MESSAGE),
-        "actual message: " + seleniumWebDriver.switchTo().alert().getText());
-    popupDialogsBrowser.acceptAlert();
+    seleniumWebDriver.switchFromDashboardIframeToIde();
+    warningDialog.waitWaitWarnDialogWindowWithSpecifiedTextMess(EXPIRE_MESSAGE);
   }
 
