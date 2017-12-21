@@ -2,21 +2,32 @@
   @Override
   public void onPushClicked() {
     final StatusNotification notification =
-        notificationManager.notify(constant.pushProcess(), PROGRESS, FLOAT_MODE);
+        notificationManager.notify(locale.pushProcess(), PROGRESS, FLOAT_MODE);
 
     final String repository = view.getRepository();
     final GitOutputConsole console = gitOutputConsoleFactory.create(PUSH_COMMAND_NAME);
-    service
-        .push(project.getLocation(), getRefs(), repository, view.isForcePushSelected())
+
+    performOperationWithTokenRequestIfNeeded(
+            new RemoteGitOperation<PushResponse>() {
+              @Override
+              public Promise<PushResponse> perform(Credentials credentials) {
+                return service.push(
+                    project.getLocation(),
+                    getRefs(),
+                    repository,
+                    view.isForcePushSelected(),
+                    credentials);
+              }
+            })
         .then(
             response -> {
               console.print(response.getCommandOutput());
               processesPanelPresenter.addCommandOutput(console);
               notification.setStatus(SUCCESS);
               if (response.getCommandOutput().contains("Everything up-to-date")) {
-                notification.setTitle(constant.pushUpToDate());
+                notification.setTitle(locale.pushUpToDate());
               } else {
-                notification.setTitle(constant.pushSuccess(repository));
+                notification.setTitle(locale.pushSuccess(repository));
               }
             })
         .catchError(

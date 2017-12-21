@@ -3,29 +3,39 @@
     view.close();
 
     final StatusNotification notification =
-        notificationManager.notify(constant.pullProcess(), PROGRESS, FLOAT_MODE);
+        notificationManager.notify(locale.pullProcess(), PROGRESS, FLOAT_MODE);
+    GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
 
-    service
-        .pull(project.getLocation(), getRefs(), view.getRepositoryName(), view.getRebase())
+    performOperationWithTokenRequestIfNeeded(
+            new RemoteGitOperation<PullResponse>() {
+              @Override
+              public Promise<PullResponse> perform(Credentials credentials) {
+                return service.pull(
+                    project.getLocation(),
+                    getRefs(),
+                    view.getRepositoryName(),
+                    view.getRebase(),
+                    credentials);
+              }
+            })
         .then(
             response -> {
-              GitOutputConsole console = gitOutputConsoleFactory.create(PULL_COMMAND_NAME);
               console.print(response.getCommandOutput(), GREEN_COLOR);
               consolesPanelPresenter.addCommandOutput(console);
               notification.setStatus(SUCCESS);
               if (response.getCommandOutput().contains("Already up-to-date")) {
-                notification.setTitle(constant.pullUpToDate());
+                notification.setTitle(locale.pullUpToDate());
               } else {
                 project.synchronize();
-                notification.setTitle(constant.pullSuccess(view.getRepositoryUrl()));
+                notification.setTitle(locale.pullSuccess(view.getRepositoryUrl()));
               }
             })
         .catchError(
             error -> {
-              notification.setStatus(FAIL);
-              if (getErrorCode(error.getCause()) == ErrorCodes.MERGE_CONFLICT) {
+              if (getErrorCode(error.getCause()) == MERGE_CONFLICT) {
                 project.synchronize();
               }
+              notification.setStatus(FAIL);
               handleError(error.getCause(), PULL_COMMAND_NAME, notification);
             });
   }

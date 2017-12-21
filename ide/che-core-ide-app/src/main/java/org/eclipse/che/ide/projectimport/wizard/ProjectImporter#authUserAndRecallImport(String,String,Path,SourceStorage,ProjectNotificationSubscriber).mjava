@@ -27,21 +27,31 @@
                   @Override
                   public void onSuccess(OAuthStatus result) {
                     if (!result.equals(OAuthStatus.NOT_PERFORMED)) {
-                      doImport(path, sourceStorage)
-                          .then(
-                              new Operation<Project>() {
-                                @Override
-                                public void apply(Project project) throws OperationException {
-                                  callback.onSuccess(project);
-                                }
-                              })
-                          .catchError(
-                              new Operation<PromiseError>() {
-                                @Override
-                                public void apply(PromiseError error) throws OperationException {
-                                  callback.onFailure(error.getCause());
-                                }
-                              });
+                      oAuthServiceClient.getToken(
+                          providerName,
+                          new AsyncRequestCallback<OAuthToken>(
+                              unmarshallerFactory.newUnmarshaller(OAuthToken.class)) {
+                            @Override
+                            protected void onSuccess(OAuthToken result) {
+                              sourceStorage.getParameters().put("username", result.getToken());
+                              sourceStorage.getParameters().put("password", result.getToken());
+
+                              doImport(path, sourceStorage)
+                                  .then(
+                                      project -> {
+                                        callback.onSuccess(project);
+                                      })
+                                  .catchError(
+                                      error -> {
+                                        callback.onFailure(error.getCause());
+                                      });
+                            }
+
+                            @Override
+                            protected void onFailure(Throwable exception) {
+                              callback.onFailure(new Exception(exception.getMessage()));
+                            }
+                          });
                     } else {
                       subscriber.onFailure("Authentication cancelled");
                       callback.onFailure(new IllegalStateException("Authentication cancelled"));
