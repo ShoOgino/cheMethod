@@ -1,45 +1,19 @@
   @VisibleForTesting
   @PostConstruct
   void init() throws IOException {
-    // check folders creation flag from environment variable
-    String allowFoldersCreationEnvVar = System.getenv(ALLOW_FOLDERS_CREATION_ENV_VARIABLE);
-    if ("false".equalsIgnoreCase(allowFoldersCreationEnvVar)) {
-      createFolders = false;
-    }
-
-    // Priority of workspace storage path sources:
-    // If Che is running on Windows
-    //     che-home-location/vfs
-    // Otherwise
-    //     If environment variable for storage location is set
-    //         use value of that variable
-    //     Otherwise
-    //         If old property of workspace storage is set
-    //             use value of that property for backward compatibility
-    //         Otherwise
-    //             use up-to-date property
-    // find root directory for projects in workspaces
-    if (isWindows) {
-      final Path vfs = WindowsHostUtils.getCheHome().resolve("vfs");
-      workspacesMountPoint = vfs.toString();
-    } else {
-      String workspaceStorageFromEnv = System.getenv(WORKSPACE_STORAGE_PATH_ENV_VARIABLE);
-      if (workspaceStorageFromEnv != null) {
-        workspacesMountPoint = workspaceStorageFromEnv;
-      } else if (oldWorkspacesMountPoint != null) {
-        workspacesMountPoint = oldWorkspacesMountPoint;
-      }
-    }
-
     // create directories if needed
-    if (hostProjectsFolder == null) {
-      ensureExist(
-          workspacesMountPoint,
-          oldWorkspacesMountPoint == null
-              ? "che.workspace.storage"
-              : "che.user.workspaces.storage");
+    if (singleMountPointForAllWorkspaces != null) {
+      ensureExist(singleMountPointForAllWorkspaces, SINGLE_MOUNTPOINT_FOR_ALL_WORKSPACES_PROPERTY);
     } else {
-      ensureExist(hostProjectsFolder, "host.projects.root");
+      ensureExist(workspacesMountPoint, WORKSPACE_PROJECTS_MOUNT_POINT_PROPERTY);
+
+      ensureExist(
+          workspacesMountPointForCheMaster,
+          CHE_MASTER_SPECIFIC_WORKSPACE_PROJECTS_MOUNT_POINT_PROPERTY);
+
+      if (migrationOnStartup && !isWindows) {
+        localProjectsMigrator.performMigration(workspacesMountPointForCheMaster);
+      }
     }
   }
 

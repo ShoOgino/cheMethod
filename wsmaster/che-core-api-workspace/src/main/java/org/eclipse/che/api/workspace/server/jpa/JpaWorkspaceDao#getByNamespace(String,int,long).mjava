@@ -1,0 +1,28 @@
+  @Override
+  @Transactional
+  public Page<WorkspaceImpl> getByNamespace(String namespace, int maxItems, long skipCount)
+      throws ServerException {
+    requireNonNull(namespace, "Required non-null namespace");
+    try {
+      final EntityManager manager = managerProvider.get();
+      final List<WorkspaceImpl> list =
+          manager
+              .createNamedQuery("Workspace.getByNamespace", WorkspaceImpl.class)
+              .setParameter("namespace", namespace)
+              .setMaxResults(maxItems)
+              .setFirstResult((int) skipCount)
+              .getResultList()
+              .stream()
+              .map(WorkspaceImpl::new)
+              .collect(Collectors.toList());
+      final long count =
+          manager
+              .createNamedQuery("Workspace.getByNamespaceCount", Long.class)
+              .setParameter("namespace", namespace)
+              .getSingleResult();
+      return new Page<>(list, skipCount, maxItems, count);
+    } catch (RuntimeException x) {
+      throw new ServerException(x.getLocalizedMessage(), x);
+    }
+  }
+
