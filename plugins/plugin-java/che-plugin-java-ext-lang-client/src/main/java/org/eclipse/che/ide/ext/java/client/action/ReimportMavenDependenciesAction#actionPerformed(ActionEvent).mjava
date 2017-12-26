@@ -1,0 +1,34 @@
+  @Override
+  public void actionPerformed(ActionEvent e) {
+    ReImportMavenProjectsCommandParameters paramsDto =
+        dtoFactory
+            .createDto(ReImportMavenProjectsCommandParameters.class)
+            .withProjectsToUpdate(getPathsToSelectedMavenProject());
+
+    javaLanguageExtensionServiceClient
+        .reImportMavenProjects(paramsDto)
+        .then(
+            updatedProjects -> {
+              for (final String path : updatedProjects) {
+                appContext
+                    .getWorkspaceRoot()
+                    .getContainer(path)
+                    .then(
+                        container -> {
+                          if (container.isPresent()) {
+                            container.get().synchronize();
+                          }
+                        });
+              }
+              // TODO update error markers in poms if needed
+            })
+        .catchError(
+            error -> {
+              notificationManager.notify(
+                  "Problem with reimporting maven dependencies",
+                  error.getMessage(),
+                  FAIL,
+                  EMERGE_MODE);
+            });
+  }
+
