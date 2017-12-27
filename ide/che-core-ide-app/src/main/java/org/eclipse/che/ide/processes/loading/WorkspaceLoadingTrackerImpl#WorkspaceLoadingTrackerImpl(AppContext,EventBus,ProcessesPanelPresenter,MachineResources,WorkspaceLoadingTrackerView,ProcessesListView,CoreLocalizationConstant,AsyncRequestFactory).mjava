@@ -1,0 +1,41 @@
+  @Inject
+  public WorkspaceLoadingTrackerImpl(
+      AppContext appContext,
+      EventBus eventBus,
+      ProcessesPanelPresenter processesPanelPresenter,
+      MachineResources resources,
+      WorkspaceLoadingTrackerView view,
+      ProcessesListView processesListView,
+      CoreLocalizationConstant localizationConstant,
+      AsyncRequestFactory asyncRequestFactory) {
+    this.appContext = appContext;
+    this.processesPanelPresenter = processesPanelPresenter;
+    this.resources = resources;
+    this.view = view;
+    this.processesListView = processesListView;
+    this.localizationConstant = localizationConstant;
+    this.asyncRequestFactory = asyncRequestFactory;
+    this.eventBus = eventBus;
+
+    view.setDelegate(this);
+
+    eventBus.addHandler(WorkspaceStartingEvent.TYPE, this);
+    eventBus.addHandler(WorkspaceRunningEvent.TYPE, this);
+    eventBus.addHandler(WorkspaceStoppedEvent.TYPE, this);
+
+    eventBus.addHandler(
+        MachineRunningEvent.TYPE,
+        event -> {
+          processesListView.setLoadingMessage(
+              localizationConstant.menuLoaderMachineRunning(event.getMachine().getName()));
+        });
+
+    eventBus.addHandler(InstallerStartingEvent.TYPE, this);
+    eventBus.addHandler(InstallerRunningEvent.TYPE, this);
+    eventBus.addHandler(InstallerFailedEvent.TYPE, this);
+
+    eventBus.addHandler(MachineStatusChangedEvent.TYPE, this);
+
+    Scheduler.get().scheduleDeferred(() -> loadInstallers());
+  }
+
