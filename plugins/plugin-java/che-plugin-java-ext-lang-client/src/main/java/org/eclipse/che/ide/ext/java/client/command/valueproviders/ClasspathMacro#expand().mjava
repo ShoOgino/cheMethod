@@ -8,42 +8,40 @@
     }
 
     final Resource resource = resources[0];
-    final Optional<Project> project = resource.getRelatedProject();
+    final Project project = resource.getProject();
 
-    if (!JavaUtil.isJavaProject(project.get())) {
+    if (!JavaUtil.isJavaProject(project)) {
       return promises.resolve("");
     }
 
-    final String projectPath = project.get().getLocation().toString();
+    final String projectPath = project.getLocation().toString();
 
     return classpathContainer
         .getClasspathEntries(projectPath)
         .then(
-            new Function<List<ClasspathEntryDto>, String>() {
-              @Override
-              public String apply(List<ClasspathEntryDto> arg) throws FunctionException {
-                classpathResolver.resolveClasspathEntries(arg);
-                Set<String> libs = classpathResolver.getLibs();
-                StringBuilder classpath = new StringBuilder();
-                for (String lib : libs) {
-                  classpath.append(lib).append(':');
-                }
-
-                for (ClasspathEntryDto container : classpathResolver.getContainers()) {
-                  if (!JRE_CONTAINER.equals(container.getPath())) {
-                    addLibsFromContainer(container, classpath);
+            (Function<List<ClasspathEntry>, String>)
+                arg -> {
+                  classpathResolver.resolveClasspathEntries(arg);
+                  Set<String> libs = classpathResolver.getLibs();
+                  StringBuilder classpath = new StringBuilder();
+                  for (String lib : libs) {
+                    classpath.append(lib).append(':');
                   }
-                }
 
-                if (classpath.toString().isEmpty()) {
-                  classpath
-                      .append(appContext.getProjectsRoot().toString())
-                      .append(projectPath)
-                      .append(':');
-                }
+                  for (ClasspathEntry container : classpathResolver.getContainers()) {
+                    if (!JRE_CONTAINER.equals(container.getPath())) {
+                      addLibsFromContainer(container, classpath);
+                    }
+                  }
 
-                return classpath.toString();
-              }
-            });
+                  if (classpath.toString().isEmpty()) {
+                    classpath
+                        .append(appContext.getProjectsRoot().toString())
+                        .append(projectPath)
+                        .append(':');
+                  }
+
+                  return classpath.toString();
+                });
   }
 
