@@ -1,0 +1,49 @@
+    @Override
+    public void run() {
+      if (cancelled.get()) {
+        return;
+      }
+      Probe probe = probeFactory.get();
+      timeouts.schedule(
+          new TimeoutProbeTask(probe), TimeUnit.SECONDS.toMillis(probeConfig.getTimeoutSeconds()));
+      boolean success = probe.probe();
+      if (success) {
+        // current success increases successes count and clears failures count
+        successes++;
+        failures = 0;
+
+        if (successes >= probeConfig.getSuccessThreshold()) {
+          // TODO make them completable futures? Then we should ensure that
+          // consecutive calls won't use executors thread time but rather use common thread
+          // pool to perform processing of passed probe result
+          if (cancelled.get()) {
+            return;
+          }
+          // Health check satisfies probeConfig health conditions
+          probeResultConsumer.accept(
+              new ProbeResult(
+                  probeFactory.getWorkspaceId(),
+                  probeFactory.getMachineName(),
+                  probeFactory.getServerName(),
+                  ProbeStatus.PASSED));
+        }
+      } else {
+        // current failure increases failures count and clears successes count
+        failures++;
+        successes = 0;
+
+        if (failures >= probeConfig.getFailureThreshold()) {
+          if (cancelled.get()) {
+            return;
+          }
+          // Health check satisfies probeConfig failure conditions
+          probeResultConsumer.accept(
+              new ProbeResult(
+                  probeFactory.getWorkspaceId(),
+                  probeFactory.getMachineName(),
+                  probeFactory.getServerName(),
+                  ProbeStatus.FAILED));
+        }
+      }
+    }
+

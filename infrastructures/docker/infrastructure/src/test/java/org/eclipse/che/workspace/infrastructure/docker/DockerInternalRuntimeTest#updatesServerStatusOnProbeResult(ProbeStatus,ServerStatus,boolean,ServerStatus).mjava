@@ -1,0 +1,31 @@
+  @Test(dataProvider = "serverProbeReactionProvider")
+  public void updatesServerStatusOnProbeResult(
+      ProbeStatus probeStatus,
+      ServerStatus oldServerStatus,
+      boolean serverStatusChanged,
+      ServerStatus newServerStatus)
+      throws Exception {
+
+    when(dockerMachine.getServers())
+        .thenReturn(
+            singletonMap(
+                SERVER_1, new ServerImpl().withUrl(SERVER_URL).withStatus(oldServerStatus)));
+    mockInstallersBootstrap();
+    mockContainerStart();
+    WorkspaceProbes m1Probes = mock(WorkspaceProbes.class);
+    when(workspaceProbesFactory.getProbes(eq(IDENTITY.getWorkspaceId()), eq(DB_MACHINE), any()))
+        .thenReturn(m1Probes);
+    dockerRuntime.start(emptyMap());
+    verify(probesScheduler).schedule(eq(m1Probes), probeResultConsumerCaptor.capture());
+    Consumer<ProbeResult> resultConsumer = probeResultConsumerCaptor.getValue();
+
+    resultConsumer.accept(
+        new ProbeResult(IDENTITY.getWorkspaceId(), DB_MACHINE, SERVER_1, probeStatus));
+
+    if (serverStatusChanged) {
+      verify(dockerMachine).setServerStatus(SERVER_1, newServerStatus);
+    } else {
+      verify(dockerMachine, never()).setServerStatus(eq(SERVER_1), any());
+    }
+  }
+

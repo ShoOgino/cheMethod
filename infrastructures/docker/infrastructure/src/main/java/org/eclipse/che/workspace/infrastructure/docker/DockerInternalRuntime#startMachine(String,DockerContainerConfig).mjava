@@ -1,5 +1,6 @@
   private void startMachine(String name, DockerContainerConfig containerConfig)
       throws InfrastructureException, InterruptedException {
+    RuntimeIdentity identity = getContext().getIdentity();
     InternalMachineConfig machineCfg = getContext().getEnvironment().getMachines().get(name);
 
     DockerMachine machine =
@@ -7,7 +8,7 @@
             getContext().getEnvironment().getNetwork(),
             name,
             containerConfig,
-            getContext().getIdentity(),
+            identity,
             new AbnormalMachineStopHandlerImpl());
     try {
       startSynchronizer.addMachine(name, machine);
@@ -18,17 +19,18 @@
       throw e;
     }
     if (machineCfg != null && !machineCfg.getInstallers().isEmpty()) {
-      bootstrapperFactory
-          .create(name, getContext().getIdentity(), machineCfg.getInstallers(), machine)
-          .bootstrap();
+      bootstrapperFactory.create(name, identity, machineCfg.getInstallers(), machine).bootstrap();
     }
 
     checkInterruption();
     ServersChecker readinessChecker =
-        serverCheckerFactory.create(getContext().getIdentity(), name, machine.getServers());
+        serverCheckerFactory.create(identity, name, machine.getServers());
     readinessChecker.startAsync(new ServerReadinessHandler(name));
     readinessChecker.await();
 
     machine.setStatus(MachineStatus.RUNNING);
+    probeScheduler.schedule(
+        probesFactory.getProbes(identity.getWorkspaceId(), name, machine.getServers()),
+        new ServerLivenessHandler());
   }
 

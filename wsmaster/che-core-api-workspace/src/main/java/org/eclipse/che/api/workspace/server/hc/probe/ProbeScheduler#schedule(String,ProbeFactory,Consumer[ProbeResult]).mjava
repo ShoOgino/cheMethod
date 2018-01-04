@@ -1,0 +1,33 @@
+  private void schedule(
+      String workspaceId, ProbeFactory probeFactory, Consumer<ProbeResult> probeResultConsumer) {
+    ProbeConfig probeConfig = probeFactory.getProbeConfig();
+    Task task = new Task(probeFactory, probeResultConsumer);
+    // scheduleWithFixedDelay is used in favor of scheduleAtFixedRate because in case of big amount
+    // of scheduled probes start time of tasks may shift and this may lead to a situation when
+    // another probeConfig is needed immediately after the previous one is finished which doesn't
+    // seem a good thing
+    ScheduledFuture scheduledFuture =
+        probesExecutor.scheduleWithFixedDelay(
+            task,
+            probeConfig.getInitialDelaySeconds(),
+            probeConfig.getPeriodSeconds(),
+            TimeUnit.SECONDS);
+
+    List<ScheduledFuture> workspaceProbes =
+        probesFutures.computeIfPresent(
+            workspaceId,
+            (OldKey, scheduledFutures) -> {
+              if (scheduledFutures == null) {
+                scheduledFutures = new ArrayList<>();
+              }
+              scheduledFutures.add(scheduledFuture);
+              return scheduledFutures;
+            });
+    // check whether workspace probes were cancelled concurrently which led to removal of the value
+    // in the map
+    if (workspaceProbes == null) {
+      scheduledFuture.cancel(true);
+      task.cancel();
+    }
+  }
+

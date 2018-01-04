@@ -1,8 +1,10 @@
   @Override
   protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
+    OpenShiftRuntimeContext context = getContext();
+    String workspaceId = context.getIdentity().getWorkspaceId();
     try {
-      final OpenShiftEnvironment osEnv = getContext().getEnvironment();
-      volumesStrategy.prepare(osEnv, getContext().getIdentity().getWorkspaceId());
+      final OpenShiftEnvironment osEnv = context.getEnvironment();
+      volumesStrategy.prepare(osEnv, workspaceId);
 
       List<Service> createdServices = new ArrayList<>();
       for (Service service : osEnv.getServices().values()) {
@@ -35,9 +37,11 @@
     } catch (InfrastructureException | RuntimeException | InterruptedException e) {
       LOG.warn(
           "Failed to start OpenShift runtime of workspace {}. Cause: {}",
-          getContext().getIdentity().getWorkspaceId(),
+          workspaceId,
           e.getMessage());
       boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+      // Cancels workspace servers probes if any
+      probeScheduler.cancel(workspaceId);
       try {
         project.cleanUp();
       } catch (InfrastructureException ignored) {
