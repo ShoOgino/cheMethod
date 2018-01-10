@@ -1,5 +1,5 @@
   @Override
-  public void onFileNameChanged(String fileName) {
+  public void onFileNameChanged(final String fileName) {
     if (fileName.isEmpty()) {
       view.showItems(emptyList());
       return;
@@ -10,15 +10,33 @@
             .createDto(ProjectSearchRequestDto.class)
             .withPath("")
             .withName(URL.encodePathSegment(fileName + "*"));
+    if (timer != null) {
+      timer.cancel();
+    }
 
-    requestTransmitter
-        .newRequest()
-        .endpointId(WS_AGENT_JSON_RPC_ENDPOINT_ID)
-        .methodName("project/search")
-        .paramsAsDto(requestParams)
-        .sendAndReceiveResultAsDto(ProjectSearchResponseDto.class, 20_000)
-        .onSuccess(response -> prepareResults(response))
-        .onFailure(error -> Log.error(getClass(), error.getMessage()))
-        .onTimeout(() -> Log.error(getClass(), "Project search request failed due timeout"));
+    timer =
+        new Timer() {
+          @Override
+          public void run() {
+            requestTransmitter
+                .newRequest()
+                .endpointId(WS_AGENT_JSON_RPC_ENDPOINT_ID)
+                .methodName("project/search")
+                .paramsAsDto(requestParams)
+                .sendAndReceiveResultAsDto(ProjectSearchResponseDto.class, 20_000)
+                .onSuccess(
+                    response -> {
+                      // Check that the file name from request corresponds to the actual file name
+                      // from the view.
+                      if (fileName.equals(view.getFileName())) {
+                        prepareResults(response);
+                      }
+                    })
+                .onFailure(error -> Log.error(getClass(), error.getMessage()))
+                .onTimeout(
+                    () -> Log.error(getClass(), "Project search request failed due timeout"));
+          }
+        };
+    timer.schedule(TYPING_PERIOD_DELAY_MS);
   }
 
