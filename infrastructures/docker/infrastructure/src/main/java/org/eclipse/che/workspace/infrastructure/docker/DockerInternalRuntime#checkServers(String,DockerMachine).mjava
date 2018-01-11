@@ -1,0 +1,18 @@
+  private void checkServers(String name, DockerMachine machine)
+      throws InterruptedException, InfrastructureException {
+    RuntimeIdentity identity = getContext().getIdentity();
+
+    checkInterruption();
+    // one-time check
+    ServersChecker readinessChecker =
+        serverCheckerFactory.create(identity, name, machine.getServers());
+    readinessChecker.startAsync(new ServerReadinessHandler(name));
+    readinessChecker.await();
+
+    checkInterruption();
+    // continuous checking
+    probeScheduler.schedule(
+        probesFactory.getProbes(identity.getWorkspaceId(), name, machine.getServers()),
+        new ServerLivenessHandler());
+  }
+
