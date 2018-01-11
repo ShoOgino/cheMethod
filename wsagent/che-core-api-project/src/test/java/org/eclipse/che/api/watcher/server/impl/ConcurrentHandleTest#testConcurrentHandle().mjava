@@ -1,0 +1,48 @@
+  @Test
+  public void testConcurrentHandle() throws Exception {
+    class HandleTask implements Callable<Void> {
+
+      WatchEvent.Kind<Path> eventType;
+
+      public HandleTask(WatchEvent.Kind<Path> eventType) {
+        this.eventType = eventType;
+      }
+
+      @Override
+      public Void call() {
+        final Path path = root.resolve(PROJECT_FILE);
+        handler.register(path, create, modify, delete);
+        handler.handle(path, eventType);
+        return null;
+      }
+    }
+    final int n = 50;
+    final ExecutorService executor = newFixedThreadPool(5);
+    final ArrayList<Callable<Void>> tasks = new ArrayList<>(n);
+    final ImmutableList<WatchEvent.Kind<Path>> operations =
+        ImmutableList.of(ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE);
+    for (int i = 0; i < n; i++) {
+      tasks.add(
+          new HandleTask(
+              operations.get(ThreadLocalRandom.current().nextInt(0, operations.size()))));
+    }
+    final List<Future<Void>> futures = executor.invokeAll(tasks, n, SECONDS);
+    long count =
+        futures
+            .stream()
+            .filter(
+                future -> {
+                  try {
+                    future.get();
+                    return false;
+                  } catch (ExecutionException ex) {
+                    System.out.println(ex.getMessage());
+                    return ex.getCause() instanceof ConcurrentModificationException;
+                  } catch (Exception ignored) {
+                    return false;
+                  }
+                })
+            .count();
+    assertEquals(count, 0);
+  }
+
