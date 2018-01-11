@@ -1,0 +1,29 @@
+  private List<String> getPublicKeys(String workspaceId) {
+    final String userId = EnvironmentContext.getCurrent().getSubject().getUserId();
+    List<String> publicKeys = new ArrayList<>();
+    try {
+      // get machine keypairs
+      List<SshPairImpl> sshPairs = sshManager.getPairs(userId, "machine");
+      publicKeys.addAll(
+          sshPairs
+              .stream()
+              .filter(sshPair -> sshPair.getPublicKey() != null)
+              .map(SshPairImpl::getPublicKey)
+              .collect(Collectors.toList()));
+      // get workspace keypair (if any)
+      SshPairImpl sshWorkspacePair = null;
+      try {
+        sshWorkspacePair = sshManager.getPair(userId, "workspace", workspaceId);
+      } catch (NotFoundException e) {
+        LOG.debug("No ssh key associated to the workspace " + workspaceId, e);
+      }
+
+      if (sshWorkspacePair != null && sshWorkspacePair.getPublicKey() != null) {
+        publicKeys.add(sshWorkspacePair.getPublicKey());
+      }
+    } catch (ServerException e) {
+      LOG.warn("Unable to get workspace {} public keys. Error: {}", workspaceId, e.getMessage());
+    }
+    return publicKeys;
+  }
+

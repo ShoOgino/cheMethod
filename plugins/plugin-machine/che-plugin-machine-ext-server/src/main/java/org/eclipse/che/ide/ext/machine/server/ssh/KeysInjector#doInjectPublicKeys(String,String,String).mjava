@@ -1,0 +1,25 @@
+  private void doInjectPublicKeys(String execServerUrl, String workspaceId, String command) {
+    ExecAgentClient client = execAgentClientFactory.create(execServerUrl);
+    try {
+      ProcessStartResponseDto startProcess =
+          client.startProcess(workspaceId, command, "sshUpload", "custom");
+      GetProcessResponseDto process = client.getProcess(workspaceId, startProcess.getPid());
+      int tryNumber = 1;
+      while (process.isAlive()) {
+        Thread.sleep(100);
+        process = client.getProcess(workspaceId, startProcess.getPid());
+        tryNumber++;
+        if (tryNumber > 10) {
+          LOG.warn("Uploading key command executed too long, exiting.");
+          client.killProcess(workspaceId, startProcess.getPid());
+          return;
+        }
+      }
+      if (process.getExitCode() != 0) {
+        LOG.warn("Uploading key failed with exit code " + process.getExitCode());
+      }
+    } catch (ServerException | InterruptedException e) {
+      LOG.warn("Unable to inject workspace {} public keys. Error: {}", workspaceId, e.getMessage());
+    }
+  }
+

@@ -1,0 +1,23 @@
+  @Test
+  public void shouldInjectSshKeysWhenThereAreAnyPairWithNotNullPublicKey() throws Exception {
+    when(sshManager.getPairs(anyString(), anyString()))
+        .thenReturn(
+            Arrays.asList(
+                new SshPairImpl(OWNER, "machine", "myPair", "publicKey1", null),
+                new SshPairImpl(OWNER, "machine", "myPair", "publicKey2", null)));
+
+    keysInjector.injectPublicKeys(WORKSPACE_ID);
+
+    verify(sshManager).getPairs(eq(OWNER), eq("machine"));
+    verify(sshManager).getPair(eq(OWNER), eq("workspace"), eq(WORKSPACE_ID));
+
+    ArgumentCaptor<String> argumentCaptor = ArgumentCaptor.forClass(String.class);
+    verify(client, times(2))
+        .startProcess(eq(WORKSPACE_ID), argumentCaptor.capture(), anyString(), anyString());
+    assertEquals(
+        "mkdir ~/.ssh/ -p"
+            + " && echo 'publicKey1' >> ~/.ssh/authorized_keys"
+            + " && echo 'publicKey2' >> ~/.ssh/authorized_keys",
+        argumentCaptor.getValue());
+  }
+
