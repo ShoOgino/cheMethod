@@ -1,0 +1,48 @@
+  @Test
+  public void shouldAssignNewPortToInstallerServer() throws Exception {
+    // given
+    Set<String> serversRefs = ImmutableSet.of("server1-http", "server1-ws");
+
+    Map<String, ServerConfigImpl> installerServers = new HashMap<>();
+    installerServers.put(
+        "server1-http", new ServerConfigImpl("8080/tcp", "http", "/api", emptyMap()));
+    installerServers.put("server1-ws", new ServerConfigImpl("8080/tcp", "ws", "/api", emptyMap()));
+
+    Map<String, ServerConfigImpl> machineServers = new HashMap<>();
+    machineServers.put("server2", new ServerConfigImpl("8080/tcp", "http", "/api", emptyMap()));
+    machineServers.putAll(installerServers);
+
+    InstallerImpl installer =
+        new InstallerImpl(
+            "installer1",
+            "name",
+            "v1",
+            "description",
+            emptyList(),
+            emptyMap(),
+            "script",
+            installerServers);
+
+    InternalMachineConfig machineConfig =
+        new InternalMachineConfig(
+            singletonList(installer), machineServers, new HashMap<>(), emptyMap(), emptyMap());
+
+    // when
+    portProvisioner.assignNewPort(
+        serversRefs, 10007, machineConfig, machineConfig.getInstallers().get(0));
+
+    // then
+    assertEquals(machineConfig.getEnv().size(), 2);
+
+    assertEquals(machineConfig.getEnv().get("CHE_SERVER_SERVER1_WS_PORT"), "10007");
+    assertEquals(machineConfig.getServers().get("server1-ws").getPort(), "10007/tcp");
+    assertEquals(
+        machineConfig.getInstallers().get(0).getServers().get("server1-ws").getPort(), "10007/tcp");
+
+    assertEquals(machineConfig.getEnv().get("CHE_SERVER_SERVER1_HTTP_PORT"), "10007");
+    assertEquals(machineConfig.getServers().get("server1-http").getPort(), "10007/tcp");
+    assertEquals(
+        machineConfig.getInstallers().get(0).getServers().get("server1-http").getPort(),
+        "10007/tcp");
+  }
+
