@@ -11,13 +11,25 @@
         createdServices.add(project.services().create(service));
       }
 
-      List<Route> createdRoutes = new ArrayList<>();
-      for (Route route : osEnv.getRoutes().values()) {
-        createdRoutes.add(project.routes().create(route));
-      }
+      //      List<Route> createdRoutes = new ArrayList<>();
+      //      for (Route route : osEnv.getRoutes().values()) {
+      //        createdRoutes.add(project.routes().create(route));
+      //      }
       // TODO https://github.com/eclipse/che/issues/7653
       // project.pods().watch(new AbnormalStopHandler());
       // project.pods().watchContainers(new MachineLogsPublisher());
+
+      // needed for resolution later on, even though nroutes are actually created by ingress
+      // /workspace{wsid}/server-{port} => service({wsid}):server-port => pod({wsid}):{port}
+      List<Route> createdRoutes =
+          osEnv
+              .getRoutes()
+              .values()
+              .stream()
+              .flatMap(r -> getRouteSteamByRouteServers(r))
+              .collect(Collectors.toList());
+      LOG.info("Creating Routes: " + createdRoutes);
+      project.kubernetesIngress().create(createdRoutes);
 
       createPods(createdServices, createdRoutes);
 

@@ -1,0 +1,42 @@
+  // breaks down original route with multiple protocols and endpoints to a single protocol
+  // routes, annotated with only the releveant server
+  private Stream<Route> getRouteSteamByRouteServers(Route r) {
+
+    Deserializer deserializer = Annotations.newDeserializer(r.getMetadata().getAnnotations());
+    final String machineName = deserializer.machineName();
+    return deserializer
+        .servers()
+        .entrySet()
+        .stream()
+        .map(
+            entry -> {
+              ServerConfig server = entry.getValue();
+
+              String serverPath = "/" + getContext().getIdentity().getWorkspaceId();
+              String targetServer = r.getSpec().getPort().getTargetPort().getStrVal();
+
+              if (targetServer != null) {
+                serverPath = serverPath + "/" + targetServer;
+              }
+
+              if (server.getPath() != null) {
+                serverPath = serverPath + server.getPath();
+              }
+
+              Map<String, ServerConfig> severMap = new HashMap<String, ServerConfig>();
+              severMap.put(entry.getKey(), server);
+              return new RouteBuilder(r)
+                  .withSpec(
+                      new RouteSpecBuilder(r.getSpec()).withHost(host).withPath(serverPath).build())
+                  .withMetadata(
+                      new ObjectMetaBuilder()
+                          .withAnnotations(
+                              Annotations.newSerializer()
+                                  .servers(severMap)
+                                  .machineName(machineName)
+                                  .annotations())
+                          .build())
+                  .build();
+            });
+  }
+
