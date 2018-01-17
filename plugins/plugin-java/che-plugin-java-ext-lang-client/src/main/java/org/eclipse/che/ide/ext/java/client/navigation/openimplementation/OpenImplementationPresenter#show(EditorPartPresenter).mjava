@@ -11,45 +11,27 @@
     activeEditor = ((TextEditor) editorPartPresenter);
     final VirtualFile file = activeEditor.getEditorInput().getFile();
 
-    if (file instanceof Resource) {
-      final Optional<Project> project = ((Resource) file).getRelatedProject();
+    javaLanguageExtensionServiceClient
+        .findImplementations(
+            new TextDocumentPositionParamsDto(
+                new TextDocumentPositionParams(
+                    new TextDocumentIdentifier(file.getLocation().toString()),
+                    new Position(
+                        activeEditor.getCursorPosition().getLine(),
+                        activeEditor.getCursorPosition().getCharacter()))))
+        .then(
+            impls -> {
+              int overridingSize = impls.getImplementers().size();
 
-      final Optional<Resource> srcFolder =
-          ((Resource) file).getParentWithMarker(SourceFolderMarker.ID);
-
-      if (!srcFolder.isPresent()) {
-        return;
-      }
-
-      final String fqn = JavaUtil.resolveFQN((Container) srcFolder.get(), (Resource) file);
-
-      service
-          .getImplementations(project.get().getLocation(), fqn, activeEditor.getCursorOffset())
-          .then(
-              new Operation<ImplementationsDescriptorDTO>() {
-                @Override
-                public void apply(ImplementationsDescriptorDTO impls) throws OperationException {
-                  int overridingSize = impls.getImplementations().size();
-
-                  String title =
-                      locale.openImplementationWindowTitle(impls.getMemberName(), overridingSize);
-                  NoImplementationWidget noImplementationWidget =
-                      new NoImplementationWidget(
-                          popupResources,
-                          javaResources,
-                          locale,
-                          OpenImplementationPresenter.this,
-                          title);
-                  if (overridingSize == 1) {
-                    actionPerformed(impls.getImplementations().get(0));
-                  } else if (overridingSize > 1) {
-                    openOneImplementation(
-                        impls, noImplementationWidget, (TextEditor) editorPartPresenter);
-                  } else if (!isNullOrEmpty(impls.getMemberName()) && overridingSize == 0) {
-                    showNoImplementations(noImplementationWidget, (TextEditor) editorPartPresenter);
-                  }
-                }
-              });
-    }
+              String title =
+                  locale.openImplementationWindowTitle(impls.getSearchedElement(), overridingSize);
+              PositionConverter.PixelCoordinates coordinates =
+                  activeEditor.getPositionConverter().offsetToPixel(activeEditor.getCursorOffset());
+              if (overridingSize == 1) {
+                openOneImplementation(impls.getImplementers().get(0));
+              } else if (!isNullOrEmpty(impls.getSearchedElement())) {
+                openImplementations(impls, title, coordinates);
+              }
+            });
   }
 
