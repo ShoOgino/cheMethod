@@ -21,17 +21,26 @@
 
       // needed for resolution later on, even though nroutes are actually created by ingress
       // /workspace{wsid}/server-{port} => service({wsid}):server-port => pod({wsid}):{port}
-      List<Route> createdRoutes =
-          osEnv
-              .getRoutes()
-              .values()
-              .stream()
-              .flatMap(r -> getRouteSteamByRouteServers(r))
-              .collect(Collectors.toList());
-      LOG.info("Creating Routes: " + createdRoutes);
-      project.kubernetesIngress().create(createdRoutes);
+      List<Ingress> createdIngresses = new ArrayList<>();
+      for (Ingress ingress : osEnv.getIngresses().values()) {
+        // create
+        createdIngresses.add(project.kubernetesIngress().create(ingress));
+      }
 
-      createPods(createdServices, createdRoutes);
+      // wait for LB ip
+      List<Ingress> actualIngresses = new ArrayList<>();
+      for (Ingress ingress : osEnv.getIngresses().values()) {
+        Ingress actualIngress =
+            project
+                .kubernetesIngress()
+                .wait(
+                    ingress.getMetadata().getName(),
+                    machineStartTimeoutMin,
+                    p -> (p.getStatus().getLoadBalancer().getIngress().size() > 0));
+        actualIngresses.add(actualIngress);
+      }
+
+      createPods(createdServices, actualIngresses);
 
       // TODO Rework it to parallel waiting https://github.com/eclipse/che/issues/7067
       for (OpenShiftMachine machine : machines.values()) {
