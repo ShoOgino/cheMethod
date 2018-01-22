@@ -1,0 +1,51 @@
+  List<SnippetResult> getSnippets(SnippetParameters params) {
+    try {
+      String uri = params.getUri();
+      if (LanguageServiceUtils.isWorkspaceUri(uri)) {
+        uri = LanguageServiceUtils.workspaceURIToFileURI(uri);
+      }
+      Reader content = null;
+
+      if (LanguageServiceUtils.isProjectUri(uri)) {
+        String path = LanguageServiceUtils.removePrefixUri(uri);
+        String wsPath = absolutize(path);
+
+        if (fsManager.existsAsFile(wsPath)) {
+          content = new InputStreamReader(new BufferedInputStream(fsManager.read(wsPath)));
+        }
+      } else {
+        String fileContent = getFileContent(uri);
+        if (fileContent != null) {
+          content = new StringReader(fileContent);
+        }
+      }
+
+      if (content != null) {
+        ArrayList<LinearRange> ranges = new ArrayList<>(params.getRanges());
+        try {
+          List<SnippetResult> result = new ArrayList<>();
+          Collections.sort(ranges, LinearRangeComparator.INSTANCE);
+          LineReader lineReader = new LineReader(content);
+          for (LinearRange range : ranges) {
+            lineReader.readTo(range.getOffset());
+            String snippet = lineReader.getCurrentLine();
+            int offsetInLine = range.getOffset() - lineReader.getCurrentLineStartOffset();
+            int lengthInLine = Math.min(snippet.length() - offsetInLine, range.getLength());
+            LinearRange rangeInLine = new LinearRange(offsetInLine, lengthInLine);
+            result.add(
+                new SnippetResult(range, snippet, lineReader.getCurrentLineIndex(), rangeInLine));
+          }
+          return result;
+        } finally {
+          content.close();
+        }
+      } else {
+        LOG.error("did not find file " + params.getUri());
+        throw new JsonRpcException(-27000, "File not found for edit: " + params.getUri());
+      }
+    } catch (ServerException | NotFoundException | IOException | ConflictException e) {
+      LOG.error("error editing file", e);
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+

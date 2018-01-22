@@ -1,64 +1,24 @@
-  public void findUsages(TextEditor activeEditor) {
-
-    final VirtualFile virtualFile = activeEditor.getEditorInput().getFile();
-
-    if (virtualFile instanceof Resource) {
-      final Project project = ((Resource) virtualFile).getRelatedProject().get();
-
-      if (project == null) {
-        return;
-      }
-
-      final Optional<Resource> srcFolder =
-          ((Resource) virtualFile).getParentWithMarker(SourceFolderMarker.ID);
-
-      if (!srcFolder.isPresent()) {
-        return;
-      }
-
-      final String fqn = JavaUtil.resolveFQN((Container) srcFolder.get(), (Resource) virtualFile);
-
-      String projectPath = project.getLocation().toString();
-      FindUsagesRequest request = dtoFactory.createDto(FindUsagesRequest.class);
-      request.setFQN(fqn);
-      request.setProjectPath(projectPath);
-      request.setOffset(activeEditor.getCursorOffset());
-
-      Promise<FindUsagesResponse> promise = searchService.findUsages(request);
-      promise
-          .then(
-              new Operation<FindUsagesResponse>() {
-                @Override
-                public void apply(FindUsagesResponse arg) throws OperationException {
-                  handleResponse(arg);
-                }
-              })
-          .catchError(
-              new Operation<PromiseError>() {
-                @Override
-                public void apply(PromiseError arg) throws OperationException {
-                  Throwable cause = arg.getCause();
-                  if (cause instanceof ServerException) {
-                    handleError(((ServerException) cause).getHTTPStatus(), cause.getMessage());
-                    return;
-                  }
-                  // in case websocket request
-                  if (cause
-                      instanceof org.eclipse.che.ide.websocket.rest.exceptions.ServerException) {
-                    handleError(
-                        ((org.eclipse.che.ide.websocket.rest.exceptions.ServerException) cause)
-                            .getHTTPStatus(),
-                        cause.getMessage());
-                    return;
-                  }
-                  Log.error(getClass(), arg);
-                  manager.notify(
-                      localizationConstant.failedToProcessFindUsage(),
-                      arg.getMessage(),
-                      FAIL,
-                      FLOAT_MODE);
-                }
-              });
+  public void findUsages(TextEditor editor) {
+    if (!(editor.getConfiguration() instanceof LanguageServerEditorConfiguration)) {
+      return;
     }
+
+    Document document = editor.getDocument();
+    TextDocumentPositionParams paramsDTO =
+        dtoBuildHelper.createTDPP(document, editor.getCursorOffset());
+
+    Promise<UsagesResponse> promise = searchService.usages(paramsDTO);
+    promise
+        .then(this::handleResponse)
+        .catchError(
+            arg -> {
+              Throwable cause = arg.getCause();
+              Log.error(getClass(), cause);
+              manager.notify(
+                  localizationConstant.failedToProcessFindUsage(),
+                  arg.getMessage(),
+                  FAIL,
+                  FLOAT_MODE);
+            });
   }
 

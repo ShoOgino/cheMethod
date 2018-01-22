@@ -1,0 +1,28 @@
+  private UsagesResponse usages(TextDocumentPositionParams parameters) {
+    String uri = LanguageServiceUtils.prefixURI(parameters.getUri());
+    parameters.setUri(uri);
+    parameters.getTextDocument().setUri(uri);
+    try {
+      Type targetClassType = new TypeToken<ArrayList<UsagesResponse>>() {}.getType();
+      List<UsagesResponse> results = doGetList(USAGES_COMMAND, parameters, targetClassType);
+      if (results.isEmpty()) {
+        return null;
+      }
+      results
+          .get(0)
+          .getSearchResults()
+          .forEach(
+              result -> {
+                iterate(
+                    result,
+                    r -> r.getChildren(),
+                    r -> {
+                      r.setUri(LanguageServiceUtils.fixUri(r.getUri()));
+                    });
+              });
+      return new DtoServerImpls.UsagesResponseDto(results.get(0));
+    } catch (JsonSyntaxException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+
