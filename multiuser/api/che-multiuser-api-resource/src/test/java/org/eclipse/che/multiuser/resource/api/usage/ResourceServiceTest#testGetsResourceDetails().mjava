@@ -1,0 +1,41 @@
+  @Test
+  public void testGetsResourceDetails() throws Exception {
+    // given
+    final ResourceDto testResource =
+        DtoFactory.newDto(ResourceDto.class).withType("test").withAmount(1234).withUnit("mb");
+    final ResourcesDetailsDto toFetch =
+        DtoFactory.newDto(ResourcesDetailsDto.class)
+            .withAccountId("account123")
+            .withProvidedResources(
+                singletonList(
+                    DtoFactory.newDto(ProvidedResourcesDto.class)
+                        .withId("resource123")
+                        .withProviderId("provider")
+                        .withOwner("account123")
+                        .withStartTime(123L)
+                        .withEndTime(321L)
+                        .withResources(singletonList(testResource))))
+            .withTotalResources(singletonList(testResource));
+
+    // when
+    when(resourceManager.getResourceDetails(eq("account123")))
+        .thenReturn(new ResourcesDetailsImpl(toFetch));
+
+    // then
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType("application/json")
+            .when()
+            .expect()
+            .statusCode(200)
+            .get(SECURE_PATH + "/resource/account123/details");
+
+    final ResourcesDetailsDto resourceDetailsDto =
+        DtoFactory.getInstance()
+            .createDtoFromJson(response.body().print(), ResourcesDetailsDto.class);
+    assertEquals(resourceDetailsDto, toFetch);
+    verify(resourceManager).getResourceDetails("account123");
+  }
+
