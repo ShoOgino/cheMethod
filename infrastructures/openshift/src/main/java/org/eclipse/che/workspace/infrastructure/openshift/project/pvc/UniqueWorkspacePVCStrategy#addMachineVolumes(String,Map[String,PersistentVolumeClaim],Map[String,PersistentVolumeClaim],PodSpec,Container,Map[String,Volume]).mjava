@@ -1,0 +1,44 @@
+  private void addMachineVolumes(
+      String workspaceId,
+      Map<String, PersistentVolumeClaim> provisionedClaims,
+      Map<String, PersistentVolumeClaim> existingVolumeName2PVC,
+      PodSpec podSpec,
+      Container container,
+      Map<String, Volume> volumes)
+      throws InfrastructureException {
+    if (volumes.isEmpty()) {
+      return;
+    }
+    final Map<String, PersistentVolumeClaim> provisionedVolumeName2PVC =
+        groupByVolumeName(provisionedClaims.values());
+
+    for (Entry<String, Volume> volumeEntry : volumes.entrySet()) {
+      final String volumeName = volumeEntry.getKey();
+      final String volumePath = volumeEntry.getValue().getPath();
+      final String subPath = workspaceId + '/' + volumeName;
+      final PersistentVolumeClaim pvc;
+      // checks whether PVC for given workspace and volume exists on remote
+      if (existingVolumeName2PVC.containsKey(volumeName)) {
+        pvc = existingVolumeName2PVC.get(volumeName);
+      }
+      // checks whether PVC for given volume provisioned previously
+      else if (provisionedVolumeName2PVC.containsKey(volumeName)) {
+        pvc = provisionedVolumeName2PVC.get(volumeName);
+      }
+      // when no existing and provisioned PVC found then create new one
+      else {
+        final String uniqueName = Names.generateName(pvcNamePrefix + '-');
+        pvc = newPVC(uniqueName, pvcAccessMode, pvcQuantity);
+        putLabel(pvc, CHE_WORKSPACE_ID_LABEL, workspaceId);
+        putLabel(pvc, CHE_VOLUME_NAME_LABEL, volumeName);
+        provisionedClaims.put(uniqueName, pvc);
+      }
+
+      // binds pvc to pod and container
+      container
+          .getVolumeMounts()
+          .add(newVolumeMount(pvc.getMetadata().getName(), volumePath, subPath));
+      addVolumeIfAbsent(podSpec, pvc.getMetadata().getName());
+    }
+  }
+

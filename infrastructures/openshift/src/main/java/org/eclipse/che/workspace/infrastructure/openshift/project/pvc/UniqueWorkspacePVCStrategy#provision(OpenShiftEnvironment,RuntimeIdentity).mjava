@@ -2,12 +2,20 @@
   public void provision(OpenShiftEnvironment osEnv, RuntimeIdentity identity)
       throws InfrastructureException {
     final Map<String, PersistentVolumeClaim> claims = osEnv.getPersistentVolumeClaims();
+    final String workspaceId = identity.getWorkspaceId();
+    // fetches all existing PVCs related to given workspace and groups them by volume name
+    final Map<String, PersistentVolumeClaim> volumeName2PVC =
+        groupByVolumeName(
+            factory
+                .create(workspaceId)
+                .persistentVolumeClaims()
+                .getByLabel(CHE_WORKSPACE_ID_LABEL, workspaceId));
     for (Pod pod : osEnv.getPods().values()) {
       final PodSpec podSpec = pod.getSpec();
       for (Container container : podSpec.getContainers()) {
         final String machineName = Names.machineName(pod, container);
-        InternalMachineConfig machineConfig = osEnv.getMachines().get(machineName);
-        addMachineVolumes(identity.getWorkspaceId(), claims, podSpec, container, machineConfig);
+        Map<String, Volume> volumes = osEnv.getMachines().get(machineName).getVolumes();
+        addMachineVolumes(workspaceId, claims, volumeName2PVC, podSpec, container, volumes);
       }
     }
   }
