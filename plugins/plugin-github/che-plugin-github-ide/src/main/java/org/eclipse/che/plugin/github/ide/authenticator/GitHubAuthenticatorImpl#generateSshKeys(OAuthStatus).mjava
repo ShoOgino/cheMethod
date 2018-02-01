@@ -1,18 +1,13 @@
   private void generateSshKeys(final OAuthStatus authStatus) {
-    final SshKeyUploader githubKeyUploader = registry.getUploader(GITHUB_HOST);
-    if (githubKeyUploader != null) {
-      String userId = appContext.getCurrentUser().getId();
-      githubKeyUploader.uploadKey(
-          userId,
-          new AsyncCallback<Void>() {
-            @Override
-            public void onSuccess(Void result) {
+    sshKeyManager
+        .generateSshKey(appContext.getCurrentUser().getId(), GITHUB_HOST)
+        .then(
+            arg -> {
               callback.onSuccess(authStatus);
               notificationManager.notify(locale.authMessageKeyUploadSuccess(), SUCCESS, FLOAT_MODE);
-            }
-
-            @Override
-            public void onFailure(Throwable exception) {
+            })
+        .catchError(
+            arg -> {
               dialogFactory
                   .createMessageDialog(
                       locale.authorizationDialogTitle(),
@@ -20,15 +15,6 @@
                       null)
                   .show();
               callback.onFailure(new Exception(locale.authMessageUnableCreateSshKey()));
-              getFailedKey();
-            }
-          });
-    } else {
-      dialogFactory
-          .createMessageDialog(
-              locale.authorizationDialogTitle(), locale.authMessageUnableCreateSshKey(), null)
-          .show();
-      callback.onFailure(new Exception(locale.authMessageUnableCreateSshKey()));
-    }
+            });
   }
 
