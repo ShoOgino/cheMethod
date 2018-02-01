@@ -2,7 +2,7 @@
       String workspaceId,
       Map<String, PersistentVolumeClaim> provisionedClaims,
       Map<String, PersistentVolumeClaim> existingVolumeName2PVC,
-      PodSpec podSpec,
+      Pod pod,
       Container container,
       Map<String, Volume> volumes)
       throws InfrastructureException {
@@ -13,9 +13,11 @@
         groupByVolumeName(provisionedClaims.values());
 
     for (Entry<String, Volume> volumeEntry : volumes.entrySet()) {
-      final String volumeName = volumeEntry.getKey();
       final String volumePath = volumeEntry.getValue().getPath();
-      final String subPath = workspaceId + '/' + volumeName;
+      final String volumeName =
+          LOGS_VOLUME_NAME.equals(volumeEntry.getKey())
+              ? volumeEntry.getKey() + '-' + pod.getMetadata().getName()
+              : volumeEntry.getKey();
       final PersistentVolumeClaim pvc;
       // checks whether PVC for given workspace and volume exists on remote
       if (existingVolumeName2PVC.containsKey(volumeName)) {
@@ -37,8 +39,12 @@
       // binds pvc to pod and container
       container
           .getVolumeMounts()
-          .add(newVolumeMount(pvc.getMetadata().getName(), volumePath, subPath));
-      addVolumeIfAbsent(podSpec, pvc.getMetadata().getName());
+          .add(
+              newVolumeMount(
+                  pvc.getMetadata().getName(),
+                  volumePath,
+                  getSubPath(workspaceId, volumeName, Names.machineName(pod, container))));
+      addVolumeIfAbsent(pod.getSpec(), pvc.getMetadata().getName());
     }
   }
 
