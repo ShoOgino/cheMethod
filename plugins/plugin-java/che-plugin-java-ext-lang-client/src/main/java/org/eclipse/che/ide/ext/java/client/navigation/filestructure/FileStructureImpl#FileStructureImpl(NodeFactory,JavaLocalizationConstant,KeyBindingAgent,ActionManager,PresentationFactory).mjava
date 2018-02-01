@@ -1,19 +1,22 @@
   @Inject
-  public FileStructureImpl(NodeFactory nodeFactory, JavaLocalizationConstant locale) {
+  public FileStructureImpl(
+      NodeFactory nodeFactory,
+      JavaLocalizationConstant locale,
+      KeyBindingAgent keyBindingAgent,
+      ActionManager actionManager,
+      PresentationFactory presentationFactory) {
     super(false);
     this.nodeFactory = nodeFactory;
     this.locale = locale;
+    this.actionManager = actionManager;
+    this.presentationFactory = presentationFactory;
+    this.keyBindingAgent = keyBindingAgent;
+
     setWidget(UI_BINDER.createAndBindUi(this));
 
     NodeStorage storage =
-        new NodeStorage(
-            new NodeUniqueKeyProvider() {
-              @Override
-              public String getKey(@NotNull Node item) {
-                return String.valueOf(item.hashCode());
-              }
-            });
-    NodeLoader loader = new NodeLoader(Collections.<NodeInterceptor>emptySet());
+        new NodeStorage((NodeUniqueKeyProvider) item -> String.valueOf(item.hashCode()));
+    NodeLoader loader = new NodeLoader(Collections.emptySet());
     tree = new Tree(storage, loader);
     tree.setAutoExpand(false);
     tree.getSelectionModel().setSelectionMode(SINGLE);
@@ -26,12 +29,9 @@
           }
         };
     tree.addDomHandler(
-        new DoubleClickHandler() {
-          @Override
-          public void onDoubleClick(DoubleClickEvent event) {
-            if (all(tree.getSelectionModel().getSelectedNodes(), LEAFS)) {
-              hide();
-            }
+        event -> {
+          if (all(tree.getSelectionModel().getSelectedNodes(), LEAFS)) {
+            hide();
           }
         },
         DoubleClickEvent.getType());
