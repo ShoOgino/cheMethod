@@ -1,0 +1,23 @@
+  @Override
+  public void prepare(KubernetesEnvironment k8sEnv, String workspaceId)
+      throws InfrastructureException {
+    final Collection<PersistentVolumeClaim> claims = k8sEnv.getPersistentVolumeClaims().values();
+    if (!claims.isEmpty()) {
+      final KubernetesNamespace namespace = factory.create(workspaceId);
+      final KubernetesPersistentVolumeClaims pvcs = namespace.persistentVolumeClaims();
+      final Set<String> existing =
+          pvcs.get().stream().map(p -> p.getMetadata().getName()).collect(toSet());
+      for (PersistentVolumeClaim pvc : claims) {
+        final String[] subpaths =
+            (String[])
+                pvc.getAdditionalProperties().remove(format(SUBPATHS_PROPERTY_FMT, workspaceId));
+        if (!existing.contains(pvc.getMetadata().getName())) {
+          pvcs.create(pvc);
+        }
+        if (preCreateDirs && subpaths != null) {
+          pvcSubPathHelper.createDirs(workspaceId, subpaths);
+        }
+      }
+    }
+  }
+

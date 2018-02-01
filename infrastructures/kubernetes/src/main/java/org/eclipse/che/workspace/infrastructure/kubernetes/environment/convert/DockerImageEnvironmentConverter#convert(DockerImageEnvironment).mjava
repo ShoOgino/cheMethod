@@ -1,0 +1,31 @@
+  public KubernetesEnvironment convert(DockerImageEnvironment environment)
+      throws InfrastructureException {
+    final Iterator<String> iterator = environment.getMachines().keySet().iterator();
+    if (!iterator.hasNext()) {
+      throw new InternalInfrastructureException(
+          "DockerImage environment must contain at least one machine configuration");
+    }
+    final String machineName = iterator.next();
+    final String dockerImage = environment.getRecipe().getContent();
+    final Map<String, String> annotations = new HashMap<>();
+    annotations.put(format(MACHINE_NAME_ANNOTATION_FMT, CONTAINER_NAME), machineName);
+
+    final Pod pod =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(POD_NAME)
+            .withAnnotations(annotations)
+            .endMetadata()
+            .withNewSpec()
+            .withContainers(
+                new ContainerBuilder().withImage(dockerImage).withName(CONTAINER_NAME).build())
+            .endSpec()
+            .build();
+    return KubernetesEnvironment.builder()
+        .setMachines(environment.getMachines())
+        .setInternalRecipe(environment.getRecipe())
+        .setWarnings(environment.getWarnings())
+        .setPods(ImmutableMap.of(POD_NAME, pod))
+        .build();
+  }
+

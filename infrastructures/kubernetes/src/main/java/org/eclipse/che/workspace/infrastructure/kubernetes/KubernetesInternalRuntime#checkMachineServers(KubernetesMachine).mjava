@@ -1,0 +1,21 @@
+  /**
+   * Checks whether machine servers are ready.
+   *
+   * @param machine the Kubernetes machine instance
+   * @throws InfrastructureException when any error while server checks occur
+   * @throws InterruptedException when process of server check was interrupted
+   */
+  private void checkMachineServers(KubernetesMachine machine)
+      throws InfrastructureException, InterruptedException {
+    final ServersChecker check =
+        serverCheckerFactory.create(
+            getContext().getIdentity(), machine.getName(), machine.getServers());
+    check.startAsync(new ServerReadinessHandler(machine.getName()));
+    check.await();
+
+    probeScheduler.schedule(
+        probesFactory.getProbes(
+            getContext().getIdentity().getWorkspaceId(), machine.getName(), machine.getServers()),
+        new ServerLivenessHandler());
+  }
+

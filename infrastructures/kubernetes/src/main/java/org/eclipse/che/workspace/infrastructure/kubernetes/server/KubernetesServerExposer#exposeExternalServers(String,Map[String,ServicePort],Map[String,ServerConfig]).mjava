@@ -1,0 +1,27 @@
+  protected void exposeExternalServers(
+      String serviceName,
+      Map<String, ServicePort> portToServicePort,
+      Map<String, ServerConfig> externalServers) {
+    for (ServicePort servicePort : portToServicePort.values()) {
+      int port = servicePort.getTargetPort().getIntVal();
+
+      Map<String, ServerConfig> ingressesServers =
+          externalServers
+              .entrySet()
+              .stream()
+              .filter(e -> parseInt(e.getValue().getPort().split("/")[0]) == port)
+              .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+      Ingress ingress =
+          new IngressBuilder()
+              .withName(serviceName + '-' + servicePort.getName())
+              .withMachineName(machineName)
+              .withServiceName(serviceName)
+              .withServicePort(servicePort.getName())
+              .withServers(ingressesServers)
+              .build();
+
+      kubernetesEnvironment.getIngresses().put(ingress.getMetadata().getName(), ingress);
+    }
+  }
+

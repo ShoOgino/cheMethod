@@ -1,0 +1,34 @@
+    private Ingress build() {
+
+      IngressBackend ingressBackend =
+          new IngressBackendBuilder()
+              .withServiceName(serviceName)
+              .withNewServicePort(servicePort.getStrVal())
+              .build();
+
+      String serverPath = "/" + serviceName + "/" + servicePort.getStrVal();
+      HTTPIngressPath httpIngressPath =
+          new HTTPIngressPathBuilder().withPath(serverPath).withBackend(ingressBackend).build();
+
+      HTTPIngressRuleValue httpIngressRuleValue =
+          new HTTPIngressRuleValueBuilder().withPaths(httpIngressPath).build();
+      IngressRule ingressRule = new IngressRuleBuilder().withHttp(httpIngressRuleValue).build();
+      IngressSpec ingressSpec = new IngressSpecBuilder().withRules(ingressRule).build();
+
+      Map<String, String> ingressAnnotations = new HashMap<>();
+      ingressAnnotations.put("ingress.kubernetes.io/rewrite-target", "/");
+      ingressAnnotations.put("ingress.kubernetes.io/ssl-redirect", "false");
+      ingressAnnotations.put("kubernetes.io/ingress.class", "nginx");
+      ingressAnnotations.putAll(
+          Annotations.newSerializer()
+              .servers(serversConfigs)
+              .machineName(machineName)
+              .annotations());
+
+      return new io.fabric8.kubernetes.api.model.extensions.IngressBuilder()
+          .withSpec(ingressSpec)
+          .withMetadata(
+              new ObjectMetaBuilder().withName(name).withAnnotations(ingressAnnotations).build())
+          .build();
+    }
+

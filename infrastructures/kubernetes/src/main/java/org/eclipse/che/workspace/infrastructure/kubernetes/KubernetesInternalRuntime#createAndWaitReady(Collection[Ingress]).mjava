@@ -1,0 +1,23 @@
+  private List<Ingress> createAndWaitReady(Collection<Ingress> ingresses)
+      throws InfrastructureException {
+    List<Ingress> createdIngresses = new ArrayList<>();
+    for (Ingress ingress : ingresses) {
+      createdIngresses.add(namespace.ingresses().create(ingress));
+    }
+
+    // wait for LB ip
+    List<Ingress> readyIngresses = new ArrayList<>();
+    for (Ingress ingress : createdIngresses) {
+      Ingress actualIngress =
+          namespace
+              .ingresses()
+              .wait(
+                  ingress.getMetadata().getName(),
+                  machineStartTimeoutMin,
+                  p -> (!p.getStatus().getLoadBalancer().getIngress().isEmpty()));
+      readyIngresses.add(actualIngress);
+    }
+
+    return readyIngresses;
+  }
+

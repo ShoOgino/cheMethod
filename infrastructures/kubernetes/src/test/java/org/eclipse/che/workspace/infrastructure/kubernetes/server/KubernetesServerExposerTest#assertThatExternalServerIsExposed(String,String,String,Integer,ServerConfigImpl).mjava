@@ -1,0 +1,63 @@
+  private void assertThatExternalServerIsExposed(
+      String machineName,
+      String serverNameRegex,
+      String portProtocol,
+      Integer port,
+      ServerConfigImpl expected) {
+    // then
+    assertTrue(
+        container
+            .getPorts()
+            .stream()
+            .anyMatch(
+                p ->
+                    p.getContainerPort().equals(port)
+                        && p.getProtocol().equals(portProtocol.toUpperCase())));
+    // ensure that service is created
+
+    Service service = null;
+    for (Entry<String, Service> entry : kubernetesEnvironment.getServices().entrySet()) {
+      if (SERVER_PREFIX_REGEX.matcher(entry.getKey()).matches()) {
+        service = entry.getValue();
+        break;
+      }
+    }
+    assertNotNull(service);
+
+    // ensure that required service port is exposed
+    Optional<ServicePort> servicePortOpt =
+        service
+            .getSpec()
+            .getPorts()
+            .stream()
+            .filter(p -> p.getTargetPort().getIntVal().equals(port))
+            .findAny();
+    assertTrue(servicePortOpt.isPresent());
+    ServicePort servicePort = servicePortOpt.get();
+    assertEquals(servicePort.getTargetPort().getIntVal(), port);
+    assertEquals(servicePort.getPort(), port);
+    assertEquals(servicePort.getName(), SERVER_PREFIX + "-" + port);
+
+    Annotations.Deserializer serviceAnnotations =
+        Annotations.newDeserializer(service.getMetadata().getAnnotations());
+    assertEquals(serviceAnnotations.machineName(), machineName);
+
+    // ensure that required ingress is created
+    Ingress ingress =
+        kubernetesEnvironment
+            .getIngresses()
+            .get(service.getMetadata().getName() + "-server-" + port);
+    IngressRule ingressRule = ingress.getSpec().getRules().get(0);
+    IngressBackend backend = ingressRule.getHttp().getPaths().get(0).getBackend();
+    assertEquals(backend.getServiceName(), service.getMetadata().getName());
+    assertEquals(backend.getServicePort().getStrVal(), servicePort.getName());
+
+    Annotations.Deserializer ingressAnnotations =
+        Annotations.newDeserializer(ingress.getMetadata().getAnnotations());
+    Map<String, ServerConfigImpl> servers = ingressAnnotations.servers();
+    ServerConfig serverConfig = servers.get(serverNameRegex);
+    assertEquals(serverConfig, expected);
+
+    assertEquals(ingressAnnotations.machineName(), machineName);
+  }
+

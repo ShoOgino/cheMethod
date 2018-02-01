@@ -1,0 +1,30 @@
+  @Override
+  protected void configure() {
+    MapBinder<String, InternalEnvironmentFactory> factories =
+        MapBinder.newMapBinder(binder(), String.class, InternalEnvironmentFactory.class);
+
+    factories.addBinding(KubernetesEnvironment.TYPE).to(KubernetesEnvironmentFactory.class);
+    factories.addBinding(DockerImageEnvironment.TYPE).to(DockerImageEnvironmentFactory.class);
+
+    bind(RuntimeInfrastructure.class).to(KubernetesInfrastructure.class);
+
+    install(new FactoryModuleBuilder().build(KubernetesRuntimeContextFactory.class));
+
+    install(new FactoryModuleBuilder().build(KubernetesRuntimeFactory.class));
+    install(new FactoryModuleBuilder().build(KubernetesBootstrapperFactory.class));
+    bind(WorkspacePVCCleaner.class).asEagerSingleton();
+    bind(RemoveNamespaceOnWorkspaceRemove.class).asEagerSingleton();
+
+    bind(CheApiEnvVarProvider.class).to(KubernetesCheApiEnvVarProvider.class);
+
+    MapBinder<String, WorkspaceVolumesStrategy> volumesStrategies =
+        MapBinder.newMapBinder(binder(), String.class, WorkspaceVolumesStrategy.class);
+    volumesStrategies.addBinding(COMMON_STRATEGY).to(CommonPVCStrategy.class);
+    volumesStrategies.addBinding(UNIQUE_STRATEGY).to(UniqueWorkspacePVCStrategy.class);
+    bind(WorkspaceVolumesStrategy.class).toProvider(WorkspaceVolumeStrategyProvider.class);
+
+    Multibinder<EnvVarProvider> envVarProviders =
+        Multibinder.newSetBinder(binder(), EnvVarProvider.class);
+    envVarProviders.addBinding().to(LogsRootEnvVariableProvider.class);
+  }
+
