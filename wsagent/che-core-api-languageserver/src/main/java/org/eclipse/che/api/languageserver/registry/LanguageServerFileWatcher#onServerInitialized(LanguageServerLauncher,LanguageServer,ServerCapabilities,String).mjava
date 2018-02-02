@@ -4,20 +4,15 @@
       ServerCapabilities capabilities,
       String projectPath) {
     LanguageServerDescription description = launcher.getDescription();
-    description
-        .getFileWatchPatterns()
-        .stream()
-        .map(patternToMatcher())
-        .forEach(
-            matcher -> {
-              int watcherId =
-                  watcherManager.registerByMatcher(
-                      matcher,
-                      s -> send(server, s, FileChangeType.Created),
-                      s -> send(server, s, FileChangeType.Changed),
-                      s -> send(server, s, FileChangeType.Deleted));
+    Set<PathMatcher> matchers =
+        description
+            .getFileWatchPatterns()
+            .stream()
+            .map(patternToMatcher())
+            .collect(Collectors.toSet());
 
-              watcherIds.add(watcherId);
-            });
+    fileCreateConsumer.watch(s -> send(server, s, Created), matchers);
+    fileUpdateConsumer.watch(s -> send(server, s, Changed), matchers);
+    fileDeleteConsumer.watch(s -> send(server, s, Deleted), matchers);
   }
 
