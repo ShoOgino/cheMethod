@@ -1,5 +1,6 @@
   @Override
-  public SearchResult search(QueryExpression query) throws ServerException {
+  public SearchResult search(QueryExpression query)
+      throws InvalidQueryException, QueryExecutionException {
     IndexSearcher luceneSearcher = null;
     try {
       final long startTime = System.currentTimeMillis();
@@ -16,7 +17,7 @@
 
       final int numDocs =
           query.getMaxItems() > 0 ? Math.min(query.getMaxItems(), RESULT_LIMIT) : RESULT_LIMIT;
-      TopDocs topDocs = luceneSearcher.searchAfter(after, luceneQuery, numDocs);
+      TopDocs topDocs = luceneSearcher.searchAfter(after, luceneQuery, numDocs, sort, true, true);
       final long totalHitsNum = topDocs.totalHits;
 
       List<SearchResultEntry> results = newArrayList();
@@ -62,7 +63,7 @@
               endOffset = offsetAtt.endOffset();
 
               if ((endOffset > txt.length()) || (startOffset > txt.length())) {
-                throw new ServerException(
+                throw new QueryExecutionException(
                     "Token "
                         + termAtt.toString()
                         + " exceeds length of provided text size "
@@ -71,25 +72,29 @@
 
               float res = queryScorer.getTokenScore();
               if (res > 0.0F && startOffset <= endOffset) {
-                try {
-                  IDocument document = new org.eclipse.jface.text.Document(txt);
-                  int lineNum = document.getLineOfOffset(startOffset);
-                  IRegion lineInfo = document.getLineInformation(lineNum);
-                  String foundLine = document.get(lineInfo.getOffset(), lineInfo.getLength());
-                  String tokenText = document.get(startOffset, endOffset - startOffset);
+                String tokenText = txt.substring(startOffset, endOffset);
+                Scanner sc = new Scanner(txt);
+                int lineNum = 1;
+                long len = 0;
+                String foundLine = "";
+                while (sc.hasNextLine()) {
+                  foundLine = sc.nextLine();
 
-                  offsetData.add(
-                      new OffsetData(
-                          tokenText, startOffset, endOffset, docId, res, lineNum, foundLine));
-                } catch (BadLocationException e) {
-                  LOG.error(e.getLocalizedMessage(), e);
-                  throw new ServerException("Can not provide data for token " + termAtt.toString());
+                  len += foundLine.length();
+                  if (len > startOffset) {
+                    break;
+                  }
+                  lineNum++;
                 }
+                offsetData.add(
+                    new OffsetData(tokenText, startOffset, endOffset, res, lineNum, foundLine));
               }
             }
           }
         }
+
         String filePath = doc.getField(PATH_FIELD).stringValue();
+        LOG.debug("Doc {} path {} score {} ", docId, filePath, scoreDoc.score);
         results.add(new SearchResultEntry(filePath, offsetData));
       }
 
@@ -108,8 +113,10 @@
           .withNextPageQueryExpression(nextPageQueryExpression)
           .withElapsedTimeMillis(elapsedTimeMillis)
           .build();
-    } catch (IOException | ParseException e) {
-      throw new ServerException(e.getMessage(), e);
+    } catch (ParseException e) {
+      throw new InvalidQueryException(e.getMessage(), e);
+    } catch (IOException e) {
+      throw new QueryExecutionException(e.getMessage(), e);
     } finally {
       try {
         searcherManager.release(luceneSearcher);

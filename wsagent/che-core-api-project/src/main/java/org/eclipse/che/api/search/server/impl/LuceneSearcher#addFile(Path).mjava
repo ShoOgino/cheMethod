@@ -1,4 +1,4 @@
-  private void addFile(Path fsPath) throws ServerException {
+  private void addFile(Path fsPath) {
     if (!fsPath.toFile().exists()) {
       return;
     }
@@ -6,18 +6,25 @@
     if (!isNotExcluded(fsPath)) {
       return;
     }
-
     String wsPath = pathTransformer.transform(fsPath);
+    LOG.debug("Adding file {} ", wsPath);
 
     try (Reader reader =
         new BufferedReader(new InputStreamReader(new FileInputStream(fsPath.toFile()), "utf-8"))) {
-      luceneIndexWriter.updateDocument(
-          new Term(PATH_FIELD, wsPath), createDocument(wsPath, reader));
-    } catch (OutOfMemoryError oome) {
-      doTerminate();
-      throw oome;
-    } catch (IOException e) {
-      throw new ServerException(e.getMessage(), e);
+      String name = nameOf(wsPath);
+      Document doc = new Document();
+      doc.add(new StringField(PATH_FIELD, wsPath, Field.Store.YES));
+      doc.add(new SortedDocValuesField(PATH_FIELD, new BytesRef(wsPath)));
+      doc.add(new TextField(NAME_FIELD, name, Field.Store.YES));
+      try {
+        doc.add(new TextField(TEXT_FIELD, CharStreams.toString(reader), Field.Store.YES));
+      } catch (MalformedInputException e) {
+        LOG.warn("Can't index file: {}", wsPath);
+      }
+      luceneIndexWriter.updateDocument(new Term(PATH_FIELD, wsPath), doc);
+
+    } catch (IOException oome) {
+      LOG.warn("Can't index file: {}", wsPath);
     }
   }
 

@@ -9,9 +9,9 @@
    */
   public ProjectSearchResponseDto search(
       String wsPath, String name, String text, int maxItems, int skipCount)
-      throws NotFoundException, ForbiddenException, ConflictException, ServerException {
+      throws BadRequestException, ServerException, NotFoundException {
     if (skipCount < 0) {
-      throw new ConflictException(String.format("Invalid 'skipCount' parameter: %d.", skipCount));
+      throw new BadRequestException(String.format("Invalid 'skipCount' parameter: %d.", skipCount));
     }
     wsPath = absolutize(wsPath);
 
@@ -24,10 +24,17 @@
             .setSkipCount(skipCount)
             .setIncludePositions(true);
 
-    SearchResult result = searcher.search(expr);
-    List<SearchResultEntry> searchResultEntries = result.getResults();
-    return DtoFactory.newDto(ProjectSearchResponseDto.class)
-        .withTotalHits(result.getTotalHits())
-        .withItemReferences(prepareResults(searchResultEntries));
+    try {
+      SearchResult result = searcher.search(expr);
+      List<SearchResultEntry> searchResultEntries = result.getResults();
+      return DtoFactory.newDto(ProjectSearchResponseDto.class)
+          .withTotalHits(result.getTotalHits())
+          .withItemReferences(prepareResults(searchResultEntries));
+    } catch (InvalidQueryException e) {
+      throw new BadRequestException(e.getMessage());
+    } catch (QueryExecutionException e) {
+      LOG.warn(e.getLocalizedMessage());
+      throw new ServerException(e.getMessage());
+    }
   }
 

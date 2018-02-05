@@ -1,15 +1,20 @@
   @PostConstruct
-  private void initialize() throws ServerException {
-    doInitialize();
-    if (!executor.isShutdown()) {
-      executor.execute(
-          () -> {
-            try {
-              addDirectory(root.toPath());
-            } catch (ServerException e) {
-              LOG.error(e.getMessage());
-            }
-          });
-    }
+  @VisibleForTesting
+  void initialize() {
+    Thread initializer =
+        new Thread(
+            () -> {
+              try {
+                long start = System.currentTimeMillis();
+                add(root.toPath());
+                LOG.info(
+                    "Initial indexing complete after {} msec ", System.currentTimeMillis() - start);
+              } finally {
+                initialIndexingLatch.countDown();
+              }
+            });
+    initializer.setName("LuceneSearcherInitThread");
+    initializer.setDaemon(true);
+    initializer.start();
   }
 
