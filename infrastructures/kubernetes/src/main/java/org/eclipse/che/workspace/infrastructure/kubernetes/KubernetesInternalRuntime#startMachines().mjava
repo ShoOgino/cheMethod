@@ -1,0 +1,26 @@
+  /**
+   * Create all machine related objects and start machines.
+   *
+   * @throws InfrastructureException when any error occurs while creating Kubernetes objects
+   */
+  protected void startMachines() throws InfrastructureException {
+    KubernetesEnvironment k8sEnv = getContext().getEnvironment();
+    List<Service> createdServices = new ArrayList<>();
+    for (Service service : k8sEnv.getServices().values()) {
+      createdServices.add(namespace.services().create(service));
+    }
+
+    // needed for resolution later on, even though n routes are actually created by ingress
+    // /workspace{wsid}/server-{port} => service({wsid}):server-port => pod({wsid}):{port}
+    List<Ingress> readyIngresses = createAndWaitReady(k8sEnv.getIngresses().values());
+
+    // TODO https://github.com/eclipse/che/issues/7653
+    // namespace.pods().watch(new AbnormalStopHandler());
+    // namespace.pods().watchContainers(new MachineLogsPublisher());
+
+    final KubernetesServerResolver serverResolver =
+        new KubernetesServerResolver(createdServices, readyIngresses);
+
+    doStartMachine(serverResolver);
+  }
+

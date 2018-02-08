@@ -1,15 +1,22 @@
   private ServerChecker getChecker(String serverRef, Server server) throws InfrastructureException {
     // TODO replace with correct behaviour
     // workaround needed because we don't have server readiness check in the model
-    String livenessCheckPath = LIVENESS_CHECKS_PATHS.get(serverRef);
     // Create server readiness endpoint URL
     URL url;
     try {
-      // TODO: ws -> http is workaround used for terminal websocket server,
-      // should be removed after server checks added to model
+      String serverUrl = server.getUrl();
+
+      if ("terminal".equals(serverRef)) {
+        serverUrl = serverUrl.replaceFirst("^ws", "http").replaceFirst("/pty$", "/");
+      }
+
+      if ("wsagent/http".equals(serverRef)) {
+        // add trailing slash
+        serverUrl = serverUrl + '/';
+      }
+
       url =
-          UriBuilder.fromUri(server.getUrl().replaceFirst("^ws", "http"))
-              .replacePath(livenessCheckPath)
+          UriBuilder.fromUri(serverUrl)
               .queryParam("token", machineTokenProvider.getToken(runtimeIdentity.getWorkspaceId()))
               .build()
               .toURL();

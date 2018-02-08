@@ -1,0 +1,27 @@
+  @Test
+  public void provisionTlsForRoutes() throws Exception {
+    // given
+    RouteTlsProvisioner tlsProvisioner = new RouteTlsProvisioner(true);
+    ServerConfigImpl httpServer = new ServerConfigImpl("8080/tpc", "http", "/api", emptyMap());
+    ServerConfigImpl wsServer = new ServerConfigImpl("8080/tpc", "ws", "/ws", emptyMap());
+
+    final Map<String, Route> routes = new HashMap<>();
+    Route route =
+        createRoute("route", ImmutableMap.of("http-server", httpServer, "ws-server", wsServer));
+    routes.put("route", route);
+    when(osEnv.getRoutes()).thenReturn(routes);
+
+    // when
+    tlsProvisioner.provision(osEnv, runtimeIdentity);
+
+    // then
+    assertEquals(route.getSpec().getTls().getTermination(), TERMINATION_EDGE);
+    assertEquals(
+        route.getSpec().getTls().getInsecureEdgeTerminationPolicy(), TERMINATION_POLICY_REDIRECT);
+
+    Map<String, ServerConfigImpl> servers =
+        Annotations.newDeserializer(route.getMetadata().getAnnotations()).servers();
+    assertEquals(servers.get("http-server").getProtocol(), "https");
+    assertEquals(servers.get("ws-server").getProtocol(), "wss");
+  }
+

@@ -1,0 +1,30 @@
+  /**
+   * Creates Kubernetes pods and resolves servers using the specified serverResolver.
+   *
+   * @param serverResolver server resolver that provide servers by container
+   * @throws InfrastructureException when any error occurs while creating Kubernetes pods
+   */
+  protected void doStartMachine(KubernetesServerResolver serverResolver)
+      throws InfrastructureException {
+    final KubernetesEnvironment environment = getContext().getEnvironment();
+    final Map<String, InternalMachineConfig> machineConfigs = environment.getMachines();
+    for (Pod toCreate : environment.getPods().values()) {
+      final Pod createdPod = namespace.pods().create(toCreate);
+      final ObjectMeta podMetadata = createdPod.getMetadata();
+      for (Container container : createdPod.getSpec().getContainers()) {
+        String machineName = Names.machineName(toCreate, container);
+        KubernetesMachine machine =
+            new KubernetesMachine(
+                machineName,
+                podMetadata.getName(),
+                container.getName(),
+                serverResolver.resolve(machineName),
+                namespace,
+                MachineStatus.STARTING,
+                machineConfigs.get(machineName).getAttributes());
+        machines.put(machine.getName(), machine);
+        sendStartingEvent(machine.getName());
+      }
+    }
+  }
+

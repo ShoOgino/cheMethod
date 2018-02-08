@@ -1,0 +1,48 @@
+  @Override
+  protected void internalStart(Map<String, String> startOptions) throws InfrastructureException {
+    KubernetesRuntimeContext<? extends KubernetesEnvironment> context = getContext();
+    String workspaceId = context.getIdentity().getWorkspaceId();
+    try {
+      final KubernetesEnvironment k8sEnv = context.getEnvironment();
+      volumesStrategy.prepare(k8sEnv, workspaceId);
+
+      startMachines();
+
+      // TODO Rework it to parallel waiting https://github.com/eclipse/che/issues/7067
+      for (KubernetesMachine machine : machines.values()) {
+        try {
+          machine.waitRunning(machineStartTimeoutMin);
+          machine.setStatus(MachineStatus.RUNNING);
+          sendRunningEvent(machine.getName());
+          bootstrapMachine(machine);
+          checkMachineServers(machine);
+        } catch (InfrastructureException rethrow) {
+          sendFailedEvent(machine.getName(), rethrow.getMessage());
+          throw rethrow;
+        }
+      }
+    } catch (InfrastructureException | RuntimeException | InterruptedException e) {
+      LOG.warn(
+          "Failed to start Kubernetes runtime of workspace {}. Cause: {}",
+          workspaceId,
+          e.getMessage());
+      boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+      // Cancels workspace servers probes if any
+      probeScheduler.cancel(workspaceId);
+      try {
+        namespace.cleanUp();
+      } catch (InfrastructureException ignored) {
+      }
+      if (interrupted) {
+        throw new InfrastructureException("Kubernetes environment start was interrupted");
+      }
+      try {
+        throw e;
+      } catch (InfrastructureException rethrow) {
+        throw rethrow;
+      } catch (Exception wrap) {
+        throw new InternalInfrastructureException(e.getMessage(), wrap);
+      }
+    }
+  }
+

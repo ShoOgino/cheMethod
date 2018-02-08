@@ -1,0 +1,39 @@
+  /**
+   * Exposes specified servers.
+   *
+   * <p>Note that created Kubernetes objects will select the corresponding pods by {@link
+   * Constants#CHE_ORIGINAL_NAME_LABEL} label. That should be added by {@link
+   * UniqueNamesProvisioner}.
+   *
+   * @param servers servers to expose
+   * @see UniqueNamesProvisioner#provision(KubernetesEnvironment, RuntimeIdentity)
+   */
+  public void expose(Map<String, ? extends ServerConfig> servers) {
+    Map<String, ServerConfig> internalServers = new HashMap<>();
+    Map<String, ServerConfig> externalServers = new HashMap<>();
+
+    servers.forEach(
+        (key, value) -> {
+          if ("true".equals(value.getAttributes().get(INTERNAL_SERVER_ATTRIBUTE))) {
+            internalServers.put(key, value);
+          } else {
+            externalServers.put(key, value);
+          }
+        });
+
+    Map<String, ServicePort> portToServicePort = exposePort(servers.values());
+    Service service =
+        new ServiceBuilder()
+            .withName(generate(SERVER_PREFIX, SERVER_UNIQUE_PART_SIZE) + '-' + machineName)
+            .withMachineName(machineName)
+            .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, pod.getMetadata().getName())
+            .withPorts(new ArrayList<>(portToServicePort.values()))
+            .withServers(internalServers)
+            .build();
+
+    String serviceName = service.getMetadata().getName();
+    kubernetesEnvironment.getServices().put(serviceName, service);
+
+    exposeExternalServers(serviceName, portToServicePort, externalServers);
+  }
+

@@ -1,0 +1,35 @@
+  /**
+   * Starts watching the pods inside Kubernetes namespace and registers a specified handler for such
+   * events. Note that watcher can be started only once so two times invocation of this method will
+   * not produce new watcher and just register the event handlers.
+   *
+   * @param handler pod action events handler
+   * @throws InfrastructureException if any error occurs while watcher starting
+   */
+  public void watch(PodActionHandler handler) throws InfrastructureException {
+    if (podWatch == null) {
+      final Watcher<Pod> watcher =
+          new Watcher<Pod>() {
+            @Override
+            public void eventReceived(Action action, Pod pod) {
+              podActionHandlers.forEach(h -> h.handle(action, pod));
+            }
+
+            @Override
+            public void onClose(KubernetesClientException ignored) {}
+          };
+      try {
+        podWatch =
+            clientFactory
+                .create()
+                .pods()
+                .inNamespace(namespace)
+                .withLabel(CHE_WORKSPACE_ID_LABEL, workspaceId)
+                .watch(watcher);
+      } catch (KubernetesClientException ex) {
+        throw new InfrastructureException(ex.getMessage());
+      }
+    }
+    podActionHandlers.add(handler);
+  }
+
