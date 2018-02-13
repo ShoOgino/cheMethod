@@ -1,0 +1,41 @@
+  @Override
+  public HttpProbeConfig get(String userId, String workspaceId, Server server)
+      throws InternalInfrastructureException {
+
+    try {
+      // add check path
+      URI uri = UriBuilder.fromUri(server.getUrl()).path("/liveness").build();
+
+      int port;
+      if (uri.getPort() == -1) {
+        if ("http".equals(uri.getScheme())) {
+          port = 80;
+        } else {
+          port = 443;
+        }
+      } else {
+        port = uri.getPort();
+      }
+
+      return new HttpProbeConfig(
+          port,
+          uri.getHost(),
+          uri.getScheme(),
+          uri.getPath(),
+          singletonMap(
+              HttpHeaders.AUTHORIZATION, machineTokenProvider.getToken(userId, workspaceId)),
+          successThreshold,
+          3,
+          120,
+          10,
+          10);
+    } catch (MachineTokenException e) {
+      throw new InternalInfrastructureException(
+          "Failed to retrieve workspace token for ws-agent server liveness probe. Error: "
+              + e.getMessage());
+    } catch (UriBuilderException e) {
+      throw new InternalInfrastructureException(
+          "Wsagent server liveness probe url is invalid. Error: " + e.getMessage());
+    }
+  }
+

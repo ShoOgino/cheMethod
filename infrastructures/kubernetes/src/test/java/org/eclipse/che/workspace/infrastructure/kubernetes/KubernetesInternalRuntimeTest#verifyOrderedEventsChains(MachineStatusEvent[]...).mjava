@@ -1,0 +1,31 @@
+  private void verifyOrderedEventsChains(MachineStatusEvent[]... eventsArrays) {
+    Map<String, LinkedList<MachineStatusEvent>> machine2Events = new HashMap<>();
+    List<MachineStatusEvent> machineStatusEvents = captureEvents();
+    for (MachineStatusEvent event : machineStatusEvents) {
+      final String machineName = event.getMachineName();
+      machine2Events.computeIfPresent(
+          machineName,
+          (mName, events) -> {
+            events.add(event);
+            return events;
+          });
+      machine2Events.computeIfAbsent(
+          machineName,
+          mName -> {
+            final LinkedList<MachineStatusEvent> events = new LinkedList<>();
+            events.add(event);
+            return events;
+          });
+    }
+
+    for (MachineStatusEvent[] expected : eventsArrays) {
+      final MachineStatusEvent machineStatusEvent = expected[0];
+      final MachineStatusEvent[] actual =
+          machine2Events
+              .remove(machineStatusEvent.getMachineName())
+              .toArray(new MachineStatusEvent[expected.length]);
+      assertEquals(actual, expected);
+    }
+    assertTrue(machine2Events.isEmpty(), "No more events expected");
+  }
+

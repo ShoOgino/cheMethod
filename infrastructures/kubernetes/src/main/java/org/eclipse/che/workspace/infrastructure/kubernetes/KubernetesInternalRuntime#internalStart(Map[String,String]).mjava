@@ -5,22 +5,32 @@
     try {
       final KubernetesEnvironment k8sEnv = context.getEnvironment();
       volumesStrategy.prepare(k8sEnv, workspaceId);
-
       startMachines();
 
-      // TODO Rework it to parallel waiting https://github.com/eclipse/che/issues/7067
+      final CompletableFuture<Void> failure = new CompletableFuture<>();
+      final List<CompletableFuture<Void>> machinesFutures = new ArrayList<>();
+      // futures that must be cancelled explicitly
+      final List<CompletableFuture<?>> toCancelFutures = new CopyOnWriteArrayList<>();
       for (KubernetesMachine machine : machines.values()) {
-        try {
-          machine.waitRunning(machineStartTimeoutMin);
-          machine.setStatus(MachineStatus.RUNNING);
-          sendRunningEvent(machine.getName());
-          bootstrapMachine(machine);
-          checkMachineServers(machine);
-        } catch (InfrastructureException rethrow) {
-          sendFailedEvent(machine.getName(), rethrow.getMessage());
-          throw rethrow;
-        }
+        final CompletableFuture<Void> machineRunningFuture = machine.waitRunningAsync();
+        toCancelFutures.add(machineRunningFuture);
+        final CompletableFuture<Void> machineBootChain =
+            machineRunningFuture
+                // since machine running future will be completed from the thread that is not from
+                // kubernetes pool it's needed to explicitly put the executor to not to delay
+                // processing in the external pool.
+                .thenComposeAsync(checkFailure(failure), executor)
+                .thenRun(publishRunningStatus(machine))
+                .thenCompose(checkFailure(failure))
+                .thenCompose(bootstrap(toCancelFutures, machine))
+                // see comments above why executor is explicitly put into arguments
+                .thenComposeAsync(checkFailure(failure), executor)
+                .thenCompose(checkServers(toCancelFutures, machine))
+                .exceptionally(publishFailedStatus(failure, machine));
+        machinesFutures.add(machineBootChain);
       }
+
+      waitMachines(machinesFutures, toCancelFutures, failure);
     } catch (InfrastructureException | RuntimeException | InterruptedException e) {
       LOG.warn(
           "Failed to start Kubernetes runtime of workspace {}. Cause: {}",
@@ -36,13 +46,7 @@
       if (interrupted) {
         throw new InfrastructureException("Kubernetes environment start was interrupted");
       }
-      try {
-        throw e;
-      } catch (InfrastructureException rethrow) {
-        throw rethrow;
-      } catch (Exception wrap) {
-        throw new InternalInfrastructureException(e.getMessage(), wrap);
-      }
+      wrapAndRethrow(e);
     }
   }
 

@@ -1,0 +1,25 @@
+  /**
+   * Returns the function the result of which the completable stage that informs about bootstrapping
+   * of the machine. Note that when the given machine does not contain installers then the result of
+   * this function will be completed stage.
+   */
+  private Function<Void, CompletionStage<Void>> bootstrap(
+      List<CompletableFuture<?>> toCancelFutures, KubernetesMachine machine) {
+    return ignored -> {
+      // think about to return copy of machines in environment
+      final InternalMachineConfig machineConfig =
+          getContext().getEnvironment().getMachines().get(machine.getName());
+      final CompletableFuture<Void> bootstrapperFuture;
+      if (!machineConfig.getInstallers().isEmpty()) {
+        bootstrapperFuture =
+            bootstrapperFactory
+                .create(getContext().getIdentity(), machineConfig.getInstallers(), machine)
+                .bootstrapAsync();
+        toCancelFutures.add(bootstrapperFuture);
+      } else {
+        bootstrapperFuture = CompletableFuture.completedFuture(null);
+      }
+      return bootstrapperFuture;
+    };
+  }
+

@@ -1,0 +1,45 @@
+  /**
+   * Waits for readiness of given machines.
+   *
+   * @param machinesFutures machines futures to wait
+   * @param toCancelFutures futures that must be explicitly closed when any error occurs
+   * @param failure failure callback that is used to prevent subsequent steps when any error occurs
+   * @throws InfrastructureException when waiting for machines exceeds the timeout
+   * @throws InfrastructureException when any problem occurred while waiting
+   * @throws InterruptedException when the thread is interrupted while waiting machines
+   */
+  private void waitMachines(
+      List<CompletableFuture<Void>> machinesFutures,
+      List<CompletableFuture<?>> toCancelFutures,
+      CompletableFuture<Void> failure)
+      throws InfrastructureException, InterruptedException {
+    try {
+      final CompletableFuture<Void> allDone =
+          CompletableFuture.allOf(
+              machinesFutures.toArray(new CompletableFuture[machinesFutures.size()]));
+      CompletableFuture.anyOf(allDone, failure).get(workspaceStartTimeout, TimeUnit.MINUTES);
+
+      if (failure.isCompletedExceptionally()) {
+        // rethrow the failure cause
+        failure.get();
+      }
+    } catch (TimeoutException ex) {
+      failure.completeExceptionally(ex);
+      cancelAll(toCancelFutures);
+      throw new InfrastructureException(
+          "Waiting for Kubernetes environment '"
+              + getContext().getIdentity().getEnvName()
+              + "' of the workspace'"
+              + getContext().getIdentity().getWorkspaceId()
+              + "' reached timeout");
+    } catch (InterruptedException ex) {
+      failure.completeExceptionally(ex);
+      cancelAll(toCancelFutures);
+      throw ex;
+    } catch (ExecutionException ex) {
+      failure.completeExceptionally(ex);
+      cancelAll(toCancelFutures);
+      wrapAndRethrow(ex.getCause());
+    }
+  }
+

@@ -2,18 +2,21 @@
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
     internalRuntime =
-        new KubernetesInternalRuntime(
+        new KubernetesInternalRuntime<>(
             13,
+            5,
             new URLRewriter.NoOpURLRewriter(),
-            eventService,
             bootstrapperFactory,
             serverCheckerFactory,
             volumesStrategy,
             probesScheduler,
             workspaceProbesFactory,
+            new RuntimeEventsPublisher(eventService),
+            new KubernetesSharedPool(),
             context,
             namespace,
             emptyList());
+
     when(context.getEnvironment()).thenReturn(k8sEnv);
     when(serverCheckerFactory.create(any(), anyString(), any())).thenReturn(serversChecker);
     when(context.getIdentity()).thenReturn(IDENTITY);
@@ -30,9 +33,9 @@
                 mockMachine(mockInstaller("terminal"))))
         .when(k8sEnv)
         .getMachines();
-    allServices = ImmutableMap.of(SERVICE_NAME, mockService());
-    Ingress ingress = mockIngress();
-    allIngresses = ImmutableMap.of(INGRESS_NAME, ingress);
+    final Map<String, Service> allServices = ImmutableMap.of(SERVICE_NAME, mockService());
+    final Ingress ingress = mockIngress();
+    final Map<String, Ingress> allIngresses = ImmutableMap.of(INGRESS_NAME, ingress);
     final Container container = mockContainer(CONTAINER_NAME_1, EXPOSED_PORT_1, INTERNAL_PORT);
     final ImmutableMap<String, Pod> allPods =
         ImmutableMap.of(POD_NAME, mockPod(ImmutableList.of(container)));
@@ -43,5 +46,8 @@
     when(k8sEnv.getServices()).thenReturn(allServices);
     when(k8sEnv.getIngresses()).thenReturn(allIngresses);
     when(k8sEnv.getPods()).thenReturn(allPods);
+    when(pods.waitAsync(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+    when(bootstrapper.bootstrapAsync()).thenReturn(CompletableFuture.completedFuture(null));
+    when(serversChecker.startAsync(any())).thenReturn(CompletableFuture.completedFuture(null));
   }
 

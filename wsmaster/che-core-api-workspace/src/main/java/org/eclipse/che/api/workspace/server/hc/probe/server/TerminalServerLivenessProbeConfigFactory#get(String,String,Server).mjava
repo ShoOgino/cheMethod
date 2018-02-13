@@ -1,0 +1,33 @@
+  @Override
+  public HttpProbeConfig get(String userId, String workspaceId, Server server)
+      throws InternalInfrastructureException {
+    URI uri;
+    try {
+      uri = new URI(server.getUrl());
+    } catch (URISyntaxException e) {
+      throw new InternalInfrastructureException(
+          "Terminal agent server liveness probe url is invalid. Error: " + e.getMessage());
+    }
+    String protocol;
+    if ("wss".equals(uri.getScheme())) {
+      protocol = "https";
+    } else {
+      protocol = "http";
+    }
+    int port;
+    if (uri.getPort() == -1) {
+      if ("http".equals(protocol)) {
+        port = 80;
+      } else {
+        port = 443;
+      }
+    } else {
+      port = uri.getPort();
+    }
+
+    String path = uri.getPath().replaceFirst("/pty$", "/liveness");
+
+    return new HttpProbeConfig(
+        port, uri.getHost(), protocol, path, null, successThreshold, 3, 120, 10, 10);
+  }
+

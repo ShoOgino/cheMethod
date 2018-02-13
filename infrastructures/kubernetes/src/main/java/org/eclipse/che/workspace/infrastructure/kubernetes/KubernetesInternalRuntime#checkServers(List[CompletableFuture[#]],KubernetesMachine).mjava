@@ -1,0 +1,42 @@
+  /**
+   * Returns a function, the result of which the completable stage that performs servers checks and
+   * start of servers probes.
+   */
+  private Function<Void, CompletionStage<Void>> checkServers(
+      List<CompletableFuture<?>> toCancelFutures, KubernetesMachine machine) {
+    return ignored -> {
+      // This completable future is used to unity the servers checks and start of probes
+      final CompletableFuture<Void> serversAndProbesFuture = new CompletableFuture<>();
+      final String machineName = machine.getName();
+      final RuntimeIdentity runtimeId = getContext().getIdentity();
+      final ServersChecker serverCheck =
+          serverCheckerFactory.create(runtimeId, machineName, machine.getServers());
+      final CompletableFuture<?> serversReadyFuture;
+      try {
+        serversReadyFuture = serverCheck.startAsync(new ServerReadinessHandler(machineName));
+        toCancelFutures.add(serversReadyFuture);
+        serversAndProbesFuture.whenComplete((ok, ex) -> serversReadyFuture.cancel(true));
+      } catch (InfrastructureException ex) {
+        serversAndProbesFuture.completeExceptionally(ex);
+        return serversAndProbesFuture;
+      }
+      serversReadyFuture.whenComplete(
+          (BiConsumer<Object, Throwable>)
+              (ok, ex) -> {
+                if (ex != null) {
+                  serversAndProbesFuture.completeExceptionally(ex);
+                  return;
+                }
+                try {
+                  probeScheduler.schedule(
+                      probesFactory.getProbes(runtimeId, machineName, machine.getServers()),
+                      new ServerLivenessHandler());
+                } catch (InfrastructureException iex) {
+                  serversAndProbesFuture.completeExceptionally(iex);
+                }
+                serversAndProbesFuture.complete(null);
+              });
+      return serversAndProbesFuture;
+    };
+  }
+

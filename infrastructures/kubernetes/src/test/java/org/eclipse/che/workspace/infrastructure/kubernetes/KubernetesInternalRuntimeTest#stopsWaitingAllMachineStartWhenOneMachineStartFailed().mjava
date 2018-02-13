@@ -5,7 +5,7 @@
     final ImmutableMap<String, Pod> allPods =
         ImmutableMap.of(POD_NAME, mockPod(ImmutableList.of(container1, container2)));
     when(k8sEnv.getPods()).thenReturn(allPods);
-    doThrow(InfrastructureException.class).when(bootstrapper).bootstrap();
+    doThrow(InfrastructureException.class).when(bootstrapper).bootstrapAsync();
 
     try {
       internalRuntime.internalStart(emptyMap());
@@ -13,13 +13,10 @@
       verify(pods).create(any());
       verify(ingresses).create(any());
       verify(services).create(any());
-      verify(bootstrapper).bootstrap();
-      verify(eventService, times(4)).publish(any());
-      verifyEventsOrder(
-          newEvent(M1_NAME, STARTING),
-          newEvent(M2_NAME, STARTING),
-          newEvent(M1_NAME, RUNNING),
-          newEvent(M1_NAME, FAILED));
+      verify(bootstrapper, atLeastOnce()).bootstrapAsync();
+      verify(eventService, atLeastOnce()).publish(any());
+      final List<MachineStatusEvent> events = captureEvents();
+      assertTrue(events.contains(newEvent(M1_NAME, STARTING)));
       throw rethrow;
     }
   }

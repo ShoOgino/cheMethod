@@ -1,0 +1,22 @@
+  @Test(
+    expectedExceptions = InfrastructureException.class,
+    expectedExceptionsMessageRegExp = "Kubernetes environment start was interrupted"
+  )
+  public void throwsInfrastructureExceptionWhenMachinesWaitingIsInterrupted() throws Exception {
+    final Thread thread = Thread.currentThread();
+    final ImmutableMap<String, Pod> podsMap =
+        ImmutableMap.of(
+            POD_NAME,
+            mockPod(
+                ImmutableList.of(
+                    mockContainer(CONTAINER_NAME_1, EXPOSED_PORT_1),
+                    mockContainer(CONTAINER_NAME_2, EXPOSED_PORT_2, INTERNAL_PORT))));
+    when(k8sEnv.getPods()).thenReturn(podsMap);
+    when(bootstrapper.bootstrapAsync()).thenReturn(new CompletableFuture<>());
+
+    Executors.newSingleThreadScheduledExecutor()
+        .schedule(thread::interrupt, 300, TimeUnit.MILLISECONDS);
+
+    internalRuntime.internalStart(emptyMap());
+  }
+
