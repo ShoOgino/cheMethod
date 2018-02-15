@@ -5,16 +5,18 @@
    * @param userId id of user to get token
    * @param workspaceId id of workspace to get token
    * @return machine security token for for given user and workspace
-   * @throws NotFoundException when there is no running workspace with given id
    */
-  public String getOrCreateToken(String userId, String workspaceId) throws NotFoundException {
+  public String getOrCreateToken(String userId, String workspaceId) {
     lock.writeLock().lock();
     try {
       final Map<String, String> wsRow = tokens.row(workspaceId);
-      if (wsRow.isEmpty()) {
-        throw new NotFoundException(format("No running workspace found with id %s", workspaceId));
+      String token = wsRow.get(userId);
+
+      if (token == null) {
+        token = generate("machine", 128);
+        tokens.put(workspaceId, userId, token);
       }
-      return wsRow.get(userId) == null ? generateToken(userId, workspaceId) : wsRow.get(userId);
+      return token;
     } finally {
       lock.writeLock().unlock();
     }
