@@ -1,0 +1,47 @@
+  @Test
+  public void shouldHandleCommandError() throws Exception {
+    // given
+    doReturn(UNKNOWN_COMMAND)
+        .when(testWorkspaceLogsReader)
+        .getReadLogsCommand(
+            TEST_WORKSPACE_ID,
+            Paths.get(
+                format(
+                    "%s/%s/%s", PATH_TO_STORE_LOGS, TEST_WORKSPACE_ID, FIRST_LOG_INFO.getName())),
+            FIRST_LOG_INFO.getLocationInsideWorkspace());
+
+    doReturn(true).when(testWorkspaceLogsReader).canWorkspaceLogsBeRead();
+    doReturn(WorkspaceStatus.RUNNING).when(testWorkspaceServiceClient).getStatus(TEST_WORKSPACE_ID);
+
+    // when
+    testWorkspaceLogsReader.read(testWorkspace, PATH_TO_STORE_LOGS);
+
+    // then
+    ArgumentCaptor<String> logArgumentCaptor1 = forClass(String.class);
+    ArgumentCaptor<String> logArgumentCaptor2 = forClass(String.class);
+    ArgumentCaptor<String> logArgumentCaptor3 = forClass(String.class);
+    ArgumentCaptor<Path> logArgumentCaptor4 = forClass(Path.class);
+    ArgumentCaptor<ProcessAgentException> logArgumentCaptor5 =
+        forClass(ProcessAgentException.class);
+
+    verify(log)
+        .warn(
+            logArgumentCaptor1.capture(),
+            logArgumentCaptor2.capture(),
+            logArgumentCaptor3.capture(),
+            logArgumentCaptor4.capture(),
+            logArgumentCaptor5.capture());
+
+    assertEquals(
+        logArgumentCaptor1.getValue(),
+        "Can't obtain '{}' logs from workspace with id='{}' from directory '{}'.");
+    assertEquals(logArgumentCaptor2.getValue(), FIRST_LOG_INFO.getName());
+    assertEquals(logArgumentCaptor3.getValue(), TEST_WORKSPACE_ID);
+    assertEquals(logArgumentCaptor4.getValue(), FIRST_LOG_INFO.getLocationInsideWorkspace());
+
+    assertNotNull(logArgumentCaptor5.getValue());
+    String errorMessage = logArgumentCaptor5.getValue().getMessage();
+    assertTrue(
+        errorMessage.contains(UNKNOWN_COMMAND), "Actual errorMessage content: " + errorMessage);
+  }
+
