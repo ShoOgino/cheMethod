@@ -3,35 +3,36 @@
   public void onFinishButtonClicked() {
     selected.put(page, view.getSelectedImport());
 
-    ConflictImportDTO result =
-        dtoFactory
-            .createDto(ConflictImportDTO.class)
-            .withTypeMatches(new ArrayList<>(selected.values()));
+    OrganizeImportParams organizeImports = dtoFactory.createDto(OrganizeImportParams.class);
+    organizeImports.setResourceUri(file.getLocation().toString());
+    organizeImports.setChoices(new ArrayList<>(selected.values()));
 
-    if (file instanceof Resource) {
-      final Optional<Project> project = ((Resource) file).getRelatedProject();
-
-      javaCodeAssistClient
-          .applyChosenImports(
-              project.get().getLocation().toString(), JavaUtil.resolveFQN(file), result)
-          .then(
-              new Operation<List<Change>>() {
-                @Override
-                public void apply(List<Change> result) throws OperationException {
-                  applyChanges(((TextEditor) editor).getDocument(), result);
-                  view.close();
-                  ((TextEditor) editor).setFocus();
-                }
-              })
-          .catchError(
-              new Operation<PromiseError>() {
-                @Override
-                public void apply(PromiseError arg) throws OperationException {
-                  String title = locale.failedToProcessOrganizeImports();
-                  String message = arg.getMessage();
-                  notificationManager.notify(title, message, FAIL, FLOAT_MODE);
-                }
-              });
-    }
+    clientServerEventService
+        .sendFileTrackingSuspendEvent()
+        .then(
+            successful -> {
+              client
+                  .organizeImports(organizeImports)
+                  .then(
+                      result -> {
+                        try {
+                          applyWorkspaceEditAction.applyWorkspaceEdit(result.getWorkspaceEdit());
+                        } finally {
+                          clientServerEventService.sendFileTrackingResumeEvent();
+                          view.hide();
+                        }
+                      })
+                  .catchError(
+                      error -> {
+                        try {
+                          String title = locale.failedToProcessOrganizeImports();
+                          String message = error.getMessage();
+                          notificationManager.notify(title, message, FAIL, FLOAT_MODE);
+                        } finally {
+                          clientServerEventService.sendFileTrackingResumeEvent();
+                          view.hide();
+                        }
+                      });
+            });
   }
 

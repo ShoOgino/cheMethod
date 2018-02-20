@@ -1,0 +1,31 @@
+  private Promise<OrganizeImportsResult> doOrganizeImports(String path) {
+    OrganizeImportParams organizeImports = dtoFactory.createDto(OrganizeImportParams.class);
+    organizeImports.setChoices(Collections.emptyList());
+    organizeImports.setResourceUri(path);
+
+    return client
+        .organizeImports(organizeImports)
+        .then(
+            result -> {
+              try {
+                if (result.getAmbiguousTypes() != null && !result.getAmbiguousTypes().isEmpty()) {
+                  show(result.getAmbiguousTypes());
+                } else {
+                  applyWorkspaceEditAction.applyWorkspaceEdit(result.getWorkspaceEdit());
+                }
+              } finally {
+                clientServerEventService.sendFileTrackingResumeEvent();
+              }
+            })
+        .catchError(
+            error -> {
+              try {
+                String title = locale.failedToProcessOrganizeImports();
+                String message = error.getMessage();
+                notificationManager.notify(title, message, FAIL, FLOAT_MODE);
+              } finally {
+                clientServerEventService.sendFileTrackingResumeEvent();
+              }
+            });
+  }
+
