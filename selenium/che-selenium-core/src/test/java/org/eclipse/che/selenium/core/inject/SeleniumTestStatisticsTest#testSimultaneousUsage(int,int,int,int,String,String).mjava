@@ -1,0 +1,37 @@
+  @Test(dataProvider = "testData")
+  @SuppressWarnings("FutureReturnValueIgnored")
+  public void testSimultaneousUsage(
+      int hitStart,
+      int hitPass,
+      int hitFail,
+      int hitSkip,
+      String initialToString,
+      String finalToString)
+      throws InterruptedException {
+    // given
+    SeleniumTestStatistics seleniumTestStatistics = new SeleniumTestStatistics();
+
+    // when
+    String actualString = seleniumTestStatistics.toString();
+
+    // then
+    assertEquals(actualString, initialToString);
+
+    // when
+    ExecutorService executor = Executors.newFixedThreadPool(10);
+
+    range(0, hitStart).forEach(i -> executor.submit(seleniumTestStatistics::hitStart));
+    range(0, hitPass).forEach(i -> executor.submit(seleniumTestStatistics::hitPass));
+    range(0, hitFail).forEach(i -> executor.submit(seleniumTestStatistics::hitFail));
+    range(0, hitSkip).forEach(i -> executor.submit(seleniumTestStatistics::hitSkip));
+
+    executor.awaitTermination(20, TimeUnit.SECONDS);
+
+    // then
+    assertEquals(seleniumTestStatistics.toString(), finalToString);
+    assertEquals(seleniumTestStatistics.hitStart(), hitStart + 1);
+    assertEquals(seleniumTestStatistics.hitPass(), hitPass + 1);
+    assertEquals(seleniumTestStatistics.hitFail(), hitFail + 1);
+    assertEquals(seleniumTestStatistics.hitSkip(), hitSkip + 1);
+  }
+
