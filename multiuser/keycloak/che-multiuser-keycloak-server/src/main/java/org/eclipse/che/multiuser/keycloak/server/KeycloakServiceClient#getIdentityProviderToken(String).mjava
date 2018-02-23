@@ -1,0 +1,35 @@
+  /**
+   * Gets auth token from given identity provider.
+   *
+   * @param oauthProvider provider name
+   * @return KeycloakTokenResponse token response
+   * @throws ForbiddenException when HTTP request was forbidden
+   * @throws BadRequestException when HTTP request considered as bad
+   * @throws IOException when unable to parse error response
+   * @throws NotFoundException when requested URL not found
+   * @throws ServerException when other error occurs
+   * @throws UnauthorizedException when no token present for user or user not linked to provider
+   */
+  public KeycloakTokenResponse getIdentityProviderToken(String oauthProvider)
+      throws ForbiddenException, BadRequestException, IOException, NotFoundException,
+          ServerException, UnauthorizedException {
+    String url =
+        UriBuilder.fromUri(keycloakSettings.get().get(AUTH_SERVER_URL_SETTING))
+            .path("/realms/{realm}/broker/{provider}/token")
+            .build(keycloakSettings.get().get(REALM_SETTING), oauthProvider)
+            .toString();
+    try {
+      String response = doRequest(url, HttpMethod.GET, null);
+      // Successful answer is not a json, but key=value&foo=bar format pairs
+      return DtoFactory.getInstance()
+          .createDtoFromJson(toJson(response), KeycloakTokenResponse.class);
+    } catch (BadRequestException e) {
+      if (assotiateUserPattern.matcher(e.getMessage()).matches()) {
+        // If user has no link with identity provider yet,
+        // we should threat this as unauthorized and send to oAuth login page.
+        throw new UnauthorizedException(e.getMessage());
+      }
+      throw e;
+    }
+  }
+

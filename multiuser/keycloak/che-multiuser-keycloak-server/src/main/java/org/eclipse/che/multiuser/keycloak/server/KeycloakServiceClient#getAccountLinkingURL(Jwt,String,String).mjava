@@ -1,0 +1,36 @@
+  /**
+   * Generates URL for account linking redirect
+   *
+   * @param token client jwt token
+   * @param oauthProvider provider name
+   * @param redirectAfterLogin URL to return after login
+   * @return URL to redirect client to perform account linking
+   */
+  public String getAccountLinkingURL(Jwt token, String oauthProvider, String redirectAfterLogin) {
+
+    DefaultClaims claims = (DefaultClaims) token.getBody();
+    final String clientId = claims.getAudience();
+
+    final String sessionState = claims.get("session_state", String.class);
+    MessageDigest md;
+    try {
+      md = MessageDigest.getInstance("SHA-256");
+    } catch (NoSuchAlgorithmException e) {
+      throw new RuntimeException(e);
+    }
+
+    final String nonce = UUID.randomUUID().toString();
+    final String input = nonce + sessionState + clientId + oauthProvider;
+    byte[] check = md.digest(input.getBytes(StandardCharsets.UTF_8));
+    final String hash = Base64.getUrlEncoder().encodeToString(check);
+
+    return UriBuilder.fromUri(keycloakSettings.get().get(AUTH_SERVER_URL_SETTING))
+        .path("/realms/{realm}/broker/{provider}/link")
+        .queryParam("nonce", nonce)
+        .queryParam("hash", hash)
+        .queryParam("client_id", clientId)
+        .queryParam("redirect_uri", redirectAfterLogin)
+        .build(keycloakSettings.get().get(REALM_SETTING), oauthProvider)
+        .toString();
+  }
+

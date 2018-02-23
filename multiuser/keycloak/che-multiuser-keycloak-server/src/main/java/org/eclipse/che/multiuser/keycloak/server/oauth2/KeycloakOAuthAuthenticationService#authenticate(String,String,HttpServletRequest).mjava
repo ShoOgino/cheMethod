@@ -15,29 +15,8 @@
     if (jwtToken == null) {
       throw new BadRequestException("No token provided.");
     }
-    DefaultClaims claims = (DefaultClaims) jwtToken.getBody();
-    final String clientId = claims.getAudience();
-    final String nonce = UUID.randomUUID().toString();
-    final String sessionState = claims.get("session_state", String.class);
-    MessageDigest md;
-    try {
-      md = MessageDigest.getInstance("SHA-256");
-    } catch (NoSuchAlgorithmException e) {
-      throw new RuntimeException(e);
-    }
-    final String input = nonce + sessionState + clientId + oauthProvider;
-    byte[] check = md.digest(input.getBytes(StandardCharsets.UTF_8));
-    final String hash = Base64.getUrlEncoder().encodeToString(check);
-    request.getSession().setAttribute("hash", hash); // TODO: for what?
     String accountLinkUrl =
-        UriBuilder.fromUri(keycloakConfiguration.get().get(AUTH_SERVER_URL_SETTING))
-            .path("/realms/{realm}/broker/{provider}/link")
-            .queryParam("nonce", nonce)
-            .queryParam("hash", hash)
-            .queryParam("client_id", clientId)
-            .queryParam("redirect_uri", redirectAfterLogin)
-            .build(keycloakConfiguration.get().get(REALM_SETTING), oauthProvider)
-            .toString();
+        keycloakServiceClient.getAccountLinkingURL(jwtToken, oauthProvider, redirectAfterLogin);
     return Response.temporaryRedirect(URI.create(accountLinkUrl)).build();
   }
 
