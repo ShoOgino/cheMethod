@@ -1,0 +1,30 @@
+  private void initializeContributionWorkflow(Project project) {
+    if (lastSelected != null && lastSelected.equals(project) && hasVcsService(lastSelected)) {
+      return;
+    }
+
+    vcsHostingServiceProvider
+        .getVcsHostingService(project)
+        .then(
+            vcsHostingService -> {
+              provideMixin(project)
+                  .then(
+                      updatedProject -> {
+                        workflowExecutor.init(vcsHostingService, updatedProject);
+                        lastSelected = updatedProject;
+                        setContributePart();
+                      })
+                  .catchError(
+                      error -> {
+                        handleVCSError(
+                            project,
+                            messages.failedToApplyVCSMixin(project.getName(), error.getMessage()));
+                      });
+            })
+        .catchError(
+            error -> {
+              handleVCSError(
+                  project, messages.failedToGetVCSService(project.getName(), error.getMessage()));
+            });
+  }
+
