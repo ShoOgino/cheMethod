@@ -11,6 +11,8 @@
       final List<CompletableFuture<Void>> machinesFutures = new ArrayList<>();
       // futures that must be cancelled explicitly
       final List<CompletableFuture<?>> toCancelFutures = new CopyOnWriteArrayList<>();
+      final EnvironmentContext currentContext = EnvironmentContext.getCurrent();
+
       for (KubernetesMachine machine : machines.values()) {
         final CompletableFuture<Void> machineRunningFuture = machine.waitRunningAsync();
         toCancelFutures.add(machineRunningFuture);
@@ -22,10 +24,10 @@
                 .thenComposeAsync(checkFailure(failure), executor)
                 .thenRun(publishRunningStatus(machine))
                 .thenCompose(checkFailure(failure))
-                .thenCompose(bootstrap(toCancelFutures, machine))
+                .thenCompose(setContext(currentContext, bootstrap(toCancelFutures, machine)))
                 // see comments above why executor is explicitly put into arguments
                 .thenComposeAsync(checkFailure(failure), executor)
-                .thenCompose(checkServers(toCancelFutures, machine))
+                .thenCompose(setContext(currentContext, checkServers(toCancelFutures, machine)))
                 .exceptionally(publishFailedStatus(failure, machine));
         machinesFutures.add(machineBootChain);
       }
