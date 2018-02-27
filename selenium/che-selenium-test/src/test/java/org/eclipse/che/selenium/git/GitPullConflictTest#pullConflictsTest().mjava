@@ -1,0 +1,45 @@
+  @Test
+  public void pullConflictsTest() throws Exception {
+    // preconditions and import the test repo
+    String javaFileChange = "AppController";
+    String textFileChange = "README.md";
+    String changeContent2 = "//second_change";
+    String pathJavaFile =
+        String.format("%s/%s/%s.java", PROJECT_NAME, PATH_TO_JAVA_FILE, javaFileChange);
+    String pathTextFile = String.format("%s/%s", PROJECT_NAME, textFileChange);
+
+    projectExplorer.waitProjectExplorer();
+    String repoUrl = String.format("https://github.com/%s/%s.git", gitHubUsername, REPO_NAME);
+    git.importJavaApp(repoUrl, PROJECT_NAME, MAVEN);
+
+    // change files in the test repo on GitHub
+    changeContentOnGithubSide(
+        String.format("%s/%s.java", PATH_TO_JAVA_FILE, javaFileChange), CHANGE_STRING_1);
+    changeContentOnGithubSide(textFileChange, CHANGE_STRING_1);
+
+    // change the java and text files in the editor
+    testProjectServiceClient.updateFile(ws.getId(), pathJavaFile, changeContent2);
+    testProjectServiceClient.updateFile(ws.getId(), pathTextFile, changeContent2);
+
+    // make pull and wait the first expected conflict message
+    performPull();
+    eventsPanel.clickEventLogBtn();
+    eventsPanel.waitExpectedMessage(FIRST_MERGE_CONFLICT_MESSAGE);
+
+    commitFiles();
+
+    // make pull again and wait the second expected conflict message
+    performPull();
+    eventsPanel.clickEventLogBtn();
+    eventsPanel.waitExpectedMessage(SECOND_MERGE_CONFLICT_MESSAGE);
+
+    // wait the expected text in the editor
+    projectExplorer.quickExpandWithJavaScript();
+    projectExplorer.openItemByPath(pathJavaFile);
+    editor.waitActive();
+    editor.waitTextIntoEditor(HEAD_CONF_PREFIX_CONF_MESS);
+    projectExplorer.openItemByPath(pathTextFile);
+    editor.waitActive();
+    editor.waitTextIntoEditor(HEAD_CONF_PREFIX_CONF_MESS);
+  }
+
