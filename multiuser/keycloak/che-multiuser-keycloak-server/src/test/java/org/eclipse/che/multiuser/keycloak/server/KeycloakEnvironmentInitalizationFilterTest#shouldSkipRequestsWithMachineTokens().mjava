@@ -1,9 +1,18 @@
   @Test
   public void shouldSkipRequestsWithMachineTokens() throws Exception {
-
-    EnvironmentContext context = EnvironmentContext.getCurrent();
-    // given
-    when(tokenExtractor.getToken(any(HttpServletRequest.class))).thenReturn("machine123123token");
+    final KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+    kpg.initialize(1024);
+    final KeyPair keyPair = kpg.generateKeyPair();
+    when(keyManager.getKeyPair()).thenReturn(keyPair);
+    final Map<String, Object> header = new HashMap<>();
+    header.put("kind", Constants.MACHINE_TOKEN_KIND);
+    final String token =
+        Jwts.builder()
+            .setPayload("payload")
+            .setHeader(header)
+            .signWith(RS512, keyPair.getPrivate())
+            .compact();
+    when(tokenExtractor.getToken(any(HttpServletRequest.class))).thenReturn(token);
 
     // when
     filter.doFilter(request, response, chain);
@@ -11,6 +20,5 @@
     // then
     verify(chain).doFilter(eq(request), eq(response));
     verifyNoMoreInteractions(userManager);
-    verifyNoMoreInteractions(context);
   }
 

@@ -1,32 +1,53 @@
   @Override
-  public void doFilter(
-      ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
+  public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
       throws IOException, ServletException {
-    final HttpServletRequest httpRequest = (HttpServletRequest) servletRequest;
-    if (!nullToEmpty(tokenExtractor.getToken(httpRequest)).startsWith("machine")) {
-      filterChain.doFilter(servletRequest, servletResponse);
+    final HttpServletRequest httpRequest = (HttpServletRequest) request;
+    final String token = tokenExtractor.getToken(httpRequest);
+
+    if (isNullOrEmpty(token)) {
+      chain.doFilter(request, response);
       return;
-    } else {
-      String tokenString;
-      User user;
-      try {
-        tokenString = tokenExtractor.getToken(httpRequest);
-        String userId = machineTokenRegistry.getUserId(tokenString);
-        user = userManager.getById(userId);
-      } catch (NotFoundException | ServerException e) {
-        throw new ServletException("Cannot find user by machine token.");
+    }
+
+    // check token signature and verify is this token machine or not
+    try {
+      final Jws<Claims> jwt =
+          Jwts.parser().setSigningKey(keyManager.getKeyPair().getPublic()).parseClaimsJws(token);
+      final Claims claims = jwt.getBody();
+
+      if (!isMachineToken(jwt)) {
+        chain.doFilter(request, response);
+        return;
       }
 
-      final Subject subject =
-          new AuthorizedSubject(
-              new SubjectImpl(user.getName(), user.getId(), tokenString, false), permissionChecker);
-
       try {
-        EnvironmentContext.getCurrent().setSubject(subject);
-        filterChain.doFilter(addUserInRequest(httpRequest, subject), servletResponse);
+        final String userId = claims.get(USER_ID_CLAIM, String.class);
+        // check if user with such id exists
+        final String userName = userManager.getById(userId).getName();
+        final Subject authorizedSubject =
+            new AuthorizedSubject(
+                new SubjectImpl(userName, userId, token, false), permissionChecker);
+        EnvironmentContext.getCurrent().setSubject(authorizedSubject);
+        chain.doFilter(addUserInRequest(httpRequest, authorizedSubject), response);
+      } catch (NotFoundException ex) {
+        sendErr(
+            response,
+            SC_UNAUTHORIZED,
+            "Authentication with machine token failed because user for this token no longer exist.");
+      } catch (ServerException ex) {
+        sendErr(
+            response,
+            SC_UNAUTHORIZED,
+            format("Authentication with machine token failed cause: %s", ex.getMessage()));
       } finally {
         EnvironmentContext.reset();
       }
+    } catch (UnsupportedJwtException
+        | MalformedJwtException
+        | SignatureException
+        | ExpiredJwtException ex) {
+      // signature check failed
+      chain.doFilter(request, response);
     }
   }
 
