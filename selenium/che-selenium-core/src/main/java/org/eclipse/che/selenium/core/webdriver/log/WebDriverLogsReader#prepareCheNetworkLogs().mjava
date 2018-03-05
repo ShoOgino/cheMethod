@@ -1,0 +1,28 @@
+  /** filter data and get requests/responses that have been sent on CHE URL */
+  private String prepareCheNetworkLogs() throws JsonParseException {
+    StringBuilder networkLogsOutput =
+        new StringBuilder("Eclipse Che network logs: \n").append("-------------------------\n");
+    Map<String, List<Log>> networkLogs = new HashMap<>();
+    for (LogEntry logEntry : readPerformanceLogs()) {
+      Log log = JsonHelper.fromJson(logEntry.getMessage(), Log.class, null);
+      if (log.isNetworkLog()) {
+        log.setTimestamp(logEntry.getTimestamp());
+        if (networkLogs.containsKey(log.getRequestId())) {
+          networkLogs.get(log.getRequestId()).add(log);
+        } else {
+          ArrayList<Log> logs = new ArrayList<>();
+          logs.add(log);
+          networkLogs.put(log.getRequestId(), logs);
+        }
+
+        if (isLogFromCheTraffic(log.getRequestId(), networkLogs)) {
+          networkLogsOutput.append(log.toString());
+        } else {
+          networkLogs.remove(log.getRequestId());
+        }
+      }
+    }
+
+    return networkLogsOutput.toString();
+  }
+
