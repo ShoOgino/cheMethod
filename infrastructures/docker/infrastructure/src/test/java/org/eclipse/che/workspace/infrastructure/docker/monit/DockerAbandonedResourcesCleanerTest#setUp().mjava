@@ -1,0 +1,71 @@
+  @BeforeMethod
+  public void setUp() throws Exception {
+    networks = new ArrayList<>();
+    usedNetworkContainers = new HashMap<>();
+
+    cleaner =
+        spy(
+            new DockerAbandonedResourcesCleaner(
+                workspaceManager, dockerConnector, workspaceRuntimes));
+
+    doAnswer(
+            invocation -> {
+              String workspaceId = invocation.getArgument(0);
+              switch (workspaceId) {
+                case workspaceId1:
+                  return workspaceImpl1;
+                case workspaceId2:
+                  return workspaceImpl2;
+                default:
+                  throw new NotFoundException("Workspace not found");
+              }
+            })
+        .when(workspaceManager)
+        .getWorkspace(anyString());
+
+    when(workspaceImpl1.getRuntime()).thenReturn(runtimeImpl);
+    doReturn(ImmutableMap.of(machineName1, machineImpl)).when(runtimeImpl).getMachines();
+
+    when(workspaceManager.getWorkspace(workspaceId2)).thenReturn(workspaceImpl2);
+
+    when(dockerConnector.listContainers()).thenReturn(asList(container1, container2, container3));
+
+    when(container1.getNames()).thenReturn(new String[] {containerName1});
+    when(container1.getLabels())
+        .thenReturn(
+            ImmutableMap.of(
+                Labels.LABEL_MACHINE_NAME, machineName1, Labels.LABEL_WORKSPACE_ID, workspaceId1));
+    when(container1.getStatus()).thenReturn(RUNNING_STATUS);
+    when(container1.getId()).thenReturn(containerId1);
+
+    when(container2.getNames()).thenReturn(new String[] {containerName2});
+    when(container2.getLabels())
+        .thenReturn(
+            ImmutableMap.of(
+                Labels.LABEL_MACHINE_NAME, machineName2, Labels.LABEL_WORKSPACE_ID, workspaceId2));
+    when(container2.getStatus()).thenReturn(RUNNING_STATUS);
+    when(container2.getId()).thenReturn(containerId2);
+
+    when(container3.getNames()).thenReturn(new String[] {containerName3});
+    when(container3.getLabels())
+        .thenReturn(
+            ImmutableMap.of(
+                Labels.LABEL_MACHINE_NAME, machineName2, Labels.LABEL_WORKSPACE_ID, workspaceId2));
+    when(container3.getStatus()).thenReturn(RUNNING_STATUS);
+    when(container3.getId()).thenReturn(containerId3);
+
+    when(dockerConnector.getNetworks(any())).thenReturn(networks);
+
+    when(abandonedNetwork.getId()).thenReturn(abandonedNetworkId);
+    when(usedNetwork.getId()).thenReturn(usedNetworkId);
+    when(additionalNetwork.getId()).thenReturn(abandonedNetworkId);
+
+    when(abandonedNetwork.getName()).thenReturn(abandonedNetworkName);
+    when(usedNetwork.getName()).thenReturn(usedNetworkName);
+    when(additionalNetwork.getName()).thenReturn(abandonedNetworkName);
+
+    //          when(abandonedNetwork.getContainers()).thenReturn(abandonedNetworkContainers);
+    when(usedNetwork.getContainers()).thenReturn(usedNetworkContainers);
+    when(additionalNetwork.getContainers()).thenReturn(additionalNetworkContainers);
+  }
+
