@@ -1,18 +1,47 @@
   @Test
-  public void shouldRevertCommit() {
-    menu.runCommand(GIT, REVERT_COMMIT);
+  public void shouldRevertCommit() throws Exception {
+    // preconditions
+    String newFile = "newFile.xml";
+    String htmlFile = "file.html";
+    String changeContent = "<! change content>";
+    String initRepoMessage = "init";
+    String createFileMessage = "create newFile.xml";
+    String updateFileMessage = "update file.html";
+    String pathToNewFile = String.format("%s/%s", PROJECT_NAME, newFile);
+    String pathToHtmlFile = String.format("%s/%s", PROJECT_NAME, htmlFile);
 
-    String revision = gitRevertCommit.getTopCommitRevision();
-    String comment = gitRevertCommit.getTopCommitComment();
+    // perform git initialize repository
+    projectExplorer.waitProjectExplorer();
 
-    gitRevertCommit.selectRevision(revision);
-    gitRevertCommit.clickRevertButton();
+    gitInitRepo();
+    commitFiles(initRepoMessage);
 
-    gitStatusBar.waitMessageInGitTab("Reverted commits: - " + revision);
+    // create new file and perform commit
+    testProjectServiceClient.createFileInProject(ws.getId(), PROJECT_NAME, newFile, changeContent);
+    projectExplorer.quickExpandWithJavaScript();
+    projectExplorer.waitItem(pathToNewFile);
 
-    menu.runCommand(GIT, REVERT_COMMIT);
+    commitFiles(createFileMessage);
 
-    assertEquals(gitRevertCommit.getTopCommitAuthor(), gitHubUsername);
-    assertTrue(gitRevertCommit.getTopCommitComment().contains("Revert \"" + comment + "\""));
+    // perform git revert and check author and comment
+    projectExplorer.waitAndSelectItem(PROJECT_NAME);
+
+    performGitRevert();
+
+    // check that 'newFile.xml' is disappear from the project tree
+    projectExplorer.waitDisappearItemByPath(pathToNewFile);
+
+    // update the 'file.html' and commit change
+    testProjectServiceClient.updateFile(ws.getId(), pathToHtmlFile, changeContent);
+    projectExplorer.waitAndSelectItem(PROJECT_NAME);
+
+    commitFiles(updateFileMessage);
+
+    // perform revert and check that 'change content' is not present in the editor
+    performGitRevert();
+
+    projectExplorer.openItemByPath(pathToHtmlFile);
+    editor.waitActive();
+    editor.waitTextNotPresentIntoEditor(changeContent);
   }
 
