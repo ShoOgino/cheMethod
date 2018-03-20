@@ -22,7 +22,7 @@
                 .replace("tcp", "http")
             + "/spring/guess";
     String requestMess = "numGuess=6&submit=Ok";
-    CompletableFuture<String> instToRequestThread =
+    CompletableFuture<String> requestToApplication =
         debugUtils.gotoDebugAppAndSendRequest(
             appUrl, requestMess, APPLICATION_FORM_URLENCODED, 200);
     editor.waitActiveBreakpoint(34);
@@ -33,7 +33,8 @@
       debugPanel.waitDebugHighlightedText("result = \"Sorry, you failed. Try again later!\";");
     } catch (TimeoutException ex) {
       // remove try-catch block after issue has been resolved
-      machineTerminal.launchScriptAndGetInfo(ws, PROJECT, testProjectServiceClient);
+      machineTerminal.logApplicationInfo(PROJECT, ws);
+      LOG.info("Application response content: " + requestToApplication.get());
       fail("Known issue: https://github.com/eclipse/che/issues/8105", ex);
     }
 
@@ -52,6 +53,9 @@
     debugPanel.typeAndSaveTextAreaDialog("\"7\"");
     debugPanel.waitTextInVariablesPanel("numGuessByUser=\"7\"");
     debugPanel.clickOnButton(DebugPanel.DebuggerActionButtons.RESUME_BTN_ID);
-    assertTrue(instToRequestThread.get().contains("<html>"));
+    String applicationResponse = requestToApplication.get(LOADER_TIMEOUT_SEC, TimeUnit.SECONDS);
+    assertTrue(
+        applicationResponse.contains("Sorry, you failed. Try again later!"),
+        "Actual application response content was: " + applicationResponse);
   }
 
