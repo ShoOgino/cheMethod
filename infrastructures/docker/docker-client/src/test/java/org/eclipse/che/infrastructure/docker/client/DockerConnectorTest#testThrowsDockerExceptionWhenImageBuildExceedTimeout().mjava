@@ -1,0 +1,28 @@
+  @Test(
+    expectedExceptions = DockerException.class,
+    expectedExceptionsMessageRegExp = "Docker image build exceed timeout .* seconds."
+  )
+  public void testThrowsDockerExceptionWhenImageBuildExceedTimeout() throws Exception {
+    dockerConnector = newConnectorSpy(0, dockerApiVersionPathPrefixProvider);
+    final AuthConfigs authConfigs =
+        DtoFactory.newDto(AuthConfigs.class)
+            .withConfigs(ImmutableMap.of("auth", DtoFactory.newDto(AuthConfig.class)));
+
+    final BuildImageParams buildImageParams =
+        BuildImageParams.create(dockerfile).withAuthConfigs(authConfigs);
+    final InputStream slowStream =
+        new InputStream() {
+          @Override
+          public int read() {
+            try {
+              Thread.sleep(373);
+            } catch (Exception ignored) {
+            }
+            return 43;
+          }
+        };
+    doReturn(slowStream).when(dockerResponse).getInputStream();
+
+    dockerConnector.buildImage(buildImageParams, progressMonitor);
+  }
+
