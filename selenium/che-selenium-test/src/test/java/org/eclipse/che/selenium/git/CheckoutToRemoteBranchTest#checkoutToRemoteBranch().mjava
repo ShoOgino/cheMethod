@@ -1,0 +1,48 @@
+  @Test
+  public void checkoutToRemoteBranch() throws Exception {
+    // preconditions and import the test repo
+    String pathJavaFile = "/src/main/java/che/eclipse/sample/Aclass.java";
+    String pathJspFile = "/src/main/webapp/index.jsp";
+    String changeContent =
+        String.format("// change_content-%s", String.valueOf(System.currentTimeMillis()));
+
+    projectExplorer.waitProjectExplorer();
+    git.importJavaApp(testRepo.getSshUrl(), PROJECT_NAME, MAVEN);
+    projectExplorer.waitAndSelectItem(PROJECT_NAME);
+
+    // git checkout to the 'second_branch'
+    checkoutToSecondRemoteBranch();
+
+    menu.runCommand(GIT, STATUS);
+    git.waitGitStatusBarWithMess(GIT_STATUS_MESS);
+
+    performGitPull();
+
+    // change content of the files, commit and push
+    testProjectServiceClient.updateFile(ws.getId(), PROJECT_NAME + pathJavaFile, changeContent);
+    testProjectServiceClient.updateFile(ws.getId(), PROJECT_NAME + pathJspFile, changeContent);
+
+    commitFiles();
+
+    performGitPush();
+
+    // import from github to the second project
+    git.importJavaApp(testRepo.getHtmlUrl(), PROJECT_NAME2, MAVEN);
+    projectExplorer.waitAndSelectItem(PROJECT_NAME2);
+
+    checkoutToSecondRemoteBranch();
+
+    // check the changes are present in the files
+    projectExplorer.quickExpandWithJavaScript();
+    projectExplorer.openItemByPath(PROJECT_NAME2 + "/src/main/java/che/eclipse/sample/Aclass.java");
+    editor.waitTextIntoEditor(changeContent);
+    projectExplorer.openItemByPath(PROJECT_NAME2 + "/src/main/webapp/index.jsp");
+    editor.waitTextIntoEditor(changeContent);
+
+    // Call and checking show history
+    projectExplorer.waitAndSelectItem(PROJECT_NAME2 + "/src");
+    menu.runCommand(GIT, SHOW_HISTORY);
+    git.waitHistoryFormToOpen();
+    git.waitCommitInHistoryForm(COMMIT_MESS);
+  }
+
