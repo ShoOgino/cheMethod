@@ -1,0 +1,32 @@
+  @Test
+  public void shoudRecreateUserWithDifferentNameIfConflictOccures() throws Exception {
+    // given
+    UserImpl newUserImpl = new UserImpl("id", "user@mail.com", "name");
+
+    ArgumentCaptor<UserImpl> captor = ArgumentCaptor.forClass(UserImpl.class);
+    ArgumentCaptor<UserImpl> captor2 = ArgumentCaptor.forClass(UserImpl.class);
+    when(userDao.getById(eq("id"))).thenThrow(NotFoundException.class);
+    when(userDao.getByEmail(eq("user@mail.com"))).thenThrow(NotFoundException.class);
+    doAnswer(
+            invocation -> {
+              if (((UserImpl) invocation.getArgument(0)).getName().equals("name")) {
+                throw new ConflictException("");
+              }
+              return newUserImpl;
+            })
+        .when(userDao)
+        .create(any());
+
+    // when
+    keycloakUserManager.getOrCreateUser("id", "user@mail.com", "name");
+
+    // then
+    verify(userDao, times(2)).getById(eq("id"));
+    verify(userDao).getByEmail(eq("user@mail.com"));
+
+    verify(userDao, atLeastOnce()).create((captor.capture()));
+    assertEquals(newUserImpl.getId(), captor.getValue().getId());
+    assertEquals(newUserImpl.getEmail(), captor.getValue().getEmail());
+    assertNotEquals(newUserImpl.getName(), captor.getValue().getName());
+  }
+

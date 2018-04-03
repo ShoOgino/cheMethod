@@ -1,0 +1,24 @@
+  @Test
+  public void shoudRecreateUserIfHeIsntFoundByIdButFoundByEmail() throws Exception {
+    // given
+    UserImpl newUserImpl = new UserImpl("id", "user@mail.com", "name");
+    UserImpl oldUserImpl = new UserImpl("oldId", "user@mail.com", "name");
+    ArgumentCaptor<UserImpl> captor = ArgumentCaptor.forClass(UserImpl.class);
+    when(userDao.getById(eq("id"))).thenThrow(NotFoundException.class);
+    when(userDao.getByEmail(eq("user@mail.com"))).thenReturn(oldUserImpl);
+
+    // when
+    keycloakUserManager.getOrCreateUser("id", "user@mail.com", "name");
+
+    // then
+    verify(userDao, times(2)).getById(eq("id"));
+    verify(userDao).getByEmail(eq("user@mail.com"));
+
+    verify(userDao).remove(eq(oldUserImpl.getId()));
+
+    verify(userDao).create((captor.capture()));
+    assertEquals(newUserImpl.getId(), captor.getValue().getId());
+    assertEquals(newUserImpl.getEmail(), captor.getValue().getEmail());
+    assertEquals(newUserImpl.getName(), captor.getValue().getName());
+  }
+
