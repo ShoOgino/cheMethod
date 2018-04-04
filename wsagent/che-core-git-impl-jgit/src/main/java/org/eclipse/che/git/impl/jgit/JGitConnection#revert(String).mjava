@@ -1,17 +1,21 @@
   @Override
   public RevertResult revert(String commit) throws GitException {
-    RevCommit revCommit;
+    String newHead = null;
     RevertCommand revertCommand = getGit().revert();
     try {
       revertCommand.include(this.repository.resolve(commit));
-      revCommit = revertCommand.call();
+      RevCommit revCommit = revertCommand.call();
+      // JGit sets commit author of revert commit from OS preferences.
+      // Do amend commit to reset commit author.
+      if (revCommit != null && revCommit.getFullMessage() != null) {
+        newHead = commit(create(revCommit.getFullMessage()).withAmend(true)).getId();
+      }
     } catch (IOException | GitAPIException exception) {
       throw new GitException(exception.getMessage(), exception);
     }
-
     return newDto(RevertResult.class)
         .withRevertedCommits(getRevertedCommits(revertCommand))
         .withConflicts(getRevertConflicts(revertCommand))
-        .withNewHead(revCommit != null ? revCommit.getId().getName() : null);
+        .withNewHead(newHead);
   }
 
