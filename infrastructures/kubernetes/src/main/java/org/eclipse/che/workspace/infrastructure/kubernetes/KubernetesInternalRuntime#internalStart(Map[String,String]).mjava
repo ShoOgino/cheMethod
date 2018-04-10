@@ -13,22 +13,21 @@
       final List<CompletableFuture<?>> toCancelFutures = new CopyOnWriteArrayList<>();
       final EnvironmentContext currentContext = EnvironmentContext.getCurrent();
 
-      for (KubernetesMachine machine : machines.values()) {
-        final CompletableFuture<Void> machineRunningFuture = machine.waitRunningAsync();
-        toCancelFutures.add(machineRunningFuture);
+      for (KubernetesMachineImpl machine : machines.getMachines(context.getIdentity()).values()) {
+        String machineName = machine.getName();
         final CompletableFuture<Void> machineBootChain =
-            machineRunningFuture
+            waitRunningAsync(toCancelFutures, machine)
                 // since machine running future will be completed from the thread that is not from
                 // kubernetes pool it's needed to explicitly put the executor to not to delay
                 // processing in the external pool.
                 .thenComposeAsync(checkFailure(failure), executor)
-                .thenRun(publishRunningStatus(machine))
+                .thenRun(publishRunningStatus(machineName))
                 .thenCompose(checkFailure(failure))
                 .thenCompose(setContext(currentContext, bootstrap(toCancelFutures, machine)))
                 // see comments above why executor is explicitly put into arguments
                 .thenComposeAsync(checkFailure(failure), executor)
                 .thenCompose(setContext(currentContext, checkServers(toCancelFutures, machine)))
-                .exceptionally(publishFailedStatus(failure, machine));
+                .exceptionally(publishFailedStatus(failure, machineName));
         machinesFutures.add(machineBootChain);
       }
 
@@ -45,6 +44,7 @@
         namespace.cleanUp();
       } catch (InfrastructureException ignored) {
       }
+
       if (interrupted) {
         throw new InfrastructureException("Kubernetes environment start was interrupted");
       }
