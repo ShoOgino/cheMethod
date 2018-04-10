@@ -1,0 +1,53 @@
+  @Test
+  public void shouldCreateIngressesForServerWhenTwoServersHasDifferentPorts() {
+    // given
+    ServerConfigImpl httpServerConfig =
+        new ServerConfigImpl("8080/tcp", "http", "/api", ATTRIBUTES_MAP);
+    ServerConfigImpl wsServerConfig =
+        new ServerConfigImpl("8081/tcp", "ws", "/connect", ATTRIBUTES_MAP);
+    ServicePort httpServicePort =
+        new ServicePortBuilder()
+            .withName("server-8080")
+            .withPort(8080)
+            .withProtocol("TCP")
+            .withTargetPort(new IntOrString(8080))
+            .build();
+    ServicePort wsServicePort =
+        new ServicePortBuilder()
+            .withName("server-8081")
+            .withPort(8081)
+            .withProtocol("TCP")
+            .withTargetPort(new IntOrString(8081))
+            .build();
+    Map<String, ServicePort> portToServicePort =
+        ImmutableMap.of("8080/tcp", httpServicePort, "8081/tcp", wsServicePort);
+
+    Map<String, ServerConfig> serversToExpose =
+        ImmutableMap.of(
+            "http-server", httpServerConfig,
+            "ws-server", wsServerConfig);
+
+    // when
+    externalServerExposer.exposeExternalServers(
+        kubernetesEnvironment, MACHINE_NAME, SERVICE_NAME, portToServicePort, serversToExpose);
+
+    // then
+    assertEquals(kubernetesEnvironment.getIngresses().size(), 2);
+    assertThatExternalServerIsExposed(
+        MACHINE_NAME,
+        SERVICE_NAME,
+        "http-server",
+        "tcp",
+        8080,
+        httpServicePort,
+        new ServerConfigImpl(httpServerConfig).withAttributes(ATTRIBUTES_MAP));
+    assertThatExternalServerIsExposed(
+        MACHINE_NAME,
+        SERVICE_NAME,
+        "ws-server",
+        "tcp",
+        8081,
+        wsServicePort,
+        new ServerConfigImpl(wsServerConfig).withAttributes(ATTRIBUTES_MAP));
+  }
+

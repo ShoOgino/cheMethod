@@ -1,0 +1,40 @@
+  public Ingress build() {
+
+    IngressBackend ingressBackend =
+        new IngressBackendBuilder()
+            .withServiceName(serviceName)
+            .withNewServicePort(servicePort.getStrVal())
+            .build();
+
+    HTTPIngressPathBuilder httpIngressPathBuilder =
+        new HTTPIngressPathBuilder().withBackend(ingressBackend);
+
+    if (!isNullOrEmpty(path)) {
+      httpIngressPathBuilder.withPath(path);
+    }
+
+    HTTPIngressPath httpIngressPath = httpIngressPathBuilder.build();
+
+    HTTPIngressRuleValue httpIngressRuleValue =
+        new HTTPIngressRuleValueBuilder().withPaths(httpIngressPath).build();
+    IngressRuleBuilder ingressRuleBuilder = new IngressRuleBuilder().withHttp(httpIngressRuleValue);
+
+    if (!isNullOrEmpty(host)) {
+      ingressRuleBuilder.withHost(host);
+    }
+
+    IngressRule ingressRule = ingressRuleBuilder.build();
+
+    IngressSpec ingressSpec = new IngressSpecBuilder().withRules(ingressRule).build();
+
+    Map<String, String> ingressAnnotations = new HashMap<>(annotations);
+    ingressAnnotations.putAll(
+        Annotations.newSerializer().servers(serversConfigs).machineName(machineName).annotations());
+
+    return new io.fabric8.kubernetes.api.model.extensions.IngressBuilder()
+        .withSpec(ingressSpec)
+        .withMetadata(
+            new ObjectMetaBuilder().withName(name).withAnnotations(ingressAnnotations).build())
+        .build();
+  }
+
