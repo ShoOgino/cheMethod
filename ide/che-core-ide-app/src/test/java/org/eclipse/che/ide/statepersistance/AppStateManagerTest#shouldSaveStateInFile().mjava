@@ -1,21 +1,28 @@
   @Test
   public void shouldSaveStateInFile() throws Exception {
-    JsonObject object = Json.createObject();
-    object.put("key1", "value1");
-    when(component1.getState()).thenReturn(object);
+    JsonObject firstComponentState = Json.createObject();
+    firstComponentState.put("key1", "value1");
+    when(component1.getState()).thenReturn(firstComponentState);
 
-    appStateManager.persistWorkspaceState();
+    JsonObject secondComponentState = Json.createObject();
+    secondComponentState.put("key2", "value2");
+    when(component2.getState()).thenReturn(secondComponentState);
+
+    appStateManager.persistState();
 
     verify(component1).getState();
-    verify(preferencesManager).setValue(anyString(), jsonArgumentCaptor.capture());
-    assertThat(jsonArgumentCaptor.getValue()).isNotNull().isNotEmpty();
+    verify(component2).getState();
+    verify(appStateService).saveState(saveStateArgumentCaptor.capture());
 
-    String value = jsonArgumentCaptor.getValue();
-    JsonObject jsonObject = Json.parse(value).getObject(WS_ID);
-    JsonObject workspace = jsonObject.getObject("workspace");
-    assertThat(workspace).isNotNull();
+    String json = saveStateArgumentCaptor.getValue();
+    assertThat(json).isNotNull();
+    JsonObject appState = Json.parse(json);
+    assertThat(appState).isNotNull();
 
-    JsonObject jsonObject1 = workspace.getObject("component1");
-    assertThat(jsonObject1.jsEquals(object)).isTrue();
+    JsonObject jsonObject1 = appState.getObject(COMPONENT_ONE_ID);
+    assertThat(jsonObject1.jsEquals(firstComponentState)).isTrue();
+
+    JsonObject jsonObject2 = appState.getObject(COMPONENT_TWO_ID);
+    assertThat(jsonObject2.jsEquals(secondComponentState)).isTrue();
   }
 
