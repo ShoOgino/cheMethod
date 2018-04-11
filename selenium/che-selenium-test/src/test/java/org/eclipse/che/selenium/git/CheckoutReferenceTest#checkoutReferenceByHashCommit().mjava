@@ -1,0 +1,63 @@
+  @Test(priority = 1)
+  public void checkoutReferenceByHashCommit() throws Exception {
+    // preconditions
+    String branchDetachedMess = String.format("(detached from %s)", sha1);
+    String hashCommit = sha1.substring(0, 8);
+    String wrongHashCommit = String.format("%s ##", hashCommit);
+    String failMessage = String.format("Branch name %s is not allowed", wrongHashCommit);
+
+    // import the test repo
+    projectExplorer.waitProjectExplorer();
+    git.importJavaApp(testRepo.getHtmlUrl(), PROJECT_NAME, BLANK);
+
+    projectExplorer.quickExpandWithJavaScript();
+    projectExplorer.openItemByPath(String.format("%s/%s", PROJECT_NAME, JS_FILE));
+    editor.waitActive();
+    editor.waitTextIntoEditor(UPDATE_FILE);
+
+    // check the name of the default branch
+    openBranchPanelAndWaitRefHeadName(DEFAULT_BRANCH);
+
+    // check the 'Cancel' button of the 'Checkout Reference' form
+    menu.runCommand(GIT, CHECKOUT_REFERENCE);
+    git.waitReferenceFormIsOpened();
+    git.clickCheckoutReferenceCancelButton();
+
+    // perform checkout reference to wrong hash commit
+    performCheckoutReference(wrongHashCommit);
+
+    git.waitGitStatusBarWithMess(failMessage);
+
+    // perform git checkout by not fully hash of specific commit
+    performCheckoutReference(hashCommit);
+
+    editor.selectTabByName(JS_FILE);
+    editor.waitTextIntoEditor(CHANGE_FILE);
+    editor.waitTextNotPresentIntoEditor(UPDATE_FILE);
+
+    // switch to default branch
+    projectExplorer.waitAndSelectItem(PROJECT_NAME);
+    menu.runCommand(GIT, BRANCHES);
+    git.waitBranchInTheListWithCoState(branchDetachedMess);
+    git.selectBranchAndClickCheckoutBtn(DEFAULT_BRANCH);
+
+    openBranchPanelAndWaitRefHeadName(DEFAULT_BRANCH);
+
+    editor.selectTabByName(JS_FILE);
+    editor.waitTextIntoEditor(UPDATE_FILE);
+
+    // perform git checkout by hash of specific commit
+    performCheckoutReference(sha1);
+
+    openBranchPanelAndWaitRefHeadName(branchDetachedMess);
+
+    // check the git history
+    openGitHistoryForm();
+
+    assertTrue(gitHistory.getTopCommitRevision().contains(hashCommit));
+
+    git.clickOnHistoryRowInСommitsList(0);
+    git.waitContentInHistoryEditor(COMMIT_MESSAGE);
+    git.closeGitHistoryForm();
+  }
+
