@@ -1,0 +1,22 @@
+  /**
+   * Note that if this invocation caused a transition of failure to a completed state then
+   * notification about machine start failed will be published.
+   */
+  private Function<Throwable, Void> publishFailedStatus(
+      CompletableFuture<Void> failure, String machineName) {
+    return ex -> {
+      if (failure.completeExceptionally(ex)) {
+        try {
+          machines.updateMachineStatus(
+              getContext().getIdentity(), machineName, MachineStatus.FAILED);
+        } catch (InfrastructureException e) {
+          LOG.error(
+              "Unable to update status of the machine '%s:%s'. Cause: %s",
+              getContext().getIdentity().getWorkspaceId(), machineName, e.getMessage());
+        }
+        eventPublisher.sendFailedEvent(machineName, ex.getMessage(), getContext().getIdentity());
+      }
+      return null;
+    };
+  }
+

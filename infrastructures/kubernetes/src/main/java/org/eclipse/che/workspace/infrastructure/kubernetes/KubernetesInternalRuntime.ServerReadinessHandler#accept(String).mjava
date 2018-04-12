@@ -1,16 +1,16 @@
     @Override
     public void accept(String serverRef) {
-      final KubernetesMachine machine = machines.get(machineName);
-      if (machine == null) {
-        // Probably machine was removed from the list during server check start due to some reason
-        return;
-      }
+      RuntimeIdentity identity = getContext().getIdentity();
+      try {
+        machines.updateServerStatus(identity, machineName, serverRef, ServerStatus.RUNNING);
 
-      machine.setServerStatus(serverRef, ServerStatus.RUNNING);
-      eventPublisher.sendServerRunningEvent(
-          machineName,
-          serverRef,
-          machine.getServers().get(serverRef).getUrl(),
-          getContext().getIdentity());
+        String url = machines.getServer(identity, machineName, serverRef).getUrl();
+
+        eventPublisher.sendServerRunningEvent(machineName, serverRef, url, identity);
+      } catch (InfrastructureException e) {
+        LOG.error(
+            "Unable to update status of the server '%s:%s:%s'. Cause: %s",
+            identity.getWorkspaceId(), machineName, serverRef, e.getMessage());
+      }
     }
 

@@ -1,8 +1,27 @@
   @Override
-  public KubernetesInternalRuntime getRuntime() throws InfrastructureException {
-    return runtimeFactory.create(
-        this,
-        projectFactory.create(getIdentity().getWorkspaceId()),
-        getEnvironment().getWarnings());
+  public OpenShiftInternalRuntime getRuntime() throws InfrastructureException {
+    Optional<KubernetesRuntimeState> runtimeStateOpt = runtimeStatuses.get(getIdentity());
+    String workspaceId = getIdentity().getWorkspaceId();
+
+    if (!runtimeStateOpt.isPresent()) {
+      // there is no cached runtime, create a new one
+      return runtimeFactory.create(
+          this, projectFactory.create(workspaceId), getEnvironment().getWarnings());
+    }
+
+    // there is cached runtime, restore cached one
+    KubernetesRuntimeState runtimeState = runtimeStateOpt.get();
+
+    OpenShiftInternalRuntime runtime =
+        runtimeFactory.create(
+            this,
+            projectFactory.create(workspaceId, runtimeState.getNamespace()),
+            getEnvironment().getWarnings());
+
+    if (runtime.getStatus() != WorkspaceStatus.RUNNING
+        || runtime.getStatus() != WorkspaceStatus.STOPPED) {
+      runtime.startServersCheckers();
+    }
+    return runtime;
   }
 

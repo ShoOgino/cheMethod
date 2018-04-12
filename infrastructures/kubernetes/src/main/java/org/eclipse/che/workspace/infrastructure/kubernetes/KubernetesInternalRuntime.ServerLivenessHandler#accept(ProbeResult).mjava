@@ -1,30 +1,31 @@
     @Override
     public void accept(ProbeResult probeResult) {
       String machineName = probeResult.getMachineName();
-      KubernetesMachine machine = machines.get(machineName);
-      if (machine == null) {
-        // Probably machine was removed from the list during server check start due to some reason
-        return;
-      }
       String serverName = probeResult.getServerName();
       ProbeStatus probeStatus = probeResult.getStatus();
-      Server server = machine.getServers().get(serverName);
-      ServerStatus oldServerStatus = server.getStatus();
-      ServerStatus serverStatus;
 
-      if (probeStatus == ProbeStatus.FAILED && oldServerStatus == ServerStatus.RUNNING) {
+      ServerStatus serverStatus;
+      if (probeStatus == ProbeStatus.FAILED) {
         serverStatus = ServerStatus.STOPPED;
-      } else if (probeStatus == ProbeStatus.PASSED && (oldServerStatus != ServerStatus.RUNNING)) {
+      } else if (probeStatus == ProbeStatus.PASSED) {
         serverStatus = ServerStatus.RUNNING;
       } else {
         return;
       }
 
-      machine.setServerStatus(serverName, serverStatus);
-      eventPublisher.sendServerStatusEvent(
-          machineName,
-          serverName,
-          machine.getServers().get(serverName),
-          getContext().getIdentity());
+      RuntimeIdentity identity = getContext().getIdentity();
+      try {
+        if (machines.updateServerStatus(identity, machineName, serverName, serverStatus)) {
+          eventPublisher.sendServerStatusEvent(
+              machineName,
+              serverName,
+              machines.getServer(identity, machineName, serverName),
+              identity);
+        }
+      } catch (InfrastructureException e) {
+        LOG.error(
+            "Unable to update status of the server '%s:%s:%s'. Cause: %s",
+            identity.getWorkspaceId(), machineName, serverName, e.getMessage());
+      }
     }
 
