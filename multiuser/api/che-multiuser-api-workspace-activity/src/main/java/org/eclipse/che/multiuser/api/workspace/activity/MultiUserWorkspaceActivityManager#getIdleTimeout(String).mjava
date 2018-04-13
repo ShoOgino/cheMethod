@@ -1,0 +1,25 @@
+  @Override
+  protected long getIdleTimeout(String wsId) {
+    List<? extends Resource> availableResources;
+    try {
+      WorkspaceImpl workspace = workspaceManager.getWorkspace(wsId);
+      Account account = accountManager.getByName(workspace.getNamespace());
+      availableResources = resourceManager.getAvailableResources(account.getId());
+
+    } catch (NotFoundException | ServerException e) {
+      LOG.error(e.getLocalizedMessage(), e);
+      return defaultTimeout;
+    }
+    Optional<? extends Resource> timeoutOpt =
+        availableResources
+            .stream()
+            .filter(resource -> TimeoutResourceType.ID.equals(resource.getType()))
+            .findAny();
+
+    if (timeoutOpt.isPresent()) {
+      return timeoutOpt.get().getAmount() * 60 * 1000;
+    } else {
+      return defaultTimeout;
+    }
+  }
+
