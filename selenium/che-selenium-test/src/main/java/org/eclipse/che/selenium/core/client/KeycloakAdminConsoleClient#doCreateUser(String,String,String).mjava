@@ -1,0 +1,50 @@
+  private String doCreateUser(String username, String email, String password) throws IOException {
+    String authPartOfCommand =
+        format(
+            "--no-config --server http://localhost:8080/auth --user %s --password %s --realm master",
+            adminTestUser.getName(), adminTestUser.getPassword());
+
+    String createUserCommand =
+        format(
+            "docker exec -i %s sh -c 'keycloak/bin/kcadm.sh create users -r che -s username=%s -s enabled=true %s 2>&1'",
+            keycloakContainerId, username, authPartOfCommand);
+    String response = processAgent.execute(createUserCommand);
+    if (!response.contains("Created new user with id ")) {
+      throw new IOException("Test user creation error: " + response);
+    }
+
+    String userId = extractUserId(response);
+
+    try {
+      String setTestUsersPermanentPasswordCommand =
+          format(
+              "docker exec -i %s sh -c 'keycloak/bin/kcadm.sh set-password -r che --username %s --new-password %s %s 2>&1'",
+              keycloakContainerId, username, password, authPartOfCommand);
+      processAgent.execute(setTestUsersPermanentPasswordCommand);
+
+      String setEmailCommand =
+          format(
+              "docker exec -i %s sh -c 'keycloak/bin/kcadm.sh update users/%s -r che --set email=%s %s 2>&1'",
+              keycloakContainerId, userId, email, authPartOfCommand);
+      processAgent.execute(setEmailCommand);
+
+      String addUserRoleToUserCommand =
+          format(
+              "docker exec -i %s sh -c 'keycloak/bin/kcadm.sh add-roles -r che --uusername %s --rolename user %s 2>&1'",
+              keycloakContainerId, username, authPartOfCommand);
+      processAgent.execute(addUserRoleToUserCommand);
+
+      String addReadTokenRoleToUserCommand =
+          format(
+              "docker exec -i %s sh -c 'keycloak/bin/kcadm.sh add-roles -r che --uusername %s --cclientid broker --rolename read-token %s 2>&1'",
+              keycloakContainerId, username, authPartOfCommand);
+      processAgent.execute(addReadTokenRoleToUserCommand);
+    } catch (IOException e) {
+      // clean up user
+      delete(userId, username);
+      throw e;
+    }
+
+    return userId;
+  }
+
