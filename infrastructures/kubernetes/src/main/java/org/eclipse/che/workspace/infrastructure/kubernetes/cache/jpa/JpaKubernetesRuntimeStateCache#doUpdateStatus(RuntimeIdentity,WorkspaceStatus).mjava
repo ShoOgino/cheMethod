@@ -1,12 +1,15 @@
-  @Transactional
-  protected void doUpdateStatus(RuntimeIdentity runtimeIdentity, WorkspaceStatus status) {
-    EntityManager entityManager = managerProvider.get();
+  @Transactional(rollbackOn = {RuntimeException.class, InfrastructureException.class})
+  protected void doUpdateStatus(RuntimeIdentity id, WorkspaceStatus status)
+      throws InfrastructureException {
+    Optional<KubernetesRuntimeState> runtimeStateOpt = get(id);
 
-    KubernetesRuntimeState runtimeState =
-        entityManager.find(KubernetesRuntimeState.class, new RuntimeId(runtimeIdentity));
+    if (!runtimeStateOpt.isPresent()) {
+      throw new InfrastructureException(
+          "Runtime state for workspace with id '" + id.getWorkspaceId() + "' was not found");
+    }
 
-    runtimeState.setStatus(status);
+    runtimeStateOpt.get().setStatus(status);
 
-    entityManager.flush();
+    managerProvider.get().flush();
   }
 

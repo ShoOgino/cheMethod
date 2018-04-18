@@ -1,0 +1,22 @@
+  @Transactional(rollbackOn = {RuntimeException.class, InfrastructureException.class})
+  protected void doUpdateStatus(
+      RuntimeIdentity id, Predicate<WorkspaceStatus> predicate, WorkspaceStatus newStatus)
+      throws InfrastructureException {
+    EntityManager entityManager = managerProvider.get();
+
+    Optional<KubernetesRuntimeState> existingStateOpt = get(id);
+
+    if (!existingStateOpt.isPresent()) {
+      throw new InfrastructureException(
+          "Runtime state for workspace with id '" + id.getWorkspaceId() + "' was not found");
+    }
+
+    KubernetesRuntimeState existingState = existingStateOpt.get();
+    if (!predicate.test(existingState.getStatus())) {
+      throw new IllegalStateException("Runtime status doesn't match to the specified predicate");
+    }
+
+    existingState.setStatus(newStatus);
+    entityManager.flush();
+  }
+
