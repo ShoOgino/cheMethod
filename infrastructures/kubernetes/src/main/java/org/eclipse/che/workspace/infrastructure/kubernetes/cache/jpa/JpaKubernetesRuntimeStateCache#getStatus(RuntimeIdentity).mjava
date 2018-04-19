@@ -1,17 +1,15 @@
-  @Transactional(rollbackOn = {RuntimeException.class, InfrastructureException.class})
+  @Transactional(rollbackOn = InfrastructureException.class)
   @Override
-  public WorkspaceStatus getStatus(RuntimeIdentity runtimeId) throws InfrastructureException {
+  public WorkspaceStatus getStatus(RuntimeIdentity id) throws InfrastructureException {
     try {
-      RuntimeId id = new RuntimeId(runtimeId);
+      Optional<KubernetesRuntimeState> runtimeStateOpt = get(id);
 
-      KubernetesRuntimeState runtimeState =
-          managerProvider.get().find(KubernetesRuntimeState.class, id);
-
-      if (runtimeState == null) {
-        throw new InfrastructureException("State for runtime with id '" + id + "' was not found");
+      if (!runtimeStateOpt.isPresent()) {
+        throw new InfrastructureException(
+            "Runtime state for workspace with id '" + id.getWorkspaceId() + "' was not found");
       }
 
-      return runtimeState.getStatus();
+      return runtimeStateOpt.get().getStatus();
     } catch (RuntimeException x) {
       throw new InfrastructureException(x.getMessage(), x);
     }
