@@ -1,0 +1,23 @@
+  @Test
+  public void suspendsWorkspaceService() throws Exception {
+    AtomicBoolean isAnyRunning = new AtomicBoolean(true);
+    String workspaceId = "workspace123";
+
+    // one workspace is running
+    when(workspaceRuntimes.getRunning()).thenReturn(Collections.singleton(workspaceId));
+    when(workspaceRuntimes.getStatus(workspaceId)).thenReturn(WorkspaceStatus.RUNNING);
+
+    when(workspaceRuntimes.isAnyInProgress())
+        .thenAnswer(
+            inv -> {
+              boolean prev = isAnyRunning.get();
+              isAnyRunning.set(false);
+              return prev;
+            });
+    // do the actual termination
+    termination.suspend();
+    // verify checked progress workspaces
+    verify(workspaceRuntimes, atLeastOnce()).isAnyInProgress();
+    verify(workspaceManager, never()).stopWorkspace(anyString(), anyMap());
+  }
+
