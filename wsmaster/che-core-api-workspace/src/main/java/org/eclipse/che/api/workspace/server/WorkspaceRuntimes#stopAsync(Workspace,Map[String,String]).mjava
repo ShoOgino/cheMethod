@@ -15,22 +15,22 @@
   public CompletableFuture<Void> stopAsync(Workspace workspace, Map<String, String> options)
       throws NotFoundException, ConflictException {
     String workspaceId = workspace.getId();
-    RuntimeState state = runtimes.get(workspaceId);
-    if (state == null) {
+    WorkspaceStatus status = statuses.get(workspaceId);
+    if (status == null) {
       throw new NotFoundException("Workspace with id '" + workspaceId + "' is not running.");
     }
-    if (state.status != RUNNING && state.status != STARTING) {
-      throw new ConflictException(
-          format(
-              "Could not stop workspace '%s' because its state is '%s'",
-              workspaceId, state.status));
-    }
-    if (!runtimes.replace(workspaceId, state, new RuntimeState(state.runtime, STOPPING))) {
-      RuntimeState newState = runtimes.get(workspaceId);
-      WorkspaceStatus status = newState != null ? newState.status : STOPPED;
+    if (status != RUNNING && status != STARTING) {
       throw new ConflictException(
           format("Could not stop workspace '%s' because its state is '%s'", workspaceId, status));
     }
+    if (!statuses.replace(workspaceId, status, STOPPING)) {
+      WorkspaceStatus newStatus = statuses.get(workspaceId);
+      throw new ConflictException(
+          format(
+              "Could not stop workspace '%s' because its state is '%s'",
+              workspaceId, newStatus == null ? STOPPED : newStatus));
+    }
+
     String stoppedBy =
         firstNonNull(
             sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY)), "undefined");
@@ -40,10 +40,9 @@
         workspace.getConfig().getName(),
         workspace.getId(),
         stoppedBy);
-    publishWorkspaceStatusEvent(workspaceId, STOPPING, state.status, null);
-
+    publishWorkspaceStatusEvent(workspaceId, STOPPING, status, null);
     return CompletableFuture.runAsync(
-        ThreadLocalPropagateContext.wrap(new StopRuntimeTask(workspace, options, stoppedBy, state)),
+        ThreadLocalPropagateContext.wrap(new StopRuntimeTask(workspace, options, stoppedBy)),
         sharedPool.getExecutor());
   }
 

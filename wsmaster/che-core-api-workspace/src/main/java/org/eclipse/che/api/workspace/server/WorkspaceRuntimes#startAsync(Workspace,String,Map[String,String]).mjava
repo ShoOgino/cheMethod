@@ -28,32 +28,30 @@
     requireNonNull(
         environment.getRecipe().getType(), "Recipe type should not be null " + workspaceId);
 
-    RuntimeState existingState = runtimes.get(workspaceId);
-    if (existingState != null) {
+    if (isStartRefused.get()) {
       throw new ConflictException(
           format(
-              "Could not start workspace '%s' because its state is '%s'",
-              workspaceId, existingState.status));
+              "Start of the workspace '%s' is rejected by the system, "
+                  + "no more workspaces are allowed to start",
+              workspace.getConfig().getName()));
     }
 
-    Subject subject = EnvironmentContext.getCurrent().getSubject();
-    RuntimeIdentity runtimeId = new RuntimeIdentityImpl(workspaceId, envName, subject.getUserId());
+    final String ownerId = EnvironmentContext.getCurrent().getSubject().getUserId();
+    final RuntimeIdentity runtimeId = new RuntimeIdentityImpl(workspaceId, envName, ownerId);
     try {
       InternalEnvironment internalEnv = createInternalEnvironment(environment);
       RuntimeContext runtimeContext = infrastructure.prepare(runtimeId, internalEnv);
       InternalRuntime runtime = runtimeContext.getRuntime();
 
-      RuntimeState state = new RuntimeState(runtime, STARTING);
-      if (isStartRefused.get()) {
-        throw new ConflictException(
-            format(
-                "Start of the workspace '%s' is rejected by the system, "
-                    + "no more workspaces are allowed to start",
-                workspace.getConfig().getName()));
-      }
-      if (runtimes.putIfAbsent(workspaceId, state) != null) {
-        throw new ConflictException(
-            "Could not start workspace '" + workspaceId + "' because it is not in 'STOPPED' state");
+      try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+        final WorkspaceStatus existingStatus = statuses.putIfAbsent(workspaceId, STARTING);
+        if (existingStatus != null) {
+          throw new ConflictException(
+              format(
+                  "Could not start workspace '%s' because its state is '%s'",
+                  workspaceId, existingStatus));
+        }
+        runtimes.put(workspaceId, runtime);
       }
       LOG.info(
           "Starting workspace '{}/{}' with id '{}' by user '{}'",
@@ -63,7 +61,6 @@
           sessionUserNameOr("undefined"));
 
       publishWorkspaceStatusEvent(workspaceId, STARTING, STOPPED, null);
-
       return CompletableFuture.runAsync(
           ThreadLocalPropagateContext.wrap(new StartRuntimeTask(workspace, options, runtime)),
           sharedPool.getExecutor());
