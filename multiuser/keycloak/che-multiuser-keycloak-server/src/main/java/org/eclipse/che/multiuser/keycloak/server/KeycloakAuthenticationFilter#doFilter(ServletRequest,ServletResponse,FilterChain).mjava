@@ -9,10 +9,8 @@
       return;
     }
 
-    final String requestURI = request.getRequestURI();
     if (token == null) {
-      LOG.debug("No 'Authorization' header for {}", requestURI);
-      send403(res);
+      send403(res, "Authorization token is missed");
       return;
     }
 
@@ -38,12 +36,17 @@
               .parseClaimsJws(token);
       LOG.debug("JWT = ", jwt);
       // OK, we can trust this JWT
-    } catch (SignatureException | IllegalArgumentException e) {
-      // don't trust the JWT!
-      LOG.error("Failed verifying the JWT token", e);
-      send403(res);
+    } catch (SignatureException
+        | IllegalArgumentException
+        | MalformedJwtException
+        | UnsupportedJwtException e) {
+      send403(res, "The specified token is not a valid. " + e.getMessage());
+      return;
+    } catch (ExpiredJwtException e) {
+      send403(res, "The specified token is expired");
       return;
     }
+
     request.setAttribute("token", jwt);
     chain.doFilter(req, res);
   }
