@@ -1,0 +1,38 @@
+  @Test
+  public void shouldInjectRuntime() throws Exception {
+    // given
+    WorkspaceImpl workspace = new WorkspaceImpl();
+    workspace.setId("ws123");
+    when(statuses.get("ws123")).thenReturn(WorkspaceStatus.RUNNING);
+
+    ImmutableMap<String, Machine> machines =
+        ImmutableMap.of("machine", new MachineImpl(emptyMap(), emptyMap(), MachineStatus.STARTING));
+
+    RuntimeIdentity identity = new RuntimeIdentityImpl("ws123", "my-env", "myId");
+    RuntimeContext context = mockContext(identity);
+    doReturn(context).when(infrastructure).prepare(eq(identity), any());
+
+    ConcurrentHashMap<String, InternalRuntime<?>> runtimesStorage = new ConcurrentHashMap<>();
+    runtimesStorage.put(
+        "ws123", new TestInternalRuntime(context, machines, WorkspaceStatus.STARTING));
+    WorkspaceRuntimes localRuntimes =
+        new WorkspaceRuntimes(
+            runtimesStorage,
+            eventService,
+            ImmutableMap.of(TEST_ENVIRONMENT_TYPE, testEnvFactory),
+            infrastructure,
+            sharedPool,
+            workspaceDao,
+            dbInitializer,
+            probeScheduler,
+            statuses,
+            lockService);
+
+    // when
+    localRuntimes.injectRuntime(workspace);
+
+    // then
+    assertEquals(workspace.getStatus(), WorkspaceStatus.RUNNING);
+    assertEquals(workspace.getRuntime(), new RuntimeImpl("my-env", machines, "myId"));
+  }
+

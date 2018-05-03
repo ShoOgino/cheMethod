@@ -3,7 +3,9 @@
       String workspaceId = workspace.getId();
       try {
         runtime.start(options);
-        runtimes.replace(workspaceId, new RuntimeState(runtime, RUNNING));
+        try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+          statuses.replace(workspaceId, RUNNING);
+        }
 
         LOG.info(
             "Workspace '{}:{}' with id '{}' started by user '{}'",
@@ -13,7 +15,10 @@
             sessionUserNameOr("undefined"));
         publishWorkspaceStatusEvent(workspaceId, RUNNING, STARTING, null);
       } catch (InfrastructureException e) {
-        runtimes.remove(workspaceId);
+        try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+          runtimes.remove(workspaceId);
+          statuses.remove(workspaceId);
+        }
         // Cancels workspace servers probes if any
         probeScheduler.cancel(workspaceId);
 

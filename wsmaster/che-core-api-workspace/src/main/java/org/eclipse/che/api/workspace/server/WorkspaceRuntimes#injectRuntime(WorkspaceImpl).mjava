@@ -6,17 +6,24 @@
    * @param workspace the workspace to inject runtime into
    */
   public void injectRuntime(WorkspaceImpl workspace) throws ServerException {
-    RuntimeState runtimeState = runtimes.get(workspace.getId());
-    if (runtimeState != null) {
-      try {
-        workspace.setRuntime(asRuntime(runtimeState));
-      } catch (InfrastructureException e) {
-        throw new ServerException(
-            "Error occurred while runtime state inspection. " + e.getMessage());
+    try (Unlocker ignored = lockService.writeLock(workspace.getId())) {
+      WorkspaceStatus workspaceStatus = statuses.get(workspace.getId());
+
+      if (workspaceStatus == null) {
+        workspace.setStatus(STOPPED);
+        return;
       }
-      workspace.setStatus(runtimeState.status);
-    } else {
-      workspace.setStatus(STOPPED);
+
+      InternalRuntime<?> internalRuntime;
+      try {
+        internalRuntime = getInternalRuntime(workspace.getId());
+      } catch (ServerException | InfrastructureException e) {
+        workspace.setStatus(STOPPED);
+        return;
+      }
+
+      workspace.setRuntime(asRuntime(internalRuntime));
+      workspace.setStatus(workspaceStatus);
     }
   }
 

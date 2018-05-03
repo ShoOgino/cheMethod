@@ -1,0 +1,25 @@
+  /**
+   * Blocks starting new workspaces and waits until all workspaces that are currently in a
+   * starting/stopping state to finish this process
+   *
+   * @throws InterruptedException
+   * @throws UnsupportedOperationException
+   */
+  @Override
+  public void suspend() throws InterruptedException, UnsupportedOperationException {
+    Preconditions.checkState(runtimes.refuseStart());
+    try {
+      runtimeInfrastructure.getIdentities();
+    } catch (UnsupportedOperationException | InfrastructureException e) {
+      throw new UnsupportedOperationException("Current infrastructure does not support suspend.");
+    }
+    WorkspaceSuspendedEventsPropagator propagator = new WorkspaceSuspendedEventsPropagator();
+    eventService.subscribe(propagator);
+    try {
+      waitAllWorkspacesRunningOrStopped();
+      sharedPool.shutdown();
+    } finally {
+      eventService.unsubscribe(propagator);
+    }
+  }
+

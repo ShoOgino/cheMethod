@@ -1,0 +1,27 @@
+  @Test
+  public void shouldRecoverRuntimeWhenThereIsNotCachedOneDuringInjecting() throws Exception {
+    // given
+    RuntimeIdentity identity = new RuntimeIdentityImpl("workspace123", "my-env", "myId");
+    mockWorkspace(identity);
+
+    when(statuses.get("workspace123")).thenReturn(WorkspaceStatus.STARTING);
+    RuntimeContext context = mockContext(identity);
+    doReturn(context).when(infrastructure).prepare(eq(identity), any());
+    ImmutableMap<String, Machine> machines =
+        ImmutableMap.of("machine", new MachineImpl(emptyMap(), emptyMap(), MachineStatus.STARTING));
+    when(context.getRuntime())
+        .thenReturn(new TestInternalRuntime(context, machines, WorkspaceStatus.STARTING));
+    doReturn(mock(InternalEnvironment.class)).when(testEnvFactory).create(any());
+    when(statuses.get(anyString())).thenReturn(WorkspaceStatus.STARTING);
+    doReturn(ImmutableSet.of(identity)).when(infrastructure).getIdentities();
+
+    // when
+    WorkspaceImpl workspace = new WorkspaceImpl();
+    workspace.setId("workspace123");
+    runtimes.injectRuntime(workspace);
+
+    // then
+    assertEquals(workspace.getStatus(), WorkspaceStatus.STARTING);
+    assertEquals(workspace.getRuntime(), new RuntimeImpl("my-env", machines, "myId"));
+  }
+

@@ -1,0 +1,26 @@
+  /**
+   * Suspends system services in a order satisfying termination dependencies.
+   *
+   * @throws InterruptedException when suspending is interrupted
+   */
+  void suspendAll() throws InterruptedException {
+    for (ServiceTermination termination : terminations) {
+      LOG.info("Suspending down '{}' service", termination.getServiceName());
+      eventService.publish(new SuspendingSystemServiceEvent(termination.getServiceName()));
+      try {
+        termination.suspend();
+        eventService.publish(new SystemServiceSuspendedEvent(termination.getServiceName()));
+        LOG.info("Service '{}' is suspended", termination.getServiceName());
+      } catch (UnsupportedOperationException e) {
+        LOG.info(
+            "Suspending down '{}' service isn't supported, terminating it",
+            termination.getServiceName());
+        doTerminate(termination);
+      } catch (InterruptedException x) {
+        LOG.error(
+            "Interrupted while waiting for '{}' service to suspend", termination.getServiceName());
+        throw x;
+      }
+    }
+  }
+

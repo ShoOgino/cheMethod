@@ -4,8 +4,12 @@
         String workspaceId = event.getIdentity().getWorkspaceId();
         // Cancels workspace servers probes if any
         probeScheduler.cancel(workspaceId);
-        RuntimeState state = runtimes.remove(workspaceId);
-        if (state != null) {
+        final WorkspaceStatus status;
+        try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+          runtimes.remove(workspaceId);
+          status = statuses.remove(workspaceId);
+        }
+        if (status != null) {
           publishWorkspaceStatusEvent(
               workspaceId,
               STOPPED,
