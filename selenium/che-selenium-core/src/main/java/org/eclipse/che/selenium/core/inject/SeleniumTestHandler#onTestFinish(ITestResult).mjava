@@ -1,31 +1,31 @@
   /** Is invoked when test or configuration is finished. */
   private void onTestFinish(ITestResult result) {
     if (result.getStatus() == ITestResult.FAILURE || result.getStatus() == ITestResult.SKIP) {
-      String invocationLabel = "";
-      if (result.getMethod().getCurrentInvocationCount() > 1) {
-        invocationLabel = format(" (run %d)", result.getMethod().getCurrentInvocationCount());
-      }
+      switch (result.getStatus()) {
+        case ITestResult.FAILURE:
+          String errorDetails =
+              result.getThrowable() != null
+                  ? " Error: " + result.getThrowable().getLocalizedMessage()
+                  : "";
 
-      if (result.getThrowable() != null) {
-        LOG.error(
-            "Test {}.{}{} failed. Error: {}",
-            result.getTestClass().getRealClass().getSimpleName(),
-            result.getMethod().getMethodName(),
-            invocationLabel,
-            result.getThrowable().getLocalizedMessage());
-        LOG.debug(result.getThrowable().getLocalizedMessage(), result.getThrowable());
-      } else {
-        LOG.error(
-            "Test {}.{}{} failed without exception.",
-            result.getTestClass().getRealClass().getSimpleName(),
-            result.getMethod().getMethodName(),
-            invocationLabel);
-      }
+          LOG.error("Test {} failed.{}", getCompletedTestLabel(result.getMethod()), errorDetails);
+          LOG.debug(result.getThrowable().getLocalizedMessage(), result.getThrowable());
 
-      captureScreenshot(result);
-      captureHtmlSource(result);
-      captureTestWorkspaceLogs(result);
-      storeWebDriverLogs(result);
+          testsWithFailure.put(result.getTestClass().getRealClass().getName(), result.getMethod());
+
+          captureScreenshot(result);
+          captureHtmlSource(result);
+          captureTestWorkspaceLogs(result);
+          storeWebDriverLogs(result);
+
+          break;
+
+        case ITestResult.SKIP:
+          LOG.warn("Test {} skipped.", getCompletedTestLabel(result.getMethod()));
+          break;
+
+        default:
+      }
     }
   }
 
