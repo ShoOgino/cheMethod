@@ -1,0 +1,24 @@
+  /** Denies starting of new probes and terminates active one if scheduler not terminated yet. */
+  public void shutdown() {
+    if (!probesExecutor.isShutdown()) {
+      probesExecutor.shutdown();
+      try {
+        LOG.info("Shutdown probe scheduler, wait 30s to stop normally");
+        if (!probesExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+          probesExecutor.shutdownNow();
+          LOG.info("Interrupt probe scheduler, wait 60s to stop");
+          if (!probesExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
+            LOG.error("Couldn't shutdown probe scheduler threads pool");
+          } else {
+            LOG.info("Probe scheduler threads pool is interrupted");
+          }
+        } else {
+          LOG.info("Probe scheduler threads pool is shut down");
+        }
+      } catch (InterruptedException x) {
+        probesExecutor.shutdownNow();
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
+
