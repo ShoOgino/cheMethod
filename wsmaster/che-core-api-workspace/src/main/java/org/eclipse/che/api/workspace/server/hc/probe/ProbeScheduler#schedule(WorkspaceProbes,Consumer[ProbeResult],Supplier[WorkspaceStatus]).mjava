@@ -1,0 +1,40 @@
+  /**
+   * Schedules provided {@link WorkspaceProbes} when a workspace becomes {@link
+   * WorkspaceStatus#RUNNING}.
+   *
+   * <p>Note that probes scheduling will be canceled when {@link #cancel(String)} is called or when
+   * a workspace becomes {@link WorkspaceStatus#STOPPING} or {@link WorkspaceStatus#STOPPED}.
+   *
+   * @param probes probes to schedule
+   * @param probeResultConsumer consumer of {@link ProbeResult} instances produced on retrieving
+   *     probe execution results
+   * @param statusSupplier supplier to retrieve workspace status. Scheduling will be delayed if
+   *     {@link RuntimeException} is thrown
+   * @see #schedule(WorkspaceProbes, Consumer)
+   */
+  public void schedule(
+      WorkspaceProbes probes,
+      Consumer<ProbeResult> probeResultConsumer,
+      Supplier<WorkspaceStatus> statusSupplier) {
+    DelayedSchedulingTask task =
+        new DelayedSchedulingTask(statusSupplier, probes, probeResultConsumer);
+
+    // scheduleWithFixedDelay is used in favor of scheduleAtFixedRate because in case of big amount
+    // of scheduled probes start time of tasks may shift and this may lead to a situation when
+    // another probeConfig is needed immediately after the previous one is finished which doesn't
+    // seem a good thing
+    ScheduledFuture scheduledFuture =
+        probesExecutor.scheduleWithFixedDelay(task, 10L, 10L, TimeUnit.SECONDS);
+
+    probesFutures.compute(
+        probes.getWorkspaceId(),
+        (key, scheduledFutures) -> {
+          List<ScheduledFuture> target = scheduledFutures;
+          if (target == null) {
+            target = new ArrayList<>();
+          }
+          target.add(scheduledFuture);
+          return target;
+        });
+  }
+

@@ -1,0 +1,38 @@
+  /**
+   * Schedules server checkers.
+   *
+   * <p>Note that if the runtime is {@link WorkspaceStatus#RUNNING} then checkers will be scheduled
+   * immediately. If the runtime is {@link WorkspaceStatus#STARTING} then checkers will be scheduled
+   * when it becomes {@link WorkspaceStatus#RUNNING}. If runtime has any another status then
+   * checkers won't be scheduled at all.
+   *
+   * @throws InfrastructureException when any exception occurred
+   */
+  public void scheduleServersCheckers() throws InfrastructureException {
+    WorkspaceStatus status = getStatus();
+
+    if (status != WorkspaceStatus.RUNNING && status != WorkspaceStatus.STARTING) {
+      return;
+    }
+
+    ServerLivenessHandler consumer = new ServerLivenessHandler();
+    WorkspaceProbes probes =
+        probesFactory.getProbes(getContext().getIdentity(), getInternalMachines());
+
+    if (status == WorkspaceStatus.RUNNING) {
+      probeScheduler.schedule(probes, consumer);
+    } else {
+      // Workspace is starting it is needed to start servers checkers when it becomes RUNNING
+      probeScheduler.schedule(
+          probes,
+          consumer,
+          () -> {
+            try {
+              return getStatus();
+            } catch (InfrastructureException e) {
+              throw new RuntimeException(e.getMessage());
+            }
+          });
+    }
+  }
+
