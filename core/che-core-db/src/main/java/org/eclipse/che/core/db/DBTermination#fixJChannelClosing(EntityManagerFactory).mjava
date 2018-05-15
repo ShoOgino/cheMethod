@@ -1,0 +1,27 @@
+  /**
+   * This method is hack that changes value of {@link JGroupsRemoteConnection#isLocal} to false.
+   * This is needed to close the JGroups EclipseLinkCommandChannel and as result gracefully stop of
+   * the system.<br>
+   * For more details see {@link JGroupsRemoteConnection#closeInternal()}
+   */
+  private void fixJChannelClosing(EntityManagerFactory emFactory) {
+    try {
+      final AbstractSession session = emFactory.unwrap(AbstractSession.class);
+      CommandManager commandManager = session.getCommandManager();
+      if (commandManager == null) {
+        // not cluster mode
+        return;
+      }
+      final JGroupsRemoteConnection conn =
+          (JGroupsRemoteConnection) commandManager.getTransportManager().getConnectionToLocalHost();
+      final Field isLocal = conn.getClass().getDeclaredField("isLocal");
+      isLocal.setAccessible(true);
+      isLocal.set(conn, false);
+    } catch (IllegalAccessException | NoSuchFieldException ex) {
+      LOG.error(
+          "Failed to change JGroupsRemoteConnection#isLocal this may prevent the graceful stop of "
+              + "the system because EclipseLinkCommandChannel won't be closed. Cause: "
+              + ex.getMessage());
+    }
+  }
+
