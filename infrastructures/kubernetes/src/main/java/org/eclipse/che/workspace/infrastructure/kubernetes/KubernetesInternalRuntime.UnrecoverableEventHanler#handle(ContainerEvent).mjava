@@ -1,23 +1,30 @@
+    /*
+     * Event is considered to be unrecoverable if it belongs to one of the workspace pods
+     * and 'lastTimestamp' of the event is *after* the time of handler initialization
+     */
     @Override
     public void handle(ContainerEvent event) {
-      if (isUnrecoverable(event)) {
+      if (isWorkspaceEvent(event)
+          && happenedAfterHandlerInitialization(event)
+          && isUnrecoverable(event)) {
         String reason = event.getReason();
         String message = event.getMessage();
-        String podName = event.getPodName();
         String workspaceId = getContext().getIdentity().getWorkspaceId();
         LOG.error(
             "Unrecoverable event occurred during workspace '{}' startup: {}, {}, {}",
             workspaceId,
             reason,
             message,
-            podName);
+            event.getPodName());
         try {
           internalStop(emptyMap());
         } catch (InfrastructureException e) {
           LOG.error("Error occurred during runtime '{}' stopping. {}", workspaceId, e.getMessage());
         } finally {
           eventPublisher.sendRuntimeStoppedEvent(
-              format("Unrecoverable event occurred: '%s', '%s', '%s'", reason, message, podName),
+              format(
+                  "Unrecoverable event occurred: '%s', '%s', '%s'",
+                  reason, message, event.getPodName()),
               getContext().getIdentity());
         }
       }
