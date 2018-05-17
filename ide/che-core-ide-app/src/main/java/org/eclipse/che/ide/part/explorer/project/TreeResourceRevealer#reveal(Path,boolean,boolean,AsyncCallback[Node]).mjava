@@ -9,45 +9,52 @@
 
     Scheduler.get()
         .scheduleFixedDelay(
-            new Scheduler.RepeatingCommand() {
-              @Override
-              public boolean execute() {
-                if (tree.getNodeLoader().isBusy()) {
-                  return true;
+            () -> {
+              if (tree.getNodeLoader().isBusy()) {
+                return true;
+              }
+
+              ResourceNode nodeByPath = getNodeByPath(path);
+              if (nodeByPath != null) {
+
+                if (select) {
+                  TreeResourceRevealer.this.isFocusRequired = isFocusRequired;
+
+                  if (toSelect == null) {
+                    toSelect = new Node[] {nodeByPath};
+                  } else {
+                    final int index = toSelect.length;
+                    toSelect = copyOf(toSelect, index + 1);
+                    toSelect[index] = nodeByPath;
+                  }
+
+                  selectTask.delay(200);
                 }
 
-                final Optional<ResourceNode> optRoot = getRootResourceNode(path);
-
-                if (!optRoot.isPresent()) {
-                  callback.onFailure(new IllegalStateException());
-                  return false;
-                }
-
-                final ResourceNode root = optRoot.get();
-
-                if (root.getData().getLocation().equals(path)) {
-                  callback.onSuccess(root);
-                  return false;
-                }
-
-                expandToPath(root, path, select, isFocusRequired)
-                    .then(
-                        new Operation<ResourceNode>() {
-                          @Override
-                          public void apply(ResourceNode node) throws OperationException {
-                            callback.onSuccess(node);
-                          }
-                        })
-                    .catchError(
-                        new Operation<PromiseError>() {
-                          @Override
-                          public void apply(PromiseError arg) throws OperationException {
-                            callback.onFailure(arg.getCause());
-                          }
-                        });
-
+                callback.onSuccess(nodeByPath);
                 return false;
               }
+
+              ResourceNode root = getRootResourceNode(path);
+
+              if (root == null) {
+                callback.onFailure(new IllegalStateException());
+                return false;
+              }
+
+              if (root.getData().getLocation().equals(path)) {
+                callback.onSuccess(root);
+                return false;
+              }
+
+              expandToPath(root, path, select, isFocusRequired)
+                  .then(callback::onSuccess)
+                  .catchError(
+                      arg -> {
+                        callback.onFailure(arg.getCause());
+                      });
+
+              return false;
             },
             500);
   }

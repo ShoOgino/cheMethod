@@ -29,38 +29,35 @@
     handler[0] =
         tree.getNodeLoader()
             .addPostLoadHandler(
-                new PostLoadHandler() {
-                  @Override
-                  public void onPostLoad(PostLoadEvent event) {
-                    if (!event.getRequestedNode().equals(parent)) {
+                event -> {
+                  if (!event.getRequestedNode().equals(parent)) {
+                    return;
+                  }
+
+                  if (handler[0] != null) {
+                    // Do not remove the handler immediately to not to lose 'loadChildren' events
+                    // that were fired after the children request.
+                    Scheduler.get()
+                        .scheduleFixedDelay(
+                            () -> {
+                              handler[0].removeHandler();
+                              return false;
+                            },
+                            1000);
+                  }
+
+                  final List<Node> children =
+                      tree.getNodeStorage().getChildren(event.getRequestedNode());
+
+                  for (Node child : children) {
+                    if (child instanceof ResourceNode
+                        && ((ResourceNode) child).getData().getLocation().isPrefixOf(segment)) {
+                      expand((ResourceNode) child, segment, select, isFocusRequired, callback);
                       return;
                     }
-
-                    if (handler[0] != null) {
-                      // Do not remove the handler immediately to not to lose 'loadChildren' events
-                      // that were fired after the children request.
-                      Scheduler.get()
-                          .scheduleFixedDelay(
-                              () -> {
-                                handler[0].removeHandler();
-                                return false;
-                              },
-                              1000);
-                    }
-
-                    final List<Node> children =
-                        tree.getNodeStorage().getChildren(event.getRequestedNode());
-
-                    for (Node child : children) {
-                      if (child instanceof ResourceNode
-                          && ((ResourceNode) child).getData().getLocation().isPrefixOf(segment)) {
-                        expand((ResourceNode) child, segment, select, isFocusRequired, callback);
-                        return;
-                      }
-                    }
-
-                    callback.onFailure(new IllegalStateException("Not found"));
                   }
+
+                  callback.onFailure(new IllegalStateException("Not found"));
                 });
 
     tree.getNodeLoader().loadChildren(parent);
