@@ -1,0 +1,40 @@
+  void initialize() {
+    languageServerServiceClient
+        .getLanguageRegexes()
+        .then(
+            languageRegexes -> {
+              languageRegexes.forEach(
+                  languageRegex -> {
+                    String namePattern = languageRegex.getNamePattern();
+
+                    FileType fileTypeCandidate = null;
+                    for (FileType fileType : fileTypeRegistry.getRegisteredFileTypes()) {
+                      String extension = fileType.getExtension();
+                      if (extension != null && RegExp.compile(namePattern).test('.' + extension)) {
+                        fileTypeCandidate = fileType;
+                      }
+
+                      String namePatternCandidate = fileType.getNamePattern();
+                      if ((namePattern.equals(namePatternCandidate)
+                          || RegExp.quote(namePattern).equals(namePatternCandidate))) {
+                        fileTypeCandidate = fileType;
+                      }
+                    }
+
+                    if (fileTypeCandidate == null) {
+                      fileTypeCandidate = new FileType(resources.file(), null, namePattern);
+                      fileTypeRegistry.registerFileType(fileTypeCandidate);
+                    } else {
+                      fileTypeCandidate.setNamePattern(namePattern);
+                    }
+
+                    lsRegistry.registerFileType(fileTypeCandidate, languageRegex);
+                    editorRegistry.registerDefaultEditor(fileTypeCandidate, editorProvider);
+                  });
+            })
+        .catchError(
+            promiseError -> {
+              LOGGER.error("Error", promiseError.getCause());
+            });
+  }
+

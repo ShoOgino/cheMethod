@@ -1,0 +1,34 @@
+  private String initializeServerInstance(String id) {
+    try {
+      LOG.debug("Initializing of a language server instance for server '{}': started", id);
+      synchronized (idRegistry.get(id)) {
+        if (serverCapabilitiesRegistry.contains(id)) {
+          LOG.debug("Already initialized");
+          return id;
+        }
+
+        LanguageServer languageServer = languageServerRegistry.get(id);
+        InitializeParams initializeParams = initializeParamsProvider.get(id);
+        InitializeResult initializeResult =
+            languageServer.initialize(initializeParams).get(30, SECONDS);
+
+        LanguageServerInitializedEvent event =
+            new LanguageServerInitializedEvent(id, languageServer);
+        eventService.publish(event);
+        LOG.debug("Published a corresponding event: {}", event);
+
+        LOG.debug("Initializing of a language server instance for server '{}': finished", id);
+
+        LOG.info("Initialized language server '{}'", id);
+        return serverCapabilitiesRegistry.add(id, initializeResult.getCapabilities());
+      }
+    } catch (LanguageServerException
+        | InterruptedException
+        | ExecutionException
+        | TimeoutException e) {
+      LOG.error("Can't initialize language server for '{}'", id, e);
+    }
+
+    return null;
+  }
+

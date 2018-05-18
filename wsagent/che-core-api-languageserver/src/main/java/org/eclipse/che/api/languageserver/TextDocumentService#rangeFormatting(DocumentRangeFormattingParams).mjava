@@ -1,0 +1,30 @@
+  private List<TextEditDto> rangeFormatting(
+      DocumentRangeFormattingParams documentRangeFormattingParams) {
+    try {
+      String wsPath = documentRangeFormattingParams.getTextDocument().getUri();
+      String uri = prefixURI(wsPath);
+      documentRangeFormattingParams.getTextDocument().setUri(uri);
+      Optional<ExtendedLanguageServer> serverOptional =
+          findServer
+              .byPath(wsPath)
+              .stream()
+              .filter(s -> truish(s.getCapabilities().getDocumentRangeFormattingProvider()))
+              .findFirst();
+      if (serverOptional.isPresent()) {
+        return serverOptional
+            .get()
+            .getTextDocumentService()
+            .rangeFormatting(documentRangeFormattingParams)
+            .get()
+            .stream()
+            .map(TextEditDto::new)
+            .collect(Collectors.toList());
+      } else {
+        return emptyList();
+      }
+
+    } catch (InterruptedException | ExecutionException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+

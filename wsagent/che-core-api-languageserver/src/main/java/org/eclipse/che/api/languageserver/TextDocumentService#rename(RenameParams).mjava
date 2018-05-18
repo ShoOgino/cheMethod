@@ -1,0 +1,30 @@
+  private RenameResultDto rename(RenameParams renameParams) {
+    String wsPath = renameParams.getTextDocument().getUri();
+    String uri = prefixURI(wsPath);
+    renameParams.getTextDocument().setUri(uri);
+    Map<String, ExtendedWorkspaceEdit> edits = new ConcurrentHashMap<>();
+    Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
+    LSOperation<ExtendedLanguageServer, WorkspaceEdit> op =
+        new LSOperation<ExtendedLanguageServer, WorkspaceEdit>() {
+          @Override
+          public boolean canDo(ExtendedLanguageServer server) {
+            Boolean renameProvider = server.getCapabilities().getRenameProvider();
+            return renameProvider != null && renameProvider;
+          }
+
+          @Override
+          public CompletableFuture<WorkspaceEdit> start(ExtendedLanguageServer element) {
+            return element.getTextDocumentService().rename(renameParams);
+          }
+
+          @Override
+          public boolean handleResult(ExtendedLanguageServer element, WorkspaceEdit result) {
+
+            addRenameResult(edits, element.getId(), result);
+            return true;
+          }
+        };
+    OperationUtil.doInParallel(servers, op, TimeUnit.SECONDS.toMillis(30));
+    return new RenameResultDto(new RenameResult(edits));
+  }
+

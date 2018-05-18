@@ -1,0 +1,28 @@
+  private String initializeIOStreams(String id) {
+    try {
+      LOG.debug("Initializing of IO streams for server '{}': started", id);
+      synchronized (idRegistry.get(id)) {
+        if (ioStreamRegistry.contains(id)) {
+          LOG.debug("Already initialized");
+          return id;
+        }
+
+        CommunicationProvider communicationProvider = communicationProviderRegistry.get(id);
+        StatusChecker statusChecker = communicationProvider.getStatusChecker();
+        InputStream inputStream = communicationProvider.getInputStream();
+        OutputStream outputStream = communicationProvider.getOutputStream();
+
+        if (!statusChecker.isAlive()) {
+          throw new LanguageServerException(statusChecker.getCause());
+        }
+
+        LOG.debug("Initializing of IO streams for server '{}': finished", id);
+        return ioStreamRegistry.add(id, Pair.of(inputStream, outputStream));
+      }
+    } catch (LanguageServerException e) {
+      LOG.error("Can't initialize IO streams for '{}'", id, e);
+    }
+
+    return null;
+  }
+

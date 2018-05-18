@@ -1,0 +1,46 @@
+  /**
+   * Initialize all language servers that match a specified workspace path. If some servers are
+   * already initialized does nothing. If some servers can't be initialized due to some errors at
+   * any point - skips them and proceeds with the rest.
+   *
+   * @param wsPath absolute workspace path
+   * @return accumulated server capabilities of all initialized language servers
+   * @throws CompletionException if no server initialized throws {@link LanguageServerException}
+   *     wrapped by {@link CompletionException}
+   */
+  CompletableFuture<ServerCapabilities> initialize(String wsPath) {
+    return supplyAsync(
+        () -> {
+          LOG.info("Started language servers initialization, file path '{}'", wsPath);
+
+          Set<ServerCapabilities> serverCapabilitiesSet =
+              findId
+                  .byPath(wsPath)
+                  .stream()
+                  .map(this::initializeIOStreams)
+                  .filter(Objects::nonNull)
+                  .map(this::createServerInstance)
+                  .filter(Objects::nonNull)
+                  .map(this::initializeServerInstance)
+                  .filter(Objects::nonNull)
+                  .map(serverCapabilitiesRegistry::getOrNull)
+                  .filter(Objects::nonNull)
+                  .collect(toSet());
+
+          LOG.info("Finished language servers initialization, file path '{}'", wsPath);
+
+          LOG.debug("Calculating number of initialized servers and accumulating capabilities");
+          if (serverCapabilitiesSet.isEmpty()) {
+            String message = String.format("Could not initialize any server for '%s'", wsPath);
+            LOG.error(message);
+            LanguageServerException cause = new LanguageServerException(message);
+            throw new CompletionException(cause);
+          } else {
+            return serverCapabilitiesSet
+                .stream()
+                .reduce(new ServerCapabilities(), serverCapabilitiesAccumulator);
+          }
+        },
+        executor);
+  }
+

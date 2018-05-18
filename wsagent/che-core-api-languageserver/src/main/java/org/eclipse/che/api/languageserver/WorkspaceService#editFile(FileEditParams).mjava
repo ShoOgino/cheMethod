@@ -1,0 +1,42 @@
+  /**
+   * Apply a list of text edits to a workspace file
+   *
+   * @param params the edit to be effected
+   * @return a list of text edits that will undo the effected change
+   */
+  @SuppressWarnings("deprecation")
+  private List<TextEditDto> editFile(FileEditParams params) {
+    try {
+      String path = removePrefixUri(params.getUri());
+      String wsPath = absolutize(path);
+
+      if (fsManager.existsAsFile(wsPath)) {
+        List<TextEdit> undo = new ArrayList<>();
+
+        fsManager.update(
+            wsPath,
+            (in, out) -> {
+              OutputStreamWriter w = new OutputStreamWriter(out);
+              undo.addAll(
+                  new CharStreamEditor(
+                          params.getEdits(),
+                          CharStreamEditor.forReader(new InputStreamReader(in)),
+                          CharStreamEditor.forWriter(w))
+                      .transform());
+              try {
+                w.flush();
+              } catch (IOException e) {
+                throw new RuntimeException("failed to write transformed file", e);
+              }
+            });
+        return undo.stream().map(TextEditDto::new).collect(Collectors.toList());
+      } else {
+        LOG.error("did not find file {} or it is a directory", params.getUri());
+        throw new JsonRpcException(-27000, "File not found for edit: " + params.getUri());
+      }
+    } catch (ServerException | NotFoundException | ConflictException e) {
+      LOG.error("error editing file", e);
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+

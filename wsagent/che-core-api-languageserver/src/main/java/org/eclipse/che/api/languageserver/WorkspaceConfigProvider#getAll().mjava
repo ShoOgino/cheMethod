@@ -1,0 +1,73 @@
+  @Override
+  public Map<String, LanguageServerConfig> getAll() {
+    Workspace workspace = workspaceProvider.get(workspaceId);
+    if (workspace == null) {
+      LOG.error("Can't get workspace");
+      return ImmutableMap.of();
+    }
+
+    Runtime runtime = workspace.getRuntime();
+    if (runtime == null) {
+      LOG.error("Can't get runtime");
+      return ImmutableMap.of();
+    }
+
+    Map<String, LanguageServerConfig> configs = newHashMap();
+
+    for (Entry<String, ? extends Machine> machineEntry : runtime.getMachines().entrySet()) {
+      Map<String, ? extends Server> servers = machineEntry.getValue().getServers();
+
+      for (Entry<String, ? extends Server> serverEntry : servers.entrySet()) {
+        Server server = serverEntry.getValue();
+        String serverUrl = server.getUrl();
+        Map<String, String> attributes = server.getAttributes();
+
+        if (!"ls".equals(attributes.get("type"))) {
+          continue;
+        }
+
+        try {
+          String id = configExtractor.extractId(attributes);
+          Map<String, String> languageRegexes = configExtractor.extractLanguageRegexes(attributes);
+          Set<String> fileWatchPatterns = configExtractor.extractFileWatchPatterns(attributes);
+          CommunicationProvider communicationProvider =
+              new SocketCommunicationProvider(new URI(serverUrl));
+
+          configs.put(
+              id,
+              new LanguageServerConfig() {
+                @Override
+                public RegexProvider getRegexpProvider() {
+                  return new RegexProvider() {
+                    @Override
+                    public Map<String, String> getLanguageRegexes() {
+                      return languageRegexes;
+                    }
+
+                    @Override
+                    public Set<String> getFileWatchPatterns() {
+                      return fileWatchPatterns;
+                    }
+                  };
+                }
+
+                @Override
+                public CommunicationProvider getCommunicationProvider() {
+                  return communicationProvider;
+                }
+
+                @Override
+                public InstanceProvider getInstanceProvider() {
+                  return DefaultInstanceProvider.getInstance();
+                }
+              });
+
+        } catch (URISyntaxException e) {
+          LOG.error("Can't parse server URI: {}, proceeding", serverUrl, e);
+        }
+      }
+    }
+
+    return configs;
+  }
+

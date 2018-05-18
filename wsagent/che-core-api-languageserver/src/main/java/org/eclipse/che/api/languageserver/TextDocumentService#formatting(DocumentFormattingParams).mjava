@@ -1,0 +1,28 @@
+  private List<TextEditDto> formatting(DocumentFormattingParams documentFormattingParams) {
+    try {
+      String wsPath = documentFormattingParams.getTextDocument().getUri();
+      String uri = prefixURI(wsPath);
+      documentFormattingParams.getTextDocument().setUri(uri);
+      Optional<ExtendedLanguageServer> serverOptional =
+          findServer
+              .byPath(wsPath)
+              .stream()
+              .filter(s -> truish(s.getCapabilities().getDocumentFormattingProvider()))
+              .findFirst();
+      if (serverOptional.isPresent()) {
+        return serverOptional
+            .get()
+            .getTextDocumentService()
+            .formatting(documentFormattingParams)
+            .get(5000, TimeUnit.MILLISECONDS)
+            .stream()
+            .map(TextEditDto::new)
+            .collect(Collectors.toList());
+      } else {
+        return emptyList();
+      }
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new JsonRpcException(-27000, e.getMessage());
+    }
+  }
+

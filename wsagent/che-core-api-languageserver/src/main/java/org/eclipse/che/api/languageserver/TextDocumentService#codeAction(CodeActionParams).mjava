@@ -1,0 +1,32 @@
+  private List<CommandDto> codeAction(CodeActionParams params) {
+    TextDocumentIdentifier textDocument = params.getTextDocument();
+    String wsPath = textDocument.getUri();
+    String uri = prefixURI(wsPath);
+    textDocument.setUri(uri);
+    List<CommandDto> result = new ArrayList<>();
+    Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
+    LSOperation<ExtendedLanguageServer, List<? extends Command>> op =
+        new LSOperation<ExtendedLanguageServer, List<? extends Command>>() {
+
+          @Override
+          public boolean canDo(ExtendedLanguageServer server) {
+            return truish(server.getCapabilities().getCodeActionProvider());
+          }
+
+          @Override
+          public CompletableFuture<List<? extends Command>> start(ExtendedLanguageServer element) {
+            return element.getTextDocumentService().codeAction(params);
+          }
+
+          @Override
+          public boolean handleResult(ExtendedLanguageServer element, List<? extends Command> res) {
+            for (Command cmd : res) {
+              result.add(new CommandDto(cmd));
+            }
+            return false;
+          }
+        };
+    OperationUtil.doInParallel(servers, op, 10000);
+    return result;
+  }
+

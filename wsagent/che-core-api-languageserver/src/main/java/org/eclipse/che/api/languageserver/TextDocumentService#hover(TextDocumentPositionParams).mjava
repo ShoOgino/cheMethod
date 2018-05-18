@@ -1,0 +1,36 @@
+  private HoverDto hover(TextDocumentPositionParams positionParams) {
+    String wsPath = positionParams.getTextDocument().getUri();
+    String uri = prefixURI(wsPath);
+    positionParams.getTextDocument().setUri(uri);
+    positionParams.setUri(prefixURI(positionParams.getUri()));
+    HoverDto result = new HoverDto();
+    result.setContents(new ArrayList<>());
+
+    Set<ExtendedLanguageServer> servers = findServer.byPath(uri);
+    OperationUtil.doInParallel(
+        servers,
+        new LSOperation<ExtendedLanguageServer, Hover>() {
+
+          @Override
+          public boolean canDo(ExtendedLanguageServer element) {
+            return truish(element.getCapabilities().getHoverProvider());
+          }
+
+          @Override
+          public CompletableFuture<Hover> start(ExtendedLanguageServer element) {
+            return element.getTextDocumentService().hover(positionParams);
+          }
+
+          @Override
+          public boolean handleResult(ExtendedLanguageServer element, Hover hover) {
+            if (hover != null) {
+              HoverDto hoverDto = new HoverDto(hover);
+              result.getContents().addAll(hoverDto.getContents());
+            }
+            return true;
+          }
+        },
+        10000);
+    return result;
+  }
+

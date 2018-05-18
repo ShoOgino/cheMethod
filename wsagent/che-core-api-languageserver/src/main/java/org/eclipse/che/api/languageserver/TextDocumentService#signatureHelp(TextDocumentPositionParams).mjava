@@ -1,0 +1,33 @@
+  private SignatureHelpDto signatureHelp(TextDocumentPositionParams positionParams) {
+    String wsPath = positionParams.getTextDocument().getUri();
+    String uri = prefixURI(wsPath);
+    positionParams.getTextDocument().setUri(uri);
+    positionParams.setUri(prefixURI(positionParams.getUri()));
+    SignatureHelpDto[] result = new SignatureHelpDto[1];
+    Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
+    LSOperation<ExtendedLanguageServer, SignatureHelp> op =
+        new LSOperation<ExtendedLanguageServer, SignatureHelp>() {
+
+          @Override
+          public boolean canDo(ExtendedLanguageServer element) {
+            return element.getCapabilities().getSignatureHelpProvider() != null;
+          }
+
+          @Override
+          public CompletableFuture<SignatureHelp> start(ExtendedLanguageServer element) {
+            return element.getTextDocumentService().signatureHelp(positionParams);
+          }
+
+          @Override
+          public boolean handleResult(ExtendedLanguageServer element, SignatureHelp res) {
+            if (res != null && !res.getSignatures().isEmpty()) {
+              result[0] = new SignatureHelpDto(res);
+              return true;
+            }
+            return false;
+          }
+        };
+    OperationUtil.doInSequence(servers, op, 10000);
+    return result[0];
+  }
+

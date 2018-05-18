@@ -1,0 +1,35 @@
+  private List<LocationDto> definition(TextDocumentPositionParams textDocumentPositionParams) {
+    String wsPath = textDocumentPositionParams.getTextDocument().getUri();
+    String uri = prefixURI(wsPath);
+    textDocumentPositionParams.getTextDocument().setUri(uri);
+    Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
+    List<LocationDto> result = new ArrayList<>();
+    OperationUtil.doInParallel(
+        servers,
+        new LSOperation<ExtendedLanguageServer, List<? extends Location>>() {
+
+          @Override
+          public boolean canDo(ExtendedLanguageServer element) {
+            return truish(element.getCapabilities().getDefinitionProvider());
+          }
+
+          @Override
+          public CompletableFuture<List<? extends Location>> start(ExtendedLanguageServer element) {
+            return element.getTextDocumentService().definition(textDocumentPositionParams);
+          }
+
+          @Override
+          public boolean handleResult(
+              ExtendedLanguageServer element, List<? extends Location> locations) {
+            locations.forEach(
+                o -> {
+                  o.setUri(removePrefixUri(o.getUri()));
+                  result.add(new LocationDto(o));
+                });
+            return true;
+          }
+        },
+        30000);
+    return result;
+  }
+

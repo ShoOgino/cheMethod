@@ -1,0 +1,37 @@
+  private List<SymbolInformationDto> documentSymbol(DocumentSymbolParams documentSymbolParams) {
+    String wsPath = documentSymbolParams.getTextDocument().getUri();
+    String uri = prefixURI(wsPath);
+    documentSymbolParams.getTextDocument().setUri(uri);
+    List<SymbolInformationDto> result = new ArrayList<>();
+    Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
+
+    OperationUtil.doInParallel(
+        servers,
+        new LSOperation<ExtendedLanguageServer, List<? extends SymbolInformation>>() {
+
+          @Override
+          public boolean canDo(ExtendedLanguageServer element) {
+            return truish(element.getCapabilities().getDocumentSymbolProvider());
+          }
+
+          @Override
+          public CompletableFuture<List<? extends SymbolInformation>> start(
+              ExtendedLanguageServer element) {
+            return element.getTextDocumentService().documentSymbol(documentSymbolParams);
+          }
+
+          @Override
+          public boolean handleResult(
+              ExtendedLanguageServer element, List<? extends SymbolInformation> locations) {
+            locations.forEach(
+                o -> {
+                  o.getLocation().setUri(removePrefixUri(o.getLocation().getUri()));
+                  result.add(new SymbolInformationDto(o));
+                });
+            return true;
+          }
+        },
+        10000);
+    return result;
+  }
+
