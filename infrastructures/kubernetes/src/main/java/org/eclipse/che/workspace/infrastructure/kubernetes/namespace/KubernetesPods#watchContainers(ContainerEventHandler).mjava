@@ -30,15 +30,34 @@
                           event.getMetadata().getCreationTimestamp(),
                           event.getLastTimestamp());
 
-                  containerEventsHandlers.forEach(h -> h.handle(containerEvent));
+                  try {
+                    if (happenedAfterWatcherInitialization(containerEvent)) {
+                      containerEventsHandlers.forEach(h -> h.handle(containerEvent));
+                    }
+                  } catch (ParseException e) {
+                    LOG.error("Failed to parse last timestamp of the event: {}", containerEvent);
+                  }
                 }
               }
             }
 
             @Override
             public void onClose(KubernetesClientException ignored) {}
+
+            /**
+             * Returns true if 'lastTimestamp' of the event is *after* the time of the watcher
+             * initialization
+             */
+            private boolean happenedAfterWatcherInitialization(ContainerEvent event)
+                throws ParseException {
+              String eventLastTimestamp = event.getLastTimestamp();
+              Date eventLastTimestampDate =
+                  ContainerEvents.convertEventTimestampToDate(eventLastTimestamp);
+              return eventLastTimestampDate.after(watcherInitializationDate);
+            }
           };
       try {
+        watcherInitializationDate = new Date();
         containerWatch =
             clientFactory.create(workspaceId).events().inNamespace(namespace).watch(watcher);
       } catch (KubernetesClientException ex) {
