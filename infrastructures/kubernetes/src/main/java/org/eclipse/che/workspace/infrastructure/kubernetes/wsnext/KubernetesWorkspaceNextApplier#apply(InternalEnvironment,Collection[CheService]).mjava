@@ -1,0 +1,29 @@
+  @Override
+  public void apply(InternalEnvironment internalEnvironment, Collection<CheService> cheServices)
+      throws InfrastructureException {
+    if (cheServices.isEmpty()) {
+      return;
+    }
+    KubernetesEnvironment kubernetesEnvironment = (KubernetesEnvironment) internalEnvironment;
+    Map<String, Pod> pods = kubernetesEnvironment.getPods();
+    if (pods.size() != 1) {
+      throw new InfrastructureException(
+          "Workspace.Next configuration can be applied to a workspace with one pod only");
+    }
+    Pod pod = pods.values().iterator().next();
+    for (CheService cheService : cheServices) {
+      for (Container container : cheService.getSpec().getContainers()) {
+        io.fabric8.kubernetes.api.model.Container k8sContainer =
+            addContainer(pod, container.getImage(), container.getEnv(), container.getResources());
+
+        String machineName = Names.machineName(pod, k8sContainer);
+
+        InternalMachineConfig machineConfig =
+            addMachine(
+                kubernetesEnvironment, machineName, container.getServers(), container.getVolumes());
+
+        normalizeMemory(k8sContainer, machineConfig);
+      }
+    }
+  }
+
