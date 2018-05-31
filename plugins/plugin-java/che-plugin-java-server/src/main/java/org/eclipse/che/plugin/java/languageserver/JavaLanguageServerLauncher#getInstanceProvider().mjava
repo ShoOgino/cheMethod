@@ -1,0 +1,27 @@
+  @Override
+  public InstanceProvider getInstanceProvider() {
+    return new InstanceProvider() {
+
+      @Override
+      public LanguageServer get(LanguageClient client, InputStream in, OutputStream out) {
+        Object javaLangClient =
+            Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class[] {LanguageClient.class, JavaLanguageClient.class},
+                new DynamicWrapper(JavaLanguageServerLauncher.this, client));
+
+        Launcher<JavaLanguageServer> launcher =
+            Launcher.createLauncher(javaLangClient, JavaLanguageServer.class, in, out);
+        launcher.startListening();
+        JavaLanguageServer proxy = launcher.getRemoteProxy();
+        LanguageServer wrapped =
+            (LanguageServer)
+                Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class[] {LanguageServer.class, FileContentAccess.class},
+                    new DynamicWrapper(new JavaLSWrapper(proxy), proxy));
+        return wrapped;
+      }
+    };
+  }
+

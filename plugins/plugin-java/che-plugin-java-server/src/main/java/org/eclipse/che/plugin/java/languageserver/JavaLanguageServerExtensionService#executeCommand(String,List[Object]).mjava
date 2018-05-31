@@ -1,9 +1,18 @@
   private CompletableFuture<Object> executeCommand(String commandId, List<Object> parameters) {
     ExecuteCommandParams params = new ExecuteCommandParams(commandId, parameters);
-    try {
-      return getOrInitLanguageServer().getWorkspaceService().executeCommand(params);
-    } catch (LanguageServerException e) {
-      throw new IllegalStateException(e);
-    }
+    return initializer
+        .initialize(prefixURI("/init.java"))
+        .thenCompose(
+            (ServerCapabilities cap) -> {
+              ExtendedLanguageServer ls = findInitializedLanguageServer();
+              if (ls != null) {
+                return ls.getWorkspaceService().executeCommand(params);
+              } else {
+                CompletableFuture<Object> completedFuture = CompletableFuture.completedFuture(null);
+                completedFuture.completeExceptionally(
+                    new LanguageServerException("did not find language server"));
+                return completedFuture;
+              }
+            });
   }
 
