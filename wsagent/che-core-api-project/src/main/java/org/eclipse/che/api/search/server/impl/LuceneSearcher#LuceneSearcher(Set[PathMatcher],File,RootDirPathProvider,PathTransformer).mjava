@@ -1,0 +1,33 @@
+  @Inject
+  public LuceneSearcher(
+      @Named("vfs.index_filter_matcher") Set<PathMatcher> excludePatterns,
+      @Named("vfs.local.fs_index_root_dir") File indexDirectory,
+      RootDirPathProvider pathProvider,
+      PathTransformer pathTransformer)
+      throws IOException {
+
+    if (indexDirectory.exists()) {
+      if (indexDirectory.isFile()) {
+        throw new IOException("Wrong configuration `vfs.local.fs_index_root_dir` is a file");
+      }
+    } else {
+      Files.createDirectories(indexDirectory.toPath());
+    }
+
+    this.root = Paths.get(pathProvider.get());
+    this.excludePatterns = excludePatterns;
+    this.pathTransformer = pathTransformer;
+    this.analyzer =
+        CustomAnalyzer.builder()
+            .withTokenizer(WhitespaceTokenizerFactory.class)
+            .addTokenFilter(LowerCaseFilterFactory.class)
+            .build();
+    this.luceneIndexWriter =
+        new IndexWriter(
+            FSDirectory.open(indexDirectory.toPath(), new SingleInstanceLockFactory()),
+            new IndexWriterConfig(analyzer));
+    this.searcherManager =
+        new SearcherManager(luceneIndexWriter, true, true, new SearcherFactory());
+    this.sort = new Sort(SortField.FIELD_SCORE, new SortField(PATH_FIELD, SortField.Type.STRING));
+  }
+
