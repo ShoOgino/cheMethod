@@ -1,0 +1,38 @@
+  private void performRename(String newName) {
+    RenameSettings settings = dtoFactory.createDto(RenameSettings.class);
+
+    RenameParams renameParams = dtoFactory.createDto(RenameParams.class);
+    renameParams.setNewName(newName);
+    VirtualFile file = textEditor.getEditorInput().getFile();
+    TextDocumentIdentifier textDocumentIdentifier = dtoBuildHelper.createTDI(file);
+    renameParams.setTextDocument(textDocumentIdentifier);
+
+    org.eclipse.lsp4j.Position position = dtoFactory.createDto(org.eclipse.lsp4j.Position.class);
+    position.setCharacter(cursorPosition.getCharacter());
+    position.setLine(cursorPosition.getLine());
+    renameParams.setPosition(position);
+
+    settings.setUpdateReferences(true);
+    settings.setRenameParams(renameParams);
+    settings.setRenameKind(RenameKind.JAVA_ELEMENT);
+
+    extensionServiceClient
+        .rename(settings)
+        .then(
+            edits -> {
+              enableAutoSave();
+              undoChanges();
+              applyWorkspaceEditAction.applyWorkspaceEdit(edits);
+              clientServerEventService.sendFileTrackingResumeEvent();
+              sendOpenEvent();
+            })
+        .catchError(
+            error -> {
+              undoChanges();
+              enableAutoSave();
+              clientServerEventService.sendFileTrackingResumeEvent();
+              notificationManager.notify(
+                  locale.failedToRename(), error.getMessage(), FAIL, FLOAT_MODE);
+            });
+  }
+

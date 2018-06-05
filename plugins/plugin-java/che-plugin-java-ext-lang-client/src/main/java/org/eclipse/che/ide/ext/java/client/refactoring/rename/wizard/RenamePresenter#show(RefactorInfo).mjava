@@ -5,26 +5,38 @@
    */
   public void show(RefactorInfo refactorInfo) {
     this.refactorInfo = refactorInfo;
-    final CreateRenameRefactoring createRenameRefactoring =
-        createRenameRefactoringDto(refactorInfo);
+    TextEditor editor = (TextEditor) editorAgent.getActiveEditor();
 
-    Promise<RenameRefactoringSession> createRenamePromise =
-        refactorService.createRenameRefactoring(createRenameRefactoring);
-    createRenamePromise
-        .then(
-            new Operation<RenameRefactoringSession>() {
-              @Override
-              public void apply(RenameRefactoringSession session) throws OperationException {
-                show(session);
-              }
-            })
+    RenameSelectionParams params = dtoFactory.createDto(RenameSelectionParams.class);
+
+    if (RefactoredItemType.JAVA_ELEMENT.equals(refactorInfo.getRefactoredItemType())) {
+      TextPosition cursorPosition = editor.getCursorPosition();
+      org.eclipse.lsp4j.Position position = dtoFactory.createDto(org.eclipse.lsp4j.Position.class);
+      position.setCharacter(cursorPosition.getCharacter());
+      position.setLine(cursorPosition.getLine());
+      params.setPosition(position);
+      String location =
+          editorAgent.getActiveEditor().getEditorInput().getFile().getLocation().toString();
+      params.setResourceUri(location);
+      params.setRenameKind(RenameKind.JAVA_ELEMENT);
+    } else {
+      // get selected resource
+      Resource resource = refactorInfo.getResources()[0];
+      params.setResourceUri(resource.getLocation().toString());
+      if (RefactoredItemType.COMPILATION_UNIT.equals(refactorInfo.getRefactoredItemType())) {
+        params.setRenameKind(RenameKind.COMPILATION_UNIT);
+      } else {
+        params.setRenameKind(RenameKind.PACKAGE);
+      }
+    }
+
+    extensionServiceClient
+        .getRenameType(params)
+        .then(this::showWizard)
         .catchError(
-            new Operation<PromiseError>() {
-              @Override
-              public void apply(PromiseError arg) throws OperationException {
-                notificationManager.notify(
-                    locale.failedToRename(), arg.getMessage(), FAIL, FLOAT_MODE);
-              }
+            error -> {
+              notificationManager.notify(
+                  locale.failedToRename(), error.getMessage(), FAIL, FLOAT_MODE);
             });
   }
 

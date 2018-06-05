@@ -1,42 +1,58 @@
   /** {@inheritDoc} */
   @Override
   public void validateName() {
-    ValidateNewName validateNewName = dtoFactory.createDto(ValidateNewName.class);
-    validateNewName.setSessionId(renameRefactoringSession.getSessionId());
-    validateNewName.setNewName(view.getNewName());
+    RenameSelectionParams params = dtoFactory.createDto(RenameSelectionParams.class);
 
-    refactorService
-        .validateNewName(validateNewName)
+    if (RefactoredItemType.JAVA_ELEMENT.equals(refactorInfo.getRefactoredItemType())) {
+      TextEditor editor = (TextEditor) editorAgent.getActiveEditor();
+      TextPosition cursorPosition = editor.getCursorPosition();
+      org.eclipse.lsp4j.Position position = dtoFactory.createDto(org.eclipse.lsp4j.Position.class);
+      position.setCharacter(cursorPosition.getCharacter());
+      position.setLine(cursorPosition.getLine());
+      params.setPosition(position);
+      params.setRenameKind(RenameKind.JAVA_ELEMENT);
+      String location =
+          editorAgent.getActiveEditor().getEditorInput().getFile().getLocation().toString();
+      params.setResourceUri(location);
+    } else if (RefactoredItemType.COMPILATION_UNIT.equals(refactorInfo.getRefactoredItemType())) {
+      params.setRenameKind(RenameKind.COMPILATION_UNIT);
+      params.setResourceUri(refactorInfo.getResources()[0].getLocation().toString());
+    } else if (RefactoredItemType.PACKAGE.equals(refactorInfo.getRefactoredItemType())) {
+      params.setRenameKind(RenameKind.PACKAGE);
+      params.setResourceUri(refactorInfo.getResources()[0].getLocation().toString());
+    }
+
+    params.setNewName(view.getNewName());
+
+    extensionServiceClient
+        .validateRenamedName(params)
         .then(
-            new Operation<RefactoringStatus>() {
-              @Override
-              public void apply(RefactoringStatus arg) throws OperationException {
-                switch (arg.getSeverity()) {
-                  case OK:
-                    view.setEnableAcceptButton(true);
-                    view.setEnablePreviewButton(true);
-                    view.clearErrorLabel();
-                    break;
-                  case INFO:
-                    view.setEnableAcceptButton(true);
-                    view.setEnablePreviewButton(true);
-                    view.showStatusMessage(arg);
-                    break;
-                  default:
-                    view.setEnableAcceptButton(false);
-                    view.setEnablePreviewButton(false);
-                    view.showErrorMessage(arg);
-                    break;
-                }
+            status -> {
+              if (status == null) {
+                return;
+              }
+              switch (status.getRefactoringSeverity()) {
+                case OK:
+                  view.setEnableAcceptButton(true);
+                  view.setEnablePreviewButton(true);
+                  view.clearErrorLabel();
+                  break;
+                case INFO:
+                  view.setEnableAcceptButton(true);
+                  view.setEnablePreviewButton(true);
+                  view.showStatusMessage(status);
+                  break;
+                default:
+                  view.setEnableAcceptButton(false);
+                  view.setEnablePreviewButton(false);
+                  view.showErrorMessage(status);
+                  break;
               }
             })
         .catchError(
-            new Operation<PromiseError>() {
-              @Override
-              public void apply(PromiseError arg) throws OperationException {
-                notificationManager.notify(
-                    locale.failedToRename(), arg.getMessage(), FAIL, FLOAT_MODE);
-              }
+            error -> {
+              notificationManager.notify(
+                  locale.failedToRename(), error.getMessage(), FAIL, FLOAT_MODE);
             });
   }
 

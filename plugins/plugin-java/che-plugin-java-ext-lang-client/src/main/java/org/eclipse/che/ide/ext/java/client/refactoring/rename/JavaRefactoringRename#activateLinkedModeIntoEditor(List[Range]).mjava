@@ -1,0 +1,54 @@
+  private void activateLinkedModeIntoEditor(List<Range> ranges) {
+    sendCloseEvent();
+    mode = linkedEditor.getLinkedMode();
+    LinkedModel model = linkedEditor.createLinkedModel();
+    List<LinkedModelGroup> groups = new ArrayList<>();
+    LinkedModelGroup group = linkedEditor.createLinkedGroup();
+    List<Position> positions = new ArrayList<>();
+    for (Range range : ranges) {
+      LinkedModelData modelData = linkedEditor.createLinkedModelData();
+      modelData.setType("link");
+      group.setData(modelData);
+      positions.add(createPositionFromRange(range, textEditor.getDocument()));
+    }
+    group.setPositions(positions);
+    groups.add(group);
+    model.setGroups(groups);
+    disableAutoSave();
+
+    mode.enterLinkedMode(model);
+
+    mode.addListener(
+        new LinkedMode.LinkedModeListener() {
+          @Override
+          public void onLinkedModeExited(boolean successful, int start, int end) {
+            boolean isSuccessful = false;
+            try {
+              if (successful) {
+                isSuccessful = true;
+                newName = textEditor.getDocument().getContentRange(start, end - start);
+                performRename(newName);
+              }
+            } finally {
+              mode.removeListener(this);
+
+              isActiveLinkedEditor = false;
+
+              boolean isNameChanged = start >= 0 && end >= 0;
+              if (!isSuccessful && isNameChanged && textEditor.isDirty()) {
+                undoChanges();
+              }
+
+              if (!isSuccessful) {
+                clientServerEventService
+                    .sendFileTrackingResumeEvent()
+                    .then(
+                        arg -> {
+                          enableAutoSave();
+                        });
+              }
+            }
+          }
+        });
+  }
+

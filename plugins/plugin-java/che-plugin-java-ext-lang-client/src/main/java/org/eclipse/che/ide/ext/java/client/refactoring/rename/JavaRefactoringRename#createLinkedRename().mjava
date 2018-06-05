@@ -1,0 +1,31 @@
+  private void createLinkedRename() {
+    cursorPosition = textEditor.getCursorPosition();
+
+    Document document = textEditor.getDocument();
+    TextDocumentPositionParams params =
+        dtoBuildHelper.createTDPP(document, textEditor.getCursorOffset());
+
+    extensionServiceClient
+        .getLinkedModeModel(params)
+        .then(
+            ranges -> {
+              clientServerEventService
+                  .sendFileTrackingSuspendEvent()
+                  .then(
+                      success -> {
+                        if (ranges == null || ranges.isEmpty()) {
+                          showError();
+                          isActiveLinkedEditor = false;
+                          clientServerEventService.sendFileTrackingResumeEvent();
+                          return;
+                        }
+                        activateLinkedModeIntoEditor(ranges);
+                      });
+            })
+        .catchError(
+            arg -> {
+              isActiveLinkedEditor = false;
+              showError();
+            });
+  }
+
