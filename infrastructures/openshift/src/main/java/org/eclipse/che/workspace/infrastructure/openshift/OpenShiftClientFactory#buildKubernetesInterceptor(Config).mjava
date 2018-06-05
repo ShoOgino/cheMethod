@@ -1,3 +1,4 @@
+  @Override
   protected Interceptor buildKubernetesInterceptor(Config config) {
     final String oauthToken;
     if (Utils.isNotNullOrEmpty(config.getUsername())
@@ -8,8 +9,7 @@
           builder.interceptors().clear();
           OkHttpClient clone = builder.build();
 
-          String credential =
-              Credentials.basic(config.getUsername(), new String(config.getPassword()));
+          String credential = Credentials.basic(config.getUsername(), config.getPassword());
           URL url = new URL(URLUtils.join(config.getMasterUrl(), AUTHORIZE_PATH));
           Response response =
               clone
@@ -21,6 +21,8 @@
                           .build())
                   .execute();
 
+          // False positive warn: according to javadocs response.body() returns non-null value
+          // if called after Call.execute()
           response.body().close();
           response = response.priorResponse() != null ? response.priorResponse() : response;
           response = response.networkResponse() != null ? response.networkResponse() : response;
@@ -48,21 +50,14 @@
       oauthToken = null;
     }
 
-    return new Interceptor() {
-      @Override
-      public Response intercept(Chain chain) throws IOException {
-        Request request = chain.request();
-        if (isNotNullOrEmpty(oauthToken)) {
-          Request authReq =
-              chain
-                  .request()
-                  .newBuilder()
-                  .addHeader("Authorization", "Bearer " + oauthToken)
-                  .build();
-          return chain.proceed(authReq);
-        }
-        return chain.proceed(request);
+    return chain -> {
+      Request request = chain.request();
+      if (isNotNullOrEmpty(oauthToken)) {
+        Request authReq =
+            chain.request().newBuilder().addHeader("Authorization", "Bearer " + oauthToken).build();
+        return chain.proceed(authReq);
       }
+      return chain.proceed(request);
     };
   }
 
