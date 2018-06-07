@@ -1,0 +1,27 @@
+  /**
+   * Registers start completion.
+   *
+   * <p>It also releases {@link #awaitInterruption(long, TimeUnit)}.
+   *
+   * @throws RuntimeStartInterruptedException when start was interrupted
+   * @throws InfrastructureException when any other exception occurs during start
+   */
+  public synchronized void complete() throws InfrastructureException {
+    completionLatch.countDown();
+    startThread = null;
+    isStarting = false;
+    eventService.unsubscribe(runtimeStartInterrupter);
+    eventService.unsubscribe(runtimeStopWatcher);
+
+    // try to complete start failure holder and
+    // rethrow original exception if it is already completed exceptionally
+    if (!startFailure.complete(null) && startFailure.isCompletedExceptionally()) {
+      try {
+        // future is already completed.
+        startFailure.getNow(null);
+      } catch (CompletionException e) {
+        rethrowCause(e);
+      }
+    }
+  }
+

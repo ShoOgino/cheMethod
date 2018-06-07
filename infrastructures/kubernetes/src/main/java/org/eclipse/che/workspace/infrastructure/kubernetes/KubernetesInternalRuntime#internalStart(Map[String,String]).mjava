@@ -3,15 +3,22 @@
     KubernetesRuntimeContext<? extends KubernetesEnvironment> context = getContext();
     String workspaceId = context.getIdentity().getWorkspaceId();
     try {
-      final KubernetesEnvironment k8sEnv = context.getEnvironment();
-      volumesStrategy.prepare(k8sEnv, workspaceId);
+      startSynchronizer.setStartThread();
+      startSynchronizer.start();
+
+      volumesStrategy.prepare(context.getEnvironment(), workspaceId);
+
+      startSynchronizer.checkFailure();
+
       startMachines();
 
-      final CompletableFuture<Void> failure = new CompletableFuture<>();
+      startSynchronizer.checkFailure();
+
       final List<CompletableFuture<Void>> machinesFutures = new ArrayList<>();
       // futures that must be cancelled explicitly
       final List<CompletableFuture<?>> toCancelFutures = new CopyOnWriteArrayList<>();
       final EnvironmentContext currentContext = EnvironmentContext.getCurrent();
+      CompletableFuture<Void> startFailure = startSynchronizer.getStartFailure();
 
       for (KubernetesMachineImpl machine : machines.getMachines(context.getIdentity()).values()) {
         String machineName = machine.getName();
@@ -20,35 +27,49 @@
                 // since machine running future will be completed from the thread that is not from
                 // kubernetes pool it's needed to explicitly put the executor to not to delay
                 // processing in the external pool.
-                .thenComposeAsync(checkFailure(failure), executor)
+                .thenComposeAsync(checkFailure(startFailure), executor)
                 .thenRun(publishRunningStatus(machineName))
-                .thenCompose(checkFailure(failure))
+                .thenCompose(checkFailure(startFailure))
                 .thenCompose(setContext(currentContext, bootstrap(toCancelFutures, machine)))
                 // see comments above why executor is explicitly put into arguments
-                .thenComposeAsync(checkFailure(failure), executor)
+                .thenComposeAsync(checkFailure(startFailure), executor)
                 .thenCompose(setContext(currentContext, checkServers(toCancelFutures, machine)))
-                .exceptionally(publishFailedStatus(failure, machineName));
+                .exceptionally(publishFailedStatus(startFailure, machineName));
         machinesFutures.add(machineBootChain);
       }
 
-      waitMachines(machinesFutures, toCancelFutures, failure);
-    } catch (InfrastructureException | RuntimeException | InterruptedException e) {
+      waitMachines(machinesFutures, toCancelFutures, startFailure);
+      startSynchronizer.complete();
+    } catch (InfrastructureException | RuntimeException e) {
+      Exception startFailureCause = startSynchronizer.getStartFailureNow();
+      if (startFailureCause == null) {
+        startFailureCause = e;
+      }
+
       LOG.warn(
           "Failed to start Kubernetes runtime of workspace {}. Cause: {}",
           workspaceId,
-          e.getMessage());
-      boolean interrupted = Thread.interrupted() || e instanceof InterruptedException;
+          startFailureCause.getMessage());
+      boolean interrupted =
+          Thread.interrupted() || startFailureCause instanceof RuntimeStartInterruptedException;
       // Cancels workspace servers probes if any
       probeScheduler.cancel(workspaceId);
+      // stop watching before namespace cleaning up
+      namespace.pods().stopWatch();
       try {
         namespace.cleanUp();
-      } catch (InfrastructureException ignored) {
+      } catch (InfrastructureException cleanUppingEx) {
+        LOG.warn(
+            "Failed to clean up namespace after workspace '{}' start failing. Cause: {}",
+            context.getIdentity().getWorkspaceId(),
+            cleanUppingEx.getMessage());
       }
 
+      startSynchronizer.completeExceptionally(startFailureCause);
       if (interrupted) {
-        throw new InfrastructureException("Kubernetes environment start was interrupted");
+        throw new RuntimeStartInterruptedException(getContext().getIdentity());
       }
-      wrapAndRethrow(e);
+      wrapAndRethrow(startFailureCause);
     } finally {
       namespace.pods().stopWatch();
     }
