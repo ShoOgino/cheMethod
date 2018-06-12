@@ -1,0 +1,34 @@
+  /**
+   * Starts the specified Pod via a Deployment.
+   *
+   * @param pod pod to deploy
+   * @return created pod
+   * @throws InfrastructureException when any exception occurs
+   */
+  public Pod deploy(Pod pod) throws InfrastructureException {
+    putLabel(pod, CHE_WORKSPACE_ID_LABEL, workspaceId);
+    ObjectMeta metadata = pod.getMetadata();
+    PodSpec podSpec = pod.getSpec();
+    podSpec.setRestartPolicy("Always"); // Only allowable value
+    try {
+      Deployment deployment =
+          clientFactory
+              .create(workspaceId)
+              .extensions()
+              .deployments()
+              .createNew()
+              .withMetadata(metadata)
+              .withNewSpec()
+              .withReplicas(1)
+              .withNewTemplate()
+              .withMetadata(metadata)
+              .withSpec(podSpec)
+              .endTemplate()
+              .endSpec()
+              .done();
+      return awaitAndGetPod(deployment);
+    } catch (KubernetesClientException e) {
+      throw new KubernetesInfrastructureException(e);
+    }
+  }
+

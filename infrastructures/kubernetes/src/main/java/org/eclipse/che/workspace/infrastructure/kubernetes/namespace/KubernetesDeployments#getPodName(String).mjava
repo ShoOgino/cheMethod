@@ -1,0 +1,46 @@
+  /**
+   * Returns the name of a specified Pod given either the actual Pod name or the name of the
+   * DeploymentConfig that controls it. <br>
+   * This is necessary because we are trying to transparently wrap Pods in DeploymentConfigs;
+   * attempting to create a Pod named {@code testPod} will result in a DeploymentConfig with name
+   * {@code testPod}, which will in turn create a Pod named e.g {@code testPod-1-xxxxx}.
+   *
+   * @param name Pod or DeploymentConfig name
+   * @return the name of the intended pod.
+   * @see
+   */
+  private String getPodName(String name) throws InfrastructureException {
+    if (clientFactory.create(workspaceId).pods().inNamespace(namespace).withName(name).get()
+        != null) {
+      return name;
+    }
+    Deployment deployment =
+        clientFactory
+            .create(workspaceId)
+            .extensions()
+            .deployments()
+            .inNamespace(namespace)
+            .withName(name)
+            .get();
+    if (deployment == null) {
+      throw new InfrastructureException("Failed to get deployment for pod");
+    }
+    Map<String, String> selector = deployment.getSpec().getSelector().getMatchLabels();
+    List<Pod> pods =
+        clientFactory
+            .create(workspaceId)
+            .pods()
+            .inNamespace(namespace)
+            .withLabels(selector)
+            .list()
+            .getItems();
+    if (pods.isEmpty()) {
+      throw new InfrastructureException(String.format("Failed to find pod with name %s", name));
+    } else if (pods.size() > 1) {
+      throw new InfrastructureException(
+          String.format("Found multiple pods in DeploymentConfig %s", name));
+    }
+
+    return pods.get(0).getMetadata().getName();
+  }
+

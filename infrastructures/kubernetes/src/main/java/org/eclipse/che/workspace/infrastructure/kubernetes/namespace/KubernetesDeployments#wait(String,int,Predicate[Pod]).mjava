@@ -1,22 +1,23 @@
   /**
    * Waits until pod state will suit for specified predicate.
    *
-   * @param name name of pod that should be watched
+   * @param name name of pod or deployment containing pod that should be watched
    * @param timeoutMin waiting timeout in minutes
    * @param predicate predicate to perform state check
-   * @return pod that suit for specified predicate
+   * @return pod that satisifes the specified predicate
    * @throws InfrastructureException when specified timeout is reached
    * @throws InfrastructureException when {@link Thread} is interrupted while waiting
    * @throws InfrastructureException when any other exception occurs
    */
   public Pod wait(String name, int timeoutMin, Predicate<Pod> predicate)
       throws InfrastructureException {
+    String podName = getPodName(name);
     CompletableFuture<Pod> future = new CompletableFuture<>();
     Watch watch = null;
     try {
 
       PodResource<Pod, DoneablePod> podResource =
-          clientFactory.create(workspaceId).pods().inNamespace(namespace).withName(name);
+          clientFactory.create(workspaceId).pods().inNamespace(namespace).withName(podName);
 
       watch =
           podResource.watch(
@@ -32,13 +33,17 @@
                 public void onClose(KubernetesClientException cause) {
                   future.completeExceptionally(
                       new InfrastructureException(
-                          "Waiting for pod '" + name + "' was interrupted"));
+                          "Waiting for pod '" + podName + "' was interrupted"));
                 }
               });
 
       Pod actualPod = podResource.get();
       if (actualPod == null) {
-        throw new InfrastructureException("Specified pod " + name + " doesn't exist");
+        if (name.equals(podName)) { // `name` refers to a bare pod
+          throw new InfrastructureException("Specified pod " + podName + " doesn't exist");
+        } else { // `name` refers to a deployment
+          throw new InfrastructureException("No pod in deployment " + name + " found.");
+        }
       }
       if (predicate.test(actualPod)) {
         return actualPod;
@@ -48,10 +53,10 @@
       } catch (ExecutionException e) {
         throw new InfrastructureException(e.getCause().getMessage(), e);
       } catch (TimeoutException e) {
-        throw new InfrastructureException("Waiting for pod '" + name + "' reached timeout");
+        throw new InfrastructureException("Waiting for pod '" + podName + "' reached timeout");
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        throw new InfrastructureException("Waiting for pod '" + name + "' was interrupted");
+        throw new InfrastructureException("Waiting for pod '" + podName + "' was interrupted");
       }
     } catch (KubernetesClientException e) {
       throw new KubernetesInfrastructureException(e);

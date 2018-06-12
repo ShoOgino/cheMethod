@@ -1,0 +1,28 @@
+  @Test
+  public void
+      shouldCompleteExceptionallyFutureForWaitingPodIfStatusIsFailedAndReasonNorLogsAreNotAvailable()
+          throws Exception {
+    // given
+    when(status.getPhase()).thenReturn(POD_STATUS_PHASE_FAILED);
+    CompletableFuture future = kubernetesDeployments.waitRunningAsync(POD_NAME);
+
+    doThrow(new InfrastructureException("Failure while retrieving pod logs"))
+        .when(clientFactory)
+        .create();
+
+    // when
+    verify(podResource).watch(watcherCaptor.capture());
+    watcher = watcherCaptor.getValue();
+    watcher.eventReceived(Watcher.Action.MODIFIED, pod);
+
+    // then
+    assertTrue(future.isCompletedExceptionally());
+    try {
+      future.get();
+    } catch (ExecutionException e) {
+      assertEquals(
+          e.getCause().getMessage(),
+          "Pod 'podName' failed to start. Error occurred while fetching pod logs.");
+    }
+  }
+

@@ -1,0 +1,38 @@
+  /**
+   * Get the Deployment resource that owns a specified Pod via the Pod's owner references.
+   *
+   * @param pod the pod controlled by desired deployment
+   * @return the deployment that manages the specified pod
+   * @throws InfrastructureException if any error occurs.
+   */
+  private ScalableResource<Deployment, DoneableDeployment> getDeploymentResource(Pod pod)
+      throws InfrastructureException {
+    List<OwnerReference> podOwners = pod.getMetadata().getOwnerReferences();
+    String podName = pod.getMetadata().getName();
+    String replicaSetName =
+        podOwners
+            .stream()
+            .filter(owner -> "ReplicaSet".equals(owner.getKind()))
+            .map(owner -> owner.getName())
+            .findAny()
+            .orElseThrow(
+                () ->
+                    new InfrastructureException(
+                        String.format("Failed to get ReplicaSet controlling Pod %s", podName)));
+
+    ReplicaSet replicaSet =
+        clientFactory.create(workspaceId).extensions().replicaSets().withName(replicaSetName).get();
+    List<OwnerReference> rsOwners = replicaSet.getMetadata().getOwnerReferences();
+    String deploymentName =
+        rsOwners
+            .stream()
+            .filter(owner -> "Deployment".equals(owner.getKind()))
+            .map(owner -> owner.getName())
+            .findAny()
+            .orElseThrow(
+                () ->
+                    new InfrastructureException(
+                        String.format("Failed to get Deployment controlling Pod %s", podName)));
+    return clientFactory.create(workspaceId).extensions().deployments().withName(deploymentName);
+  }
+
