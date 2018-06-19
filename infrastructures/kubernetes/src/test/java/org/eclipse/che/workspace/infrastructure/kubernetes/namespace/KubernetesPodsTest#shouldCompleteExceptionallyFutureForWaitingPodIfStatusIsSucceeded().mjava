@@ -1,0 +1,23 @@
+  @Test
+  public void shouldCompleteExceptionallyFutureForWaitingPodIfStatusIsSucceeded() throws Exception {
+    // given
+    when(status.getPhase()).thenReturn(POD_STATUS_PHASE_SUCCEEDED);
+    CompletableFuture future = kubernetesPods.waitRunningAsync("name");
+
+    // when
+    verify(podResource).watch(watcherCaptor.capture());
+    watcher = watcherCaptor.getValue();
+    watcher.eventReceived(Watcher.Action.MODIFIED, pod);
+
+    // then
+    assertTrue(future.isCompletedExceptionally());
+
+    try {
+      future.get();
+    } catch (ExecutionException e) {
+      assertEquals(
+          e.getCause().getMessage(),
+          "Pod container has been terminated. Container must be configured to use a non-terminating command.");
+    }
+  }
+

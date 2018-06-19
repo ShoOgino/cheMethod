@@ -1,0 +1,38 @@
+  private void handleStartingPodStatus(CompletableFuture<Void> podRunningFuture, Pod pod) {
+    if (POD_STATUS_PHASE_RUNNING.equals(pod.getStatus().getPhase())) {
+      podRunningFuture.complete(null);
+      return;
+    }
+
+    if (POD_STATUS_PHASE_SUCCEEDED.equals(pod.getStatus().getPhase())) {
+      podRunningFuture.completeExceptionally(
+          new InfrastructureException(
+              "Pod container has been terminated. Container must be configured to use a non-terminating command."));
+      return;
+    }
+
+    if (POD_STATUS_PHASE_FAILED.equals(pod.getStatus().getPhase())) {
+      String exceptionMessage = "Pod '" + pod.getMetadata().getName() + "' failed to start.";
+      String reason = pod.getStatus().getReason();
+      if (Strings.isNullOrEmpty(reason)) {
+        try {
+          String podLog =
+              clientFactory
+                  .create()
+                  .pods()
+                  .inNamespace(namespace)
+                  .withName(pod.getMetadata().getName())
+                  .getLog();
+          exceptionMessage = exceptionMessage.concat(" Pod logs: ").concat(podLog);
+
+        } catch (InfrastructureException e) {
+          exceptionMessage = exceptionMessage.concat(" Error occurred while fetching pod logs.");
+        }
+      } else {
+        exceptionMessage = exceptionMessage.concat(" Reason: ").concat(reason);
+      }
+      podRunningFuture.completeExceptionally(new InfrastructureException(exceptionMessage));
+      LOG.warn(exceptionMessage);
+    }
+  }
+
