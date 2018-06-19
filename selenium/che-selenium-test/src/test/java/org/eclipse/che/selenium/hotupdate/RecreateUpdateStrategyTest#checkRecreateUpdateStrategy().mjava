@@ -1,0 +1,35 @@
+  @Test
+  public void checkRecreateUpdateStrategy() throws Exception {
+    String ocClientRolloutCommand = "rollout latest che";
+
+    int requestAttempts = 100;
+    int requestTimeoutInSec = 6;
+
+    // open a user workspace and send request for preparing to shutdown
+    ide.open(workspace);
+
+    cheTestSystemClient.stop();
+
+    // reopen the workspace and make sure that this one is not available after suspending system
+    ide.open(workspace);
+    projectExplorer.waitProjectExplorerDisappearance(requestTimeoutInSec);
+    terminal.waitTerminalIsNotPresent(requestTimeoutInSec);
+
+    // performs rollout
+    openShiftCliCommandExecutor.execute(ocClientRolloutCommand);
+    cheTestSystemClient.waitWorkspaceMasterStatus(
+        requestAttempts, requestTimeoutInSec, SystemStatus.RUNNING);
+
+    // get current version of deployment after rollout
+    int cheDeploymentAfterRollout =
+        parseInt(openShiftCliCommandExecutor.execute(COMMAND_FOR_GETTING_CURRENT_DEPLOYMENT_CHE));
+
+    // After rollout updating - deployment should be increased on 1. Previews version +1 should be
+    // equal current
+    assertEquals(cheDeploymentAfterRollout, cheDeploymentBeforeRollout + 1);
+
+    // make sure that CHE ide is available after updating again
+    ide.open(workspace);
+    ide.waitOpenedWorkspaceIsReadyToUse();
+  }
+
