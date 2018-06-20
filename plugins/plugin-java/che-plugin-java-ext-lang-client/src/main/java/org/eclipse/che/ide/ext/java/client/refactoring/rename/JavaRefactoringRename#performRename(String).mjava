@@ -19,12 +19,21 @@
     extensionServiceClient
         .rename(settings)
         .then(
-            edits -> {
+            result -> {
               enableAutoSave();
               undoChanges();
-              applyWorkspaceEditAction.applyWorkspaceEdit(edits);
-              clientServerEventService.sendFileTrackingResumeEvent();
-              sendOpenEvent();
+              RefactoringStatus refactoringStatus = result.getRefactoringStatus();
+              if (!FATAL.equals(refactoringStatus.getRefactoringSeverity())) {
+                applyWorkspaceEditAction.applyWorkspaceEdit(result.getCheWorkspaceEdit());
+                clientServerEventService.sendFileTrackingResumeEvent();
+                sendOpenEvent();
+              } else {
+                notificationManager.notify(
+                    locale.failedToRename(),
+                    getErrorMessage(refactoringStatus.getRefactoringStatusEntries()),
+                    FAIL,
+                    FLOAT_MODE);
+              }
             })
         .catchError(
             error -> {
