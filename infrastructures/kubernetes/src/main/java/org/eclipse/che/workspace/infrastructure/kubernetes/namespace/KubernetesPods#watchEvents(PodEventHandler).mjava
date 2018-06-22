@@ -1,0 +1,79 @@
+  /**
+   * Registers a specified handler for handling events about changes in pods containers.
+   *
+   * @param handler pod container events handler
+   * @throws InfrastructureException if any error occurs while watcher starting
+   */
+  public void watchEvents(PodEventHandler handler) throws InfrastructureException {
+    if (containerWatch == null) {
+      final Watcher<Event> watcher =
+          new Watcher<Event>() {
+            @Override
+            public void eventReceived(Action action, Event event) {
+              ObjectReference involvedObject = event.getInvolvedObject();
+
+              if (POD_OBJECT_KIND.equals(involvedObject.getKind())) {
+
+                String podName = involvedObject.getName();
+
+                PodEvent podEvent =
+                    new PodEvent(
+                        podName,
+                        getContainerName(involvedObject.getFieldPath()),
+                        event.getReason(),
+                        event.getMessage(),
+                        event.getMetadata().getCreationTimestamp(),
+                        event.getLastTimestamp());
+
+                try {
+                  if (happenedAfterWatcherInitialization(podEvent)) {
+                    containerEventsHandlers.forEach(h -> h.handle(podEvent));
+                  }
+                } catch (ParseException e) {
+                  LOG.error("Failed to parse last timestamp of the event: {}", podEvent);
+                }
+              }
+            }
+
+            @Override
+            public void onClose(KubernetesClientException ignored) {}
+
+            /**
+             * Returns the container name if the event is related to container. When the event is
+             * related to container `fieldPath` field contain information in the following format:
+             * `spec.container{web}`, where `web` is container name
+             */
+            private String getContainerName(String fieldPath) {
+              String containerName = null;
+              if (fieldPath != null) {
+                Matcher containerFieldMatcher = CONTAINER_FIELD_PATH_PATTERN.matcher(fieldPath);
+                if (containerFieldMatcher.matches()) {
+                  containerName = containerFieldMatcher.group(CONTAINER_NAME_GROUP);
+                }
+              }
+              return containerName;
+            }
+
+            /**
+             * Returns true if 'lastTimestamp' of the event is *after* the time of the watcher
+             * initialization
+             */
+            private boolean happenedAfterWatcherInitialization(PodEvent event)
+                throws ParseException {
+              String eventLastTimestamp = event.getLastTimestamp();
+              Date eventLastTimestampDate =
+                  PodEvents.convertEventTimestampToDate(eventLastTimestamp);
+              return eventLastTimestampDate.after(watcherInitializationDate);
+            }
+          };
+      try {
+        watcherInitializationDate = new Date();
+        containerWatch =
+            clientFactory.create(workspaceId).events().inNamespace(namespace).watch(watcher);
+      } catch (KubernetesClientException ex) {
+        throw new KubernetesInfrastructureException(ex);
+      }
+    }
+    containerEventsHandlers.add(handler);
+  }
+
