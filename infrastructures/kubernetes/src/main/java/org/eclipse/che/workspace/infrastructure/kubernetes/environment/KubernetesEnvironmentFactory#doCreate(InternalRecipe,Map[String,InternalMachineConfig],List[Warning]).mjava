@@ -32,6 +32,7 @@
     Map<String, Service> services = new HashMap<>();
     boolean isAnyIngressPresent = false;
     boolean isAnyPVCPresent = false;
+    boolean isAnySecretPresent = false;
     for (HasMetadata object : list.getItems()) {
       if (object instanceof Pod) {
         Pod pod = (Pod) object;
@@ -43,6 +44,8 @@
         isAnyIngressPresent = true;
       } else if (object instanceof PersistentVolumeClaim) {
         isAnyPVCPresent = true;
+      } else if (object instanceof Secret) {
+        isAnySecretPresent = true;
       } else {
         throw new ValidationException(
             format("Found unknown object type '%s'", object.getMetadata()));
@@ -58,6 +61,10 @@
       warnings.add(new WarningImpl(PVC_IGNORED_WARNING_CODE, PVC_IGNORED_WARNING_MESSAGE));
     }
 
+    if (isAnySecretPresent) {
+      warnings.add(new WarningImpl(SECRET_IGNORED_WARNING_CODE, SECRET_IGNORED_WARNING_MESSAGE));
+    }
+
     addRamLimitAttribute(machines, pods.values());
 
     KubernetesEnvironment k8sEnv =
@@ -69,6 +76,7 @@
             .setServices(services)
             .setIngresses(new HashMap<>())
             .setPersistentVolumeClaims(new HashMap<>())
+            .setSecrets(new HashMap<>())
             .build();
 
     envValidator.validate(k8sEnv);
