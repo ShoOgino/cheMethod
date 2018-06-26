@@ -1,0 +1,66 @@
+  @Test
+  public void checkExistedCheUserOcpProjectCreationAndRemoval() throws Exception {
+    // go to login page of Eclipse Che
+    // (we can't use dashboard.open() here to login with OAuth)
+    seleniumWebDriver.navigate().to(testDashboardUrlProvider.get());
+
+    // click on button to login with OpenShift OAuth
+    cheLoginPage.loginWithOpenShiftOAuth();
+
+    // login to OCP from login page with default test user credentials
+    openShiftLoginPage.login(defaultTestUser.getName(), defaultTestUser.getPassword());
+
+    // authorize ocp-client to access OpenShift account
+    authorizeOpenShiftAccessPage.waitOnOpen();
+    authorizeOpenShiftAccessPage.allowPermissions();
+
+    // fill first broker profile page
+    firstBrokerProfilePage.submit(defaultTestUser);
+
+    // add OCP user to existed Eclipse Che user account
+    String expectedError =
+        format(USER_ALREADY_EXISTS_ERROR_MESSAGE_TEMPLATE, defaultTestUser.getEmail());
+
+    assertEquals(firstBrokerProfilePage.getErrorAlert(), expectedError);
+    firstBrokerProfilePage.addToExistingAccount();
+
+    // login into Eclipse Che again
+    String expectedInfo =
+        format(LOGIN_TO_CHE_WITH_OPENSHIFT_OAUTH_MESSAGE_TEMPLATE, defaultTestUser.getName());
+    assertEquals(cheLoginPage.getInfoAlert(), expectedInfo);
+    cheLoginPage.loginWithPredefinedUsername(defaultTestUser.getPassword());
+
+    // create and open workspace of java type
+    dashboard.selectWorkspacesItemOnDashboard();
+    workspaces.clickOnAddWorkspaceBtn();
+    newWorkspace.waitToolbar();
+    newWorkspace.clickOnAllStacksTab();
+    newWorkspace.selectStack(JAVA);
+    newWorkspace.typeWorkspaceName(WORKSPACE_NAME);
+    newWorkspace.clickOnCreateButtonAndOpenInIDE();
+
+    // switch to the Eclipse Che IDE and wait until workspace is ready to use
+    seleniumWebDriverHelper.switchToIdeFrameAndWaitAvailability();
+    toastLoader.waitToastLoaderAndClickStartButton();
+    ide.waitOpenedWorkspaceIsReadyToUse();
+
+    // go to OCP and check if there is a project with name equals to test workspace id
+    openShiftProjectCatalogPage.open();
+    openShiftLoginPage.login(defaultTestUser.getName(), defaultTestUser.getPassword());
+    Workspace testWorkspace =
+        defaultUserWorkspaceServiceClient.getByName(WORKSPACE_NAME, defaultTestUser.getName());
+    openShiftProjectCatalogPage.waitProject(testWorkspace.getId());
+
+    // remove test workspace from Eclipse Che Dashboard
+    seleniumWebDriver.navigate().to(testDashboardUrlProvider.get());
+    dashboard.selectWorkspacesItemOnDashboard();
+    workspaces.selectAllWorkspacesByBulk();
+    workspaces.clickOnDeleteWorkspacesBtn();
+    workspaces.clickOnDeleteButtonInDialogWindow();
+    workspaces.waitWorkspaceIsNotPresent(WORKSPACE_NAME);
+
+    // go to OCP and check if there is no project with name equals to test workspace id
+    openShiftProjectCatalogPage.open();
+    openShiftProjectCatalogPage.waitProjectAbsence(testWorkspace.getId());
+  }
+
