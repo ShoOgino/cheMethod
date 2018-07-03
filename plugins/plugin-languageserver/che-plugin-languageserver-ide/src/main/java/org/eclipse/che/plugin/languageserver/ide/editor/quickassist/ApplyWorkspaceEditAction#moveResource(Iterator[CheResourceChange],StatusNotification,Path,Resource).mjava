@@ -1,0 +1,32 @@
+  private Promise<Object> moveResource(
+      Iterator<CheResourceChange> resourceChangesIterator,
+      StatusNotification notification,
+      Path path,
+      Resource resource) {
+    return resource
+        .move(path)
+        .then(
+            (Function<Resource, Object>)
+                movedResource -> {
+                  eventBus.fireEvent(new RevealResourceEvent(movedResource.getLocation()));
+                  if (movedResource.isFolder()) {
+                    return appResourceChanges(resourceChangesIterator, notification);
+                  }
+                  final List<EditorPartPresenter> openedEditors = editorAgent.getOpenedEditors();
+
+                  for (EditorPartPresenter editor : openedEditors) {
+                    VirtualFile file = editor.getEditorInput().getFile();
+                    if (movedResource.getLocation().equals(file.getLocation())) {
+                      eventBus.fireEvent(FileEvent.createFileOpenedEvent(file));
+                      return appResourceChanges(resourceChangesIterator, notification);
+                    }
+                  }
+                  return appResourceChanges(resourceChangesIterator, notification);
+                })
+        .catchError(
+            error -> {
+              notification.setStatus(Status.FAIL);
+              notification.setContent(error.getMessage());
+            });
+  }
+

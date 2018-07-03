@@ -1,0 +1,65 @@
+  private Promise<?> appResourceChanges(
+      Iterator<CheResourceChange> resourceChangesIterator, StatusNotification notification) {
+    if (!resourceChangesIterator.hasNext()) {
+      return promises.resolve(null);
+    }
+    CheResourceChange change = resourceChangesIterator.next();
+    if (change == null) {
+      return appResourceChanges(resourceChangesIterator, notification);
+    }
+    String newUri = change.getNewUri();
+    String current = change.getCurrent();
+
+    if (isNullOrEmpty(current) && isNullOrEmpty(newUri)) {
+      return appResourceChanges(resourceChangesIterator, notification);
+    }
+
+    if (isNullOrEmpty(newUri)) {
+      Path oldPath = Path.valueOf(current).makeAbsolute();
+      return deleteResouce(oldPath)
+          .then(
+              (Function<Void, Promise<?>>)
+                  ignored -> appResourceChanges(resourceChangesIterator, notification));
+    }
+
+    Path path = Path.valueOf(newUri).makeAbsolute();
+    if (isNullOrEmpty(current)) {
+      return createResource(path, change.getResourceKind(), notification)
+          .then(
+              (Function<ItemReference, Promise<?>>)
+                  ignored -> appResourceChanges(resourceChangesIterator, notification));
+    }
+
+    Path oldPath = Path.valueOf(current).makeAbsolute();
+
+    Container workspaceRoot = appContext.getWorkspaceRoot();
+
+    return workspaceRoot
+        .getResource(oldPath)
+        .thenPromise(
+            resourceOptional -> {
+              if (!resourceOptional.isPresent()) {
+                return promises.resolve(null);
+              }
+              Resource resource = resourceOptional.get();
+
+              if (resource.isProject()) {
+                closeRelatedEditors(resource);
+              }
+
+              for (EditorPartPresenter editor : editorAgent.getOpenedEditors()) {
+                if (resource
+                    .getLocation()
+                    .isPrefixOf(editor.getEditorInput().getFile().getLocation())) {
+                  TextDocumentIdentifier documentId =
+                      dtoHelper.createTDI(editor.getEditorInput().getFile());
+                  DidCloseTextDocumentParams closeEvent =
+                      dtoFactory.createDto(DidCloseTextDocumentParams.class);
+                  closeEvent.setTextDocument(documentId);
+                  textDocumentService.didClose(closeEvent);
+                }
+              }
+              return moveResource(resourceChangesIterator, notification, path, resource);
+            });
+  }
+
