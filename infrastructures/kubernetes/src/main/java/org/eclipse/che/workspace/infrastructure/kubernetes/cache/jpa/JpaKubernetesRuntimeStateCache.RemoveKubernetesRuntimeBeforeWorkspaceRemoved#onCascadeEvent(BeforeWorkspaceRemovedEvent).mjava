@@ -1,0 +1,22 @@
+    @Override
+    public void onCascadeEvent(BeforeWorkspaceRemovedEvent event) throws Exception {
+      Optional<KubernetesRuntimeState> k8sRuntimeStateOpt =
+          k8sRuntimes.find(event.getWorkspace().getId());
+      if (k8sRuntimeStateOpt.isPresent()) {
+        KubernetesRuntimeState existingK8sRuntimeState = k8sRuntimeStateOpt.get();
+        RuntimeId runtimeId = existingK8sRuntimeState.getRuntimeId();
+
+        // It is not normal case when non STOPPED workspace is going to be removed.
+        // Need to log error to investigate why it may happen
+        // and clean up existing runtime not to lock removing of workspace.
+        LOG.error(
+            format(
+                "Workspace is being removed while Kubernetes runtime state '%s:%s:%s' exists. "
+                    + "This situation indicates a bug that needs to be reported. Runtime state "
+                    + "will be removed from DB, but Kubernetes resources (pods, pvcs, etc.) "
+                    + "won't be cleaned up.",
+                runtimeId.getWorkspaceId(), runtimeId.getEnvName(), runtimeId.getOwnerId()));
+        k8sRuntimes.remove(runtimeId);
+      }
+    }
+
