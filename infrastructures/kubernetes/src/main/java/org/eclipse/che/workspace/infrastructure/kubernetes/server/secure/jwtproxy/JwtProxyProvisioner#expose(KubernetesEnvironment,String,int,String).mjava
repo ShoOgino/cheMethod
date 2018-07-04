@@ -1,0 +1,41 @@
+  /**
+   * Modifies Kubernetes environment to expose the specified service port via JWTProxy.
+   *
+   * @param k8sEnv Kubernetes environment to modify
+   * @param backendServiceName service name that will be exposed
+   * @param backendServicePort service port that will be exposed
+   * @param protocol protocol that will be used for exposed port
+   * @return JWTProxy service port that expose the specified one
+   * @throws InfrastructureException if any exception occurs during port exposing
+   */
+  public ServicePort expose(
+      KubernetesEnvironment k8sEnv,
+      String backendServiceName,
+      int backendServicePort,
+      String protocol)
+      throws InfrastructureException {
+    ensureJwtProxyInjected(k8sEnv);
+
+    int listenPort = availablePort++;
+
+    proxyConfigBuilder.addVerifierProxy(
+        listenPort, "http://" + backendServiceName + ":" + backendServicePort);
+    k8sEnv
+        .getConfigMaps()
+        .get(getConfigMapName())
+        .getData()
+        .put(JWT_PROXY_CONFIG_FILE, proxyConfigBuilder.build());
+
+    ServicePort exposedPort =
+        new ServicePortBuilder()
+            .withName("server-" + listenPort)
+            .withPort(listenPort)
+            .withProtocol(protocol)
+            .withNewTargetPort(listenPort)
+            .build();
+
+    k8sEnv.getServices().get(getServiceName()).getSpec().getPorts().add(exposedPort);
+
+    return exposedPort;
+  }
+

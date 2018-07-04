@@ -1,0 +1,39 @@
+  private void ensureJwtProxyInjected(KubernetesEnvironment k8sEnv) throws InfrastructureException {
+    if (!k8sEnv.getMachines().containsKey(JWT_PROXY_MACHINE_NAME)) {
+      k8sEnv.getMachines().put(JWT_PROXY_MACHINE_NAME, createJwtProxyMachine());
+      k8sEnv.getPods().put(JWT_PROXY_POD_NAME, createJwtProxyPod(identity));
+
+      KeyPair keyPair = signatureKeyManager.getKeyPair();
+      if (keyPair == null) {
+        throw new InternalInfrastructureException(
+            "Key pair for machine authentication does not exist");
+      }
+      Map<String, String> initConfigMapData = new HashMap<>();
+      initConfigMapData.put(
+          JWT_PROXY_PUBLIC_KEY_FILE,
+          PUBLIC_KEY_HEADER
+              + java.util.Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded())
+              + PUBLIC_KEY_FOOTER);
+
+      initConfigMapData.put(JWT_PROXY_CONFIG_FILE, proxyConfigBuilder.build());
+
+      ConfigMap jwtProxyConfigMap =
+          new ConfigMapBuilder()
+              .withNewMetadata()
+              .withName(getConfigMapName())
+              .endMetadata()
+              .withData(initConfigMapData)
+              .build();
+      k8sEnv.getConfigMaps().put(jwtProxyConfigMap.getMetadata().getName(), jwtProxyConfigMap);
+
+      Service jwtProxyService =
+          new ServerServiceBuilder()
+              .withName(serviceName)
+              .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, JWT_PROXY_MACHINE_NAME)
+              .withMachineName(JWT_PROXY_MACHINE_NAME)
+              .withPorts(emptyList())
+              .build();
+      k8sEnv.getServices().put(jwtProxyService.getMetadata().getName(), jwtProxyService);
+    }
+  }
+
