@@ -1,0 +1,27 @@
+  private void validatePorts(List<ChePluginEndpoint> endpoints, List<CheContainer> containers)
+      throws InfrastructureException {
+    List<Integer> containerPorts =
+        containers
+            .stream()
+            .flatMap(cheContainer -> cheContainer.getPorts().stream())
+            .mapToInt(CheContainerPort::getExposedPort)
+            .boxed()
+            .collect(Collectors.toList());
+    HashSet<Integer> uniqueContainerPorts = new HashSet<>(containerPorts);
+    requireEqual(
+        uniqueContainerPorts.size(),
+        containerPorts.size(),
+        "Containers contain duplicated exposed ports.");
+    HashSet<Integer> uniqueEndpointPorts =
+        endpoints
+            .stream()
+            .mapToInt(ChePluginEndpoint::getTargetPort)
+            .boxed()
+            .collect(Collectors.toCollection(HashSet::new));
+    SetView<Integer> portsDifference = Sets.difference(uniqueContainerPorts, uniqueEndpointPorts);
+    requireEmpty(
+        portsDifference,
+        "Ports in containers and endpoints don't match. Difference: {}",
+        portsDifference.toString());
+  }
+
