@@ -1,0 +1,32 @@
+  @Override
+  public Workspace createWorkspace(
+      String workspaceName, int memory, MemoryMeasure memoryUnit, WorkspaceConfigDto workspace)
+      throws Exception {
+    EnvironmentDto environment = workspace.getEnvironments().get("replaced_name");
+    environment
+        .getMachines()
+        .values()
+        .stream()
+        .filter(WsAgentMachineFinderUtil::containsWsAgentServerOrInstaller)
+        .forEach(
+            m ->
+                m.getAttributes()
+                    .put(MEMORY_LIMIT_ATTRIBUTE, Long.toString(convertToByte(memory, memoryUnit))));
+    workspace.getEnvironments().remove("replaced_name");
+    workspace.getEnvironments().put(workspaceName, environment);
+    workspace.setName(workspaceName);
+    workspace.setDefaultEnv(workspaceName);
+
+    WorkspaceDto workspaceDto =
+        requestFactory
+            .fromUrl(getBaseUrl())
+            .usePostMethod()
+            .setBody(workspace)
+            .request()
+            .asDto(WorkspaceDto.class);
+
+    LOG.info("Workspace name='{}' and id='{}' created", workspaceName, workspaceDto.getId());
+
+    return workspaceDto;
+  }
+
