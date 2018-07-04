@@ -1,9 +1,9 @@
-  private void assertThatExternalServerIsExposed(
+  @SuppressWarnings("SameParameterValue")
+  private void assertThatExternalServersAreExposed(
       String machineName,
-      String serverNameRegex,
       String portProtocol,
       Integer port,
-      ServerConfigImpl expected) {
+      Map<String, ServerConfig> expectedServers) {
     // then
     assertTrue(
         container
@@ -16,7 +16,7 @@
     // ensure that service is created
 
     Service service = null;
-    for (Entry<String, Service> entry : openShiftEnvironment.getServices().entrySet()) {
+    for (Entry<String, Service> entry : kubernetesEnvironment.getServices().entrySet()) {
       if (SERVER_PREFIX_REGEX.matcher(entry.getKey()).matches()) {
         service = entry.getValue();
         break;
@@ -42,18 +42,12 @@
         Annotations.newDeserializer(service.getMetadata().getAnnotations());
     assertEquals(serviceAnnotations.machineName(), machineName);
 
-    // ensure that required route is created
-    Route route =
-        openShiftEnvironment.getRoutes().get(service.getMetadata().getName() + "-server-" + port);
-    assertEquals(route.getSpec().getTo().getName(), service.getMetadata().getName());
-    assertEquals(route.getSpec().getPort().getTargetPort().getStrVal(), servicePort.getName());
-
-    Annotations.Deserializer routeAnnotations =
-        Annotations.newDeserializer(route.getMetadata().getAnnotations());
-    Map<String, ServerConfigImpl> servers = routeAnnotations.servers();
-    ServerConfig serverConfig = servers.get(serverNameRegex);
-    assertEquals(serverConfig, expected);
-
-    assertEquals(routeAnnotations.machineName(), machineName);
+    verify(externalServerExposerStrategy)
+        .expose(
+            kubernetesEnvironment,
+            machineName,
+            service.getMetadata().getName(),
+            servicePort,
+            expectedServers);
   }
 
