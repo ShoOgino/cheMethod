@@ -1,0 +1,25 @@
+  @SuppressWarnings("SameParameterValue")
+  private void assertThatExternalServerIsExposed(
+      String machineName,
+      String serviceName,
+      String serverNameRegex,
+      Integer port,
+      ServicePort servicePort,
+      ServerConfigImpl expected) {
+
+    // ensure that required ingress is created
+    Ingress ingress = kubernetesEnvironment.getIngresses().get(serviceName + "-server-" + port);
+    IngressRule ingressRule = ingress.getSpec().getRules().get(0);
+    IngressBackend backend = ingressRule.getHttp().getPaths().get(0).getBackend();
+    assertEquals(backend.getServiceName(), serviceName);
+    assertEquals(backend.getServicePort().getStrVal(), servicePort.getName());
+
+    Annotations.Deserializer ingressAnnotations =
+        Annotations.newDeserializer(ingress.getMetadata().getAnnotations());
+    Map<String, ServerConfigImpl> servers = ingressAnnotations.servers();
+    ServerConfig serverConfig = servers.get(serverNameRegex);
+    assertEquals(serverConfig, expected);
+
+    assertEquals(ingressAnnotations.machineName(), machineName);
+  }
+

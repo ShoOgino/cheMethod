@@ -8,7 +8,7 @@
    * @param servers servers to expose
    * @see UniqueNamesProvisioner#provision(KubernetesEnvironment, RuntimeIdentity)
    */
-  public void expose(Map<String, ? extends ServerConfig> servers) {
+  public void expose(Map<String, ? extends ServerConfig> servers) throws InfrastructureException {
     Map<String, ServerConfig> internalServers = new HashMap<>();
     Map<String, ServerConfig> externalServers = new HashMap<>();
 
@@ -21,18 +21,26 @@
           }
         });
 
-    Map<String, ServicePort> portToServicePort = exposePort(servers.values());
+    Collection<ServicePort> servicePorts = exposePorts(servers.values());
     Service service =
-        new ServiceBuilder()
+        new ServerServiceBuilder()
             .withName(generate(SERVER_PREFIX, SERVER_UNIQUE_PART_SIZE) + '-' + machineName)
             .withMachineName(machineName)
             .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, pod.getMetadata().getName())
-            .withPorts(new ArrayList<>(portToServicePort.values()))
+            .withPorts(new ArrayList<>(servicePorts))
             .withServers(internalServers)
             .build();
 
     String serviceName = service.getMetadata().getName();
-    kubernetesEnvironment.getServices().put(serviceName, service);
-    exposeExternalServers(serviceName, portToServicePort, externalServers);
+    k8sEnv.getServices().put(serviceName, service);
+
+    for (ServicePort servicePort : servicePorts) {
+      // expose service port related external servers if exist
+      Map<String, ServerConfig> matchedExternalServers = match(externalServers, servicePort);
+      if (!matchedExternalServers.isEmpty()) {
+        externalServerExposer.expose(
+            k8sEnv, machineName, serviceName, servicePort, matchedExternalServers);
+      }
+    }
   }
 
