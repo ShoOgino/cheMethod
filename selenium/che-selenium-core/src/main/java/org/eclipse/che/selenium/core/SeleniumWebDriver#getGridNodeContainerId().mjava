@@ -1,0 +1,34 @@
+  public String getGridNodeContainerId() throws IOException {
+    if (!gridMode) {
+      throw new UnsupportedOperationException("We can't get grid node container id in local mode.");
+    }
+
+    if (gridNodeContainerId == null) {
+      String getGridNodeInfoUrl =
+          format(
+              "http://localhost:%s/grid/api/testsession?session=%s",
+              webDriverPort, driver.getSessionId());
+
+      Map<String, String> gridNodeInfo;
+      try {
+        gridNodeInfo = httpJsonRequestFactory.fromUrl(getGridNodeInfoUrl).request().asProperties();
+      } catch (ServerException
+          | UnauthorizedException
+          | ForbiddenException
+          | NotFoundException
+          | ConflictException
+          | BadRequestException e) {
+        throw new IOException(e);
+      }
+
+      if (!gridNodeInfo.containsKey("proxyId")) {
+        throw new IOException("Proxy ID of grid node wasn't found.");
+      }
+
+      URL proxyId = new URL(gridNodeInfo.get("proxyId"));
+      gridNodeContainerId = dockerUtil.findGridNodeContainerByIp(proxyId.getHost());
+    }
+
+    return gridNodeContainerId;
+  }
+
