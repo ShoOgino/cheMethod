@@ -3,6 +3,8 @@
       QuickAssistInvocationContext invocationContext, CodeAssistCallback callback) {
     LinearRange range = invocationContext.getTextEditor().getSelectedLinearRange();
     Document document = invocationContext.getTextEditor().getDocument();
+    TextEditor textEditor = invocationContext.getTextEditor();
+    boolean goToClosest = (range.getLength() == 0);
     QueryAnnotationsEvent.QueryCallback annotationCallback =
         new QueryAnnotationsEvent.QueryCallback() {
 
@@ -12,26 +14,25 @@
               Map<Annotation, org.eclipse.che.ide.api.editor.text.Position> annotations) {
             // iteration with range never returns anything; need to filter ourselves.
             // https://github.com/eclipse/che/issues/4338
-            List<Diagnostic> diagnostics =
-                annotations
-                    .entrySet()
-                    .stream()
-                    .filter(
-                        (e) -> e.getValue().overlapsWith(range.getStartOffset(), range.getLength()))
-                    .map(Entry::getKey)
-                    .map(a -> (DiagnosticAnnotation) a)
-                    .map(DiagnosticAnnotation::getDiagnostic)
-                    .collect(Collectors.toList());
+            List<Diagnostic> diagnostics = new LinkedList<>();
+            int offset =
+                collectQuickFixableAnnotations(
+                    range, document, annotations, goToClosest, diagnostics);
+            if (offset != range.getStartOffset()) {
+              TextEditor presenter = ((TextEditor) textEditor);
+              presenter.getCursorModel().setCursorPosition(offset);
+            }
 
             CodeActionContext context = new CodeActionContext(diagnostics);
 
-            TextPosition start = document.getPositionFromIndex(range.getStartOffset());
+            TextPosition start =
+                document.getPositionFromIndex(goToClosest ? offset : range.getStartOffset());
             TextPosition end =
-                document.getPositionFromIndex(range.getStartOffset() + range.getLength());
+                document.getPositionFromIndex(
+                    goToClosest ? offset : range.getStartOffset() + range.getLength());
             Position rangeStart = new Position(start.getLine(), start.getCharacter());
             Position rangeEnd = new Position(end.getLine(), end.getCharacter());
             Range rangeParam = new Range(rangeStart, rangeEnd);
-            rangeParam.setEnd(rangeEnd);
 
             TextDocumentIdentifier textDocumentIdentifier =
                 new TextDocumentIdentifier(document.getFile().getLocation().toString());
@@ -40,7 +41,7 @@
 
             Promise<List<Command>> codeAction =
                 textDocumentService.codeAction(new CodeActionParamsDto(params));
-            List<CompletionProposal> proposals = new ArrayList<>();
+            List<CompletionProposal> proposals = new LinkedList<>();
             codeAction.then(
                 (commands) -> {
                   for (Command command : commands) {
