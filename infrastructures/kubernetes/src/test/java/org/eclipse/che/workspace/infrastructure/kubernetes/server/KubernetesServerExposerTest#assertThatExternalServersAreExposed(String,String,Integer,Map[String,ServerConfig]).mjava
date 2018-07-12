@@ -5,38 +5,14 @@
       Integer port,
       Map<String, ServerConfig> expectedServers) {
     // then
-    assertTrue(
-        container
-            .getPorts()
-            .stream()
-            .anyMatch(
-                p ->
-                    p.getContainerPort().equals(port)
-                        && p.getProtocol().equals(portProtocol.toUpperCase())));
+    assertThatContainerPortIsExposed(portProtocol, port);
     // ensure that service is created
 
-    Service service = null;
-    for (Entry<String, Service> entry : kubernetesEnvironment.getServices().entrySet()) {
-      if (SERVER_PREFIX_REGEX.matcher(entry.getKey()).matches()) {
-        service = entry.getValue();
-        break;
-      }
-    }
+    Service service = findContainerRelatedService();
     assertNotNull(service);
 
     // ensure that required service port is exposed
-    Optional<ServicePort> servicePortOpt =
-        service
-            .getSpec()
-            .getPorts()
-            .stream()
-            .filter(p -> p.getTargetPort().getIntVal().equals(port))
-            .findAny();
-    assertTrue(servicePortOpt.isPresent());
-    ServicePort servicePort = servicePortOpt.get();
-    assertEquals(servicePort.getTargetPort().getIntVal(), port);
-    assertEquals(servicePort.getPort(), port);
-    assertEquals(servicePort.getName(), SERVER_PREFIX + "-" + port);
+    ServicePort servicePort = assertThatServicePortIsExposed(port, service);
 
     Annotations.Deserializer serviceAnnotations =
         Annotations.newDeserializer(service.getMetadata().getAnnotations());

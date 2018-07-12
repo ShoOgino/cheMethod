@@ -1,0 +1,30 @@
+  @Test
+  public void shouldExposeSecureServersWithNewJwtProxyServicePort() throws Exception {
+    // given
+    ServicePort machineServicePort = new ServicePort();
+    machineServicePort.setTargetPort(new IntOrString(8080));
+    machineServicePort.setProtocol("TCP");
+    Map<String, ServerConfig> servers =
+        ImmutableMap.of(
+            "server1",
+            new ServerConfigImpl("8080/tcp", "http", "/api", ImmutableMap.of("secure", "true")),
+            "server2",
+            new ServerConfigImpl("8080/tcp", "ws", "/connect", ImmutableMap.of("secure", "true")));
+
+    ServicePort jwtProxyServicePort = new ServicePort();
+    doReturn(jwtProxyServicePort)
+        .when(jwtProxyProvisioner)
+        .expose(any(), anyString(), anyInt(), anyString());
+
+    when(jwtProxyProvisioner.getServiceName()).thenReturn(JWT_PROXY_SERVICE_NAME);
+
+    // when
+    secureServerExposer.expose(
+        k8sEnv, MACHINE_NAME, MACHINE_SERVICE_NAME, machineServicePort, servers);
+
+    // then
+    verify(jwtProxyProvisioner).expose(k8sEnv, MACHINE_SERVICE_NAME, 8080, "TCP");
+    verify(externalServerExposer)
+        .expose(k8sEnv, MACHINE_NAME, JWT_PROXY_SERVICE_NAME, jwtProxyServicePort, servers);
+  }
+
