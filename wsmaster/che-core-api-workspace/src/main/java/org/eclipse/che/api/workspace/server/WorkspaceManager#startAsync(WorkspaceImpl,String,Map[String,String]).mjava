@@ -8,9 +8,16 @@
               workspace.getNamespace(), workspace.getConfig().getName(), envName));
     }
     workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
-    workspaceDao.update(workspace);
     final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
 
+    // validate environment in advance
+    try {
+      runtimes.validate(workspace.getConfig().getEnvironments().get(env));
+    } catch (InfrastructureException | ValidationException e) {
+      throw new ServerException(e);
+    }
+
+    workspaceDao.update(workspace);
     runtimes
         .startAsync(workspace, env, firstNonNull(options, Collections.emptyMap()))
         .thenAccept(aVoid -> handleStartupSuccess(workspace))
