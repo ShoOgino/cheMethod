@@ -10,11 +10,19 @@
    * @since 4.4.0
    */
   public Promise<Void> importProject(Path path, SourceStorageDto source) {
-    String url = getBaseUrl() + IMPORT + encodePath(path);
-
-    url += url.contains("?") ? "&" : "?";
-    url += "clientId=" + appContext.getApplicationId().orElse("");
-
-    return reqFactory.createPostRequest(url, source).header(CONTENT_TYPE, APPLICATION_JSON).send();
+    return Promises.create(
+        (resolve, reject) ->
+            requestTransmitter
+                .newRequest()
+                .endpointId(WS_AGENT_JSON_RPC_ENDPOINT_ID)
+                .methodName(PROJECT_IMPORT)
+                .paramsAsDto(
+                    dtoFactory
+                        .createDto(ImportRequestDto.class)
+                        .withWsPath(path.toString())
+                        .withSourceStorage(source))
+                .sendAndReceiveResultAsDto(ImportRequestDto.class)
+                .onSuccess(() -> resolve.apply(null))
+                .onFailure(error -> reject.apply(getPromiseError(error))));
   }
 
