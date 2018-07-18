@@ -1,4 +1,4 @@
-  private void connectToTerminal(@NotNull String wsUrl) {
+  private void connectToTerminal(@NotNull String wsUrl, TerminalOptionsJso options) {
     countRetry--;
 
     socket = WebSocket.create(wsUrl);
@@ -25,28 +25,30 @@
               DATA_EVENT_NAME,
               data -> {
                 Jso jso = Jso.create();
-                jso.addField("type", "data");
-                jso.addField("data", data);
+                jso.addField(TYPE, DATA_EVENT_NAME);
+                jso.addField(DATA_EVENT_NAME, data);
                 socket.send(jso.serialize());
               });
+          String command = options.getStringField("command");
+          if (!Strings.isNullOrEmpty(command)) {
+            sendCommand(command);
+            sendCommand("\r");
+          }
         });
 
     socket.setOnErrorHandler(
-        new ConnectionErrorHandler() {
-          @Override
-          public void onError() {
-            connected = false;
+        () -> {
+          connected = false;
 
-            if (countRetry == 0) {
-              view.showErrorMessage(locale.terminalErrorStart());
-              notificationManager.notify(
-                  locale.connectionFailedWithTerminal(),
-                  locale.terminalErrorConnection(),
-                  FAIL,
-                  FLOAT_MODE);
-            } else {
-              reconnect();
-            }
+          if (countRetry == 0) {
+            view.showErrorMessage(locale.terminalErrorStart());
+            notificationManager.notify(
+                locale.connectionFailedWithTerminal(),
+                locale.terminalErrorConnection(),
+                FAIL,
+                FLOAT_MODE);
+          } else {
+            reconnect();
           }
         });
   }
