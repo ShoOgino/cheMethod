@@ -1,17 +1,41 @@
   @Test
-  public void shouldUploadDirectoryWithDefaultOptions() throws URISyntaxException, IOException {
-    // open upload file window
-    menu.runCommand(
-        TestMenuCommandsConstants.Project.PROJECT, TestMenuCommandsConstants.Project.UPLOAD_FOLDER);
+  public void shouldUploadDirectoryWithDefaultOptions() throws IOException {
+    // given
+    final String uploadingFileName = "index.jsp";
+    final String pathToUploadingFileInsideTheProject =
+        format("%s/%s", PROJECT_NAME, uploadingFileName);
+    final Path localPathToFolderToUpload =
+        get(PROJECT_SOURCES.getPath()).resolve("src/main/webapp");
 
-    uploadDirectoryDialogPage.waitOnOpen();
-
-    // when
-    uploadDirectoryDialogPage.selectResourceToUpload(Paths.get(FOLDER_TO_UPLOAD_PATH.toURI()));
+    // open upload directory window
+    openFormAndUploadFolder(localPathToFolderToUpload);
     uploadDirectoryDialogPage.clickOnUploadButton();
 
     // then
+    projectExplorer.quickRevealToItemWithJavaScript(pathToUploadingFileInsideTheProject);
+    projectExplorer.waitVisibleItem(pathToUploadingFileInsideTheProject);
+
+    // Check that uploading directory doesn't overwrite existed one
+    // when change the directory - when change the file
+    projectExplorer.waitAndSelectItem(pathToUploadingFileInsideTheProject);
+    projectExplorer.openItemByPath(pathToUploadingFileInsideTheProject);
+    editor.typeTextIntoEditor(TEXT_TO_INSERT);
+
+    // when re-upload the directory
+    projectExplorer.waitAndSelectItem(PROJECT_NAME);
+    openFormAndUploadFolder(localPathToFolderToUpload);
+    uploadDirectoryDialogPage.clickOnUploadButton();
+
+    // then there is changes remained after uploading
+    uploadFileDialogPage.waitOnClose();
     projectExplorer.quickRevealToItemWithJavaScript(
-        format("%s/%s", PROJECT_NAME, "company/" + FILE_TO_UPLOAD_NAME));
+        get(pathToUploadingFileInsideTheProject).getParent().toString());
+    projectExplorer.openItemByPath(pathToUploadingFileInsideTheProject);
+
+    try {
+      editor.waitTextIntoEditor(TEXT_TO_INSERT);
+    } catch (WebDriverException ex) {
+      fail("Known issue https://github.com/eclipse/che/issues/10484", ex);
+    }
   }
 
