@@ -5,6 +5,7 @@
    * @param backendServiceName service name that will be exposed
    * @param backendServicePort service port that will be exposed
    * @param protocol protocol that will be used for exposed port
+   * @param secureServers secure servers to expose
    * @return JWTProxy service port that expose the specified one
    * @throws InfrastructureException if any exception occurs during port exposing
    */
@@ -12,14 +13,23 @@
       KubernetesEnvironment k8sEnv,
       String backendServiceName,
       int backendServicePort,
-      String protocol)
+      String protocol,
+      Map<String, ServerConfig> secureServers)
       throws InfrastructureException {
     ensureJwtProxyInjected(k8sEnv);
 
     int listenPort = availablePort++;
 
+    Set<String> excludes = new HashSet<>();
+    for (ServerConfig config : secureServers.values()) {
+      if (config.getAttributes().containsKey(UNSECURED_PATHS_ATTRIBUTE)) {
+        Collections.addAll(
+            excludes, config.getAttributes().get(UNSECURED_PATHS_ATTRIBUTE).split(","));
+      }
+    }
+
     proxyConfigBuilder.addVerifierProxy(
-        listenPort, "http://" + backendServiceName + ":" + backendServicePort);
+        listenPort, "http://" + backendServiceName + ":" + backendServicePort, excludes);
     k8sEnv
         .getConfigMaps()
         .get(getConfigMapName())
