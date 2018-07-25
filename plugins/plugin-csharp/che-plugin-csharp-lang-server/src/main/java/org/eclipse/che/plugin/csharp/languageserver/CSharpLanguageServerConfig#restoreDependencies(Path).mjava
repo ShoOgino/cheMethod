@@ -1,31 +1,20 @@
   private void restoreDependencies(Path workspaceRootFsPath) throws LanguageServerException {
-    File[] files = workspaceRootFsPath.toFile().listFiles();
-    if (files == null) {
-      LOG.error("Something went wrong while listing workspace projects");
-      return;
-    }
+    File workspaceRootFile = workspaceRootFsPath.toFile();
+    if (workspaceRootFile.isDirectory()) {
+      ProcessBuilder processBuilder = new ProcessBuilder("dotnet", "restore");
+      processBuilder.directory(workspaceRootFile);
 
-    for (File file : files) {
-      if (file.isDirectory()) {
-        if (!file.toPath().resolve("dotnet").toFile().exists()) {
-          LOG.warn("An executable 'dotnet' is not present at '{}'", file.toPath().toString());
-          return;
+      try {
+        Process process = processBuilder.start();
+        int resultCode = process.waitFor();
+        if (resultCode != 0) {
+          String err = IoUtil.readStream(process.getErrorStream());
+          String in = IoUtil.readStream(process.getInputStream());
+          throw new LanguageServerException(
+              "Can't restore dependencies. Error: " + err + ". Output: " + in);
         }
-
-        ProcessBuilder processBuilder = new ProcessBuilder("dotnet", "restore");
-        processBuilder.directory(file);
-        try {
-          Process process = processBuilder.start();
-          int resultCode = process.waitFor();
-          if (resultCode != 0) {
-            String err = IoUtil.readStream(process.getErrorStream());
-            String in = IoUtil.readStream(process.getInputStream());
-            throw new LanguageServerException(
-                "Can't restore dependencies. Error: " + err + ". Output: " + in);
-          }
-        } catch (IOException | InterruptedException e) {
-          throw new LanguageServerException("Can't start CSharp language server", e);
-        }
+      } catch (IOException | InterruptedException e) {
+        throw new LanguageServerException("Can't start CSharp language server", e);
       }
     }
   }
