@@ -1,10 +1,10 @@
-  public String build() {
+  public String build() throws InternalInfrastructureException {
     List<VerifierProxyConfig> proxyConfigs = new ArrayList<>();
     Config config =
         new Config()
             .withJWTProxy(
                 new JWTProxy()
-                    .withSignerProxy(new SignerProxy().withEnabled(false))
+                    .withSignerProxy(new SignerProxyConfig().withEnabled(false))
                     .withVerifiedProxyConfigs(proxyConfigs));
 
     for (VerifierProxy verifierProxy : verifierProxies) {
@@ -13,14 +13,14 @@
               .withAudience(workspaceId)
               .withUpstream(verifierProxy.upstream)
               .withMaxSkew("1m")
-              .withMaxTtl("8800h")
+              .withMaxTtl(ttl)
               .withKeyServer(
                   new RegistrableComponentConfig()
                       .withType("preshared")
                       .withOptions(
                           ImmutableMap.of(
                               "issuer",
-                              "wsmaster",
+                              issuer,
                               "key_id",
                               workspaceId,
                               "public_key_path",
@@ -29,11 +29,15 @@
                   Collections.singleton(
                       new RegistrableComponentConfig()
                           .withType("static")
-                          .withOptions(ImmutableMap.of("iss", "wsmaster"))))
+                          .withOptions(ImmutableMap.of("iss", issuer))))
               .withNonceStorage(new RegistrableComponentConfig().withType("void"));
 
       if (!verifierProxy.excludes.isEmpty()) {
         verifierConfig.setExcludes(verifierProxy.excludes);
+      }
+
+      if (authPageUrl != null) {
+        verifierConfig.setAuthUrl(authPageUrl.toString());
       }
 
       VerifierProxyConfig proxyConfig =
@@ -47,7 +51,8 @@
     try {
       return YAML_PARSER.writeValueAsString(config);
     } catch (JsonProcessingException e) {
-      throw new RuntimeException("Error during creation of JWTProxy config YAML: ", e);
+      throw new InternalInfrastructureException(
+          "Error during creation of JWTProxy config YAML: " + e.getMessage(), e);
     }
   }
 
