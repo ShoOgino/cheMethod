@@ -3,23 +3,13 @@
       throws IOException, ServletException {
     final HttpServletRequest httpRequest = (HttpServletRequest) request;
     final String token = tokenExtractor.getToken(httpRequest);
-
     if (isNullOrEmpty(token)) {
       chain.doFilter(request, response);
       return;
     }
-
     // check token signature and verify is this token machine or not
     try {
-      final Jws<Claims> jwt =
-          Jwts.parser().setSigningKey(keyManager.getKeyPair().getPublic()).parseClaimsJws(token);
-      final Claims claims = jwt.getBody();
-
-      if (!isMachineToken(jwt)) {
-        chain.doFilter(request, response);
-        return;
-      }
-
+      final Claims claims = jwtParser.parseClaimsJws(token).getBody();
       try {
         final String userId = claims.get(USER_ID_CLAIM, String.class);
         // check if user with such id exists
@@ -34,20 +24,17 @@
             response,
             SC_UNAUTHORIZED,
             "Authentication with machine token failed because user for this token no longer exist.");
-      } catch (ServerException ex) {
-        sendErr(
-            response,
-            SC_UNAUTHORIZED,
-            format("Authentication with machine token failed cause: %s", ex.getMessage()));
       } finally {
         EnvironmentContext.reset();
       }
-    } catch (UnsupportedJwtException
-        | MalformedJwtException
-        | SignatureException
-        | ExpiredJwtException ex) {
-      // signature check failed
+    } catch (NotMachineTokenJwtException ex) {
+      // not a machine token, bypass
       chain.doFilter(request, response);
+    } catch (ServerException | JwtException e) {
+      sendErr(
+          response,
+          SC_UNAUTHORIZED,
+          format("Authentication with machine token failed cause: %s", e.getMessage()));
     }
   }
 

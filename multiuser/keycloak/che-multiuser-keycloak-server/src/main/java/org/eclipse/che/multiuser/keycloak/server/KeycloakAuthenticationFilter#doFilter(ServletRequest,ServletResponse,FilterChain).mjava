@@ -4,49 +4,27 @@
     HttpServletRequest request = (HttpServletRequest) req;
 
     final String token = tokenExtractor.getToken(request);
-    if (shouldSkipAuthentication(request, token)) {
-      chain.doFilter(req, res);
-      return;
-    }
-
     if (token == null) {
-      send403(res, "Authorization token is missed");
+      send401(res, "Authorization token is missed");
       return;
     }
 
     Jws<Claims> jwt;
     try {
-      jwt =
-          Jwts.parser()
-              .setAllowedClockSkewSeconds(allowedClockSkewSec)
-              .setSigningKeyResolver(
-                  new SigningKeyResolverAdapter() {
-                    @Override
-                    public Key resolveSigningKey(
-                        @SuppressWarnings("rawtypes") JwsHeader header, Claims claims) {
-                      try {
-                        return getJwtPublicKey(header);
-                      } catch (JwkException e) {
-                        throw new JwtException(
-                            "Error during the retrieval of the public key during JWT token validation",
-                            e);
-                      }
-                    }
-                  })
-              .parseClaimsJws(token);
+      if (shouldSkipAuthentication(request, token)) {
+        chain.doFilter(req, res);
+        return;
+      }
+      jwt = jwtParser.parseClaimsJws(token);
       LOG.debug("JWT = ", jwt);
       // OK, we can trust this JWT
-    } catch (SignatureException
-        | IllegalArgumentException
-        | MalformedJwtException
-        | UnsupportedJwtException e) {
-      send403(res, "The specified token is not a valid. " + e.getMessage());
-      return;
     } catch (ExpiredJwtException e) {
-      send403(res, "The specified token is expired");
+      send401(res, "The specified token is expired");
+      return;
+    } catch (JwtException e) {
+      send401(res, "Token validation failed: " + e.getMessage());
       return;
     }
-
     request.setAttribute("token", jwt);
     chain.doFilter(req, res);
   }
