@@ -1,6 +1,5 @@
   @Override
   public void go(AcceptsOneWidget container) {
-    container.setWidget(view);
 
     final ProjectWizardMode wizardMode = ProjectWizardMode.parse(context.get(WIZARD_MODE_KEY));
     final String projectName = dataObject.getName();
@@ -15,11 +14,24 @@
       }
       updateDelegate.updateControls();
     }
-
-    updateView();
-    validateCoordinates();
-
-    view.setArchetypeSectionVisibility(CREATE == wizardMode);
-    view.enableArchetypes(view.isGenerateFromArchetypeSelected());
+    if (CREATE == wizardMode) {
+      projectService
+          .getItem(Path.valueOf(dataObject.getPath()).parent().append("pom.xml"))
+          .then(
+              result -> {
+                notificationManager.notify(
+                    localization.mavenPageArchetypeDisabledTitle(),
+                    localization.mavenPageArchetypeDisabledMessage(),
+                    WARNING,
+                    EMERGE_MODE);
+                updateView(container, false);
+              })
+          .catchError(
+              error -> {
+                updateView(container, true);
+              });
+    } else {
+      updateView(container, false);
+    }
   }
 
