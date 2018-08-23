@@ -9,21 +9,24 @@
     }
     // check token signature and verify is this token machine or not
     try {
-      final Claims claims = jwtParser.parseClaimsJws(token).getBody();
+      HttpSession session = ((HttpServletRequest) request).getSession(true);
+      Subject sessionSubject = (Subject) session.getAttribute("che_subject");
+      if (sessionSubject == null || !sessionSubject.getToken().equals(token)) {
+        try {
+          sessionSubject = extractSubject(token);
+          session.setAttribute("che_subject", sessionSubject);
+        } catch (NotFoundException e) {
+          sendErr(
+              response,
+              SC_UNAUTHORIZED,
+              "Authentication with machine token failed because user for this token no longer exist.");
+          return;
+        }
+      }
+
       try {
-        final String userId = claims.get(USER_ID_CLAIM, String.class);
-        // check if user with such id exists
-        final String userName = userManager.getById(userId).getName();
-        final Subject authorizedSubject =
-            new AuthorizedSubject(
-                new SubjectImpl(userName, userId, token, false), permissionChecker);
-        EnvironmentContext.getCurrent().setSubject(authorizedSubject);
-        chain.doFilter(addUserInRequest(httpRequest, authorizedSubject), response);
-      } catch (NotFoundException ex) {
-        sendErr(
-            response,
-            SC_UNAUTHORIZED,
-            "Authentication with machine token failed because user for this token no longer exist.");
+        EnvironmentContext.getCurrent().setSubject(sessionSubject);
+        chain.doFilter(addUserInRequest(httpRequest, sessionSubject), response);
       } finally {
         EnvironmentContext.reset();
       }
