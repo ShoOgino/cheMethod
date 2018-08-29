@@ -1,0 +1,46 @@
+  private void subscribeToEvents() {
+    eventService.subscribe(
+        event -> statusCache.put(event.getProjectName(), event.getStatus()),
+        StatusChangedEventDto.class);
+
+    eventService.subscribe(
+        event -> {
+          String filePath = event.getPath();
+          FileChangedEventDto.Status status = event.getStatus();
+          Status statusDto = newDto(Status.class);
+          if (status == FileChangedEventDto.Status.ADDED) {
+            statusDto.setAdded(singletonList(filePath));
+          } else if (status == FileChangedEventDto.Status.MODIFIED) {
+            statusDto.setModified(singletonList(filePath));
+          } else if (status == FileChangedEventDto.Status.UNTRACKED) {
+            statusDto.setModified(singletonList(filePath));
+          }
+
+          updateCachedStatus(
+              Paths.get(filePath).getParent().getFileName().toString(),
+              singletonList(filePath),
+              statusDto);
+
+          try {
+            projectFiles.put(
+                filePath, getLastModifiedTime(Paths.get(rootDirPathProvider.get() + filePath)));
+          } catch (IOException exception) {
+            LOG.error(exception.getMessage());
+          }
+        },
+        FileChangedEventDto.class);
+
+    eventService.subscribe(
+        event -> collectProjectFiles(pathTransformer.transform(event.getProjectPath()).toString()),
+        ProjectCreatedEvent.class);
+
+    eventService.subscribe(
+        event -> {
+          String projectFsPath = pathTransformer.transform(event.getProjectPath()).toString();
+          projectFiles.keySet().removeIf(file -> file.startsWith(projectFsPath));
+          statusCache.remove(
+              event.getProjectPath().substring(event.getProjectPath().lastIndexOf('/') + 1));
+        },
+        ProjectDeletedEvent.class);
+  }
+
