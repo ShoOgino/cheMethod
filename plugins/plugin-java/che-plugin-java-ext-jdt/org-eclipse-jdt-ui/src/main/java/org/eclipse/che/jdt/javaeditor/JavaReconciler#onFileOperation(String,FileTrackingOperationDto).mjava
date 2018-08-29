@@ -1,0 +1,46 @@
+  private void onFileOperation(String endpointId, FileTrackingOperationDto operation) {
+    try {
+      Type operationType = operation.getType();
+      switch (operationType) {
+        case START:
+          {
+            String filePath = operation.getPath();
+            ProjectConfig project =
+                projectManager
+                    .getClosest(filePath)
+                    .orElseThrow(
+                        () -> new NotFoundException("The file is not found by path " + filePath));
+
+            String projectPath = project.getPath();
+            if (isNullOrEmpty(projectPath)) {
+              throw new NotFoundException("The project is not recognized for " + filePath);
+            }
+
+            reconcileAndTransmit(filePath, projectPath, endpointId);
+            break;
+          }
+
+        case SUSPEND:
+          {
+            mode = DEACTIVATED;
+            break;
+          }
+
+        case RESUME:
+          {
+            mode = ACTIVATED;
+            break;
+          }
+
+        default:
+          {
+            break;
+          }
+      }
+    } catch (NotFoundException e) {
+      String errorMessage = "Can not handle file operation: " + e.getMessage();
+
+      LOG.debug(errorMessage);
+    }
+  }
+
