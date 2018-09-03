@@ -1,0 +1,35 @@
+  /**
+   * Deploys Che plugin broker in a workspace, receives result of its execution and return resolved
+   * workspace tooling or error of plugin broker execution.
+   *
+   * <p>This API is in <b>Beta</b> and is subject to changes or removal.
+   */
+  @Beta
+  public List<ChePlugin> getTooling(
+      RuntimeIdentity runtimeID,
+      Collection<PluginMeta> pluginsMeta,
+      KubernetesEnvironment environment)
+      throws InfrastructureException {
+
+    String workspaceId = runtimeID.getWorkspaceId();
+    CompletableFuture<List<ChePlugin>> toolingFuture = new CompletableFuture<>();
+    KubernetesNamespace kubernetesNamespace = factory.create(workspaceId);
+
+    String configMapName = generateUniqueConfigMapName();
+
+    ListenBrokerEvents listenBrokerEvents = getListenEventPhase(workspaceId, toolingFuture);
+    PrepareStorage prepareStorage = getPrepareStoragePhase(workspaceId, environment);
+    DeliverMetas deliverMetas =
+        getDeliverPhaseMetas(kubernetesNamespace, pluginsMeta, configMapName);
+    WaitBrokerResult waitBrokerResult = getWaitBrokerPhase(toolingFuture);
+    DeployBroker deployBroker =
+        getDeployBrokerPhase(kubernetesNamespace, workspaceId, configMapName);
+
+    listenBrokerEvents
+        .then(prepareStorage)
+        .then(deliverMetas)
+        .then(deployBroker)
+        .then(waitBrokerResult);
+    return listenBrokerEvents.execute();
+  }
+

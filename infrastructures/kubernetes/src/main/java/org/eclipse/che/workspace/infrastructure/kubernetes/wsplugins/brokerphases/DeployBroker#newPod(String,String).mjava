@@ -1,0 +1,39 @@
+  private Pod newPod(String podName, String workspaceId) {
+    final Container container =
+        new ContainerBuilder()
+            .withName(podName)
+            .withImage(pluginBrokerImage)
+            .withArgs(
+                "-metas",
+                confFolder + "/" + configFile,
+                "-push-endpoint",
+                cheWebsocketEndpoint,
+                "-workspace-id",
+                workspaceId)
+            .withImagePullPolicy("Always")
+            .withVolumeMounts(
+                newVolumeMount(pvcClaimProjects, "/plugins", workspaceId + "/plugins"),
+                new VolumeMount(confFolder + "/", brokerVolume, true, null))
+            .withNewResources()
+            .withLimits(singletonMap("memory", new Quantity("250Mi")))
+            .endResources()
+            .build();
+    return new PodBuilder()
+        .withNewMetadata()
+        .withName(podName)
+        .endMetadata()
+        .withNewSpec()
+        .withContainers(container)
+        .withVolumes(
+            newVolume(pvcClaimProjects, pvcClaimProjects),
+            new VolumeBuilder()
+                .withName(brokerVolume)
+                .withNewConfigMap()
+                .withName(configMapName)
+                .endConfigMap()
+                .build())
+        .withRestartPolicy("Never")
+        .endSpec()
+        .build();
+  }
+

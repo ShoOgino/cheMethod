@@ -1,0 +1,41 @@
+  /**
+   * Gets Che tooling plugins list from provided workspace config attributes, fetches corresponding
+   * meta objects from Che plugin registry and returns list of {@link PluginMeta} with meta
+   * information about plugins in a workspace.
+   *
+   * <p>This API is in <b>Beta</b> and is subject to changes or removal.
+   *
+   * @param attributes workspace config attributes
+   * @throws InfrastructureException when attributes contain invalid Che plugins entries or Che
+   *     plugin meta files retrieval from Che plugin registry fails or returns invalid data
+   */
+  @Beta
+  public Collection<PluginMeta> get(Map<String, String> attributes) throws InfrastructureException {
+    if (pluginRegistry == null || attributes == null || attributes.isEmpty()) {
+      return emptyList();
+    }
+    String pluginsAttribute = attributes.get(Constants.WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE);
+    String editorAttribute = attributes.get(Constants.WORKSPACE_TOOLING_EDITOR_ATTRIBUTE);
+
+    ArrayList<Pair<String, String>> metasIdsVersions = new ArrayList<>();
+    if (!isNullOrEmpty(pluginsAttribute)) {
+      String[] plugins = pluginsAttribute.split(" *, *");
+      if (plugins.length != 0) {
+        Collection<Pair<String, String>> pluginsIdsVersions = parseIdsVersions(plugins);
+        metasIdsVersions.addAll(pluginsIdsVersions);
+      }
+    }
+    if (!isNullOrEmpty(editorAttribute)) {
+      Collection<Pair<String, String>> editorIdVersionCollection =
+          parseIdsVersions(editorAttribute);
+      if (editorIdVersionCollection.size() > 1) {
+        throw new InfrastructureException(
+            "Multiple editors found in workspace config attributes. "
+                + "It is not supported. Please, use one editor only.");
+      }
+      metasIdsVersions.addAll(editorIdVersionCollection);
+    }
+
+    return getMetas(metasIdsVersions);
+  }
+
