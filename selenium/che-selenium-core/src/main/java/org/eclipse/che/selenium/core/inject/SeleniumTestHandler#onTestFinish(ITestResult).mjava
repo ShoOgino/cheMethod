@@ -1,22 +1,42 @@
   /** Is invoked when test or configuration is finished. */
   private void onTestFinish(ITestResult result) {
+    // do not treat SeleniumTestHandler error as test failure
+    if (testsWithFailure.containsKey(result.getTestClass().getRealClass().getName())
+        && testsWithFailure
+            .get(result.getTestClass().getRealClass().getName())
+            .getMethod()
+            .equals(result.getMethod())
+        && result.getMethod().getCurrentInvocationCount() == 1) {
+      // restore initial test exception
+      result.setThrowable(
+          testsWithFailure.get(result.getTestClass().getRealClass().getName()).getThrowable());
+      return;
+    }
+
     if (result.getStatus() == ITestResult.FAILURE || result.getStatus() == ITestResult.SKIP) {
       switch (result.getStatus()) {
         case ITestResult.FAILURE:
-          String errorDetails =
-              result.getThrowable() != null
-                  ? " Error: " + result.getThrowable().getLocalizedMessage()
-                  : "";
+          if (result.getMethod().isTest()) {
+            String errorDetails =
+                result.getThrowable() != null
+                    ? " Error: " + result.getThrowable().getLocalizedMessage()
+                    : "";
 
-          LOG.error("Test {} failed.{}", getCompletedTestLabel(result.getMethod()), errorDetails);
-          LOG.debug(result.getThrowable().getLocalizedMessage(), result.getThrowable());
+            LOG.error("Test {} failed.{}", getCompletedTestLabel(result.getMethod()), errorDetails);
+            LOG.debug(result.getThrowable().getLocalizedMessage(), result.getThrowable());
 
-          testsWithFailure.put(result.getTestClass().getRealClass().getName(), result.getMethod());
+            testsWithFailure.put(result.getTestClass().getRealClass().getName(), result);
+          }
+
+          captureWebDriver(result);
+          captureTestWorkspaceLogs(result);
 
           break;
 
         case ITestResult.SKIP:
-          LOG.warn("Test {} skipped.", getCompletedTestLabel(result.getMethod()));
+          if (result.getMethod().isTest()) {
+            LOG.warn("Test {} skipped.", getCompletedTestLabel(result.getMethod()));
+          }
 
           // don't capture test data if test is skipped because of previous test with higher
           // priority failed
@@ -28,11 +48,6 @@
 
         default:
       }
-
-      captureScreenshot(result);
-      captureHtmlSource(result);
-      captureTestWorkspaceLogs(result);
-      storeWebDriverLogs(result);
     }
   }
 
