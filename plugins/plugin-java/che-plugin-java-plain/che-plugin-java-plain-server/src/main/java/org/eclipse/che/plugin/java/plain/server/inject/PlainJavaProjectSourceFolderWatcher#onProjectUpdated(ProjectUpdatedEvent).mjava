@@ -1,0 +1,25 @@
+  private void onProjectUpdated(ProjectUpdatedEvent event) {
+    ExecuteCommandParams params =
+        new ExecuteCommandParams(
+            GET_PROJECT_SOURCE_LOCATIONS_COMMAND, singletonList(prefixURI(event.getProjectPath())));
+
+    ExtendedLanguageServer languageServer = lsRegistry.byId(JavaModule.LS_ID);
+    if (languageServer == null) {
+      return;
+    }
+
+    languageServer
+        .getServer()
+        .getWorkspaceService()
+        .executeCommand(params)
+        .thenAccept(
+            result -> {
+              if (result == null) {
+                return;
+              }
+              Type type = new TypeToken<ArrayList<String>>() {}.getType();
+              List<String> paths = gson.fromJson(gson.toJson(result), type);
+              paths.stream().forEach(f -> matcher.accept(Paths.get(removeUriScheme(prefixURI(f)))));
+            });
+  }
+
