@@ -1,0 +1,32 @@
+  /**
+   * Waits during {@code timeout} until {@code condition} has a "true" state.
+   *
+   * @param condition expression which should be performed
+   * @param timeout waiting time
+   * @param delayBetweenAttemptsInMilliseconds delay between tries of {@code condition} execution in
+   *     milliseconds
+   */
+  @SuppressWarnings("FutureReturnValueIgnored")
+  public static void waitSuccessCondition(
+      BooleanSupplier condition,
+      long timeout,
+      long delayBetweenAttemptsInMilliseconds,
+      TimeUnit timeoutTimeUnit)
+      throws InterruptedException, TimeoutException {
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    executor.submit(
+        () -> {
+          while (!condition.getAsBoolean()) {
+            sleepQuietly(delayBetweenAttemptsInMilliseconds, TimeUnit.MILLISECONDS);
+          }
+        });
+
+    executor.shutdown();
+    if (!executor.awaitTermination(timeout, timeoutTimeUnit)) {
+      throw new TimeoutException(
+          String.format(
+              "Expected condition failed: waiting for %s %s with %s MILLISECONDS interval",
+              timeout, timeoutTimeUnit, delayBetweenAttemptsInMilliseconds));
+    }
+  }
+
