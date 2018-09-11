@@ -1,17 +1,28 @@
   @Override
   public List<ChePlugin> execute() throws InfrastructureException {
-    final String podName = "che-plugin-broker-" + workspaceId;
-    final Pod pod = newPod(podName, workspaceId);
-    KubernetesDeployments deployments = kubernetesNamespace.deployments();
+    KubernetesDeployments deployments = namespace.deployments();
     try {
-      deployments.create(pod);
+      // Creates config map that can inject Che tooling plugins meta files into a Che plugin
+      // broker in a workspace.
+      for (ConfigMap configMap : brokerEnvironment.getConfigMaps().values()) {
+        namespace.configMaps().create(configMap);
+      }
+      for (Pod toCreate : brokerEnvironment.getPods().values()) {
+        deployments.deploy(toCreate);
+      }
 
       return nextPhase.execute();
     } finally {
       try {
-        deployments.delete(podName);
+        deployments.delete();
       } catch (InfrastructureException e) {
         LOG.error("Broker deployment removal failed. Error: " + e.getLocalizedMessage(), e);
+      }
+      try {
+        namespace.configMaps().delete();
+      } catch (InfrastructureException ex) {
+        LOG.error(
+            "Broker deployment config map removal failed. Error: " + ex.getLocalizedMessage(), ex);
       }
     }
   }

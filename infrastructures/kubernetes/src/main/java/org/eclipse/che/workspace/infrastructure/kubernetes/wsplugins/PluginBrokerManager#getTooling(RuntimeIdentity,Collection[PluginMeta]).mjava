@@ -5,31 +5,22 @@
    * <p>This API is in <b>Beta</b> and is subject to changes or removal.
    */
   @Beta
-  public List<ChePlugin> getTooling(
-      RuntimeIdentity runtimeID,
-      Collection<PluginMeta> pluginsMeta,
-      KubernetesEnvironment environment)
+  public List<ChePlugin> getTooling(RuntimeIdentity runtimeID, Collection<PluginMeta> pluginsMeta)
       throws InfrastructureException {
 
     String workspaceId = runtimeID.getWorkspaceId();
-
     CompletableFuture<List<ChePlugin>> toolingFuture = new CompletableFuture<>();
     KubernetesNamespace kubernetesNamespace = factory.create(workspaceId);
+    E brokerEnvironment = brokerEnvironmentConfig.create(pluginsMeta, runtimeID);
 
-    String configMapName = generateUniqueConfigMapName();
+    environmentProvisioner.provision(brokerEnvironment, runtimeID);
 
     ListenBrokerEvents listenBrokerEvents = getListenEventPhase(workspaceId, toolingFuture);
-    PrepareStorage prepareStorage = getPrepareStoragePhase(workspaceId, environment);
-    DeliverMetas deliverMetas =
-        getDeliverPhaseMetas(kubernetesNamespace, pluginsMeta, configMapName);
+    PrepareStorage prepareStorage = getPrepareStoragePhase(workspaceId, brokerEnvironment);
     WaitBrokerResult waitBrokerResult = getWaitBrokerPhase(toolingFuture);
-    DeployBroker deployBroker = getDeployBrokerPhase(kubernetesNamespace, runtimeID, configMapName);
+    DeployBroker deployBroker = getDeployBrokerPhase(kubernetesNamespace, brokerEnvironment);
 
-    listenBrokerEvents
-        .then(prepareStorage)
-        .then(deliverMetas)
-        .then(deployBroker)
-        .then(waitBrokerResult);
+    listenBrokerEvents.then(prepareStorage).then(deployBroker).then(waitBrokerResult);
     return listenBrokerEvents.execute();
   }
 

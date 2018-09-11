@@ -1,20 +1,22 @@
-  private Pod newPod(String podName, String workspaceId) {
+  private Pod newPod(
+      String podName,
+      String workspaceId,
+      String configMapName,
+      List<Pair<String, String>> envVars) {
     final Container container =
         new ContainerBuilder()
-            .withName(podName)
+            .withName(CONTAINER_NAME)
             .withImage(pluginBrokerImage)
             .withArgs(
                 "-metas",
-                confFolder + "/" + configFile,
+                CONF_FOLDER + "/" + CONFIG_FILE,
                 "-push-endpoint",
                 cheWebsocketEndpoint,
                 "-workspace-id",
                 workspaceId)
             .withImagePullPolicy("Always")
-            .withVolumeMounts(
-                newVolumeMount(pvcClaimProjects, "/plugins", workspaceId + "/plugins"),
-                new VolumeMount(confFolder + "/", brokerVolume, true, null))
-            .withEnv(envVars)
+            .withVolumeMounts(new VolumeMount(CONF_FOLDER + "/", BROKER_VOLUME, true, null))
+            .withEnv(envVars.stream().map(this::asEnvVar).collect(toList()))
             .withNewResources()
             .withLimits(singletonMap("memory", new Quantity("250Mi")))
             .endResources()
@@ -26,9 +28,8 @@
         .withNewSpec()
         .withContainers(container)
         .withVolumes(
-            newVolume(pvcClaimProjects, pvcClaimProjects),
             new VolumeBuilder()
-                .withName(brokerVolume)
+                .withName(BROKER_VOLUME)
                 .withNewConfigMap()
                 .withName(configMapName)
                 .endConfigMap()
