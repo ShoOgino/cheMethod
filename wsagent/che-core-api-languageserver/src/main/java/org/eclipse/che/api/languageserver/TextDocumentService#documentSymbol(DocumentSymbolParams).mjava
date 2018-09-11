@@ -7,7 +7,7 @@
 
     OperationUtil.doInParallel(
         servers,
-        new LSOperation<ExtendedLanguageServer, List<? extends SymbolInformation>>() {
+        new LSOperation<ExtendedLanguageServer, List<Either<SymbolInformation, DocumentSymbol>>>() {
 
           @Override
           public boolean canDo(ExtendedLanguageServer element) {
@@ -15,20 +15,40 @@
           }
 
           @Override
-          public CompletableFuture<List<? extends SymbolInformation>> start(
+          public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> start(
               ExtendedLanguageServer element) {
             return element.getTextDocumentService().documentSymbol(documentSymbolParams);
           }
 
           @Override
           public boolean handleResult(
-              ExtendedLanguageServer element, List<? extends SymbolInformation> locations) {
+              ExtendedLanguageServer element,
+              List<Either<SymbolInformation, DocumentSymbol>> locations) {
             locations.forEach(
                 o -> {
-                  o.getLocation().setUri(removePrefixUri(o.getLocation().getUri()));
-                  result.add(new SymbolInformationDto(o));
+                  // minimal fix for https://github.com/eclipse/che/issues/11139 when updating lsp4j
+                  if (o.isLeft()) {
+                    SymbolInformation si = o.getLeft();
+                    si.getLocation().setUri(removePrefixUri(si.getLocation().getUri()));
+                    result.add(new SymbolInformationDto(si));
+                  } else {
+                    result.addAll(convertDocumentSymbol(o.getRight()));
+                  }
                 });
             return true;
+          }
+
+          private Collection<? extends SymbolInformationDto> convertDocumentSymbol(
+              DocumentSymbol symbol) {
+            ArrayList<SymbolInformationDto> result = new ArrayList<>();
+            result.add(
+                new SymbolInformationDto(
+                    new SymbolInformation(
+                        symbol.getName(), symbol.getKind(), new Location(uri, symbol.getRange()))));
+            for (DocumentSymbol child : symbol.getChildren()) {
+              result.addAll(convertDocumentSymbol(child));
+            }
+            return result;
           }
         },
         10000);
