@@ -1,0 +1,32 @@
+  @Override
+  public void onEvent(BrokerEvent event) {
+    if (!workspaceId.equals(event.getWorkspaceId())) {
+      return;
+    }
+
+    switch (event.getStatus()) {
+      case DONE:
+        List<ChePlugin> tooling = event.getTooling();
+        if (tooling != null) {
+          finishFuture.complete(tooling);
+        } else {
+          finishFuture.completeExceptionally(
+              new InternalInfrastructureException(
+                  format(
+                      "Plugin brokering process for workspace `%s` is finished but plugins list is missing",
+                      workspaceId)));
+        }
+        break;
+      case FAILED:
+        finishFuture.completeExceptionally(
+            new InfrastructureException(
+                format(
+                    "Plugin broking process for workspace %s failed with error: %s",
+                    workspaceId, event.getError())));
+        break;
+      case STARTED:
+      default:
+        // do nothing
+    }
+  }
+
