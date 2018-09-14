@@ -1,9 +1,9 @@
   /**
-   * Adds k8s and Che specific configuration of a sidecar into the environment.
-   * For example:
+   * Adds k8s and Che specific configuration of a sidecar into the environment. For example:
    * <li>k8s container configuration {@link Container}
    * <li>k8s service configuration {@link Service}
    * <li>Che machine config {@link InternalMachineConfig}
+   *
    * @throws InfrastructureException when any error occurs
    */
   private void addSidecar(
@@ -13,12 +13,17 @@
       KubernetesEnvironment kubernetesEnvironment)
       throws InfrastructureException {
 
-    List<ChePluginEndpoint> containerEndpoints =
-        getContainerEndpoints(container.getPorts(), chePlugin.getEndpoints());
-    io.fabric8.kubernetes.api.model.Container k8sContainer =
-        addContainer(pod, container.getImage(), container.getEnv(), containerEndpoints);
+    K8sContainerResolver k8sContainerResolver =
+        new K8sContainerResolverBuilder()
+            .setContainer(container)
+            .setPluginEndpoints(chePlugin.getEndpoints())
+            .build();
+    List<ChePluginEndpoint> containerEndpoints = k8sContainerResolver.getEndpoints();
+
+    Container k8sContainer = k8sContainerResolver.create();
 
     String machineName = Names.machineName(pod, k8sContainer);
+    pod.getSpec().getContainers().add(k8sContainer);
 
     InternalMachineConfig machineConfig =
         addMachineConfig(
