@@ -11,16 +11,19 @@
     String workspaceId = runtimeID.getWorkspaceId();
     CompletableFuture<List<ChePlugin>> toolingFuture = new CompletableFuture<>();
     KubernetesNamespace kubernetesNamespace = factory.create(workspaceId);
-    E brokerEnvironment = brokerEnvironmentConfig.create(pluginsMeta, runtimeID);
 
+    E brokerEnvironment = brokerEnvironmentFactory.create(pluginsMeta, runtimeID);
     environmentProvisioner.provision(brokerEnvironment, runtimeID);
 
     ListenBrokerEvents listenBrokerEvents = getListenEventPhase(workspaceId, toolingFuture);
     PrepareStorage prepareStorage = getPrepareStoragePhase(workspaceId, brokerEnvironment);
     WaitBrokerResult waitBrokerResult = getWaitBrokerPhase(toolingFuture);
-    DeployBroker deployBroker = getDeployBrokerPhase(kubernetesNamespace, brokerEnvironment);
+    DeployBroker deployBroker =
+        getDeployBrokerPhase(
+            runtimeID.getWorkspaceId(), kubernetesNamespace, brokerEnvironment, toolingFuture);
 
     listenBrokerEvents.then(prepareStorage).then(deployBroker).then(waitBrokerResult);
+
     return listenBrokerEvents.execute();
   }
 
