@@ -1,0 +1,38 @@
+  protected CompletableFuture<Void> doDeletePod(String podName) throws InfrastructureException {
+    Watch toCloseOnException = null;
+    try {
+      PodResource<Pod, DoneablePod> podResource =
+          clientFactory.create(workspaceId).pods().inNamespace(namespace).withName(podName);
+      if (podResource.get() == null) {
+        throw new InfrastructureException(
+            String.format("No pod found to delete for name %s", podName));
+      }
+
+      final CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
+      final Watch watch = podResource.watch(new DeleteWatcher<Pod>(deleteFuture));
+      toCloseOnException = watch;
+
+      Boolean deleteSucceeded = podResource.delete();
+      if (deleteSucceeded == null || !deleteSucceeded) {
+        deleteFuture.complete(null);
+      }
+      return deleteFuture.whenComplete(
+          (v, e) -> {
+            if (e != null) {
+              LOG.warn("Failed to remove pod {} cause {}", podName, e.getMessage());
+            }
+            watch.close();
+          });
+    } catch (KubernetesClientException e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw new KubernetesInfrastructureException(e);
+    } catch (Exception e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw e;
+    }
+  }
+

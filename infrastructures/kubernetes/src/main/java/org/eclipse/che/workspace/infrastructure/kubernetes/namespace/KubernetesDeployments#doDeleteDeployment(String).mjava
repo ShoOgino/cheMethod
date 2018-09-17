@@ -1,0 +1,65 @@
+  protected CompletableFuture<Void> doDeleteDeployment(String deploymentName)
+      throws InfrastructureException {
+    // Try to get pod name if it exists (it may not, if e.g. workspace config refers to
+    // nonexistent service account).
+    String podName;
+    try {
+      podName = getPodName(deploymentName);
+    } catch (InfrastructureException e) {
+      // Not an error, just means the Deployment has failed to create a pod.
+      podName = null;
+    }
+
+    Watch toCloseOnException = null;
+    try {
+      ScalableResource<Deployment, DoneableDeployment> deploymentResource =
+          clientFactory
+              .create(workspaceId)
+              .extensions()
+              .deployments()
+              .inNamespace(namespace)
+              .withName(deploymentName);
+      if (deploymentResource.get() == null) {
+        throw new InfrastructureException(
+            String.format("No deployment foud to delete for name %s", deploymentName));
+      }
+
+      final CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
+      final Watch watch;
+      // If we have a Pod, we have to watch to make sure it is deleted, otherwise, we watch the
+      // Deployment we are deleting.
+      if (!Strings.isNullOrEmpty(podName)) {
+        PodResource<Pod, DoneablePod> podResource =
+            clientFactory.create(workspaceId).pods().inNamespace(namespace).withName(podName);
+        watch = podResource.watch(new DeleteWatcher<Pod>(deleteFuture));
+        toCloseOnException = watch;
+      } else {
+        watch = deploymentResource.watch(new DeleteWatcher<Deployment>(deleteFuture));
+        toCloseOnException = watch;
+      }
+
+      Boolean deleteSucceeded = deploymentResource.delete();
+
+      if (deleteSucceeded == null || !deleteSucceeded) {
+        deleteFuture.complete(null);
+      }
+      return deleteFuture.whenComplete(
+          (v, e) -> {
+            if (e != null) {
+              LOG.warn("Failed to remove deployment {} cause {}", deploymentName, e.getMessage());
+            }
+            watch.close();
+          });
+    } catch (KubernetesClientException e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw new KubernetesInfrastructureException(e);
+    } catch (Exception e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw e;
+    }
+  }
+
