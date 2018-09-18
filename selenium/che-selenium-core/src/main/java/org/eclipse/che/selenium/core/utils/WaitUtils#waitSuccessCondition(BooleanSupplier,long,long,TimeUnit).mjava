@@ -6,20 +6,23 @@
    * @param delayBetweenAttemptsInMilliseconds delay between tries of {@code condition} execution in
    *     milliseconds
    */
-  @SuppressWarnings("FutureReturnValueIgnored")
   public static void waitSuccessCondition(
       BooleanSupplier condition,
       long timeout,
       long delayBetweenAttemptsInMilliseconds,
       TimeUnit timeoutTimeUnit)
-      throws InterruptedException, TimeoutException {
+      throws InterruptedException, TimeoutException, ExecutionException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
-    executor.submit(
-        () -> {
-          while (!condition.getAsBoolean()) {
-            sleepQuietly(delayBetweenAttemptsInMilliseconds, TimeUnit.MILLISECONDS);
-          }
-        });
+    Future<?> conditionVerification =
+        executor.submit(
+            (Callable<Void>)
+                () -> {
+                  while (!condition.getAsBoolean()) {
+                    sleepQuietly(delayBetweenAttemptsInMilliseconds, TimeUnit.MILLISECONDS);
+                  }
+
+                  return null;
+                });
 
     executor.shutdown();
     if (!executor.awaitTermination(timeout, timeoutTimeUnit)) {
@@ -28,5 +31,7 @@
               "Expected condition failed: waiting for %s %s with %s MILLISECONDS interval",
               timeout, timeoutTimeUnit, delayBetweenAttemptsInMilliseconds));
     }
+
+    conditionVerification.get();
   }
 
