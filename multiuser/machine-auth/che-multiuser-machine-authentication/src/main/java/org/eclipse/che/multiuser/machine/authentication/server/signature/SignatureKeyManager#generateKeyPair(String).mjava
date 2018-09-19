@@ -1,19 +1,23 @@
   @VisibleForTesting
-  SignatureKeyPairImpl generateKeyPair(String workspaceId) throws ServerException {
-    final KeyPairGenerator kpg;
+  SignatureKeyPair generateKeyPair(String workspaceId)
+      throws NoSuchAlgorithmException, ServerException, ConflictException {
     try {
-      kpg = KeyPairGenerator.getInstance(algorithm);
-    } catch (NoSuchAlgorithmException ex) {
-      throw new ServerException(ex.getMessage(), ex);
+      KeyPairGenerator kpg = KeyPairGenerator.getInstance(algorithm);
+      kpg.initialize(keySize);
+      final KeyPair pair = kpg.generateKeyPair();
+      final SignatureKeyPairImpl kp =
+          new SignatureKeyPairImpl(workspaceId, pair.getPublic(), pair.getPrivate());
+      LOG.debug(
+          "Generated signature key pair with ws id {} and algorithm {}.",
+          kp.getWorkspaceId(),
+          algorithm);
+      return signatureKeyDao.create(kp);
+    } catch (NoSuchAlgorithmException | ConflictException | ServerException ex) {
+      LOG.error(
+          "Unable to generate signature keypair for ws {}. Cause: {}",
+          workspaceId,
+          ex.getMessage());
+      throw ex;
     }
-    kpg.initialize(keySize);
-    final KeyPair pair = kpg.generateKeyPair();
-    final SignatureKeyPairImpl kp =
-        new SignatureKeyPairImpl(workspaceId, pair.getPublic(), pair.getPrivate());
-    LOG.debug(
-        "Generated signature key pair with ws id {} and algorithm {}.",
-        kp.getWorkspaceId(),
-        algorithm);
-    return kp;
   }
 
