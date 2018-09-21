@@ -9,10 +9,18 @@
    * @throws InfrastructureException if any exception occurs during project preparing
    */
   public OpenShiftProject create(String workspaceId) throws InfrastructureException {
-    final String projectName = isNullOrEmpty(this.projectName) ? workspaceId : this.projectName;
-
-    OpenShiftProject osProject = new OpenShiftProject(clientFactory, projectName, workspaceId);
+    final String projectName = isPredefined() ? this.projectName : workspaceId;
+    OpenShiftProject osProject = doCreateProject(workspaceId, projectName);
     osProject.prepare();
+
+    if (!isPredefined() && !isNullOrEmpty(serviceAccountName)) {
+      // prepare service account for workspace only if account name is configured
+      // and project is not predefined
+      // since predefined project should be prepared during Che deployment
+      WorkspaceServiceAccount workspaceServiceAccount =
+          doCreateServiceAccount(workspaceId, projectName);
+      workspaceServiceAccount.prepare();
+    }
 
     return osProject;
   }
