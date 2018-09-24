@@ -1,0 +1,41 @@
+  @VisibleForTesting
+  static List<ExtendedTextEdit> convertToExtendedEdits(
+      List<TextEdit> edits, CharStreamIterator charStreamIter) {
+    // don't manipulate the original collection
+    edits = new ArrayList<>(edits);
+    edits.sort(CharStreamEditor.COMPARATOR);
+
+    List<ExtendedTextEdit> result = new ArrayList<>(edits.size());
+    Iterator<TextEdit> editIterator = edits.iterator();
+    if (editIterator.hasNext()) {
+      TextEdit edit = editIterator.next();
+      while (edit != null) {
+        int currentLine = edit.getRange().getStart().getLine();
+        Position lineStart = new Position(edit.getRange().getStart().getLine(), 0);
+        Position nextLineStart = new Position(edit.getRange().getStart().getLine() + 1, 0);
+        charStreamIter.advanceTo(lineStart, CharStreamIterator.NULL_CONSUMER);
+        StringBuilder lineText = new StringBuilder();
+        charStreamIter.advanceTo(
+            nextLineStart,
+            new BiConsumer<Integer, Integer>() {
+
+              @Override
+              public void accept(Integer t, Integer u) {
+                if (t != '\r' && t != '\n') {
+                  lineText.append((char) t.intValue());
+                }
+              }
+            });
+        while (edit != null && edit.getRange().getStart().getLine() == currentLine) {
+          result.add(doConvert(edit, lineText));
+          if (editIterator.hasNext()) {
+            edit = editIterator.next();
+          } else {
+            edit = null;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
