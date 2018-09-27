@@ -1,0 +1,28 @@
+  private void addMachineVolumes(
+      String workspaceId, Pod pod, Container container, Map<String, Volume> volumes)
+      throws InfrastructureException {
+    if (volumes.isEmpty()) {
+      return;
+    }
+
+    for (Entry<String, Volume> volumeEntry : volumes.entrySet()) {
+      final String volumePath = volumeEntry.getValue().getPath();
+      final String volumeName =
+          LOGS_VOLUME_NAME.equals(volumeEntry.getKey())
+              ? volumeEntry.getKey() + '-' + pod.getMetadata().getName()
+              : volumeEntry.getKey();
+
+      final String uniqueVolumeName = Names.generateName(EPHEMERAL_VOLUME_NAME_PREFIX);
+
+      // binds volume to pod and container
+      container
+          .getVolumeMounts()
+          .add(
+              newVolumeMount(
+                  uniqueVolumeName,
+                  volumePath,
+                  getSubPath(workspaceId, volumeName, Names.machineName(pod, container))));
+      addEmptyDirVolumeIfAbsent(pod.getSpec(), uniqueVolumeName);
+    }
+  }
+
