@@ -7,12 +7,24 @@
       for (ConfigMap configMap : brokerEnvironment.getConfigMaps().values()) {
         namespace.configMaps().create(configMap);
       }
-      for (Pod toCreate : brokerEnvironment.getPods().values()) {
-        deployments.deploy(toCreate);
+
+      Pod pluginBrokerPod = getPluginBrokerPod(brokerEnvironment.getPods());
+
+      if (factory.isConfigured()) {
+        UnrecoverablePodEventListener unrecoverableEventListener =
+            factory.create(
+                ImmutableSet.of(pluginBrokerPod.getMetadata().getName()),
+                this::handleUnrecoverableEvent);
+        namespace.deployments().watchEvents(unrecoverableEventListener);
       }
+
+      Pod deployedPod = deployments.deploy(pluginBrokerPod);
+
+      deployments.waitRunningAsync(deployedPod.getMetadata().getName());
 
       return nextPhase.execute();
     } finally {
+      namespace.deployments().stopWatch();
       try {
         deployments.delete();
       } catch (InfrastructureException e) {
