@@ -1,0 +1,29 @@
+  /**
+   * Check that workspace has either plugins defined in attributes (Che 7) or installers defined in
+   * machines (Che 6).
+   *
+   * @throws ValidationException
+   */
+  private void validatePlugins(WorkspaceConfig config) throws ValidationException {
+    List<String> installers =
+        config
+            .getEnvironments()
+            .values()
+            .stream()
+            .map(
+                env ->
+                    env.getMachines()
+                        .values()
+                        .stream()
+                        .map(MachineConfig::getInstallers)
+                        .flatMap(List::stream))
+            .flatMap(Function.identity())
+            .collect(Collectors.toList());
+    Map<String, String> attributes = config.getAttributes();
+    boolean hasPlugins = !Strings.isNullOrEmpty(attributes.getOrDefault(PLUGINS_ATTRIBUTE, null));
+    boolean hasEditor = !Strings.isNullOrEmpty(attributes.getOrDefault(EDITOR_ATTRIBUTE, null));
+    if ((hasPlugins || hasEditor) && installers.size() > 0) {
+      throw new ValidationException("Workspace config cannot have both plugins and installers.");
+    }
+  }
+
