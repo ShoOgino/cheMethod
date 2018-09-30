@@ -1,0 +1,21 @@
+  @Test
+  public void testSetMemoryLimitAndRequest() throws Exception {
+    when(podStatus.getPhase()).thenReturn(POD_PHASE_SUCCEEDED);
+
+    pvcSubPathHelper.createDirs(WORKSPACE_ID, WORKSPACE_ID + PROJECTS_PATH);
+
+    verify(osDeployments).create(podCaptor.capture());
+    ResourceRequirements actual =
+        podCaptor.getValue().getSpec().getContainers().get(0).getResources();
+    ResourceRequirements expected =
+        new ResourceRequirementsBuilder()
+            .addToLimits(of("memory", new Quantity(jobMemoryLimit)))
+            .addToRequests(of("memory", new Quantity(jobMemoryLimit)))
+            .build();
+    assertEquals(actual, expected);
+    verify(osDeployments).wait(anyString(), anyInt(), any());
+    verify(podStatus).getPhase();
+    verify(osDeployments).delete(anyString());
+    verify(securityContextProvisioner).provision(any());
+  }
+
