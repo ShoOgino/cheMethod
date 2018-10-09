@@ -1,0 +1,37 @@
+  /** wait JDT LS message about project is updated */
+  public void waitJDTLSProjectResolveFinishedMessage(String... projects) {
+    List<String> projectStrings = new ArrayList<>(projects.length);
+    for (String project : projects) {
+      projectStrings.add("file:///projects/" + project);
+    }
+    try {
+
+      updateProjDriverWait.until(
+          (Predicate<WebDriver>)
+              webdriver -> {
+                ArrayList<String> projectsCopy = new ArrayList<>(projectStrings);
+                String text = consoleContainer.getText();
+                Matcher matcher = LANGUAGE_SERVER_UPDATE_MESSAGE.matcher(text);
+                while (matcher.find()) {
+                  String addedProjects = matcher.group(1);
+                  Iterator<String> iter = projectsCopy.iterator();
+                  while (iter.hasNext()) {
+                    if (addedProjects.contains(iter.next())) {
+                      iter.remove();
+                    }
+                  }
+                  if (projectsCopy.isEmpty()) {
+                    return true;
+                  }
+                }
+                return false;
+              });
+    } catch (TimeoutException e) {
+      LOG.warn("timed out waiting for resolving projects {}", (Object[]) projects);
+    }
+    // once a new project has been added to the workspace, stuff in the project
+    // explorer will be updated, for example showing packages instead of folders
+    // wait for this to be finished
+    loader.waitOnClosed();
+  }
+
