@@ -27,14 +27,36 @@
           username = claims.getIssuer() + ":" + claims.getSubject();
         }
         String email = claims.get("email", String.class);
+        String id = claims.getSubject();
+
         if (isNullOrEmpty(email)) {
-          sendError(
-              response,
-              400,
-              "Unable to authenticate user because email address is not set in keycloak profile");
-          return;
+          boolean userNotFound = false;
+          try {
+            userManager.getById(id);
+          } catch (NotFoundException e) {
+            userNotFound = true;
+          }
+          if (userNotFound) {
+            try {
+              EnvironmentContext.getCurrent()
+                  .setSubject(new SubjectImpl(username, id, token, true));
+              Map<String, String> profileAttributes =
+                  keycloakProfileRetriever.retrieveKeycloakAttributes();
+              email = profileAttributes.get("email");
+              if (email == null) {
+                sendError(
+                    response,
+                    400,
+                    "Unable to authenticate user because email address is not set in keycloak profile");
+                return;
+              }
+            } finally {
+              EnvironmentContext.reset();
+            }
+          }
         }
-        User user = userManager.getOrCreateUser(claims.getSubject(), email, username);
+
+        User user = userManager.getOrCreateUser(id, email, username);
         subject =
             new AuthorizedSubject(
                 new SubjectImpl(user.getName(), user.getId(), token, false), permissionChecker);
