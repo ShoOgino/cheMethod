@@ -1,0 +1,24 @@
+    @Override
+    public void onEvent(RuntimeAbnormalStoppingEvent event) {
+      RuntimeIdentity identity = event.getIdentity();
+      String workspaceId = identity.getWorkspaceId();
+      WorkspaceStatus previousStatus;
+      try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+        previousStatus = statuses.replace(workspaceId, STOPPING);
+      }
+
+      if (previousStatus == null) {
+        LOG.error(
+            "Runtime '{}:{}:{}' became abnormally stopping but it was not considered as active before",
+            workspaceId,
+            identity.getEnvName(),
+            identity.getOwnerId());
+      }
+
+      publishWorkspaceStatusEvent(
+          workspaceId,
+          STOPPING,
+          previousStatus,
+          "Workspace is going to be STOPPED. Reason: " + event.getReason());
+    }
+

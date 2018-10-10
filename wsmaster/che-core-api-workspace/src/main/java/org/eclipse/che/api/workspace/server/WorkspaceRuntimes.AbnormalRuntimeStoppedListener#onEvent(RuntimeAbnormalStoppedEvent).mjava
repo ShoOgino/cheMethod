@@ -1,0 +1,28 @@
+    @Override
+    public void onEvent(RuntimeAbnormalStoppedEvent event) {
+      RuntimeIdentity identity = event.getIdentity();
+      String workspaceId = identity.getWorkspaceId();
+      // Cancels workspace servers probes if any
+      probeScheduler.cancel(workspaceId);
+      final WorkspaceStatus previousStatus;
+      try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+        runtimes.remove(workspaceId);
+        previousStatus = statuses.remove(workspaceId);
+      }
+
+      if (previousStatus == null) {
+        LOG.error(
+            "Runtime '{}:{}:{}' is abnormally stopped but it was not considered as active before",
+            workspaceId,
+            identity.getEnvName(),
+            identity.getOwnerId());
+      }
+
+      publishWorkspaceStatusEvent(
+          workspaceId,
+          STOPPED,
+          previousStatus,
+          "Workspace is stopped. Reason: " + event.getReason());
+      setAbnormalStopAttributes(workspaceId, event.getReason());
+    }
+
