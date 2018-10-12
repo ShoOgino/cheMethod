@@ -31,15 +31,15 @@
       InternalEnvironment internalEnv =
           createInternalEnvironment(environment, workspace.getConfig().getAttributes());
       runtime = infra.prepare(identity, internalEnv).getRuntime();
-
+      WorkspaceStatus runtimeStatus = runtime.getStatus();
       try (Unlocker ignored = lockService.writeLock(workspace.getId())) {
-        statuses.putIfAbsent(identity.getWorkspaceId(), runtime.getStatus());
-        runtimes.put(identity.getWorkspaceId(), runtime);
+        statuses.replace(identity.getWorkspaceId(), runtimeStatus);
+        runtimes.putIfAbsent(identity.getWorkspaceId(), runtime);
       }
       LOG.info(
-          "Successfully recovered workspace runtime '{}'",
+          "Successfully recovered workspace runtime '{}'. Its status is '{}'",
           identity.getWorkspaceId(),
-          identity.getEnvName());
+          runtimeStatus);
       return runtime;
     } catch (InfrastructureException | ValidationException | NotFoundException x) {
       throw new ServerException(

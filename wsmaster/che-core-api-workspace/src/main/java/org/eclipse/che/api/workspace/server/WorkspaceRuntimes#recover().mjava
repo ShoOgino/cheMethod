@@ -18,15 +18,20 @@
       return;
     }
 
+    LOG.info("Infrastructure is tracking {} active runtimes", identities.size());
+
+    if (identities.isEmpty()) {
+      return;
+    }
+
     for (RuntimeIdentity identity : identities) {
-      try {
-        recoverOne(infrastructure, identity);
-      } catch (ServerException | ConflictException e) {
-        LOG.error(
-            "An error occurred while attempting to recover runtimes using infrastructure '{}'. Reason: '{}'",
-            infrastructure.getName(),
-            e.getMessage());
+      String workspaceId = identity.getWorkspaceId();
+
+      try (Unlocker ignored = lockService.writeLock(workspaceId)) {
+        statuses.putIfAbsent(workspaceId, STARTING);
       }
     }
+
+    sharedPool.execute(new RecoverRuntimesTask(identities));
   }
 
