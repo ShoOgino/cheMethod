@@ -1,0 +1,28 @@
+  /**
+   * Schedules a task to check whether the specified runtime changed its status from {@link
+   * WorkspaceStatus#STARTING} after the specified timeout and if it didn't change then runtime
+   * start will be interrupted.
+   *
+   * <p>MUST be invoked after recovering of {@link WorkspaceStatus#STARTING} runtime to track it and
+   * avoid hanging.
+   *
+   * <p>{@link #stopTracking(RuntimeIdentity)} MUST be invoked if start is normally interrupted or
+   * became RUNNING before timeout.
+   *
+   * @param runtime runtime to track
+   * @param timeoutMin timeout before which runtime should change its state
+   */
+  public synchronized void trackStarting(KubernetesInternalRuntime runtime, long timeoutMin) {
+    String workspaceId = runtime.getContext().getIdentity().getWorkspaceId();
+    WaitStatusChangedTask waitStartingChangedTask =
+        new WaitStatusChangedTask(
+            runtime, WorkspaceStatus.STARTING, this::handleHangingStartingRuntime);
+
+    LOG.debug(
+        "Registered a task to check runtime '{}' to become RUNNING OR STOPPED after {} minutes",
+        workspaceId,
+        timeoutMin);
+    workspaceId2Task.put(workspaceId, waitStartingChangedTask);
+    getTimer().schedule(waitStartingChangedTask, TimeUnit.MINUTES.toMillis(timeoutMin));
+  }
+

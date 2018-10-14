@@ -1,0 +1,24 @@
+  private void handleHangingStoppingRuntime(KubernetesInternalRuntime runtime) {
+    RuntimeIdentity runtimeId = runtime.getContext().getIdentity();
+    try {
+      eventPublisher.sendAbnormalStoppingEvent(
+          runtimeId, "Workspace is not stopped in time. Trying to stop it forcibly");
+      runtime.internalStop(emptyMap());
+      runtime.markStopped();
+      eventPublisher.sendAbnormalStoppedEvent(runtimeId, "Workspace stop reached timeout");
+      LOG.info(
+          "Runtime '{}:{}:{}' is not stopped in time. Stopped it forcibly",
+          runtimeId.getWorkspaceId(),
+          runtimeId.getEnvName(),
+          runtimeId.getOwnerId());
+    } catch (InfrastructureException e) {
+      LOG.error(
+          "Error occurred during forcibly stopping of hanging runtime '{}:{}:{}'. Error: {}",
+          runtimeId.getWorkspaceId(),
+          runtimeId.getEnvName(),
+          runtimeId.getOwnerId(),
+          e.getMessage(),
+          e);
+    }
+  }
+
