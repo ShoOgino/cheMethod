@@ -1,0 +1,20 @@
+  private void acceptEvent(LanguageServerInitializedEvent event) {
+    String id = event.getId();
+    LanguageServer languageServer = event.getLanguageServer();
+    Set<PathMatcher> pathMatchers = pathMatcherRegistry.getOrDefault(id, ImmutableSet.of());
+
+    for (PathMatcher pathMatcher : pathMatchers) {
+      eventConsumers
+          .computeIfAbsent(id, __ -> new ConcurrentHashMap<>())
+          .put(
+              pathMatcher,
+              path -> {
+                FileEvent fileEvent = new FileEvent(path.toString(), fileChangeType);
+                List<FileEvent> changes = ImmutableList.of(fileEvent);
+                DidChangeWatchedFilesParams params = new DidChangeWatchedFilesParams(changes);
+                WorkspaceService service = languageServer.getWorkspaceService();
+                service.didChangeWatchedFiles(params);
+              });
+    }
+  }
+
