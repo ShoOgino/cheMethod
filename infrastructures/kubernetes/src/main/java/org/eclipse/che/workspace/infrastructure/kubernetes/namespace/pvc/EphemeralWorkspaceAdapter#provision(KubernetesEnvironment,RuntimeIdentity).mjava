@@ -2,10 +2,42 @@
       throws InfrastructureException {
     for (Pod pod : k8sEnv.getPods().values()) {
       PodSpec podSpec = pod.getSpec();
+
+      // To ensure same volumes get mounted correctly in different containers, we need to track
+      // which volumes have been "created"
+      Map<String, String> volumeKeyToNameCache = new HashMap<>();
+
       for (Container container : podSpec.getContainers()) {
         String machineName = Names.machineName(pod, container);
         Map<String, Volume> volumes = k8sEnv.getMachines().get(machineName).getVolumes();
-        addMachineVolumes(identity.getWorkspaceId(), pod, container, volumes);
+        if (volumes.isEmpty()) {
+          continue;
+        }
+
+        for (Entry<String, Volume> volumeEntry : volumes.entrySet()) {
+          final String volumePath = volumeEntry.getValue().getPath();
+          final String volumeKey =
+              LOGS_VOLUME_NAME.equals(volumeEntry.getKey())
+                  ? volumeEntry.getKey() + '-' + pod.getMetadata().getName()
+                  : volumeEntry.getKey();
+
+          final String uniqueVolumeName;
+          if (volumeKeyToNameCache.containsKey(volumeKey)) {
+            uniqueVolumeName = volumeKeyToNameCache.get(volumeKey);
+          } else {
+            uniqueVolumeName = Names.generateName(EPHEMERAL_VOLUME_NAME_PREFIX);
+            volumeKeyToNameCache.put(volumeKey, uniqueVolumeName);
+          }
+          // binds volume to pod and container
+          container
+              .getVolumeMounts()
+              .add(
+                  newVolumeMount(
+                      uniqueVolumeName,
+                      volumePath,
+                      getSubPath(identity.getWorkspaceId(), volumeKey, machineName)));
+          addEmptyDirVolumeIfAbsent(pod.getSpec(), uniqueVolumeName);
+        }
       }
     }
   }
