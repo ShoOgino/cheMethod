@@ -12,6 +12,45 @@
     operations.put(operationId, new Operation(create, modify, delete));
 
     LOG.debug("Registered matcher operation set with id '{}'", operationId);
+
+    try {
+      Files.walkFileTree(
+          Paths.get(pathProvider.get()),
+          new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+              for (PathMatcher matcher : directoryExcludes) {
+                if (matcher.matches(dir)) {
+                  return SKIP_SUBTREE;
+                }
+              }
+
+              if (matcher.matches(dir)) {
+                accept(dir);
+              }
+
+              return CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+              for (PathMatcher matcher : fileExcludes) {
+                if (matcher.matches(file)) {
+                  return CONTINUE;
+                }
+              }
+
+              if (matcher.matches(file)) {
+                accept(file);
+              }
+
+              return CONTINUE;
+            }
+          });
+    } catch (IOException e) {
+      LOG.error("Can't watch because of: {}", e.getLocalizedMessage(), e);
+    }
+
     return operationId;
   }
 
