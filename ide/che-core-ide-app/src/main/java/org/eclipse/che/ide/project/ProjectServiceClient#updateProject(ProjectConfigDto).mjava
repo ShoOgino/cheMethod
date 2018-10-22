@@ -2,20 +2,25 @@
    * Updates the project with the new {@code configuration} or creates the new one from existed
    * folder on server side.
    *
-   * @param configuration configuration which which be applied to the existed project
+   * @param configuration configuration which be applied to the existed project
    * @return {@link Promise} with the applied {@link ProjectConfigDto}
    * @see ProjectConfigDto
    * @since 4.4.0
    */
   public Promise<ProjectConfigDto> updateProject(ProjectConfigDto configuration) {
-    Path prjPath = new Path(configuration.getPath());
-    final String url = getBaseUrl() + encodePath(prjPath.addLeadingSeparator());
-
-    return reqFactory
-        .createRequest(PUT, url, configuration, false)
-        .header(CONTENT_TYPE, APPLICATION_JSON)
-        .header(ACCEPT, APPLICATION_JSON)
-        .loader(loaderFactory.newLoader("Updating project..."))
-        .send(unmarshaller.newUnmarshaller(ProjectConfigDto.class));
+    return Promises.create(
+        (resolve, reject) ->
+            requestTransmitter
+                .newRequest()
+                .endpointId(WS_AGENT_JSON_RPC_ENDPOINT_ID)
+                .methodName(PROJECT_UPDATE)
+                .paramsAsDto(
+                    dtoFactory
+                        .createDto(UpdateRequestDto.class)
+                        .withWsPath(configuration.getPath())
+                        .withConfig(configuration))
+                .sendAndReceiveResultAsDto(ProjectConfigDto.class)
+                .onSuccess(resolve::apply)
+                .onFailure(error -> reject.apply(getPromiseError(error))));
   }
 
