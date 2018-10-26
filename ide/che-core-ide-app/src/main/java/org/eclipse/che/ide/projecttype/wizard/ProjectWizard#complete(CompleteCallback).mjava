@@ -23,12 +23,32 @@
 
                 final Container container = optContainer.get();
                 if (container.getResourceType() == PROJECT) {
+                  StatusNotification notification =
+                      notificationManager.notify(
+                          localizedConstant.projectWizardUpdateProject(dataObject.getName()),
+                          null,
+                          PROGRESS,
+                          FLOAT_MODE);
+
                   ((Project) container)
                       .update()
                       .withBody(dataObject)
                       .send()
-                      .then(onComplete(callback))
-                      .catchError(onFailure(callback));
+                      .then(
+                          project -> {
+                            notification.setStatus(SUCCESS);
+                            callback.onCompleted();
+                          })
+                      .catchError(
+                          error -> {
+                            String errorMessage = error.getMessage();
+                            if (!isNullOrEmpty(errorMessage)) {
+                              notification.setContent(errorMessage);
+                            }
+
+                            notification.setStatus(FAIL);
+                            callback.onFailure(error.getCause());
+                          });
                 } else if (container.getResourceType() == FOLDER) {
                   ((Folder) container)
                       .toProject()
