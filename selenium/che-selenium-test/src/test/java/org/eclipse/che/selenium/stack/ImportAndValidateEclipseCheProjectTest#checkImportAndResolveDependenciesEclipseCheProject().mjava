@@ -1,7 +1,7 @@
   @Test
   public void checkImportAndResolveDependenciesEclipseCheProject() {
-    final int timeoutToOpenInfoPanelInSec = 1200;
-    final int timeoutToClosingInfoPanelInSec = 5400;
+    final int timeoutToOpenInfoPanelInSec = 500;
+    final int timeoutToClosingInfoPanelInSec = 1200;
 
     // import the eclipse-che project
     projectExplorer.waitProjectExplorer();
@@ -13,34 +13,50 @@
     projectWizard.selectTypeProject(MAVEN);
     projectWizard.clickSaveButton();
     loader.waitOnClosed();
-
-    // TODO it is the workaround, delete it after resolving the issue
-    // TODO https://github.com/eclipse/che/issues/10515
-    closeErrorDialog();
-
-    try {
-      projectWizard.waitCreateProjectWizardFormIsClosed();
-    } catch (TimeoutException ex) {
-      // TODO it is the workaround, delete it after resolving the issue
-      // TODO https://github.com/eclipse/che/issues/11145
-      LOG.warn(
-          "'Project Configuration' panel didn't close in time. "
-              + "It is known random failure https://github.com/eclipse/che/issues/11145",
-          ex);
-      projectWizard.closeWithIcon();
-    }
-
+    projectWizard.waitCreateProjectWizardFormIsClosed();
     loader.waitOnClosed();
+
+    // waits on project resolving message
+    consoles.waitJDTLSProjectResolveFinishedMessage(PROJECT_NAME);
+
+    // waits while the 'Import Maven project(s)' info bar is closed
+    mavenPluginStatusBar.waitClosingInfoPanel(timeoutToClosingInfoPanelInSec);
 
     // expand the project
     projectExplorer.waitItem(PROJECT_NAME);
     projectExplorer.openItemByPath(PROJECT_NAME);
     loader.waitOnClosed();
 
+    // waits the text in the progress info bar
+    loader.waitOnClosed();
+    mavenPluginStatusBar.waitExpectedTextInInfoPanel(
+        "Building workspace", timeoutToOpenInfoPanelInSec);
+
+    // should close the progress monitor form by Esc
+    mavenPluginStatusBar.clickOnInfoPanel();
+    mavenPluginStatusBar.waitProgressMonitorFormToOpen();
+    mavenPluginStatusBar.closeProgressMonitorFormByKeys(ESCAPE.toString());
+
+    // then open it again
+    mavenPluginStatusBar.clickOnInfoPanel();
+    mavenPluginStatusBar.waitProgressMonitorFormToOpen();
+
+    // wait while progress info is closed
+    mavenPluginStatusBar.waitClosingInfoPanel(timeoutToClosingInfoPanelInSec);
+    mavenPluginStatusBar.waitProgressMonitorFormToClose();
+
     // then open files
     // open a java file
     quickRevealToItemWithJavaScriptAndOpenFile(PATH_TO_JAVA_FILE);
     editor.waitActive();
+
+    // checks packages in project Explorer
+    try {
+      projectExplorer.waitVisibilityByName(PACKAGE_NAME);
+    } catch (TimeoutException ex) {
+      // remove try-catch block after issue has been resolved
+      fail("Known permanent failure https://github.com/eclipse/che/issues/11537");
+    }
 
     // open a xml file
     quickRevealToItemWithJavaScriptAndOpenFile(PATH_TO_POM_FILE);
@@ -49,24 +65,6 @@
     // open a ts file
     quickRevealToItemWithJavaScriptAndOpenFile(PATH_TO_TS_FILE);
     editor.waitActive();
-
-    // open the resolving dependencies form
-    loader.waitOnClosed();
-    mavenPluginStatusBar.waitExpectedTextInInfoPanel(
-        "Resolving project:", timeoutToOpenInfoPanelInSec);
-    mavenPluginStatusBar.clickOnInfoPanel();
-
-    // should close the resolve dependencies form by Esc
-    mavenPluginStatusBar.waitResolveDependenciesFormToOpen();
-    mavenPluginStatusBar.closeResolveDependenciesFormByKeys(ESCAPE.toString());
-
-    // then open it again
-    mavenPluginStatusBar.clickOnInfoPanel();
-    mavenPluginStatusBar.waitResolveDependenciesFormToOpen();
-
-    // wait while dependencies are resolved
-    mavenPluginStatusBar.waitClosingInfoPanel(timeoutToClosingInfoPanelInSec);
-    mavenPluginStatusBar.waitResolveDependenciesFormToClose();
 
     // wait the project and the files
     projectExplorer.waitItem(PROJECT_NAME);
