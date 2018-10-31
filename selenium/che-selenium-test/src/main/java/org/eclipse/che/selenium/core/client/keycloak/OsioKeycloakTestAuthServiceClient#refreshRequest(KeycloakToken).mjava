@@ -1,0 +1,46 @@
+  @Override
+  protected KeycloakToken refreshRequest(KeycloakToken token) {
+    KeycloakToken newToken = null;
+    HttpURLConnection http = null;
+    try {
+      http = (HttpURLConnection) new URL(osioAuthEndpoint + "/api/token/refresh").openConnection();
+      http.setRequestMethod(HttpMethod.POST);
+      http.setAllowUserInteraction(false);
+      http.setInstanceFollowRedirects(true);
+      http.setRequestProperty("Content-Type", "application/json");
+      http.setDoOutput(true);
+      OutputStream output = http.getOutputStream();
+      output.write(String.format(REFRESH_TOKEN_TEMPLATE, token.getRefreshToken()).getBytes(UTF_8));
+      output.close();
+      if (http.getResponseCode() != 200) {
+        throw new RuntimeException(
+            "Cannot get access token using the KeyCloak REST API. Server response code: "
+                + osioAuthEndpoint
+                + " "
+                + http.getResponseCode()
+                + IoUtil.readStream(http.getErrorStream()));
+      }
+
+      // request was ok. Obtain token from inputStream. Response is in format
+      // {"token":{"active_token":"<token>", ...}} Need to get rid of the root "token" element.
+
+      final BufferedReader response =
+          new BufferedReader(new InputStreamReader(http.getInputStream(), UTF_8));
+      String responseString = IOUtils.toString(response);
+      JsonParser parser = new JsonParser();
+      JsonObject parse = parser.parse(responseString).getAsJsonObject();
+      JsonElement jsonElement = parse.get("token");
+
+      newToken = readerToKeycloakToken(new StringReader(jsonElement.toString()));
+
+    } catch (IOException e) {
+      LOG.error(e.getMessage(), e);
+    } finally {
+      if (http != null) {
+        http.disconnect();
+      }
+    }
+
+    return newToken;
+  }
+
