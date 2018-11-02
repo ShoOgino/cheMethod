@@ -12,10 +12,21 @@
       final ServersChecker serverCheck =
           serverCheckerFactory.create(runtimeId, machineName, machine.getServers());
       final CompletableFuture<?> serversReadyFuture;
+      LOG.debug(
+          "Performing servers check for machine '{}' in workspace '{}'",
+          machineName,
+          runtimeId.getWorkspaceId());
       try {
         serversReadyFuture = serverCheck.startAsync(new ServerReadinessHandler(machineName));
         toCancelFutures.add(serversReadyFuture);
-        serversAndProbesFuture.whenComplete((ok, ex) -> serversReadyFuture.cancel(true));
+        serversAndProbesFuture.whenComplete(
+            (ok, ex) -> {
+              LOG.debug(
+                  "Servers checks done for machine '{}' in workspace '{}'",
+                  machineName,
+                  runtimeId.getWorkspaceId());
+              serversReadyFuture.cancel(true);
+            });
       } catch (InfrastructureException ex) {
         serversAndProbesFuture.completeExceptionally(ex);
         return serversAndProbesFuture;
