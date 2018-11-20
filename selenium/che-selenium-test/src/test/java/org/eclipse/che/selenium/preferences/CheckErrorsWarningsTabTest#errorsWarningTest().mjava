@@ -2,47 +2,37 @@
   public void errorsWarningTest() throws Exception {
     final String expectedTabTitle = "AppController";
     final URL errorsWarningFilePath = getClass().getResource("errors-warnings");
-    final URL embedCodeFilePath = getClass().getResource("embed-code");
+    final List<String> expectedErrorsWarningsList = readFile(errorsWarningFilePath);
 
-    List<String> expectedErrorsWarningsList = readFile(errorsWarningFilePath);
-    String embedCode = readFileToString(embedCodeFilePath);
-    projectExplorer.waitItem(PROJECT_NAME);
-    notificationsPopupPanel.waitProgressPopupPanelClose();
-
-    testProjectServiceClient.updateFile(
-        workspace.getId(), PATH_TO_CLASS_IN_SPRING_PACKAGE, embedCode);
-
-    projectExplorer.quickExpandWithJavaScript();
-    loader.waitOnClosed();
+    // open file
     projectExplorer.openItemByVisibleNameInExplorer(expectedTabTitle + ".java");
     editor.waitTabIsPresent(expectedTabTitle);
     editor.waitTabSelection(0, expectedTabTitle);
     editor.waitActive();
 
+    // check markers default settings
     menu.runCommand(TestMenuCommandsConstants.Profile.PROFILE_MENU, PREFERENCES);
     preferences.waitPreferencesForm();
     preferences.waitMenuInCollapsedDropdown(Preferences.DropDownJavaCompilerMenu.ERRORS_WARNINGS);
     preferences.selectDroppedMenuByName(Preferences.DropDownJavaCompilerMenu.ERRORS_WARNINGS);
-    preferences.getItemsFromErrorWarningsWidget();
     assertEquals(preferences.getItemsFromErrorWarningsWidget(), expectedErrorsWarningsList);
-
     preferences.close();
     consoles.closeProcessesArea();
+
+    // change and check markers settings for displaying warnings
     menu.runCommand(TestMenuCommandsConstants.Profile.PROFILE_MENU, PREFERENCES);
     changeAllSettingsInErrorsWarningsTab(Preferences.DropDownValueForErrorWaitingWidget.WARNING);
     editor.waitAnnotationsAreNotPresent(ERROR_OVERVIEW);
-    assertTrue(editor.getMarkersQuantity(WARNING_OVERVIEW) >= 12);
-    assertEquals(editor.getMarkersQuantity(WARNING), 22);
+    waitWarningMarkersQuantity();
 
+    // change and check markers settings for displaying errors
     editor.waitAnnotationsAreNotPresent(ERROR_OVERVIEW);
     menu.runCommand(TestMenuCommandsConstants.Profile.PROFILE_MENU, PREFERENCES);
     changeAllSettingsInErrorsWarningsTab(Preferences.DropDownValueForErrorWaitingWidget.ERROR);
-    assertEquals(editor.getMarkersQuantity(ERROR_OVERVIEW), 12);
-    assertEquals(editor.getMarkersQuantity(ERROR), 22);
-    editor.waitAnnotationsAreNotPresent(WARNING_OVERVIEW);
-    assertTrue(editor.getMarkersQuantity(ERROR_OVERVIEW) >= 12);
-    assertEquals(editor.getMarkersQuantity(ERROR), 22);
+    waitErrorMarkersQuantity();
 
+    // change and check markers settings for ignoring all markers
+    editor.waitAnnotationsAreNotPresent(WARNING_OVERVIEW);
     menu.runCommand(TestMenuCommandsConstants.Profile.PROFILE_MENU, PREFERENCES);
     changeAllSettingsInErrorsWarningsTab(Preferences.DropDownValueForErrorWaitingWidget.IGNORE);
     editor.waitAnnotationsAreNotPresent(ERROR_OVERVIEW);
