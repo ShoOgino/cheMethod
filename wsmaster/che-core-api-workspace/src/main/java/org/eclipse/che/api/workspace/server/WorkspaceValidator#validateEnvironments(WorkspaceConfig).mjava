@@ -1,0 +1,28 @@
+  private void validateEnvironments(WorkspaceConfig config) throws ValidationException {
+    boolean environmentIsNotSet =
+        (config.getEnvironments() == null || config.getEnvironments().isEmpty())
+            && isNullOrEmpty(config.getDefaultEnv());
+    boolean isSidecarWorkspace = isSidecarBasedWorkspace(config.getAttributes());
+    if (environmentIsNotSet && isSidecarWorkspace) {
+      // sidecar based workspaces allowed not to have environment
+      return;
+    }
+    check(!isNullOrEmpty(config.getDefaultEnv()), "Workspace default environment name required");
+    checkNotNull(config.getEnvironments(), "Workspace must contain at least one environment");
+    check(
+        config.getEnvironments().containsKey(config.getDefaultEnv()),
+        "Workspace default environment configuration required");
+
+    for (Environment environment : config.getEnvironments().values()) {
+      checkNotNull(environment, "Environment must not be null");
+      Recipe recipe = environment.getRecipe();
+      checkNotNull(recipe, "Environment recipe must not be null");
+      checkNotNull(recipe.getType(), "Environment recipe type must not be null");
+
+      for (Entry<String, ? extends MachineConfig> machineEntry :
+          environment.getMachines().entrySet()) {
+        validateMachine(machineEntry.getKey(), machineEntry.getValue());
+      }
+    }
+  }
+

@@ -17,16 +17,19 @@
    * @see WorkspaceStatus#RUNNING
    */
   public CompletableFuture<Void> startAsync(
-      Workspace workspace, String envName, Map<String, String> options)
+      Workspace workspace, @Nullable String envName, Map<String, String> options)
       throws ConflictException, NotFoundException, ServerException {
 
-    final EnvironmentImpl environment = copyEnv(workspace, envName);
     final String workspaceId = workspace.getId();
-
-    requireNonNull(environment, "Environment should not be null " + workspaceId);
-    requireNonNull(environment.getRecipe(), "Recipe should not be null " + workspaceId);
-    requireNonNull(
-        environment.getRecipe().getType(), "Recipe type should not be null " + workspaceId);
+    // Sidecar-based workspaces allowed not to have environments
+    EnvironmentImpl environment = null;
+    if (envName != null) {
+      environment = copyEnv(workspace, envName);
+      requireNonNull(environment, "Environment should not be null " + workspaceId);
+      requireNonNull(environment.getRecipe(), "Recipe should not be null " + workspaceId);
+      requireNonNull(
+          environment.getRecipe().getType(), "Recipe type should not be null " + workspaceId);
+    }
 
     if (isStartRefused.get()) {
       throw new ConflictException(
