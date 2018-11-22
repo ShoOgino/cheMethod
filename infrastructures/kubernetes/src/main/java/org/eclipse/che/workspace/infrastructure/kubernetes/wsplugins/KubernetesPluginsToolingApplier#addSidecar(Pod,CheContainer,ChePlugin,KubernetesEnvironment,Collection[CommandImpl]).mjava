@@ -3,6 +3,7 @@
    * <li>k8s container configuration {@link Container}
    * <li>k8s service configuration {@link Service}
    * <li>Che machine config {@link InternalMachineConfig}
+   * <li>Fill in machine name attribute in related commands
    *
    * @throws InfrastructureException when any error occurs
    */
@@ -10,7 +11,8 @@
       Pod pod,
       CheContainer container,
       ChePlugin chePlugin,
-      KubernetesEnvironment kubernetesEnvironment)
+      KubernetesEnvironment kubernetesEnvironment,
+      Collection<CommandImpl> sidecarRelatedCommands)
       throws InfrastructureException {
 
     K8sContainerResolver k8sContainerResolver =
@@ -38,6 +40,14 @@
 
     InternalMachineConfig machineConfig = machineResolver.resolve();
     kubernetesEnvironment.getMachines().put(machineName, machineConfig);
+
+    sidecarRelatedCommands.forEach(c -> c.getAttributes().put("machineName", machineName));
+
+    container
+        .getCommands()
+        .stream()
+        .map(c -> asCommand(machineName, c))
+        .forEach(c -> kubernetesEnvironment.getCommands().add(c));
 
     SidecarServicesProvisioner sidecarServicesProvisioner =
         new SidecarServicesProvisioner(containerEndpoints, pod.getMetadata().getName());
