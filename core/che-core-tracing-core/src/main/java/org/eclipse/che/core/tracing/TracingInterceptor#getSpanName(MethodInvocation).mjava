@@ -1,0 +1,33 @@
+  private String getSpanName(MethodInvocation invocation) {
+    Class<?> objectType = invocation.getThis().getClass();
+    Method method = invocation.getMethod();
+
+    // we assume that there won't be more than 4 traced methods on a type. If there are, we're
+    // adding a little bit of runtime overhead of enlarging the hashmap's capacity, but in the usual
+    // case we're saving 12 entries in the map (16 is the default capacity).
+    String ret = spanNames.computeIfAbsent(objectType, __ -> new WeakHashMap<>(4)).get(method);
+
+    if (ret != null) {
+      return ret;
+    }
+
+    Traced annotation = method.getAnnotation(Traced.class);
+
+    if (annotation == null) {
+      throw new IllegalStateException(
+          "Misconfigured Guice interception. Tracing interceptor called on method "
+              + method
+              + " that is not annotated with @Traced.");
+    }
+
+    String name = annotation.name();
+
+    if (name.isEmpty()) {
+      name = cleanName(objectType) + "#" + method.getName();
+    }
+
+    spanNames.get(objectType).put(method, name);
+
+    return name;
+  }
+

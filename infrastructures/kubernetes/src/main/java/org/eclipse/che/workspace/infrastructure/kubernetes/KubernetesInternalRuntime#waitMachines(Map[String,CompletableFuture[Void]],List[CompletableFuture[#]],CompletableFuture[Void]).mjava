@@ -9,7 +9,7 @@
    * @throws RuntimeStartInterruptedException when the thread is interrupted while waiting machines
    */
   private void waitMachines(
-      List<CompletableFuture<Void>> machinesFutures,
+      Map<String, CompletableFuture<Void>> machinesFutures,
       List<CompletableFuture<?>> toCancelFutures,
       CompletableFuture<Void> failure)
       throws InfrastructureException {
@@ -19,7 +19,8 @@
           getContext().getIdentity().getWorkspaceId());
       final CompletableFuture<Void> allDone =
           CompletableFuture.allOf(
-              machinesFutures.toArray(new CompletableFuture[machinesFutures.size()]));
+              machinesFutures.values().toArray(new CompletableFuture[machinesFutures.size()]));
+
       CompletableFuture.anyOf(allDone, failure)
           .get(startSynchronizer.getStartTimeoutMillis(), TimeUnit.MILLISECONDS);
 
@@ -39,17 +40,21 @@
                   + "' reached timeout");
       failure.completeExceptionally(ie);
       cancelAll(toCancelFutures);
+      finishAllStartupTracesAsFailures(ie);
       throw ie;
     } catch (InterruptedException ex) {
       RuntimeStartInterruptedException runtimeInterruptedEx =
           new RuntimeStartInterruptedException(getContext().getIdentity());
       failure.completeExceptionally(runtimeInterruptedEx);
       cancelAll(toCancelFutures);
+      finishAllStartupTracesAsFailures(ex);
       throw runtimeInterruptedEx;
     } catch (ExecutionException ex) {
       failure.completeExceptionally(ex.getCause());
       cancelAll(toCancelFutures);
       wrapAndRethrow(ex.getCause());
+      // note that we do NOT finish the startup traces here, because execution exception is
+      // handled by the "exceptional" parts of the completable chain.
     }
   }
 

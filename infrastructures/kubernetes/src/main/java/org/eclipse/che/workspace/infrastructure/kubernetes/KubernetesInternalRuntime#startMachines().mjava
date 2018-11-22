@@ -5,22 +5,15 @@
    */
   protected void startMachines() throws InfrastructureException {
     KubernetesEnvironment k8sEnv = getContext().getEnvironment();
+    String workspaceId = getContext().getIdentity().getWorkspaceId();
 
-    for (Secret secret : k8sEnv.getSecrets().values()) {
-      namespace.secrets().create(secret);
-    }
+    createSecrets(k8sEnv, workspaceId);
+    createConfigMaps(k8sEnv, workspaceId);
+    List<Service> createdServices = createServices(k8sEnv, workspaceId);
 
-    for (ConfigMap configMap : k8sEnv.getConfigMaps().values()) {
-      namespace.configMaps().create(configMap);
-    }
-
-    List<Service> createdServices = new ArrayList<>();
-    for (Service service : k8sEnv.getServices().values()) {
-      createdServices.add(namespace.services().create(service));
-    }
     // needed for resolution later on, even though n routes are actually created by ingress
     // /workspace{wsid}/server-{port} => service({wsid}):server-port => pod({wsid}):{port}
-    List<Ingress> readyIngresses = createAndWaitReady(k8sEnv.getIngresses().values());
+    List<Ingress> readyIngresses = createIngresses(k8sEnv, workspaceId);
 
     // TODO https://github.com/eclipse/che/issues/7653
     // namespace.pods().watch(new AbnormalStopHandler());

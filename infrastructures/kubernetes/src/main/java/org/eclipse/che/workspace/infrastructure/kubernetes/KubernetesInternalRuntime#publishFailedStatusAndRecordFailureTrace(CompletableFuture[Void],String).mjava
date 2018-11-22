@@ -2,10 +2,12 @@
    * Note that if this invocation caused a transition of failure to a completed state then
    * notification about machine start failed will be published.
    */
-  private Function<Throwable, Void> publishFailedStatus(
+  private Function<Throwable, Void> publishFailedStatusAndRecordFailureTrace(
       CompletableFuture<Void> failure, String machineName) {
     return ex -> {
       if (failure.completeExceptionally(ex)) {
+        finishSpanAsFailure(machineStartupTraces.remove(machineName), ex.getMessage());
+
         try {
           machines.updateMachineStatus(
               getContext().getIdentity(), machineName, MachineStatus.FAILED);
@@ -17,6 +19,9 @@
               e.getMessage());
         }
         eventPublisher.sendFailedEvent(machineName, ex.getMessage(), getContext().getIdentity());
+      } else {
+        String message = ex.getMessage() + " (happened elsewhere)";
+        finishSpanAsCancelled(machineStartupTraces.remove(machineName), message);
       }
       return null;
     };

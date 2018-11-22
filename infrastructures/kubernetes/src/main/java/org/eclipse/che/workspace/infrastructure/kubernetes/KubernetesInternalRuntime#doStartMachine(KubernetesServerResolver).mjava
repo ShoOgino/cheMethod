@@ -6,17 +6,22 @@
    */
   protected void doStartMachine(KubernetesServerResolver serverResolver)
       throws InfrastructureException {
+    machineStartupTraces =
+        new ConcurrentHashMap<>(getContext().getEnvironment().getMachines().size());
+
     final KubernetesEnvironment environment = getContext().getEnvironment();
     final Map<String, InternalMachineConfig> machineConfigs = environment.getMachines();
     final String workspaceId = getContext().getIdentity().getWorkspaceId();
     LOG.debug("Begin pods creation for workspace '{}'", workspaceId);
     for (Pod toCreate : environment.getPods().values()) {
+      startTracingContainersStartup(toCreate);
       final Pod createdPod = namespace.deployments().deploy(toCreate);
       LOG.debug(
           "Creating pod '{}' in workspace '{}'", toCreate.getMetadata().getName(), workspaceId);
       final ObjectMeta podMetadata = createdPod.getMetadata();
       for (Container container : createdPod.getSpec().getContainers()) {
         String machineName = Names.machineName(toCreate, container);
+
         LOG.debug("Creating machine '{}' in workspace '{}'", machineName, workspaceId);
         machines.put(
             getContext().getIdentity(),

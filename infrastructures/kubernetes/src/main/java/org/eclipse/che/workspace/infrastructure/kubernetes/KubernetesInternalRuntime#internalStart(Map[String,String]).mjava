@@ -35,7 +35,7 @@
 
       startSynchronizer.checkFailure();
 
-      final List<CompletableFuture<Void>> machinesFutures = new ArrayList<>();
+      final Map<String, CompletableFuture<Void>> machinesFutures = new LinkedHashMap<>();
       // futures that must be cancelled explicitly
       final List<CompletableFuture<?>> toCancelFutures = new CopyOnWriteArrayList<>();
       final EnvironmentContext currentContext = EnvironmentContext.getCurrent();
@@ -55,8 +55,9 @@
                 // see comments above why executor is explicitly put into arguments
                 .thenComposeAsync(checkFailure(startFailure), executor)
                 .thenCompose(setContext(currentContext, checkServers(toCancelFutures, machine)))
-                .exceptionally(publishFailedStatus(startFailure, machineName));
-        machinesFutures.add(machineBootChain);
+                .thenRun(finishStartupTracingSpan(machineName))
+                .exceptionally(publishFailedStatusAndRecordFailureTrace(startFailure, machineName));
+        machinesFutures.put(machineName, machineBootChain);
       }
 
       waitMachines(machinesFutures, toCancelFutures, startFailure);
