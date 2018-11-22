@@ -1,0 +1,60 @@
+  @Test(priority = 1)
+  public void checkSharingByAddedMember() {
+    dashboard.logout();
+
+    // login as developer and check that the shared workspace exists in Workspaces list
+    dashboard.open(testUser.getName(), testUser.getPassword());
+    dashboard.selectWorkspacesItemOnDashboard();
+    workspaces.waitWorkspaceIsPresent(WORKSPACE_NAME);
+    workspaces.selectWorkspaceItemName(WORKSPACE_NAME);
+    workspaceDetails.waitToolbarTitleName(WORKSPACE_NAME);
+
+    // check all members permission
+    workspaceDetails.selectTabInWorkspaceMenu(SHARE);
+    workspaceShare.waitMemberNameInShareList(memberName);
+    assertEquals(workspaceShare.getMemberPermissions(memberName), MEMBER_PERMISSIONS);
+    workspaceShare.waitMemberNameInShareList(systemAdminName);
+    assertEquals(workspaceShare.getMemberPermissions(systemAdminName), ADMIN_PERMISSIONS);
+
+    // try to remove the workspace owner from the members list
+    workspaceShare.waitInviteMemberDialogClosed();
+    workspaceShare.waitMemberNameInShareList(systemAdminName);
+    workspaceShare.clickOnRemoveMemberButton(systemAdminName);
+    workspaceDetails.clickOnDeleteButtonInDialogWindow();
+    dashboard.waitNotificationMessage("User can't edit permissions for this instance");
+    dashboard.waitNotificationIsClosed();
+
+    // open workspace and check
+    workspaceDetails.clickOpenInIdeWsBtn();
+    ide.switchToIdeAndWaitWorkspaceIsReadyToUse();
+    notificationsPopupPanel.waitPopupPanelsAreClosed();
+    projectExplorer.waitAndSelectItem(PROJECT_NAME);
+    projectExplorer.openItemByPath(PROJECT_NAME);
+    projectExplorer.openItemByPath(PROJECT_NAME + "/" + FILE_NAME);
+    editor.waitActive();
+    editor.selectTabByName(FILE_NAME);
+    editor.waitTextIntoEditor(FILE_CONTENT);
+
+    // try to delete the workspace
+    dashboard.open();
+    navigationBar.waitNavigationBar();
+    dashboard.selectWorkspacesItemOnDashboard();
+    workspaces.selectWorkspaceItemName(WORKSPACE_NAME);
+    workspaceDetails.waitToolbarTitleName(WORKSPACE_NAME);
+    workspaceDetails.selectTabInWorkspaceMenu(OVERVIEW);
+
+    workspaceOverview.clickOnDeleteWorkspace();
+    workspaceDetails.clickOnDeleteButtonInDialogWindow();
+    dashboard.waitNotificationMessage(
+        "The user does not have permission to delete workspace with id ");
+    dashboard.waitNotificationIsClosed();
+    workspaceDetails.checkStateOfWorkspace(StateWorkspace.STOPPED);
+
+    dashboard.logout();
+
+    dashboard.open(adminTestUser.getName(), adminTestUser.getPassword());
+    dashboard.selectWorkspacesItemOnDashboard();
+    workspaces.waitWorkspaceIsPresent(WORKSPACE_NAME);
+    workspaces.waitWorkspaceStatus(WORKSPACE_NAME, STOPPED);
+  }
+
