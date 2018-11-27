@@ -1,0 +1,25 @@
+  @VisibleForTesting
+  InternalEnvironment createInternalEnvironment(
+      @Nullable Environment environment,
+      Map<String, String> workspaceConfigAttributes,
+      List<? extends Command> commands)
+      throws InfrastructureException, ValidationException, NotFoundException {
+    String recipeType;
+    if (environment == null) {
+      recipeType = Constants.NO_ENVIRONMENT_RECIPE_TYPE;
+    } else {
+      recipeType = environment.getRecipe().getType();
+    }
+    InternalEnvironmentFactory factory = environmentFactories.get(recipeType);
+    if (factory == null) {
+      throw new NotFoundException(
+          format("InternalEnvironmentFactory is not configured for recipe type: '%s'", recipeType));
+    }
+    InternalEnvironment internalEnvironment = factory.create(environment);
+    internalEnvironment.setAttributes(new HashMap<>(workspaceConfigAttributes));
+    internalEnvironment.setCommands(
+        commands.stream().map(CommandImpl::new).collect(Collectors.toList()));
+
+    return internalEnvironment;
+  }
+
