@@ -1,8 +1,5 @@
   private List<CommandDto> codeAction(CodeActionParams params) {
-    TextDocumentIdentifier textDocument = params.getTextDocument();
-    String wsPath = textDocument.getUri();
-    String uri = prefixURI(wsPath);
-    textDocument.setUri(uri);
+    String wsPath = params.getTextDocument().getUri();
     List<CommandDto> result = new ArrayList<>();
     Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
     LSOperation<ExtendedLanguageServer, List<Either<Command, CodeAction>>> op =
@@ -16,7 +13,11 @@
           @Override
           public CompletableFuture<List<Either<Command, CodeAction>>> start(
               ExtendedLanguageServer element) {
-            return element.getTextDocumentService().codeAction(params);
+            CodeActionParams clonedParams = lsParamsCloner.clone(params);
+            URI uri = languageServerPathTransformer.toFsURI(element.getId(), wsPath);
+            clonedParams.getTextDocument().setUri(uri.toString());
+
+            return element.getTextDocumentService().codeAction(clonedParams);
           }
 
           @Override

@@ -1,0 +1,31 @@
+  @Inject
+  private void subscribe(
+      LanguageServerPathTransformer languageServerPathTransformer,
+      EventService eventService,
+      RequestTransmitter requestTransmitter) {
+    eventService.subscribe(
+        event -> {
+          PublishDiagnosticsParams params = event.getParams();
+          if (params.getUri() != null) {
+            try {
+              URI uri = new URI(params.getUri());
+              String wsPath =
+                  languageServerPathTransformer.toWsPath(event.getLanguageServerId(), uri);
+              params.setUri(wsPath);
+              endpointIds.forEach(
+                  endpointId ->
+                      requestTransmitter
+                          .newRequest()
+                          .endpointId(endpointId)
+                          .methodName("textDocument/publishDiagnostics")
+                          .paramsAsDto(new ExtendedPublishDiagnosticsParamsDto(event))
+                          .sendAndSkipResult());
+
+            } catch (URISyntaxException e) {
+              LOG.error("Can't parse diagnostic URI: {}", params.getUri(), e);
+            }
+          }
+        },
+        ExtendedPublishDiagnosticsParams.class);
+  }
+

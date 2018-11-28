@@ -1,7 +1,6 @@
   private RenameResultDto rename(RenameParams renameParams) {
     String wsPath = renameParams.getTextDocument().getUri();
-    String uri = prefixURI(wsPath);
-    renameParams.getTextDocument().setUri(uri);
+
     Map<String, ExtendedWorkspaceEdit> edits = new ConcurrentHashMap<>();
     Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
     LSOperation<ExtendedLanguageServer, WorkspaceEdit> op =
@@ -14,7 +13,11 @@
 
           @Override
           public CompletableFuture<WorkspaceEdit> start(ExtendedLanguageServer element) {
-            return element.getTextDocumentService().rename(renameParams);
+            RenameParams clonedRenameParams = lsParamsCloner.clone(renameParams);
+            URI uri = languageServerPathTransformer.toFsURI(element.getId(), wsPath);
+            clonedRenameParams.getTextDocument().setUri(uri.toString());
+
+            return element.getTextDocumentService().rename(clonedRenameParams);
           }
 
           @Override

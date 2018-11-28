@@ -1,10 +1,14 @@
   private void didChange(DidChangeTextDocumentParams didChangeTextDocumentParams) {
     String wsPath = didChangeTextDocumentParams.getTextDocument().getUri();
-    String uri = prefixURI(wsPath);
-    didChangeTextDocumentParams.getTextDocument().setUri(uri);
-    didChangeTextDocumentParams.setUri(prefixURI(didChangeTextDocumentParams.getUri()));
     findServer
         .byPath(wsPath)
-        .forEach(server -> server.getTextDocumentService().didChange(didChangeTextDocumentParams));
+        .forEach(
+            server -> {
+              URI uri = languageServerPathTransformer.toFsURI(server.getId(), wsPath);
+              DidChangeTextDocumentParams clonedDidChangeTextDocumentParams =
+                  lsParamsCloner.clone(didChangeTextDocumentParams);
+              clonedDidChangeTextDocumentParams.getTextDocument().setUri(uri.toString());
+              server.getTextDocumentService().didChange(clonedDidChangeTextDocumentParams);
+            });
   }
 

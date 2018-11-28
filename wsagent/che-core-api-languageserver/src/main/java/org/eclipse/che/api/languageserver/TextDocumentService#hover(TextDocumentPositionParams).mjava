@@ -1,12 +1,10 @@
   private HoverDto hover(TextDocumentPositionParams positionParams) {
     String wsPath = positionParams.getTextDocument().getUri();
-    String uri = prefixURI(wsPath);
-    positionParams.getTextDocument().setUri(uri);
-    positionParams.setUri(prefixURI(positionParams.getUri()));
+
     Hover result = new Hover();
     StringBuilder content = new StringBuilder();
 
-    Set<ExtendedLanguageServer> servers = findServer.byPath(uri);
+    Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
     OperationUtil.doInParallel(
         servers,
         new LSOperation<ExtendedLanguageServer, Hover>() {
@@ -18,7 +16,11 @@
 
           @Override
           public CompletableFuture<Hover> start(ExtendedLanguageServer element) {
-            return element.getTextDocumentService().hover(positionParams);
+            TextDocumentPositionParams clonedPositionParams = lsParamsCloner.clone(positionParams);
+            URI uri = languageServerPathTransformer.toFsURI(element.getId(), wsPath);
+            clonedPositionParams.getTextDocument().setUri(uri.toString());
+
+            return element.getTextDocumentService().hover(clonedPositionParams);
           }
 
           @Override

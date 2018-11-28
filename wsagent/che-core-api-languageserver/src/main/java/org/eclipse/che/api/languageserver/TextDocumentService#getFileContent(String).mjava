@@ -1,16 +1,22 @@
-  private String getFileContent(String uri) {
+  private String getFileContent(String wsPath) {
     try {
-      uri = prefixURI(uri);
       Optional<ExtendedLanguageServer> serverOptional =
           findServer
-              .byPath(uri)
+              .byPath(wsPath)
               .stream()
-              .filter(
-                  s -> {
-                    return s.getServer() instanceof FileContentAccess;
-                  })
+              .filter(s -> s.getServer() instanceof FileContentAccess)
               .findFirst();
       if (serverOptional.isPresent()) {
+        String uri;
+        if (wsPath.startsWith(ROOT)) {
+          uri =
+              languageServerPathTransformer
+                  .toFsURI(serverOptional.get().getId(), wsPath)
+                  .toString();
+        } else {
+          uri = wsPath;
+        }
+
         return ((FileContentAccess) serverOptional.get().getServer())
             .getFileContent(uri)
             .get(5000, TimeUnit.MILLISECONDS);

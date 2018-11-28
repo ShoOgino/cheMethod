@@ -1,7 +1,5 @@
   private List<SymbolInformationDto> documentSymbol(DocumentSymbolParams documentSymbolParams) {
     String wsPath = documentSymbolParams.getTextDocument().getUri();
-    String uri = prefixURI(wsPath);
-    documentSymbolParams.getTextDocument().setUri(uri);
     List<SymbolInformationDto> result = new ArrayList<>();
     Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
 
@@ -17,7 +15,11 @@
           @Override
           public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> start(
               ExtendedLanguageServer element) {
-            return element.getTextDocumentService().documentSymbol(documentSymbolParams);
+            DocumentSymbolParams clonedDocumentSymbolParams =
+                lsParamsCloner.clone(documentSymbolParams);
+            URI uri = languageServerPathTransformer.toFsURI(element.getId(), wsPath);
+            clonedDocumentSymbolParams.getTextDocument().setUri(uri.toString());
+            return element.getTextDocumentService().documentSymbol(clonedDocumentSymbolParams);
           }
 
           @Override
@@ -33,21 +35,22 @@
                     si.getLocation().setUri(removePrefixUri(si.getLocation().getUri()));
                     result.add(new SymbolInformationDto(si));
                   } else {
-                    result.addAll(convertDocumentSymbol(o.getRight()));
+                    URI uri = languageServerPathTransformer.toFsURI(element.getId(), wsPath);
+                    result.addAll(convertDocumentSymbol(o.getRight(), uri.toString()));
                   }
                 });
             return true;
           }
 
           private Collection<? extends SymbolInformationDto> convertDocumentSymbol(
-              DocumentSymbol symbol) {
+              DocumentSymbol symbol, String uri) {
             ArrayList<SymbolInformationDto> result = new ArrayList<>();
             result.add(
                 new SymbolInformationDto(
                     new SymbolInformation(
                         symbol.getName(), symbol.getKind(), new Location(uri, symbol.getRange()))));
             for (DocumentSymbol child : symbol.getChildren()) {
-              result.addAll(convertDocumentSymbol(child));
+              result.addAll(convertDocumentSymbol(child, uri));
             }
             return result;
           }

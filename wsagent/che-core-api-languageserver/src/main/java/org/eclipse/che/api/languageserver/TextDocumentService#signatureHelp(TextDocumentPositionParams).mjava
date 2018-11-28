@@ -1,8 +1,6 @@
   private SignatureHelpDto signatureHelp(TextDocumentPositionParams positionParams) {
     String wsPath = positionParams.getTextDocument().getUri();
-    String uri = prefixURI(wsPath);
-    positionParams.getTextDocument().setUri(uri);
-    positionParams.setUri(prefixURI(positionParams.getUri()));
+
     SignatureHelpDto[] result = new SignatureHelpDto[1];
     Set<ExtendedLanguageServer> servers = findServer.byPath(wsPath);
     LSOperation<ExtendedLanguageServer, SignatureHelp> op =
@@ -15,7 +13,11 @@
 
           @Override
           public CompletableFuture<SignatureHelp> start(ExtendedLanguageServer element) {
-            return element.getTextDocumentService().signatureHelp(positionParams);
+            TextDocumentPositionParams clonedPositionParams = lsParamsCloner.clone(positionParams);
+            URI uri = languageServerPathTransformer.toFsURI(element.getId(), wsPath);
+            clonedPositionParams.getTextDocument().setUri(uri.toString());
+
+            return element.getTextDocumentService().signatureHelp(clonedPositionParams);
           }
 
           @Override
