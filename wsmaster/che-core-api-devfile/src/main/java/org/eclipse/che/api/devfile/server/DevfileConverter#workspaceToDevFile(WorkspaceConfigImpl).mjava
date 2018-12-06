@@ -1,0 +1,53 @@
+  public Devfile workspaceToDevFile(WorkspaceConfigImpl wsConfig) throws WorkspaceExportException {
+
+    if (!isNullOrEmpty(wsConfig.getDefaultEnv()) || !wsConfig.getEnvironments().isEmpty()) {
+      throw new WorkspaceExportException(
+          format(
+              "Workspace %s cannot be converted to devfile since it is contains environments (which have no equivalent in devfile model)",
+              wsConfig.getName()));
+    }
+
+    Devfile devFile =
+        new Devfile().withSpecVersion(CURRENT_SPEC_VERSION).withName(wsConfig.getName());
+
+    // Manage projects
+    List<Project> projects = new ArrayList<>();
+    wsConfig
+        .getProjects()
+        .forEach(projectConfig -> projects.add(projectConfigToDevProject(projectConfig)));
+    devFile.setProjects(projects);
+
+    // Manage commands
+    Map<String, String> toolsIdToName = parseTools(wsConfig);
+    List<Command> commands = new ArrayList<>();
+    wsConfig
+        .getCommands()
+        .forEach(command -> commands.add(commandImplToDevCommand(command, toolsIdToName)));
+    devFile.setCommands(commands);
+
+    // Manage tools
+    List<Tool> tools = new ArrayList<>();
+    for (Map.Entry<String, String> entry : wsConfig.getAttributes().entrySet()) {
+      if (entry.getKey().equals(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE)) {
+        String editorId = entry.getValue();
+        Tool editorTool =
+            new Tool()
+                .withType("cheEditor")
+                .withId(editorId)
+                .withName(toolsIdToName.getOrDefault(editorId, editorId));
+        tools.add(editorTool);
+      } else if (entry.getKey().equals(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE)) {
+        for (String pluginId : entry.getValue().split(",")) {
+          Tool pluginTool =
+              new Tool()
+                  .withId(pluginId)
+                  .withType("chePlugin")
+                  .withName(toolsIdToName.getOrDefault(pluginId, pluginId));
+          tools.add(pluginTool);
+        }
+      }
+    }
+    devFile.setTools(tools);
+    return devFile;
+  }
+

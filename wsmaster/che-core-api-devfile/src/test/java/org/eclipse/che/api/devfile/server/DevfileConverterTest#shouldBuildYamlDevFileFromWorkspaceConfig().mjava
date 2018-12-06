@@ -1,0 +1,74 @@
+  @Test
+  public void shouldBuildYamlDevFileFromWorkspaceConfig() throws Exception {
+
+    String jsonContent =
+        Files.readFile(getClass().getClassLoader().getResourceAsStream("workspace_config.json"));
+    WorkspaceConfigImpl workspaceConfig =
+        JsonHelper.fromJson(jsonContent, WorkspaceConfigImpl.class, null);
+    Devfile devFile = devfileConverter.workspaceToDevFile(workspaceConfig);
+
+    String yamlContent =
+        Files.readFile(getClass().getClassLoader().getResourceAsStream("devfile.yaml"));
+
+    Devfile expectedDevFile = objectMapper.readValue(yamlContent, Devfile.class);
+
+    // Recursively compare
+    assertEquals(devFile.getSpecVersion(), expectedDevFile.getSpecVersion());
+    assertEquals(devFile.getName(), expectedDevFile.getName());
+    assertEquals(devFile.getProjects().size(), expectedDevFile.getProjects().size());
+    for (Project project : devFile.getProjects()) {
+      Project expectedProject =
+          expectedDevFile
+              .getProjects()
+              .stream()
+              .filter(project1 -> project1.getName().equals(project.getName()))
+              .findFirst()
+              .get();
+      assertEquals(project.getSource().getType(), expectedProject.getSource().getType());
+      assertEquals(project.getSource().getLocation(), expectedProject.getSource().getLocation());
+    }
+
+    assertEquals(devFile.getCommands().size(), expectedDevFile.getCommands().size());
+    for (Command command : devFile.getCommands()) {
+      Command expectedCommand =
+          expectedDevFile
+              .getCommands()
+              .stream()
+              .filter(command1 -> command1.getName().equals(command.getName().split(":")[0]))
+              .findFirst()
+              .get();
+      for (Action action : command.getActions()) {
+        Action expectedAction =
+            expectedCommand
+                .getActions()
+                .stream()
+                .filter(action1 -> action1.getTool().equals(action.getTool()))
+                .findFirst()
+                .get();
+        assertEquals(action.getCommand(), expectedAction.getCommand());
+        assertEquals(action.getType(), expectedAction.getType());
+        assertEquals(action.getWorkdir(), expectedAction.getWorkdir());
+      }
+      if (command.getAttributes() != null && expectedCommand.getAttributes() != null) {
+        assertTrue(
+            command
+                .getAttributes()
+                .entrySet()
+                .containsAll(expectedCommand.getAttributes().entrySet()));
+      }
+    }
+
+    assertEquals(devFile.getTools().size(), expectedDevFile.getTools().size());
+    for (Tool tool : devFile.getTools()) {
+      Tool expectedTool =
+          expectedDevFile
+              .getTools()
+              .stream()
+              .filter(tool1 -> tool1.getName().equals(tool.getName()))
+              .findFirst()
+              .get();
+      assertEquals(tool.getId(), expectedTool.getId());
+      assertEquals(tool.getType(), expectedTool.getType());
+    }
+  }
+

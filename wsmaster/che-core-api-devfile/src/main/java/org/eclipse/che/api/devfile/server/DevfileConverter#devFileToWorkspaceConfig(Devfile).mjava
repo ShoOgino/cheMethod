@@ -1,0 +1,47 @@
+  public WorkspaceConfigImpl devFileToWorkspaceConfig(Devfile devFile)
+      throws DevfileFormatException {
+    validateCurrentVersion(devFile);
+    WorkspaceConfigImpl config = new WorkspaceConfigImpl();
+
+    config.setName(devFile.getName());
+
+    // Manage projects
+    List<ProjectConfigImpl> projects = new ArrayList<>();
+    devFile.getProjects().forEach(project -> projects.add(devProjectToProjectConfig(project)));
+    config.setProjects(projects);
+
+    // Manage tools
+    Map<String, String> attributes = new HashMap<>();
+    StringJoiner pluginsStringJoiner = new StringJoiner(",");
+    StringJoiner toolIdToNameMappingStringJoiner = new StringJoiner(",");
+    for (Tool tool : devFile.getTools()) {
+      switch (tool.getType()) {
+        case "cheEditor":
+          attributes.put(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE, tool.getId());
+          break;
+        case "chePlugin":
+          pluginsStringJoiner.add(tool.getId());
+          break;
+        default:
+          throw new DevfileFormatException(
+              format("Unsupported tool %s type provided: %s", tool.getName(), tool.getType()));
+      }
+      toolIdToNameMappingStringJoiner.add(tool.getId() + "=" + tool.getName());
+    }
+    if (pluginsStringJoiner.length() > 0) {
+      attributes.put(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE, pluginsStringJoiner.toString());
+    }
+    if (toolIdToNameMappingStringJoiner.length() > 0) {
+      attributes.put(ALIASES_WORKSPACE_ATTRIBUTE_NAME, toolIdToNameMappingStringJoiner.toString());
+    }
+    config.setAttributes(attributes);
+
+    // Manage commands
+    List<CommandImpl> commands = new ArrayList<>();
+    devFile
+        .getCommands()
+        .forEach(command -> commands.addAll(devCommandToCommandImpls(devFile, command)));
+    config.setCommands(commands);
+    return config;
+  }
+
