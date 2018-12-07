@@ -5,12 +5,25 @@
 
     TracingTags.WORKSPACE_ID.set(workspaceId);
 
+    final Map<String, ConfigMap> configMaps = k8sEnv.getConfigMaps();
+    Map<String, String> configMapNameTranslation = new HashMap<>();
+    for (ConfigMap configMap : configMaps.values()) {
+      final String originalName = configMap.getMetadata().getName();
+      putLabel(configMap.getMetadata(), Constants.CHE_ORIGINAL_NAME_LABEL, originalName);
+      final String uniqueName = Names.uniqueResourceName(originalName, workspaceId);
+      configMap.getMetadata().setName(uniqueName);
+      configMapNameTranslation.put(originalName, uniqueName);
+    }
+
     final Collection<PodData> podData = k8sEnv.getPodData().values();
     for (PodData pod : podData) {
       final ObjectMeta podMeta = pod.getMetadata();
       putLabel(podMeta, Constants.CHE_ORIGINAL_NAME_LABEL, podMeta.getName());
-      final String podName = Names.uniquePodName(podMeta.getName(), workspaceId);
+      final String podName = Names.uniqueResourceName(podMeta.getName(), workspaceId);
       podMeta.setName(podName);
+      if (configMapNameTranslation.size() > 0) {
+        rewriteConfigMapNames(pod, configMapNameTranslation);
+      }
     }
 
     final Set<Ingress> ingresses = new HashSet<>(k8sEnv.getIngresses().values());

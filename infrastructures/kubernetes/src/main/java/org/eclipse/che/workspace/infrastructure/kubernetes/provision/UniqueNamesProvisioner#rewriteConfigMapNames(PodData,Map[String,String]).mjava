@@ -1,0 +1,47 @@
+  private void rewriteConfigMapNames(PodData pod, Map<String, String> configMapNameTranslation) {
+    // First update any env vars that reference configMaps.
+    for (Container container : pod.getSpec().getContainers()) {
+      // Can set env vars to key/value pairs in configmap
+      if (container.getEnv() != null) {
+        container
+            .getEnv()
+            .stream()
+            .filter(
+                env ->
+                    env.getValueFrom() != null && env.getValueFrom().getConfigMapKeyRef() != null)
+            .forEach(
+                env -> {
+                  ConfigMapKeySelector configMap = env.getValueFrom().getConfigMapKeyRef();
+                  String originalName = configMap.getName();
+                  configMap.setName(configMapNameTranslation.get(originalName));
+                });
+      }
+      if (container.getEnvFrom() != null) {
+        // Can use all entries in configMap as env vars
+        container
+            .getEnvFrom()
+            .stream()
+            .filter(envFrom -> envFrom.getConfigMapRef() != null)
+            .forEach(
+                envFrom -> {
+                  ConfigMapEnvSource configMapRef = envFrom.getConfigMapRef();
+                  String originalName = configMapRef.getName();
+                  configMapRef.setName(configMapNameTranslation.get(originalName));
+                });
+      }
+    }
+    // Next update any mounted configMaps
+    List<Volume> volumes = pod.getSpec().getVolumes();
+    if (pod.getSpec().getVolumes() != null) {
+      volumes
+          .stream()
+          .filter(vol -> vol.getConfigMap() != null)
+          .forEach(
+              volume -> {
+                ConfigMapVolumeSource configMapVolume = volume.getConfigMap();
+                String originalName = configMapVolume.getName();
+                configMapVolume.setName(configMapNameTranslation.get(originalName));
+              });
+    }
+  }
+
