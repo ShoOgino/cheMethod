@@ -1,0 +1,47 @@
+  @Test
+  public void bothPodsAndDeploymentsIncludedInPodData() throws Exception {
+    PodTemplateSpec podTemplate =
+        new PodTemplateSpecBuilder()
+            .withNewMetadata()
+            .withName("deployment-pod")
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    Deployment deployment =
+        new DeploymentBuilder()
+            .withNewMetadata()
+            .withName("deployment-test")
+            .endMetadata()
+            .withNewSpec()
+            .withTemplate(podTemplate)
+            .endSpec()
+            .build();
+    Pod pod =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName("bare-pod")
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    final List<HasMetadata> recipeObjects = asList(deployment, pod);
+    when(validatedObjects.getItems()).thenReturn(recipeObjects);
+
+    final KubernetesEnvironment parsed =
+        k8sEnvironmentFactory.doCreate(internalRecipe, emptyMap(), emptyList());
+
+    assertEquals(parsed.getPodData().size(), 2);
+    assertTrue(
+        parsed
+            .getPodData()
+            .values()
+            .stream()
+            .allMatch(
+                podData -> {
+                  String name = podData.getMetadata().getName();
+                  return name.equals(podTemplate.getMetadata().getName())
+                      || name.equals(pod.getMetadata().getName());
+                }));
+  }
+

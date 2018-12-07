@@ -13,28 +13,20 @@
     final Map<String, InternalMachineConfig> machineConfigs = environment.getMachines();
     final String workspaceId = getContext().getIdentity().getWorkspaceId();
     LOG.debug("Begin pods creation for workspace '{}'", workspaceId);
-    for (Pod toCreate : environment.getPods().values()) {
-      startTracingContainersStartup(toCreate);
+    for (Pod toCreate : environment.getPodsCopy().values()) {
+      startTracingContainersStartup(toCreate.getSpec(), toCreate.getMetadata());
+      ObjectMeta toCreateMeta = toCreate.getMetadata();
       final Pod createdPod = namespace.deployments().deploy(toCreate);
-      LOG.debug(
-          "Creating pod '{}' in workspace '{}'", toCreate.getMetadata().getName(), workspaceId);
-      final ObjectMeta podMetadata = createdPod.getMetadata();
-      for (Container container : createdPod.getSpec().getContainers()) {
-        String machineName = Names.machineName(toCreate, container);
-
-        LOG.debug("Creating machine '{}' in workspace '{}'", machineName, workspaceId);
-        machines.put(
-            getContext().getIdentity(),
-            new KubernetesMachineImpl(
-                workspaceId,
-                machineName,
-                podMetadata.getName(),
-                container.getName(),
-                MachineStatus.STARTING,
-                machineConfigs.get(machineName).getAttributes(),
-                serverResolver.resolve(machineName)));
-        eventPublisher.sendStartingEvent(machineName, getContext().getIdentity());
-      }
+      LOG.debug("Creating pod '{}' in workspace '{}'", toCreateMeta.getName(), workspaceId);
+      startMachines(createdPod, toCreateMeta, machineConfigs, serverResolver);
+    }
+    for (Deployment toCreate : environment.getDeploymentsCopy().values()) {
+      PodTemplateSpec template = toCreate.getSpec().getTemplate();
+      startTracingContainersStartup(template.getSpec(), template.getMetadata());
+      ObjectMeta toCreateMeta = toCreate.getMetadata();
+      final Pod createdPod = namespace.deployments().deploy(toCreate);
+      LOG.debug("Creating deployment '{}' in workspace '{}'", toCreateMeta.getName(), workspaceId);
+      startMachines(createdPod, toCreateMeta, machineConfigs, serverResolver);
     }
     LOG.debug("Pods creation finished in workspace '{}'", workspaceId);
   }

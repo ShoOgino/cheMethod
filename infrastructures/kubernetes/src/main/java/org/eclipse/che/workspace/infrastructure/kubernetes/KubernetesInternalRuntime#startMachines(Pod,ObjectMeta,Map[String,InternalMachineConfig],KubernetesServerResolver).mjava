@@ -1,0 +1,26 @@
+  /** Puts createdPod in the {@code machines} map and sends the starting event for this machine */
+  public void startMachines(
+      Pod createdPod,
+      ObjectMeta toCreateMeta,
+      Map<String, InternalMachineConfig> machineConfigs,
+      KubernetesServerResolver serverResolver)
+      throws InfrastructureException {
+    final String workspaceId = getContext().getIdentity().getWorkspaceId();
+    for (Container container : createdPod.getSpec().getContainers()) {
+      String machineName = Names.machineName(toCreateMeta, container);
+
+      LOG.debug("Creating machine '{}' in workspace '{}'", machineName, workspaceId);
+      machines.put(
+          getContext().getIdentity(),
+          new KubernetesMachineImpl(
+              workspaceId,
+              machineName,
+              createdPod.getMetadata().getName(),
+              container.getName(),
+              MachineStatus.STARTING,
+              machineConfigs.get(machineName).getAttributes(),
+              serverResolver.resolve(machineName)));
+      eventPublisher.sendStartingEvent(machineName, getContext().getIdentity());
+    }
+  }
+

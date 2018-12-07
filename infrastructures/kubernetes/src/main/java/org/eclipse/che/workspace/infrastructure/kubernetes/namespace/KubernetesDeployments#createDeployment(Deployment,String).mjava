@@ -1,0 +1,41 @@
+  private Pod createDeployment(Deployment deployment, String workspaceId)
+      throws InfrastructureException {
+    final String deploymentName = deployment.getMetadata().getName();
+    final CompletableFuture<Pod> createFuture = new CompletableFuture<>();
+    final Watch createWatch =
+        clientFactory
+            .create(workspaceId)
+            .pods()
+            .inNamespace(namespace)
+            .watch(new CreateWatcher(createFuture, workspaceId, deploymentName));
+    try {
+      clientFactory
+          .create(workspaceId)
+          .apps()
+          .deployments()
+          .inNamespace(namespace)
+          .create(deployment);
+      return createFuture.get(POD_CREATION_TIMEOUT_MIN, TimeUnit.MINUTES);
+    } catch (KubernetesClientException e) {
+      throw new KubernetesInfrastructureException(e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new InfrastructureException(
+          String.format(
+              "Interrupted while waiting for Pod creation. -id: %s -message: %s",
+              deploymentName, e.getMessage()));
+    } catch (ExecutionException e) {
+      throw new InfrastructureException(
+          String.format(
+              "Error occured while waiting for Pod creation. -id: %s -message: %s",
+              deploymentName, e.getCause().getMessage()));
+    } catch (TimeoutException e) {
+      throw new InfrastructureException(
+          String.format(
+              "Pod creation timeout exceeded. -id: %s -message: %s",
+              deploymentName, e.getMessage()));
+    } finally {
+      createWatch.close();
+    }
+  }
+
