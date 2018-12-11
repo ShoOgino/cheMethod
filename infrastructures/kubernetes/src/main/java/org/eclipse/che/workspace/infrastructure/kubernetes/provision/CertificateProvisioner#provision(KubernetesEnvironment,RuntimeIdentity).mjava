@@ -1,0 +1,44 @@
+  @Override
+  public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+    if (!isConfigured()) {
+      return;
+    }
+
+    k8sEnv
+        .getSecrets()
+        .put(
+            CHE_SELF_SIGNED_CERT_SECRET,
+            new SecretBuilder()
+                .withNewMetadata()
+                .withName(CHE_SELF_SIGNED_CERT_SECRET)
+                .endMetadata()
+                .withStringData(ImmutableMap.of(CA_CERT_FILE, certificate))
+                .build());
+
+    for (Pod pod : k8sEnv.getPods().values()) {
+      Optional<Volume> certVolume =
+          pod.getSpec()
+              .getVolumes()
+              .stream()
+              .filter(v -> v.getName().equals(CHE_SELF_SIGNED_CERT_VOLUME))
+              .findAny();
+
+      if (!certVolume.isPresent()) {
+        pod.getSpec().getVolumes().add(buildCertSecretVolume());
+      }
+
+      for (Container container : pod.getSpec().getContainers()) {
+        Optional<VolumeMount> certVolumeMount =
+            container
+                .getVolumeMounts()
+                .stream()
+                .filter(vm -> vm.getName().equals(CHE_SELF_SIGNED_CERT_VOLUME))
+                .findAny();
+        if (!certVolumeMount.isPresent()) {
+          container.getVolumeMounts().add(buildCertVolumeMount());
+        }
+      }
+    }
+  }
+
