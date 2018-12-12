@@ -8,27 +8,30 @@
       return;
     }
     final Collection<PersistentVolumeClaim> claims = k8sEnv.getPersistentVolumeClaims().values();
-    if (!claims.isEmpty()) {
-      LOG.debug("Preparing PVC started for workspace '{}'", workspaceId);
-      final KubernetesNamespace namespace = factory.create(workspaceId);
-      final KubernetesPersistentVolumeClaims pvcs = namespace.persistentVolumeClaims();
-      final Set<String> existing =
-          pvcs.get().stream().map(p -> p.getMetadata().getName()).collect(toSet());
-      for (PersistentVolumeClaim pvc : claims) {
-        final String[] subpaths =
-            (String[])
-                pvc.getAdditionalProperties().remove(format(SUBPATHS_PROPERTY_FMT, workspaceId));
-        if (!existing.contains(pvc.getMetadata().getName())) {
-          LOG.debug("Creating PVC for workspace '{}'", workspaceId);
-          pvcs.create(pvc);
-          LOG.debug("Waiting PVC for workspace '{}' to be bound", workspaceId);
-          pvcs.waitBound(pvc.getMetadata().getName(), timeoutMillis);
-        }
-        if (preCreateDirs && subpaths != null) {
-          pvcSubPathHelper.createDirs(workspaceId, subpaths);
-        }
-      }
-      LOG.debug("Preparing PVC done for workspace '{}'", workspaceId);
+
+    if (claims.isEmpty()) {
+      return;
     }
+
+    log.debug("Preparing PVC started for workspace '{}'", workspaceId);
+    final KubernetesNamespace namespace = factory.create(workspaceId);
+    final KubernetesPersistentVolumeClaims pvcs = namespace.persistentVolumeClaims();
+    final Set<String> existing =
+        pvcs.get().stream().map(p -> p.getMetadata().getName()).collect(toSet());
+    for (PersistentVolumeClaim pvc : claims) {
+      final String[] subpaths =
+          (String[])
+              pvc.getAdditionalProperties().remove(format(SUBPATHS_PROPERTY_FMT, workspaceId));
+      if (!existing.contains(pvc.getMetadata().getName())) {
+        log.debug("Creating PVC for workspace '{}'", workspaceId);
+        pvcs.create(pvc);
+        log.debug("Waiting PVC for workspace '{}' to be bound", workspaceId);
+        pvcs.waitBound(pvc.getMetadata().getName(), timeoutMillis);
+      }
+      if (preCreateDirs && subpaths != null) {
+        pvcSubPathHelper.createDirs(workspaceId, subpaths);
+      }
+    }
+    log.debug("Preparing PVC done for workspace '{}'", workspaceId);
   }
 
