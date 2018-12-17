@@ -15,7 +15,7 @@
       configMapNameTranslation.put(originalName, uniqueName);
     }
 
-    final Collection<PodData> podData = k8sEnv.getPodData().values();
+    final Collection<PodData> podData = k8sEnv.getPodsData().values();
     for (PodData pod : podData) {
       final ObjectMeta podMeta = pod.getMetadata();
       putLabel(podMeta, Constants.CHE_ORIGINAL_NAME_LABEL, podMeta.getName());
@@ -24,6 +24,17 @@
       if (configMapNameTranslation.size() > 0) {
         rewriteConfigMapNames(pod, configMapNameTranslation);
       }
+    }
+
+    // We expliticly need to modify the deployments in the environment to provision unique names
+    // for them.
+    final Collection<Deployment> deployments = k8sEnv.getDeploymentsCopy().values();
+    for (Deployment deployment : deployments) {
+      final ObjectMeta deploymentMeta = deployment.getMetadata();
+      final String originalName = deploymentMeta.getName();
+      putLabel(deploymentMeta, Constants.CHE_ORIGINAL_NAME_LABEL, originalName);
+      final String deploymentName = Names.uniqueResourceName(originalName, workspaceId);
+      deploymentMeta.setName(deploymentName);
     }
 
     final Set<Ingress> ingresses = new HashSet<>(k8sEnv.getIngresses().values());
