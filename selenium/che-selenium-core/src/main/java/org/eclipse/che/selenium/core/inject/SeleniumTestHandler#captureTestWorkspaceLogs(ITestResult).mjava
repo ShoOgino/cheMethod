@@ -1,49 +1,57 @@
   private void captureTestWorkspaceLogs(ITestResult result) {
     Object testInstance = result.getInstance();
-    for (Field field : testInstance.getClass().getDeclaredFields()) {
-      field.setAccessible(true);
+    traverseClassHierarchy(
+        testInstance.getClass(),
+        (clazz) -> {
+          for (Field field : clazz.getDeclaredFields()) {
+            field.setAccessible(true);
 
-      Object obj;
-      try {
-        obj = field.get(testInstance);
-      } catch (IllegalAccessException e) {
-        LOG.error(
-            "Field {} is inaccessible in {}.", field.getName(), testInstance.getClass().getName());
-        continue;
-      }
+            Object obj;
+            try {
+              obj = field.get(testInstance);
+            } catch (IllegalAccessException e) {
+              LOG.error(
+                  "Field {} is inaccessible in {}.",
+                  field.getName(),
+                  testInstance.getClass().getName());
+              continue;
+            }
 
-      if (!(obj instanceof TestWorkspace)) {
-        continue;
-      }
+            if (!(obj instanceof TestWorkspace)) {
+              continue;
+            }
 
-      try {
-        if (((TestWorkspace) obj).getId() == null) {
-          continue;
-        }
-      } catch (ExecutionException | InterruptedException e) {
-        continue;
-      }
+            try {
+              if (((TestWorkspace) obj).getId() == null) {
+                continue;
+              }
+            } catch (ExecutionException | InterruptedException e) {
+              continue;
+            }
 
-      String testReference = getTestReference(result);
-      Path pathToStoreWorkspaceLogs = Paths.get(workspaceLogsDir, testReference);
-      testWorkspaceLogsReader.store((TestWorkspace) obj, pathToStoreWorkspaceLogs, false);
-      Path pathToZipWithWorkspaceLogs =
-          pathToStoreWorkspaceLogs.getParent().resolve(getTestResultFilename(testReference, "zip"));
+            String testReference = getTestReference(result);
+            Path pathToStoreWorkspaceLogs = Paths.get(workspaceLogsDir, testReference);
+            testWorkspaceLogsReader.store((TestWorkspace) obj, pathToStoreWorkspaceLogs, false);
+            Path pathToZipWithWorkspaceLogs =
+                pathToStoreWorkspaceLogs
+                    .getParent()
+                    .resolve(getTestResultFilename(testReference, "zip"));
 
-      if (!Files.exists(pathToStoreWorkspaceLogs)) {
-        return;
-      }
+            if (!Files.exists(pathToStoreWorkspaceLogs)) {
+              return;
+            }
 
-      try {
-        Path zip = Files.createFile(pathToZipWithWorkspaceLogs);
-        try (ZipOutputStream out = ZipUtils.stream(zip)) {
-          ZipUtils.add(out, pathToStoreWorkspaceLogs);
-        }
+            try {
+              Path zip = Files.createFile(pathToZipWithWorkspaceLogs);
+              try (ZipOutputStream out = ZipUtils.stream(zip)) {
+                ZipUtils.add(out, pathToStoreWorkspaceLogs);
+              }
 
-        FileUtils.deleteQuietly(pathToStoreWorkspaceLogs.toFile());
-      } catch (IOException | IllegalArgumentException e) {
-        LOG.warn("Error of creation zip-file with workspace logs.", e);
-      }
-    }
+              FileUtils.deleteQuietly(pathToStoreWorkspaceLogs.toFile());
+            } catch (IOException | IllegalArgumentException e) {
+              LOG.warn("Error of creation zip-file with workspace logs.", e);
+            }
+          }
+        });
   }
 
