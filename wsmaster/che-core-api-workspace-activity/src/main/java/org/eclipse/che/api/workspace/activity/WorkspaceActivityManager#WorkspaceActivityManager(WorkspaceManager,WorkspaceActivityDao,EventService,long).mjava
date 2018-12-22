@@ -15,35 +15,30 @@
               + " minutes). This may cause problems with workspace components startup and/or premature workspace shutdown.");
     }
 
-    this.workspaceEventsSubscriber =
-        new EventSubscriber<WorkspaceStatusEvent>() {
+    //noinspection Convert2Lambda
+    this.setCreatedTimestampSubscriber =
+        new EventSubscriber<WorkspaceCreatedEvent>() {
           @Override
-          public void onEvent(WorkspaceStatusEvent event) {
-            switch (event.getStatus()) {
-              case RUNNING:
-                try {
-                  Workspace workspace = workspaceManager.getWorkspace(event.getWorkspaceId());
-                  if (workspace.getAttributes().remove(WORKSPACE_STOPPED_BY) != null) {
-                    workspaceManager.updateWorkspace(event.getWorkspaceId(), workspace);
-                  }
-                } catch (Exception ex) {
-                  LOG.warn(
-                      "Failed to remove stopped information attribute for workspace "
-                          + event.getWorkspaceId());
-                }
-                update(event.getWorkspaceId(), System.currentTimeMillis());
-                break;
-              case STOPPED:
-                try {
-                  activityDao.removeExpiration(event.getWorkspaceId());
-                } catch (ServerException e) {
-                  LOG.error(e.getLocalizedMessage(), e);
-                }
-                break;
-              default:
-                // do nothing
+          public void onEvent(WorkspaceCreatedEvent event) {
+            try {
+              long createdTime =
+                  Long.parseLong(
+                      event.getWorkspace().getAttributes().get(Constants.CREATED_ATTRIBUTE_NAME));
+              activityDao.setCreatedTime(event.getWorkspace().getId(), createdTime);
+            } catch (ServerException | NumberFormatException x) {
+              LOG.warn("Failed to record workspace created time in workspace activity.", x);
             }
           }
         };
+
+    this.workspaceActivityRemover =
+        new CascadeEventSubscriber<BeforeWorkspaceRemovedEvent>() {
+          @Override
+          public void onCascadeEvent(BeforeWorkspaceRemovedEvent event) throws Exception {
+            activityDao.removeActivity(event.getWorkspace().getId());
+          }
+        };
+
+    this.updateStatusChangedTimestampSubscriber = new UpdateStatusChangedTimestampSubscriber();
   }
 

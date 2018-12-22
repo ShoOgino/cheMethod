@@ -1,0 +1,43 @@
+    @Override
+    public void onEvent(WorkspaceStatusEvent event) {
+      long now = System.currentTimeMillis();
+      String workspaceId = event.getWorkspaceId();
+      WorkspaceStatus status = event.getStatus();
+
+      // first, record the activity
+      try {
+        activityDao.setStatusChangeTime(workspaceId, status, now);
+      } catch (ServerException e) {
+        LOG.warn(
+            "Failed to record workspace activity. Workspace: {}, status: {}",
+            workspaceId,
+            status.toString(),
+            e);
+      }
+
+      // now do any special handling
+      switch (status) {
+        case RUNNING:
+          try {
+            Workspace workspace = workspaceManager.getWorkspace(workspaceId);
+            if (workspace.getAttributes().remove(WORKSPACE_STOPPED_BY) != null) {
+              workspaceManager.updateWorkspace(workspaceId, workspace);
+            }
+          } catch (Exception ex) {
+            LOG.warn(
+                "Failed to remove stopped information attribute for workspace {}", workspaceId);
+          }
+          WorkspaceActivityManager.this.update(workspaceId, now);
+          break;
+        case STOPPED:
+          try {
+            activityDao.removeExpiration(workspaceId);
+          } catch (ServerException e) {
+            LOG.error(e.getLocalizedMessage(), e);
+          }
+          break;
+        default:
+          // do nothing
+      }
+    }
+
