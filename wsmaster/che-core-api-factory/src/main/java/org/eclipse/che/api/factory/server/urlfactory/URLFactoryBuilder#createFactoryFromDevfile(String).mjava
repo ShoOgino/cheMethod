@@ -1,0 +1,29 @@
+  /**
+   * Build a factory using the provided devfile
+   *
+   * @param devfileLocation location of devfile
+   * @return a factory or null if devfile is not found
+   */
+  public Optional<FactoryDto> createFactoryFromDevfile(String devfileLocation)
+      throws BadRequestException, ServerException {
+    if (devfileLocation == null) {
+      return Optional.empty();
+    }
+    final String devfileYamlContent = urlFetcher.fetch(devfileLocation);
+    if (Strings.isNullOrEmpty(devfileYamlContent)) {
+      return Optional.empty();
+    }
+    try {
+      Devfile devfile = devfileManager.parse(devfileYamlContent, false);
+      WorkspaceConfigImpl wsConfig = devfileManager.createWorkspaceConfig(devfile);
+      return Optional.of(
+          newDto(FactoryDto.class)
+              .withV(CURRENT_VERSION)
+              .withWorkspace(DtoConverter.asDto(wsConfig)));
+    } catch (DevfileFormatException e) {
+      throw new BadRequestException(e.getMessage());
+    } catch (IOException x) {
+      throw new ServerException(x.getLocalizedMessage(), x);
+    }
+  }
+
