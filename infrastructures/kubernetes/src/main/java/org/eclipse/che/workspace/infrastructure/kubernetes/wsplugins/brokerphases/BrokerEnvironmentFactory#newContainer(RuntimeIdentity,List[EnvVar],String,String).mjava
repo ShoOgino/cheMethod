@@ -1,12 +1,13 @@
   private Container newContainer(
-      RuntimeIdentity runtimeId, List<EnvVar> envVars, String image, String brokerVolumeName) {
-    final Container container =
+      RuntimeIdentity runtimeId,
+      List<EnvVar> envVars,
+      String image,
+      @Nullable String brokerVolumeName) {
+    final ContainerBuilder cb =
         new ContainerBuilder()
             .withName(generateUniqueName(CONTAINER_NAME_SUFFIX))
             .withImage(image)
             .withArgs(
-                "-metas",
-                CONF_FOLDER + "/" + CONFIG_FILE,
                 "-push-endpoint",
                 cheWebsocketEndpoint,
                 "-runtime-id",
@@ -16,12 +17,12 @@
                     MoreObjects.firstNonNull(runtimeId.getEnvName(), ""),
                     runtimeId.getOwnerId()))
             .withImagePullPolicy(brokerPullPolicy)
-            .withVolumeMounts(
-                new VolumeMount(CONF_FOLDER + "/", null, brokerVolumeName, true, null))
-            .withEnv(envVars)
-            .withNewResources()
-            .endResources()
-            .build();
+            .withEnv(envVars);
+    if (brokerVolumeName != null) {
+      cb.withVolumeMounts(new VolumeMount(CONF_FOLDER + "/", null, brokerVolumeName, true, null));
+      cb.addToArgs("-metas", CONF_FOLDER + "/" + CONFIG_FILE);
+    }
+    Container container = cb.build();
     Containers.addRamLimit(container, "250Mi");
     Containers.addRamRequest(container, "250Mi");
     return container;
