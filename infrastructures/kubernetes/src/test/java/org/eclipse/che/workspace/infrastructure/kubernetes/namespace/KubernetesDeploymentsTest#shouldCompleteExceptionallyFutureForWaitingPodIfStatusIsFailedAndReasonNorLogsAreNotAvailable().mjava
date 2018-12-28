@@ -3,16 +3,16 @@
       shouldCompleteExceptionallyFutureForWaitingPodIfStatusIsFailedAndReasonNorLogsAreNotAvailable()
           throws Exception {
     // given
-    when(status.getPhase()).thenReturn(POD_STATUS_PHASE_FAILED);
     CompletableFuture future = kubernetesDeployments.waitRunningAsync(POD_NAME);
 
-    doThrow(new InfrastructureException("Failure while retrieving pod logs"))
+    when(status.getPhase()).thenReturn(POD_STATUS_PHASE_FAILED);
+    doThrow(new InfrastructureException("Unable to create client"))
         .when(clientFactory)
-        .create();
+        .create(anyString());
 
     // when
     verify(podResource).watch(watcherCaptor.capture());
-    watcher = watcherCaptor.getValue();
+    Watcher<Pod> watcher = watcherCaptor.getValue();
     watcher.eventReceived(Watcher.Action.MODIFIED, pod);
 
     // then
@@ -22,7 +22,7 @@
     } catch (ExecutionException e) {
       assertEquals(
           e.getCause().getMessage(),
-          "Pod 'podName' failed to start. Error occurred while fetching pod logs.");
+          "Pod 'podName' failed to start. Error occurred while fetching pod logs: Unable to create client");
     }
   }
 

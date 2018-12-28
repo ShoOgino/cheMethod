@@ -1,0 +1,33 @@
+  @VisibleForTesting
+  void checkOne(String workspaceId) throws InfrastructureException {
+    LOG.debug("Checking consistency of runtime for workspace `{}`", workspaceId);
+    KubernetesInternalRuntime k8sRuntime = getKubernetesInternalRuntime(workspaceId);
+    RuntimeIdentity runtimeId = k8sRuntime.getContext().getIdentity();
+
+    try {
+      if (k8sRuntime.isConsistent()) {
+        return;
+      }
+    } catch (InfrastructureException e) {
+      throw new InfrastructureException(
+          format(
+              "Error occurred during runtime '%s:%s' consistency checking. Cause: %s",
+              runtimeId.getWorkspaceId(), runtimeId.getOwnerId(), e.getMessage()),
+          e);
+    }
+
+    // check if status is still RUNNING
+    // not to initialize abnormal stop for a runtime that is not RUNNING anymore
+    if (!isRunning(k8sRuntime)) {
+      return;
+    }
+
+    LOG.warn(
+        "Found runtime `{}:{}` with inconsistent state. It's going to be stopped automatically",
+        runtimeId.getWorkspaceId(),
+        runtimeId.getOwnerId());
+
+    stopAbnormally(k8sRuntime);
+    LOG.debug("Checking consistency of runtime for workspace `{}` is finished", workspaceId);
+  }
+

@@ -1,0 +1,29 @@
+  @Test
+  public void
+      shouldMarkRuntimeAsStoppedEvenWhenExceptionOccursDuringRuntimeStoppingOnCheckingConsistency()
+          throws Exception {
+    // given
+    doReturn(k8sRuntime).when(workspaceRuntimes).getInternalRuntime("workspace1");
+    doReturn(false).when(k8sRuntime).isConsistent();
+    doThrow(new InfrastructureException("error")).when(k8sRuntime).stop(any());
+
+    // when
+    InfrastructureException caughtException = null;
+    try {
+      inconsistentRuntimesDetector.checkOne("workspace1");
+    } catch (InfrastructureException e) {
+      caughtException = e;
+    }
+
+    // then
+    assertNotNull(caughtException);
+    assertEquals(
+        caughtException.getMessage(),
+        "Failed to stop the runtime 'workspace1:owner1' which has inconsistent state. Error: error");
+    verify(k8sRuntime).stop(emptyMap());
+    verify(eventPublisher)
+        .sendAbnormalStoppingEvent(runtimeId, "The runtime has inconsistent state.");
+    verify(eventPublisher)
+        .sendAbnormalStoppedEvent(runtimeId, "The runtime has inconsistent state.");
+  }
+
