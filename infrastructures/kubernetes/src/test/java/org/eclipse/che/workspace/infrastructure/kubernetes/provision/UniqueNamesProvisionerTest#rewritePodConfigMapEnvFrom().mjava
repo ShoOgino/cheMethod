@@ -1,0 +1,26 @@
+  @Test
+  public void rewritePodConfigMapEnvFrom() throws Exception {
+    when(runtimeIdentity.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+
+    ConfigMap configMap = newConfigMap();
+    doReturn(ImmutableMap.of(CONFIGMAP_NAME, configMap)).when(k8sEnv).getConfigMaps();
+
+    EnvFromSource envFrom =
+        new EnvFromSourceBuilder()
+            .withNewConfigMapRef()
+            .withName(CONFIGMAP_NAME)
+            .endConfigMapRef()
+            .build();
+    Container container = new ContainerBuilder().withEnvFrom(envFrom).build();
+    Pod pod = newPod();
+    pod.getSpec().setContainers(ImmutableList.of(container));
+    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
+    doReturn(ImmutableMap.of(POD_NAME, podData)).when(k8sEnv).getPodsData();
+
+    uniqueNamesProvisioner.provision(k8sEnv, runtimeIdentity);
+
+    String newConfigMapName = configMap.getMetadata().getName();
+    EnvFromSource newEnvFromSource = container.getEnvFrom().iterator().next();
+    assertEquals(newEnvFromSource.getConfigMapRef().getName(), newConfigMapName);
+  }
+

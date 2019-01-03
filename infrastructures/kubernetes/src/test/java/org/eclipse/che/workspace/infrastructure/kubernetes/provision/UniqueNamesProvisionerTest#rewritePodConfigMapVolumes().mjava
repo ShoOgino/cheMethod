@@ -1,0 +1,21 @@
+  @Test
+  public void rewritePodConfigMapVolumes() throws Exception {
+    when(runtimeIdentity.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+
+    ConfigMap configMap = newConfigMap();
+    doReturn(ImmutableMap.of(CONFIGMAP_NAME, configMap)).when(k8sEnv).getConfigMaps();
+
+    Volume volume =
+        new VolumeBuilder().withNewConfigMap().withName(CONFIGMAP_NAME).endConfigMap().build();
+    Pod pod = newPod();
+    pod.getSpec().setVolumes(ImmutableList.of(volume));
+    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
+    doReturn(ImmutableMap.of(POD_NAME, podData)).when(k8sEnv).getPodsData();
+
+    uniqueNamesProvisioner.provision(k8sEnv, runtimeIdentity);
+
+    String newConfigMapName = configMap.getMetadata().getName();
+    Volume newVolume = pod.getSpec().getVolumes().iterator().next();
+    assertEquals(newVolume.getConfigMap().getName(), newConfigMapName);
+  }
+

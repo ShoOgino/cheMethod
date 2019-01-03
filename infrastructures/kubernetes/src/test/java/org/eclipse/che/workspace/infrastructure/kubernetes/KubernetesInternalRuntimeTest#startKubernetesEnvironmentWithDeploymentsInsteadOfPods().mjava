@@ -1,0 +1,38 @@
+  @Test
+  public void startKubernetesEnvironmentWithDeploymentsInsteadOfPods() throws Exception {
+    when(k8sEnv.getPodsCopy()).thenReturn(emptyMap());
+    when(k8sEnv.getDeploymentsCopy()).thenReturn(deploymentsMap);
+    when(k8sEnv.getSecrets()).thenReturn(ImmutableMap.of("secret", new Secret()));
+    when(k8sEnv.getConfigMaps()).thenReturn(ImmutableMap.of("configMap", new ConfigMap()));
+    when(deployments.deploy(any(Deployment.class)))
+        .thenAnswer(
+            a -> {
+              Deployment deployment = (Deployment) a.getArguments()[0];
+              return new PodBuilder()
+                  .withMetadata(deployment.getSpec().getTemplate().getMetadata())
+                  .withSpec(deployment.getSpec().getTemplate().getSpec())
+                  .build();
+            });
+
+    internalRuntime.start(emptyMap());
+
+    verify(toolingProvisioner).provision(IDENTITY, startSynchronizer, k8sEnv);
+    verify(internalEnvironmentProvisioner).provision(IDENTITY, k8sEnv);
+    verify(kubernetesEnvironmentProvisioner).provision(k8sEnv, IDENTITY);
+    verify(deployments).deploy(any(Deployment.class));
+    verify(ingresses).create(any());
+    verify(services).create(any());
+    verify(secrets).create(any());
+    verify(configMaps).create(any());
+    verify(namespace.deployments(), times(1)).watchEvents(any());
+    verify(bootstrapper, times(2)).bootstrapAsync();
+    verify(eventService, times(4)).publish(any());
+    verifyOrderedEventsChains(
+        new MachineStatusEvent[] {newEvent(M1_NAME, STARTING), newEvent(M1_NAME, RUNNING)},
+        new MachineStatusEvent[] {newEvent(M2_NAME, STARTING), newEvent(M2_NAME, RUNNING)});
+    verify(serverCheckerFactory).create(IDENTITY, M1_NAME, emptyMap());
+    verify(serverCheckerFactory).create(IDENTITY, M2_NAME, emptyMap());
+    verify(serversChecker, times(2)).startAsync(any());
+    verify(namespace.deployments(), times(1)).stopWatch();
+  }
+

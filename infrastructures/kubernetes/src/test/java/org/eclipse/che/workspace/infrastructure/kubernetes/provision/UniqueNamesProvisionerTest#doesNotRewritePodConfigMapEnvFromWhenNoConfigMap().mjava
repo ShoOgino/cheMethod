@@ -1,0 +1,22 @@
+  @Test
+  public void doesNotRewritePodConfigMapEnvFromWhenNoConfigMap() throws Exception {
+    when(runtimeIdentity.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+
+    EnvFromSource envFrom =
+        new EnvFromSourceBuilder()
+            .withNewConfigMapRef()
+            .withName(CONFIGMAP_NAME)
+            .endConfigMapRef()
+            .build();
+    Container container = new ContainerBuilder().withEnvFrom(envFrom).build();
+    Pod pod = newPod();
+    pod.getSpec().setContainers(ImmutableList.of(container));
+    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
+    doReturn(ImmutableMap.of(POD_NAME, podData)).when(k8sEnv).getPodsData();
+
+    uniqueNamesProvisioner.provision(k8sEnv, runtimeIdentity);
+
+    EnvFromSource newEnvFromSource = container.getEnvFrom().iterator().next();
+    assertEquals(newEnvFromSource.getConfigMapRef().getName(), CONFIGMAP_NAME);
+  }
+
