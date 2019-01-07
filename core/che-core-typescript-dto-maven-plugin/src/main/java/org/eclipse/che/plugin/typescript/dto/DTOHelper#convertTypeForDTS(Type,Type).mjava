@@ -1,0 +1,40 @@
+  /**
+   * Convert Java type to TypeScript type for .d.ts Same as {@link #convertType(Type)} but in
+   * addition check if dto and its container dto in same package than skip adding namespace
+   */
+  public static String convertTypeForDTS(Type containerType, Type type) {
+    if (type instanceof ParameterizedType) {
+      ParameterizedType parameterizedType = (ParameterizedType) type;
+      Type rawType = parameterizedType.getRawType();
+      return convertParametrizedTypeDTS(type, parameterizedType, rawType, containerType);
+    } else if (String.class.equals(type)) {
+      // Maybe find a better enum type for typescript
+      return "string";
+
+    } else if ((type instanceof Class && ((Class) type).isEnum())) {
+
+      Object[] constants = ((Class) type).getEnumConstants();
+      return Arrays.stream(constants)
+          .map(o -> "\'" + o.toString() + "\'")
+          .collect(Collectors.joining(" | "));
+    } else if (Integer.class.equals(type)
+        || Integer.TYPE.equals(type)
+        || Long.class.equals(type)
+        || Long.TYPE.equals(type)
+        || Double.class.equals(type)
+        || Double.TYPE.equals(type)
+        || Float.TYPE.equals(type)) {
+      return "number";
+    } else if (Boolean.class.equals(type) || Boolean.TYPE.equals(type)) {
+      return "boolean";
+    }
+
+    String declarationPackage = convertToDTSPackageName((Class) containerType);
+    String typePackage = convertToDTSPackageName((Class) type);
+    if (declarationPackage.equals(typePackage)) {
+      return convertToDTSName((Class) type);
+    }
+
+    return typePackage + "." + convertToDTSName((Class) type);
+  }
+

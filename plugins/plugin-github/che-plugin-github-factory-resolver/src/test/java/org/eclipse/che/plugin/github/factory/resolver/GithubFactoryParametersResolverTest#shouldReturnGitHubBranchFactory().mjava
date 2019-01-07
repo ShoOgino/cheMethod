@@ -6,32 +6,29 @@
     String githubCloneUrl = "https://github.com/eclipse/che";
     String githubBranch = "4.2.x";
 
-    FactoryDto computedFactory = newDto(FactoryDto.class).withV("4.0");
-    when(urlFactoryBuilder.createFactory(anyString())).thenReturn(computedFactory);
+    FactoryDto computedFactory = newDto(FactoryDto.class).withV(CURRENT_VERSION);
+    when(urlFactoryBuilder.createFactoryFromJson(anyString()))
+        .thenReturn(Optional.of(computedFactory));
 
     githubFactoryParametersResolver.createFactory(singletonMap(URL_PARAMETER_NAME, githubUrl));
 
-    // check we called the builder with the following codenvy json file
-    verify(urlFactoryBuilder).createFactory(jsonFileLocationArgumentCaptor.capture());
+    // check we called the builder with the following factory json file
+    verify(urlFactoryBuilder).createFactoryFromJson(fileLocationArgumentCaptor.capture());
     assertEquals(
-        jsonFileLocationArgumentCaptor.getValue(),
+        fileLocationArgumentCaptor.getValue(),
         "https://raw.githubusercontent.com/eclipse/che/4.2.x/.factory.json");
 
     // check we provide dockerfile and correct env
-    verify(urlFactoryBuilder)
-        .buildWorkspaceConfig(
-            eq("che"),
-            eq("eclipse"),
-            eq("https://raw.githubusercontent.com/eclipse/che/4.2.x/.factory.dockerfile"));
+    verify(urlFactoryBuilder).buildDefaultWorkspaceConfig(eq("che"));
 
     // check project config built
     verify(projectConfigDtoMerger)
         .merge(any(FactoryDto.class), projectConfigDtoArgumentCaptor.capture());
 
-    ProjectConfigDto projectConfigDto = projectConfigDtoArgumentCaptor.getValue();
+    ProjectConfigDto projectConfigDto = projectConfigDtoArgumentCaptor.getValue().get();
     SourceStorageDto sourceStorageDto = projectConfigDto.getSource();
     assertNotNull(sourceStorageDto);
-    assertEquals(sourceStorageDto.getType(), "git");
+    assertEquals(sourceStorageDto.getType(), "github");
     assertEquals(sourceStorageDto.getLocation(), githubCloneUrl);
     Map<String, String> sourceParameters = sourceStorageDto.getParameters();
     assertEquals(sourceParameters.size(), 1);

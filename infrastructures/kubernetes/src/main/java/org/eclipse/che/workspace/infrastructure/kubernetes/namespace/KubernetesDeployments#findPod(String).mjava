@@ -1,0 +1,35 @@
+  private Optional<Pod> findPod(String name) throws InfrastructureException {
+    Pod pod = clientFactory.create(workspaceId).pods().inNamespace(namespace).withName(name).get();
+    if (pod != null) {
+      return Optional.of(pod);
+    }
+    Deployment deployment =
+        clientFactory
+            .create(workspaceId)
+            .apps()
+            .deployments()
+            .inNamespace(namespace)
+            .withName(name)
+            .get();
+    if (deployment == null) {
+      return Optional.empty();
+    }
+    Map<String, String> selector = deployment.getSpec().getSelector().getMatchLabels();
+    List<Pod> pods =
+        clientFactory
+            .create(workspaceId)
+            .pods()
+            .inNamespace(namespace)
+            .withLabels(selector)
+            .list()
+            .getItems();
+    if (pods.isEmpty()) {
+      return Optional.empty();
+    } else if (pods.size() > 1) {
+      throw new InfrastructureException(
+          String.format("Found multiple pods in Deployment '%s'", name));
+    }
+
+    return Optional.of(pods.get(0));
+  }
+

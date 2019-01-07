@@ -1,0 +1,34 @@
+  @Test
+  public void testInitBrokerContainer() throws Exception {
+    // given
+    Collection<PluginMeta> metas = singletonList(new PluginMeta().type(SUPPORTED_TYPE));
+    ArgumentCaptor<BrokersConfigs> captor = ArgumentCaptor.forClass(BrokersConfigs.class);
+
+    // when
+    factory.create(metas, runtimeId, new BrokersResult());
+
+    // then
+    verify(factory).doCreate(captor.capture());
+    BrokersConfigs brokersConfigs = captor.getValue();
+    List<Container> initContainers = brokersConfigs.pod.getSpec().getInitContainers();
+    assertEquals(initContainers.size(), 1);
+    Container initContainer = initContainers.get(0);
+    assertEquals(initContainer.getImage(), INIT_IMAGE);
+    assertEquals(initContainer.getImagePullPolicy(), IMAGE_PULL_POLICY);
+    assertEquals(
+        initContainer.getEnv(),
+        asList(new EnvVar("test1", "value1", null), new EnvVar("test2", "value2", null)));
+    assertEquals(
+        initContainer.getArgs().toArray(),
+        new String[] {
+          "-push-endpoint",
+          PUSH_ENDPOINT,
+          "-runtime-id",
+          String.format(
+              "%s:%s:%s",
+              runtimeId.getWorkspaceId(), runtimeId.getEnvName(), runtimeId.getOwnerId())
+        });
+    assertEquals(Containers.getRamLimit(initContainer), 262144000);
+    assertEquals(Containers.getRamLimit(initContainer), 262144000);
+  }
+

@@ -1,25 +1,32 @@
   @BeforeMethod
   public void setUp() throws Exception {
-    final Pod earlyPod = mock(Pod.class);
-    final PodStatus earlyPodStatus = mock(PodStatus.class);
-    when(earlyPod.getStatus()).thenReturn(earlyPodStatus);
-    when(podResource.get()).thenReturn(earlyPod);
-
-    lenient().when(clientFactory.create()).thenReturn(kubernetesClient);
     lenient().when(clientFactory.create(anyString())).thenReturn(kubernetesClient);
 
-    final MixedOperation mixedOperation = mock(MixedOperation.class);
-    final NonNamespaceOperation namespaceOperation = mock(NonNamespaceOperation.class);
-    doReturn(mixedOperation).when(kubernetesClient).pods();
-    lenient().when(mixedOperation.withName(anyString())).thenReturn(podResource);
-    when(mixedOperation.inNamespace(anyString())).thenReturn(namespaceOperation);
-    when(namespaceOperation.withName(anyString())).thenReturn(podResource);
+    lenient().when(pod.getStatus()).thenReturn(status);
+    lenient().when(pod.getMetadata()).thenReturn(metadata);
+    lenient().when(metadata.getName()).thenReturn(POD_NAME);
 
-    when(pod.getStatus()).thenReturn(status);
-    when(pod.getMetadata()).thenReturn(metadata);
-    when(metadata.getName()).thenReturn(POD_NAME);
-    lenient().when(podResource.getLog()).thenReturn("Pod fail log");
-    watcherCaptor = ArgumentCaptor.forClass(Watcher.class);
+    // Model DSL: client.pods().inNamespace(...).withName(...).get().getMetadata().getName();
+    lenient().doReturn(podsMixedOperation).when(kubernetesClient).pods();
+    lenient().doReturn(podsNamespaceOperation).when(podsMixedOperation).inNamespace(anyString());
+    lenient().doReturn(podResource).when(podsNamespaceOperation).withName(anyString());
+    lenient().doReturn(pod).when(podResource).get();
+
+    // Model DSL:
+    // client.apps().deployments(...).inNamespace(...).withName(...).get().getMetadata().getName();
+    lenient().doReturn(apps).when(kubernetesClient).apps();
+    lenient().doReturn(deploymentsMixedOperation).when(apps).deployments();
+    lenient()
+        .doReturn(deploymentsNamespaceOperation)
+        .when(deploymentsMixedOperation)
+        .inNamespace(anyString());
+    lenient()
+        .doReturn(deploymentResource)
+        .when(deploymentsNamespaceOperation)
+        .withName(anyString());
+    lenient().doReturn(deployment).when(deploymentResource).get();
+    lenient().doReturn(deploymentMetadata).when(deployment).getMetadata();
+    lenient().doReturn(deploymentSpec).when(deployment).getSpec();
 
     kubernetesDeployments = new KubernetesDeployments("namespace", "workspace123", clientFactory);
   }

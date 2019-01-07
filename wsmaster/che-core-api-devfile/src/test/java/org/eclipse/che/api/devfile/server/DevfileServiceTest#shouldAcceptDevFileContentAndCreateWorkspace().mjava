@@ -1,0 +1,23 @@
+  @Test
+  public void shouldAcceptDevFileContentAndCreateWorkspace() throws Exception {
+    ArgumentCaptor<Devfile> captor = ArgumentCaptor.forClass(Devfile.class);
+    String yamlContent =
+        Files.readFile(getClass().getClassLoader().getResourceAsStream("devfile.yaml"));
+    Devfile devfile = createDevfile(yamlContent);
+    WorkspaceImpl ws = createWorkspace(WorkspaceStatus.STOPPED);
+    when(devfileManager.parse(anyString(), anyBoolean())).thenReturn(devfile);
+    when(devfileManager.createWorkspace(any(Devfile.class))).thenReturn(ws);
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .contentType(ContentType.JSON)
+            .body(yamlContent)
+            .when()
+            .post(SECURE_PATH + "/devfile");
+
+    assertEquals(response.getStatusCode(), 201);
+    verify(devfileManager).createWorkspace(captor.capture());
+    assertEquals(devfile, captor.getValue());
+  }
+

@@ -7,16 +7,24 @@
     webDriverWaitFactory
         .get(timeout)
         .until(
-            (ExpectedCondition<Boolean>)
-                driver -> {
-                  waitAndSwitchToFrame(By.id("ide-application-iframe"), PREPARING_WS_TIMEOUT_SEC);
-                  if (isVisible(By.id("gwt-debug-projectTree"))) {
-                    return true;
-                  }
+            new ExpectedCondition<Boolean>() {
+              private boolean switchedToFrame;
 
-                  seleniumWebDriver.switchTo().parentFrame();
-                  return false;
-                });
+              @Override
+              public Boolean apply(WebDriver driver) {
+                if (!switchedToFrame) {
+                  try {
+                    waitAndSwitchToFrame(By.id("ide-application-iframe"));
+                    switchedToFrame = true;
+                  } catch (NoSuchElementException | TimeoutException e) {
+                    driver.switchTo().parentFrame();
+                    return false;
+                  }
+                }
+
+                return isVisible(By.id("gwt-debug-projectTree"));
+              }
+            });
 
     return seleniumWebDriver.getWindowHandle();
   }

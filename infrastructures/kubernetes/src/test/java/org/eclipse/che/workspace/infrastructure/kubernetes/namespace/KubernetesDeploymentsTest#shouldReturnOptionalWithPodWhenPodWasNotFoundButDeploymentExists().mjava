@@ -1,0 +1,25 @@
+  @Test
+  public void shouldReturnOptionalWithPodWhenPodWasNotFoundButDeploymentExists() throws Exception {
+    // given
+    when(podResource.get()).thenReturn(null);
+    when(deploymentResource.get()).thenReturn(deployment);
+    LabelSelector labelSelector = mock(LabelSelector.class);
+    doReturn(labelSelector).when(deploymentSpec).getSelector();
+    doReturn(ImmutableMap.of("deployment", "existing")).when(labelSelector).getMatchLabels();
+
+    FilterWatchListDeletable filterList = mock(FilterWatchListDeletable.class);
+    doReturn(filterList).when(podsNamespaceOperation).withLabels(any());
+    PodList podList = mock(PodList.class);
+    doReturn(singletonList(pod)).when(podList).getItems();
+    doReturn(podList).when(filterList).list();
+
+    // when
+    Optional<Pod> fetchedPodOpt = kubernetesDeployments.get("existing");
+
+    // then
+    assertTrue(fetchedPodOpt.isPresent());
+    verify(podsNamespaceOperation).withName("existing");
+    verify(deploymentsNamespaceOperation).withName("existing");
+    assertEquals(fetchedPodOpt.get(), pod);
+  }
+

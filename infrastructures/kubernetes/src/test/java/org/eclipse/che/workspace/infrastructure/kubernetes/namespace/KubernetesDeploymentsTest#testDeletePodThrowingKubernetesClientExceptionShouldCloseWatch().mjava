@@ -1,0 +1,21 @@
+  @Test
+  public void testDeletePodThrowingKubernetesClientExceptionShouldCloseWatch() throws Exception {
+    final String POD_NAME = "nonExistingPod";
+    doReturn(POD_NAME).when(metadata).getName();
+
+    doThrow(KubernetesClientException.class).when(podResource).delete();
+    Watch watch = mock(Watch.class);
+    doReturn(watch).when(podResource).watch(any());
+
+    try {
+      new KubernetesDeployments("", "", clientFactory)
+          .doDeletePod(POD_NAME)
+          .get(5, TimeUnit.SECONDS);
+    } catch (KubernetesInfrastructureException e) {
+      assertTrue(e.getCause() instanceof KubernetesClientException);
+      verify(watch).close();
+      return;
+    }
+    fail("The exception should have been rethrown");
+  }
+
