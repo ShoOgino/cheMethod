@@ -1,0 +1,33 @@
+  @Override
+  public void bindTo(MeterRegistry registry) {
+    startingStoppedFailureCounter = bindFailureFrom(WorkspaceStatus.STARTING, registry);
+    runningStoppedFailureCounter = bindFailureFrom(WorkspaceStatus.RUNNING, registry);
+    stoppingStoppedFailureCounter = bindFailureFrom(WorkspaceStatus.STOPPING, registry);
+
+    // only subscribe to the event once we have the counters ready
+    eventService.subscribe(
+        event -> {
+          if (event.getError() == null || event.getStatus() != WorkspaceStatus.STOPPED) {
+            return;
+          }
+
+          Counter counter;
+          switch (event.getPrevStatus()) {
+            case STARTING:
+              counter = startingStoppedFailureCounter;
+              break;
+            case RUNNING:
+              counter = runningStoppedFailureCounter;
+              break;
+            case STOPPING:
+              counter = stoppingStoppedFailureCounter;
+              break;
+            default:
+              return;
+          }
+
+          counter.increment();
+        },
+        WorkspaceStatusEvent.class);
+  }
+
