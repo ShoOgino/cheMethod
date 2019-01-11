@@ -2,20 +2,29 @@
    * Build a factory using the provided devfile
    *
    * @param devfileLocation location of devfile
+   * @param fileUrlProvider optional service-specific provider of URL's to the file raw content
    * @return a factory or null if devfile is not found
    */
-  public Optional<FactoryDto> createFactoryFromDevfile(String devfileLocation)
+  public Optional<FactoryDto> createFactoryFromDevfile(
+      String devfileLocation, @Nullable Function<String, String> fileUrlProvider)
       throws BadRequestException, ServerException {
     if (devfileLocation == null) {
       return Optional.empty();
     }
     final String devfileYamlContent = urlFetcher.fetch(devfileLocation);
-    if (Strings.isNullOrEmpty(devfileYamlContent)) {
+    if (isNullOrEmpty(devfileYamlContent)) {
       return Optional.empty();
     }
     try {
       Devfile devfile = devfileManager.parse(devfileYamlContent, false);
+      Optional<Pair<String, EnvironmentImpl>> environmentPair =
+          devfileEnvironmentFactory.create(devfile, fileUrlProvider);
       WorkspaceConfigImpl wsConfig = devfileManager.createWorkspaceConfig(devfile);
+      if (environmentPair.isPresent()) {
+        final String environmentName = environmentPair.get().first;
+        wsConfig.setDefaultEnv(environmentName);
+        wsConfig.setEnvironments(singletonMap(environmentName, environmentPair.get().second));
+      }
       return Optional.of(
           newDto(FactoryDto.class)
               .withV(CURRENT_VERSION)
