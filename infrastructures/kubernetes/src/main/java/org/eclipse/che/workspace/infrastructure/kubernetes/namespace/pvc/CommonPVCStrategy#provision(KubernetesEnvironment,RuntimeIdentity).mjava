@@ -7,26 +7,18 @@
       return;
     }
     log.debug("Provisioning PVC strategy for workspace '{}'", workspaceId);
-    final Set<String> subPaths = new HashSet<>();
-    String commonPVCName = getCommonPVCName(identity);
-    final PersistentVolumeClaim pvc = newPVC(commonPVCName, pvcAccessMode, pvcQuantity);
-    k8sEnv.getPersistentVolumeClaims().put(commonPVCName, pvc);
-    for (PodData pod : k8sEnv.getPodsData().values()) {
-      PodSpec podSpec = pod.getSpec();
-      List<Container> containers = new ArrayList<>();
-      containers.addAll(podSpec.getContainers());
-      containers.addAll(podSpec.getInitContainers());
-      for (Container container : containers) {
-        String machineName = Names.machineName(pod, container);
-        InternalMachineConfig machineConfig = k8sEnv.getMachines().get(machineName);
-        addMachineVolumes(
-            commonPVCName, workspaceId, subPaths, pod, container, machineConfig.getVolumes());
+
+    PersistentVolumeClaim commonPVC = provisionCommonPVC(k8sEnv, identity);
+
+    provisionCheVolumes(k8sEnv, workspaceId, commonPVC.getMetadata().getName());
+
+    if (preCreateDirs) {
+      Set<String> subPaths = combineVolumeMountsSubpaths(k8sEnv);
+      if (!subPaths.isEmpty()) {
+        commonPVC.setAdditionalProperty(
+            format(SUBPATHS_PROPERTY_FMT, workspaceId),
+            subPaths.toArray(new String[subPaths.size()]));
       }
-    }
-    if (preCreateDirs && !subPaths.isEmpty()) {
-      pvc.setAdditionalProperty(
-          format(SUBPATHS_PROPERTY_FMT, workspaceId),
-          subPaths.toArray(new String[subPaths.size()]));
     }
     log.debug("PVC strategy provisioning done for workspace '{}'", workspaceId);
   }
