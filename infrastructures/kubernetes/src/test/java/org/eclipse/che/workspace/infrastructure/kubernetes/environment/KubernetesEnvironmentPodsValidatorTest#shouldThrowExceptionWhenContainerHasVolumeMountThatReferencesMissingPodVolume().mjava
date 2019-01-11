@@ -1,0 +1,23 @@
+  @Test(
+      expectedExceptions = ValidationException.class,
+      expectedExceptionsMessageRegExp =
+          "Container 'main' in pod 'pod1' contains volume mount that references missing volume 'non-existing'")
+  public void shouldThrowExceptionWhenContainerHasVolumeMountThatReferencesMissingPodVolume()
+      throws Exception {
+    // given
+    String podName = "pod1";
+    Pod pod = createPod("pod1", "main");
+    pod.getSpec()
+        .getContainers()
+        .get(0)
+        .getVolumeMounts()
+        .add(new VolumeMountBuilder().withName("non-existing").withMountPath("/tmp/data").build());
+    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
+    when(kubernetesEnvironment.getPodsData()).thenReturn(ImmutableMap.of(podName, podData));
+    when(kubernetesEnvironment.getMachines())
+        .thenReturn(ImmutableMap.of(podName + "/main", mock(InternalMachineConfig.class)));
+
+    // when
+    podsValidator.validate(kubernetesEnvironment);
+  }
+
