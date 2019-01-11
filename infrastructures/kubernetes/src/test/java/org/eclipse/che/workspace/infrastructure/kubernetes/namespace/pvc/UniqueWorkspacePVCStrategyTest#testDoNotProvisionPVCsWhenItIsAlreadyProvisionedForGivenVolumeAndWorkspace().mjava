@@ -3,20 +3,25 @@
       throws Exception {
     final String pvcUniqueName1 = PVC_NAME_PREFIX + "-3121";
     PersistentVolumeClaim pvc1 =
-        mockPVC(ImmutableMap.of(CHE_VOLUME_NAME_LABEL, VOLUME_1_NAME), pvcUniqueName1);
+        newPVC(pvcUniqueName1, ImmutableMap.of(CHE_VOLUME_NAME_LABEL, VOLUME_1_NAME));
+    pvc1.getAdditionalProperties().put("CHE_PROVISIONED", true);
     final String pvcUniqueName2 = PVC_NAME_PREFIX + "-71333";
     PersistentVolumeClaim pvc2 =
-        mockPVC(ImmutableMap.of(CHE_VOLUME_NAME_LABEL, VOLUME_2_NAME), pvcUniqueName2);
-    when(k8sEnv.getPersistentVolumeClaims())
-        .thenReturn(ImmutableMap.of(pvcUniqueName1, pvc1, pvcUniqueName2, pvc2));
+        newPVC(pvcUniqueName2, ImmutableMap.of(CHE_VOLUME_NAME_LABEL, VOLUME_2_NAME));
+    pvc2.getAdditionalProperties().put("CHE_PROVISIONED", true);
+    k8sEnv.getPersistentVolumeClaims().clear();
+    k8sEnv.getPersistentVolumeClaims().put(pvcUniqueName1, pvc1);
+    k8sEnv.getPersistentVolumeClaims().put(pvcUniqueName2, pvc2);
 
     strategy.provision(k8sEnv, IDENTITY);
 
-    assertEquals(podSpec.getVolumes().size(), 2);
-    assertEquals(podSpec2.getVolumes().size(), 1);
-    assertEquals(container.getVolumeMounts().size(), 2);
-    assertEquals(container2.getVolumeMounts().size(), 1);
-    assertEquals(container3.getVolumeMounts().size(), 1);
+    assertNotNull(k8sEnv.getPersistentVolumeClaims().get(pvcUniqueName1));
+    assertNotNull(k8sEnv.getPersistentVolumeClaims().get(pvcUniqueName2));
+    assertEquals(pod.getSpec().getVolumes().size(), 2);
+    assertEquals(pod.getSpec().getContainers().get(0).getVolumeMounts().size(), 2);
+    assertEquals(pod.getSpec().getContainers().get(1).getVolumeMounts().size(), 1);
+    assertEquals(pod2.getSpec().getVolumes().size(), 1);
+    assertEquals(pod2.getSpec().getContainers().get(0).getVolumeMounts().size(), 1);
     assertEquals(k8sEnv.getPersistentVolumeClaims().size(), 2);
   }
 
