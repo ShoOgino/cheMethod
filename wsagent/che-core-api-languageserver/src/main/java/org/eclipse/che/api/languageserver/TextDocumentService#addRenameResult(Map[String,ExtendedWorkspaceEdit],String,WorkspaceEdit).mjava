@@ -4,14 +4,21 @@
     ExtendedWorkspaceEdit result = new ExtendedWorkspaceEdit();
     List<ExtendedTextDocumentEdit> edits = new ArrayList<>();
     if (workspaceEdit.getDocumentChanges() != null) {
-      for (TextDocumentEdit documentEdit : workspaceEdit.getDocumentChanges()) {
-        ExtendedTextDocumentEdit edit = new ExtendedTextDocumentEdit();
-        edit.setTextDocument(documentEdit.getTextDocument());
-        edit.getTextDocument().setUri(removePrefixUri(edit.getTextDocument().getUri()));
-        edit.setEdits(
-            convertToExtendedEdit(
-                documentEdit.getEdits(), removeUriScheme(documentEdit.getTextDocument().getUri())));
-        edits.add(edit);
+      for (Either<TextDocumentEdit, ResourceOperation> documentChange :
+          workspaceEdit.getDocumentChanges()) {
+        if (documentChange.isLeft()) {
+          // since we're not announcing our capability to handle resource edits in initialization,
+          // we should not get any resoure changes
+          TextDocumentEdit documentEdit = documentChange.getLeft();
+          ExtendedTextDocumentEdit edit = new ExtendedTextDocumentEdit();
+          edit.setTextDocument(documentEdit.getTextDocument());
+          edit.getTextDocument().setUri(removePrefixUri(edit.getTextDocument().getUri()));
+          edit.setEdits(
+              convertToExtendedEdit(
+                  documentEdit.getEdits(),
+                  removeUriScheme(documentEdit.getTextDocument().getUri())));
+          edits.add(edit);
+        }
       }
     } else if (workspaceEdit.getChanges() != null) {
       for (Entry<String, List<TextEdit>> entry : workspaceEdit.getChanges().entrySet()) {
