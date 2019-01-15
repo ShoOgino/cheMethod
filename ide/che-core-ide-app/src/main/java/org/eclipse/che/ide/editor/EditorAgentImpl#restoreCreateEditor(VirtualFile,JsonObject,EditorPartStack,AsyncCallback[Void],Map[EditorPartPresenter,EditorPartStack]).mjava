@@ -15,9 +15,15 @@
     }
     final boolean active = file.hasKey("ACTIVE") && file.getBoolean("ACTIVE");
 
-    final FileType fileType = fileTypeRegistry.getFileTypeByFile(resourceFile);
-    final EditorProvider provider = editorRegistry.getEditor(fileType);
-    if (provider instanceof AsyncEditorProvider) {
+    Set<FileType> fileTypesByFile = getFileTypesByFile(resourceFile);
+    Optional<FileType> registeredFileType =
+        fileTypesByFile
+            .stream()
+            .filter(fileType -> editorRegistry.getEditor(fileType) instanceof AsyncEditorProvider)
+            .findAny();
+    if (registeredFileType.isPresent()) {
+      FileType fileType = registeredFileType.get();
+      final EditorProvider provider = editorRegistry.getEditor(fileType);
       ((AsyncEditorProvider) provider)
           .createEditor(resourceFile)
           .then(
@@ -38,6 +44,8 @@
                         });
               });
     } else {
+      FileType fileType = fileTypesByFile.stream().findAny().orElse(unknownFileType);
+      final EditorProvider provider = editorRegistry.getEditor(fileType);
       EditorPartPresenter editor = provider.getEditor();
       restoreInitEditor(
               resourceFile,

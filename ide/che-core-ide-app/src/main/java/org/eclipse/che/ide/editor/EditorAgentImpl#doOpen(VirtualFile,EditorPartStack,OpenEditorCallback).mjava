@@ -2,22 +2,27 @@
       VirtualFile file, EditorPartStack editorPartStackConsumer, OpenEditorCallback callback) {
 
     addToOpeningFilesList(file.getLocation(), editorPartStackConsumer);
-
-    final FileType fileType = fileTypeRegistry.getFileTypeByFile(file);
-    final EditorProvider editorProvider = editorRegistry.getEditor(fileType);
-    if (editorProvider instanceof AsyncEditorProvider) {
-      AsyncEditorProvider provider = (AsyncEditorProvider) editorProvider;
-      Promise<EditorPartPresenter> promise = provider.createEditor(file);
-      if (promise != null) {
-        promise.then(
-            editor -> {
-              initEditor(file, callback, fileType, editor, editorPartStackConsumer, editorProvider);
-            });
-        return;
-      }
+    Set<FileType> fileTypesByFile = getFileTypesByFile(file);
+    Optional<FileType> registeredFileType =
+        fileTypesByFile
+            .stream()
+            .filter(fileType -> editorRegistry.getEditor(fileType) instanceof AsyncEditorProvider)
+            .findAny();
+    if (registeredFileType.isPresent()) {
+      FileType fileType = registeredFileType.get();
+      final EditorProvider editorProvider = editorRegistry.getEditor(fileType);
+      ((AsyncEditorProvider) editorProvider)
+          .createEditor(file)
+          .then(
+              editor -> {
+                initEditor(
+                    file, callback, fileType, editor, editorPartStackConsumer, editorProvider);
+              });
+    } else {
+      FileType fileType = fileTypesByFile.stream().findAny().orElse(unknownFileType);
+      final EditorProvider editorProvider = editorRegistry.getEditor(fileType);
+      final EditorPartPresenter editor = editorProvider.getEditor();
+      initEditor(file, callback, fileType, editor, editorPartStackConsumer, editorProvider);
     }
-
-    final EditorPartPresenter editor = editorProvider.getEditor();
-    initEditor(file, callback, fileType, editor, editorPartStackConsumer, editorProvider);
   }
 
