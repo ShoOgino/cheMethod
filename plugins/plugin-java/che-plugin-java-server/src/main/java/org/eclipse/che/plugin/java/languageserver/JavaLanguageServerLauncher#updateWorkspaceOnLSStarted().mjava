@@ -9,22 +9,22 @@
                 CompletableFuture.runAsync(
                     () -> projectSynchronizer.synchronize(registeredProject.getPath()));
               }
-              if (!registeredProject.getProblems().isEmpty()) {
-                try {
-
-                  projectManager.update(registeredProject);
-                  eventService.publish(new ProjectUpdatedEvent(registeredProject.getPath()));
-                } catch (ForbiddenException
-                    | ServerException
-                    | NotFoundException
-                    | ConflictException
-                    | BadRequestException e) {
-                  LOG.error(
-                      String.format(
-                          "Failed to update project '%s' configuration",
-                          registeredProject.getName()),
-                      e);
-                }
+              try {
+                projectManager.update(registeredProject);
+                eventService.publish(new ProjectClassPathChangedEvent(registeredProject.getPath()));
+                notifyTransmitter.sendNotification(
+                    new ExecuteCommandParams(
+                        Notifications.UPDATE_PROJECTS_CLASSPATH,
+                        Collections.singletonList(registeredProject.getPath())));
+              } catch (ForbiddenException
+                  | ServerException
+                  | NotFoundException
+                  | ConflictException
+                  | BadRequestException e) {
+                LOG.error(
+                    String.format(
+                        "Failed to update project '%s' configuration", registeredProject.getName()),
+                    e);
               }
             });
   }
