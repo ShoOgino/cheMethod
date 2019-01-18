@@ -1,0 +1,26 @@
+  @Test(
+      expectedExceptions = ValidationException.class,
+      expectedExceptionsMessageRegExp =
+          "Pod 'pod1' contains volume 'user-data' with PVC sources that references missing PVC 'non-existing'")
+  public void shouldThrowExceptionWhenPodHasVolumeThatReferencesMissingPVC() throws Exception {
+    // given
+    String podName = "pod1";
+    Pod pod = createPod("pod1", "main");
+    pod.getSpec()
+        .getVolumes()
+        .add(
+            new VolumeBuilder()
+                .withName("user-data")
+                .withNewPersistentVolumeClaim()
+                .withClaimName("non-existing")
+                .endPersistentVolumeClaim()
+                .build());
+    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
+    when(kubernetesEnvironment.getPodsData()).thenReturn(ImmutableMap.of(podName, podData));
+    when(kubernetesEnvironment.getMachines())
+        .thenReturn(ImmutableMap.of(podName + "/main", mock(InternalMachineConfig.class)));
+
+    // when
+    podsValidator.validate(kubernetesEnvironment);
+  }
+

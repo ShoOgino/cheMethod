@@ -1,0 +1,67 @@
+  @Test
+  public void testProcessingDifferentVolumeMountsBoundToTheSameVolume() throws Exception {
+    // given
+    k8sEnv = KubernetesEnvironment.builder().build();
+    k8sEnv.getPersistentVolumeClaims().put("appStorage", newPVC("appStorage"));
+
+    Pod pod =
+        newPod(POD_1_NAME)
+            .withContainers(
+                newContainer(CONTAINER_1_NAME)
+                    .withVolumeMount("appStorage", "/data", "data")
+                    .withVolumeMount("appStorage", "/config", "config")
+                    .build())
+            .withPVCVolume("appStorage", "appStorage")
+            .build();
+
+    k8sEnv.addPod(pod);
+
+    k8sEnv
+        .getMachines()
+        .put(
+            MACHINE_1_NAME,
+            TestObjects.newMachineConfig().withVolume("appStorage", "/app-storage").build());
+
+    // when
+    strategy.provision(k8sEnv, IDENTITY);
+
+    // then
+    assertEquals(k8sEnv.getPersistentVolumeClaims().size(), 1);
+    PersistentVolumeClaim pvcForUserData =
+        findPvc("appStorage", k8sEnv.getPersistentVolumeClaims());
+    assertNotNull(pvcForUserData);
+    assertTrue(pvcForUserData.getMetadata().getName().startsWith(PVC_NAME_PREFIX));
+    assertEquals(
+        pvcForUserData.getMetadata().getLabels().get(CHE_WORKSPACE_ID_LABEL), WORKSPACE_ID);
+
+    PodSpec podSpec = k8sEnv.getPodsData().get(POD_1_NAME).getSpec();
+
+    assertEquals(podSpec.getVolumes().size(), 1);
+    io.fabric8.kubernetes.api.model.Volume userPodVolume = podSpec.getVolumes().get(0);
+    assertEquals(
+        userPodVolume.getPersistentVolumeClaim().getClaimName(),
+        pvcForUserData.getMetadata().getName());
+    assertEquals(
+        podSpec.getVolumes().get(0).getPersistentVolumeClaim().getClaimName(),
+        pvcForUserData.getMetadata().getName());
+
+    // check container bound to user-defined PVC
+    Container container1 = podSpec.getContainers().get(0);
+    assertEquals(container1.getVolumeMounts().size(), 3);
+
+    VolumeMount dataVolumeMount = container1.getVolumeMounts().get(0);
+    assertEquals(dataVolumeMount.getSubPath(), WORKSPACE_ID + "/appStorage/data");
+    assertEquals(dataVolumeMount.getMountPath(), "/data");
+    assertEquals(dataVolumeMount.getName(), userPodVolume.getName());
+
+    VolumeMount configVolumeMount = container1.getVolumeMounts().get(1);
+    assertEquals(configVolumeMount.getSubPath(), WORKSPACE_ID + "/appStorage/config");
+    assertEquals(configVolumeMount.getMountPath(), "/config");
+    assertEquals(configVolumeMount.getName(), userPodVolume.getName());
+
+    VolumeMount appStorage = container1.getVolumeMounts().get(2);
+    assertEquals(appStorage.getSubPath(), WORKSPACE_ID + "/appStorage");
+    assertEquals(appStorage.getMountPath(), "/app-storage");
+    assertEquals(appStorage.getName(), userPodVolume.getName());
+  }
+

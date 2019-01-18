@@ -1,0 +1,42 @@
+  @Test
+  public void testReplacingUserDefinedPVCsWithWithEmptyDirVolumes() throws Exception {
+    // given
+    k8sEnv.getPersistentVolumeClaims().put("pvc1", mock(PersistentVolumeClaim.class));
+    k8sEnv.getPersistentVolumeClaims().put("pvc2", mock(PersistentVolumeClaim.class));
+
+    io.fabric8.kubernetes.api.model.Volume configMapVolume =
+        new VolumeBuilder().withNewConfigMap().withName("configMap").endConfigMap().build();
+    io.fabric8.kubernetes.api.model.Volume emptyDirVolume =
+        new VolumeBuilder().withNewEmptyDir().endEmptyDir().build();
+    io.fabric8.kubernetes.api.model.Volume pvcVolume =
+        new VolumeBuilder()
+            .withNewPersistentVolumeClaim()
+            .withClaimName("pvc1")
+            .endPersistentVolumeClaim()
+            .build();
+    Pod pod =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(POD_NAME)
+            .endMetadata()
+            .withNewSpec()
+            .withVolumes(
+                new VolumeBuilder(pvcVolume).build(),
+                new VolumeBuilder(configMapVolume).build(),
+                new VolumeBuilder(emptyDirVolume).build())
+            .endSpec()
+            .build();
+
+    k8sEnv.addPod(pod);
+
+    // when
+    ephemeralWorkspaceAdapter.provision(k8sEnv, runtimeIdentity);
+
+    // then
+    assertTrue(k8sEnv.getPersistentVolumeClaims().isEmpty());
+    assertNull(pod.getSpec().getVolumes().get(0).getPersistentVolumeClaim());
+    assertEquals(pod.getSpec().getVolumes().get(0).getEmptyDir(), new EmptyDirVolumeSource());
+    assertEquals(pod.getSpec().getVolumes().get(1), configMapVolume);
+    assertEquals(pod.getSpec().getVolumes().get(2), emptyDirVolume);
+  }
+

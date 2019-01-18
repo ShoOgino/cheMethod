@@ -1,0 +1,36 @@
+  private void prefixVolumeMountsSubpaths(KubernetesEnvironment k8sEnv, String workspaceId) {
+    for (PodData pod : k8sEnv.getPodsData().values()) {
+      Map<String, String> volumeToClaimName = new HashMap<>();
+      for (io.fabric8.kubernetes.api.model.Volume volume : pod.getSpec().getVolumes()) {
+        if (volume.getPersistentVolumeClaim() == null) {
+          continue;
+        }
+        volumeToClaimName.put(volume.getName(), volume.getPersistentVolumeClaim().getClaimName());
+      }
+
+      if (volumeToClaimName.isEmpty()) {
+        // Pod does not have any volume that references PVC
+        continue;
+      }
+
+      Stream.concat(
+              pod.getSpec().getContainers().stream(), pod.getSpec().getInitContainers().stream())
+          .forEach(
+              c -> {
+                for (VolumeMount volumeMount : c.getVolumeMounts()) {
+                  String pvcName = volumeToClaimName.get(volumeMount.getName());
+                  if (pvcName == null) {
+                    // should not happens since Volume<>PVC links are checked during recipe
+                    // validation
+                    continue;
+                  }
+
+                  String volumeSubPath =
+                      getVolumeMountSubpath(
+                          volumeMount, pvcName, workspaceId, Names.machineName(pod, c));
+                  volumeMount.setSubPath(volumeSubPath);
+                }
+              });
+    }
+  }
+

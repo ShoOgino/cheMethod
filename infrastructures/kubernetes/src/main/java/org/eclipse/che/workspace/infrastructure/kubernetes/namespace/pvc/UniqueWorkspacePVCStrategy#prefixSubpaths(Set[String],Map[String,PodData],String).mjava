@@ -1,0 +1,47 @@
+  /**
+   * Prefixes user-defined subpath with `{workspace id} + {PVC name}` where PVC name is supposed to
+   * be used as Che volume name.
+   *
+   * @param userDefinedPVCs set with user-defined PVCs names
+   * @param pods pods to change subpaths
+   * @param workspaceId workspace id to be used in subpath prefix
+   */
+  private void prefixSubpaths(
+      Set<String> userDefinedPVCs, Map<String, PodData> pods, String workspaceId) {
+    for (PodData pod : pods.values()) {
+      Map<String, String> volumeToClaimName = new HashMap<>();
+
+      for (io.fabric8.kubernetes.api.model.Volume volume : pod.getSpec().getVolumes()) {
+        if (volume.getPersistentVolumeClaim() == null) {
+          continue;
+        }
+
+        String claimName = volume.getPersistentVolumeClaim().getClaimName();
+        if (userDefinedPVCs.contains(claimName)) {
+          volumeToClaimName.put(volume.getName(), claimName);
+        }
+      }
+
+      if (volumeToClaimName.isEmpty()) {
+        continue;
+      }
+
+      Stream.concat(
+              pod.getSpec().getContainers().stream(), pod.getSpec().getInitContainers().stream())
+          .forEach(
+              c -> {
+                for (VolumeMount volumeMount : c.getVolumeMounts()) {
+                  String claimName = volumeToClaimName.get(volumeMount.getName());
+                  if (claimName == null) {
+                    // claim is not user-defined. No need to prefix it
+                    return;
+                  }
+                  String volumeSubPath =
+                      getVolumeMountSubpath(
+                          volumeMount, claimName, workspaceId, Names.machineName(pod, c));
+                  volumeMount.setSubPath(volumeSubPath);
+                }
+              });
+    }
+  }
+

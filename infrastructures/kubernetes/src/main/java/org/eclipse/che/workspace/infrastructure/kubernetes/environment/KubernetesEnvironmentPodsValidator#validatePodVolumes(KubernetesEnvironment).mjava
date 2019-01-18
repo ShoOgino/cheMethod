@@ -1,0 +1,29 @@
+  private void validatePodVolumes(KubernetesEnvironment env) throws ValidationException {
+    Set<String> pvcsNames = env.getPersistentVolumeClaims().keySet();
+    for (PodData pod : env.getPodsData().values()) {
+      Set<String> volumesNames = new HashSet<>();
+      for (Volume volume : pod.getSpec().getVolumes()) {
+        volumesNames.add(volume.getName());
+
+        PersistentVolumeClaimVolumeSource pvcSource = volume.getPersistentVolumeClaim();
+        if (pvcSource != null && !pvcsNames.contains(pvcSource.getClaimName())) {
+          throw new ValidationException(
+              String.format(
+                  "Pod '%s' contains volume '%s' with PVC sources that references missing PVC '%s'",
+                  pod.getMetadata().getName(), volume.getName(), pvcSource.getClaimName()));
+        }
+      }
+
+      for (Container container : pod.getSpec().getContainers()) {
+        for (VolumeMount volumeMount : container.getVolumeMounts()) {
+          if (!volumesNames.contains(volumeMount.getName())) {
+            throw new ValidationException(
+                String.format(
+                    "Container '%s' in pod '%s' contains volume mount that references missing volume '%s'",
+                    container.getName(), pod.getMetadata().getName(), volumeMount.getName()));
+          }
+        }
+      }
+    }
+  }
+

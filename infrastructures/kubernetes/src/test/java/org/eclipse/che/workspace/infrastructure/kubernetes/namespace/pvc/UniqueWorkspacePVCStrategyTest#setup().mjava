@@ -4,54 +4,41 @@
         new UniqueWorkspacePVCStrategy(
             PVC_NAME_PREFIX, PVC_QUANTITY, PVC_ACCESS_MODE, factory, ephemeralWorkspaceAdapter);
 
-    Map<String, InternalMachineConfig> machines = new HashMap<>();
-    InternalMachineConfig machine1 = mock(InternalMachineConfig.class);
-    Map<String, Volume> volumes1 = new HashMap<>();
-    volumes1.put(VOLUME_1_NAME, new VolumeImpl().withPath("/path"));
-    volumes1.put(VOLUME_2_NAME, new VolumeImpl().withPath("/path2"));
-    lenient().when(machine1.getVolumes()).thenReturn(volumes1);
-    machines.put(MACHINE_NAME, machine1);
-    InternalMachineConfig machine2 = mock(InternalMachineConfig.class);
-    Map<String, Volume> volumes2 = new HashMap<>();
-    volumes2.put(VOLUME_2_NAME, new VolumeImpl().withPath("/path2"));
-    lenient().when(machine2.getVolumes()).thenReturn(volumes2);
-    machines.put(MACHINE_NAME_2, machine2);
-    InternalMachineConfig machine3 = mock(InternalMachineConfig.class);
-    Map<String, Volume> volumes3 = new HashMap<>();
-    volumes3.put(VOLUME_1_NAME, new VolumeImpl().withPath("/path"));
-    lenient().when(machine3.getVolumes()).thenReturn(volumes3);
-    machines.put(MACHINE_NAME_3, machine3);
-    lenient().when(k8sEnv.getMachines()).thenReturn(machines);
+    k8sEnv = KubernetesEnvironment.builder().build();
 
-    lenient().when(pod.getSpec()).thenReturn(podSpec);
-    lenient().when(pod2.getSpec()).thenReturn(podSpec2);
-    lenient().when(podSpec.getContainers()).thenReturn(asList(container, container2));
-    lenient().when(podSpec2.getContainers()).thenReturn(singletonList(container3));
-    lenient().when(podSpec.getVolumes()).thenReturn(new ArrayList<>());
-    lenient().when(podSpec2.getVolumes()).thenReturn(new ArrayList<>());
-    lenient().when(container.getName()).thenReturn(CONTAINER_NAME);
-    lenient().when(container2.getName()).thenReturn(CONTAINER_NAME_2);
-    lenient().when(container3.getName()).thenReturn(CONTAINER_NAME_3);
-    lenient().when(container.getVolumeMounts()).thenReturn(new ArrayList<>());
-    lenient().when(container2.getVolumeMounts()).thenReturn(new ArrayList<>());
-    lenient().when(container3.getVolumeMounts()).thenReturn(new ArrayList<>());
+    k8sEnv
+        .getMachines()
+        .put(
+            MACHINE_1_NAME,
+            TestObjects.newMachineConfig()
+                .withVolume(VOLUME_1_NAME, "/path")
+                .withVolume(VOLUME_2_NAME, "/path2")
+                .build());
+
+    k8sEnv
+        .getMachines()
+        .put(
+            MACHINE_2_NAME,
+            TestObjects.newMachineConfig().withVolume(VOLUME_2_NAME, "/path2").build());
+
+    k8sEnv
+        .getMachines()
+        .put(
+            MACHINE_3_NAME,
+            TestObjects.newMachineConfig().withVolume(VOLUME_1_NAME, "/path").build());
+
+    pod =
+        newPod(POD_1_NAME)
+            .withContainers(
+                newContainer(CONTAINER_1_NAME).build(), newContainer(CONTAINER_2_NAME).build())
+            .build();
+
+    pod2 = newPod(POD_2_NAME).withContainers(newContainer(CONTAINER_3_NAME).build()).build();
+
+    k8sEnv.addPod(pod);
+    k8sEnv.addPod(pod2);
 
     when(factory.create(WORKSPACE_ID)).thenReturn(k8sNamespace);
     when(k8sNamespace.persistentVolumeClaims()).thenReturn(pvcs);
-
-    mockName(pod, POD_NAME);
-    mockName(pod2, POD_NAME_2);
-
-    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
-    PodData pod2Data = new PodData(pod2.getSpec(), pod2.getMetadata());
-    lenient()
-        .when(k8sEnv.getPodsData())
-        .thenReturn(ImmutableMap.of(POD_NAME, podData, POD_NAME_2, pod2Data));
-
-    lenient().when(workspace.getId()).thenReturn(WORKSPACE_ID);
-    Map<String, String> workspaceAttributes = new HashMap<>();
-    WorkspaceConfig workspaceConfig = mock(WorkspaceConfig.class);
-    lenient().when(workspace.getConfig()).thenReturn(workspaceConfig);
-    lenient().when(workspaceConfig.getAttributes()).thenReturn(workspaceAttributes);
   }
 

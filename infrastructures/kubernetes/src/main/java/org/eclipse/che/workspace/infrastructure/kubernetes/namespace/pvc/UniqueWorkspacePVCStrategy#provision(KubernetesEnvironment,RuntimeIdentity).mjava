@@ -6,26 +6,19 @@
       ephemeralWorkspaceAdapter.provision(k8sEnv, identity);
       return;
     }
+
     LOG.debug("Provisioning PVC strategy for workspace '{}'", workspaceId);
-    final Map<String, PersistentVolumeClaim> claims = k8sEnv.getPersistentVolumeClaims();
+
+    fillInExistingPVCs(k8sEnv, workspaceId);
+
     // fetches all existing PVCs related to given workspace and groups them by volume name
     final Map<String, PersistentVolumeClaim> volumeName2PVC =
-        groupByVolumeName(
-            factory
-                .create(workspaceId)
-                .persistentVolumeClaims()
-                .getByLabel(CHE_WORKSPACE_ID_LABEL, workspaceId));
-    for (PodData pod : k8sEnv.getPodsData().values()) {
-      final PodSpec podSpec = pod.getSpec();
-      List<Container> containers = new ArrayList<>();
-      containers.addAll(podSpec.getContainers());
-      containers.addAll(podSpec.getInitContainers());
-      for (Container container : containers) {
-        final String machineName = Names.machineName(pod, container);
-        Map<String, Volume> volumes = k8sEnv.getMachines().get(machineName).getVolumes();
-        addMachineVolumes(workspaceId, claims, volumeName2PVC, pod, container, volumes);
-      }
-    }
+        groupByVolumeName(k8sEnv.getPersistentVolumeClaims().values());
+
+    processUserDefinedPVCs(k8sEnv, identity, workspaceId, volumeName2PVC);
+
+    provisionCheVolumes(k8sEnv, workspaceId, volumeName2PVC);
+
     LOG.debug("PVC strategy provisioning done for workspace '{}'", workspaceId);
   }
 
