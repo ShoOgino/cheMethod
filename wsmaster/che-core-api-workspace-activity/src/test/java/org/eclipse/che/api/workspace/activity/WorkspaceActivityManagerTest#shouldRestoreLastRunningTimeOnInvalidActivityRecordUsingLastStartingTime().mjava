@@ -1,0 +1,27 @@
+  @Test
+  public void shouldRestoreLastRunningTimeOnInvalidActivityRecordUsingLastStartingTime()
+      throws Exception {
+    // given
+    String id = "1";
+    WorkspaceActivity invalidActivity = new WorkspaceActivity();
+    invalidActivity.setWorkspaceId(id);
+    invalidActivity.setLastStarting(10);
+    when(workspaceRuntimes.getRunning()).thenReturn(singleton(id));
+    when(workspaceActivityDao.findActivity(eq(id))).thenReturn(invalidActivity);
+    when(workspaceManager.getWorkspace(eq(id)))
+        .thenReturn(
+            WorkspaceImpl.builder()
+                .setId(id)
+                .setAttributes(ImmutableMap.of(Constants.CREATED_ATTRIBUTE_NAME, "15"))
+                .build());
+
+    // when
+    clock.forward(Duration.of(1, ChronoUnit.SECONDS));
+    activityManager.validate();
+
+    // then
+    verify(workspaceActivityDao).setCreatedTime(eq(id), eq(15L));
+    verify(workspaceActivityDao)
+        .setStatusChangeTime(eq(id), eq(WorkspaceStatus.RUNNING), eq(clock.millis()));
+  }
+

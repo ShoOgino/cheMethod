@@ -1,0 +1,91 @@
+  private void checkActivityRecordValidity() throws ServerException {
+    for (String runningWsId : workspaceRuntimes.getRunning()) {
+      WorkspaceActivity activity = activityDao.findActivity(runningWsId);
+      if (activity == null) {
+        LOG.warn(
+            "Found a running workspace {} without any activity record. This shouldn't really happen"
+                + " but is being rectified by adding a new activity record for it.",
+            runningWsId);
+        try {
+          createMissingActivityRecord(runningWsId);
+        } catch (NotFoundException e) {
+          LOG.error(
+              "Detected a running workspace {} but could not find" + " its record.",
+              runningWsId,
+              e);
+        } catch (ConflictException e) {
+          LOG.debug(
+              "Activity record created while we were trying to rectify its absence for a running"
+                  + " workspace {}.",
+              runningWsId);
+        }
+      } else {
+        // what are we trying to handle here?
+        // 1) make sure that the activity record has a valid created time
+        // 2) make sure activity record as at least 1 activity record - if it lacks last_running,
+        //    we look at last_starting and if even that is not there we make sure there is at least
+        //    created_time - the last_* are not mandatory, but the created_time should be present
+        // 3) absence of last_running - this can either happen very shortly after the workspace
+        //    has started and the schedule of this method coincided with it starting. or there has
+        //    been some kind of problem.
+        // 4) absence of expiry - again this should only happen shortly after the workspace has
+        //    started if the schedule of this method managed to read the activity before the expiry
+        //    time has been persisted in the event handler. Otherwise it is a problem.
+
+        if (activity.getCreated() == null) {
+          try {
+            rectifyCreatedTime(activity);
+          } catch (NotFoundException e) {
+            LOG.error(
+                "Detected a running workspace {} but could not find" + " its record.",
+                runningWsId,
+                e);
+          }
+        }
+
+        // let's use a single value for the current time in all the code below
+        long now = clock.millis();
+
+        boolean noLastRunningTime = activity.getLastRunning() == null;
+
+        // this value is the last recorded activity of any kind on the workspace.
+        // Even though we tried to recover the created_time in the code above, it might still happen
+        // that we failed to do that and that no other activity exists on the workspace.
+        // That's why in the code below we still have to account for the possibility of this value
+        // being null.
+        Long lastKnownActivity =
+            maxOf(
+                activity.getCreated(),
+                activity.getLastStarting(),
+                activity.getLastRunning(),
+                activity.getLastStopping(),
+                activity.getLastStopped());
+
+        if (noLastRunningTime) {
+          rectifyNoLastRunningTime(runningWsId, activity, now, lastKnownActivity);
+        } else if (lastKnownActivity != null && lastKnownActivity > activity.getLastRunning()) {
+          LOG.warn(
+              "Workspace {} has been found running yet there is an activity on it newer than the"
+                  + " last running time. This should not happen. Resetting the last running time to"
+                  + " the newest activity time. The activity record is this: ",
+              runningWsId,
+              activity.toString());
+          activityDao.setStatusChangeTime(runningWsId, WorkspaceStatus.RUNNING, lastKnownActivity);
+          activity.setLastRunning(lastKnownActivity);
+        }
+
+        // check whether we even need to do anything about expiry. If we're configured with
+        // idle-timeout of 0 then expiration is not used at all.
+        long idleTimeout = getIdleTimeout(runningWsId);
+        if (idleTimeout == 0) {
+          continue;
+        }
+
+        if (activity.getExpiration() == null) {
+          rectifyExpirationTime(
+              runningWsId, activity, now, noLastRunningTime, lastKnownActivity, idleTimeout);
+        }
+      }
+    }
+  }
+

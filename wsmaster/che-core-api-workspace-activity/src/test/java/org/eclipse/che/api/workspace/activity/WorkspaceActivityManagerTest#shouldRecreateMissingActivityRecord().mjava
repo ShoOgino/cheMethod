@@ -1,0 +1,30 @@
+  @Test
+  public void shouldRecreateMissingActivityRecord() throws Exception {
+    // given
+    String id = "1";
+    when(workspaceRuntimes.getRunning()).thenReturn(singleton(id));
+    when(workspaceActivityDao.findActivity(eq(id))).thenReturn(null);
+    when(workspaceManager.getWorkspace(eq(id)))
+        .thenReturn(
+            WorkspaceImpl.builder()
+                .setId(id)
+                .setAttributes(ImmutableMap.of(Constants.CREATED_ATTRIBUTE_NAME, "15"))
+                .build());
+
+    // when
+    clock.forward(Duration.of(1, ChronoUnit.SECONDS));
+    activityManager.validate();
+
+    // then
+    ArgumentCaptor<WorkspaceActivity> captor = ArgumentCaptor.forClass(WorkspaceActivity.class);
+    verify(workspaceActivityDao).createActivity(captor.capture());
+    WorkspaceActivity created = captor.getValue();
+    assertEquals(id, created.getWorkspaceId());
+    assertEquals(Long.valueOf(15), created.getCreated());
+    assertEquals(WorkspaceStatus.RUNNING, created.getStatus());
+    assertNotNull(created.getLastRunning());
+    assertEquals(clock.millis(), (long) created.getLastRunning());
+    assertNotNull(created.getExpiration());
+    assertEquals(clock.millis() + DEFAULT_TIMEOUT, (long) created.getExpiration());
+  }
+
