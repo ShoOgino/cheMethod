@@ -1,21 +1,34 @@
-  private void createMissingActivityRecord(String workspaceId)
-      throws ServerException, ConflictException, NotFoundException {
-    Workspace workspace = workspaceManager.getWorkspace(workspaceId);
-    long createdTime =
-        Long.parseLong(workspace.getAttributes().get(Constants.CREATED_ATTRIBUTE_NAME));
+  private void createMissingActivityRecord(String runningWsId) throws ServerException {
+    LOG.warn(
+        "Found a running workspace {} without any activity record. This shouldn't really happen"
+            + " but is being rectified by adding a new activity record for it.",
+        runningWsId);
+    try {
+      Workspace workspace = workspaceManager.getWorkspace(runningWsId);
+      long createdTime =
+          Long.parseLong(workspace.getAttributes().get(Constants.CREATED_ATTRIBUTE_NAME));
 
-    WorkspaceActivity activity = new WorkspaceActivity();
-    activity.setWorkspaceId(workspaceId);
-    activity.setCreated(createdTime);
-    activity.setStatus(WorkspaceStatus.RUNNING);
-    activity.setLastRunning(clock.millis());
+      WorkspaceActivity activity = new WorkspaceActivity();
+      activity.setWorkspaceId(runningWsId);
+      activity.setCreated(createdTime);
+      activity.setStatus(WorkspaceStatus.RUNNING);
+      activity.setLastRunning(clock.millis());
 
-    long idleTimeout = getIdleTimeout(workspaceId);
-    if (idleTimeout > 0) {
-      // only set the expiration if it is used
-      activity.setExpiration(clock.millis() + idleTimeout);
+      long idleTimeout = getIdleTimeout(runningWsId);
+      if (idleTimeout > 0) {
+        // only set the expiration if it is used
+        activity.setExpiration(clock.millis() + idleTimeout);
+      }
+
+      activityDao.createActivity(activity);
+    } catch (NotFoundException e) {
+      LOG.error(
+          "Detected a running workspace {} but could not find" + " its record.", runningWsId, e);
+    } catch (ConflictException e) {
+      LOG.debug(
+          "Activity record created while we were trying to rectify its absence for a running"
+              + " workspace {}.",
+          runningWsId);
     }
-
-    activityDao.createActivity(activity);
   }
 

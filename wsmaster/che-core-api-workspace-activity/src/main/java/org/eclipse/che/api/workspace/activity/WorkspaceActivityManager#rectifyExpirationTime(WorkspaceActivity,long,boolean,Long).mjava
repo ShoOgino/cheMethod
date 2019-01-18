@@ -1,10 +1,25 @@
+  /**
+   * Rectifies the absence of expiry - this should only happen shortly after the workspace has
+   * started if the schedule of this method managed to read the activity before the expiry time has
+   * been persisted in the event handler. Otherwise it is a problem.
+   *
+   * @param activity the activity record of the running workspace with a rectified last running time
+   * @param now the current time we're working with
+   * @param noLastRunningTime true if there has been no prior record of the last running time
+   * @param lastKnownActivity the time of the last known activity detected before the last running
+   *     time rectification
+   */
   private void rectifyExpirationTime(
-      String runningWsId,
-      WorkspaceActivity activity,
-      long now,
-      boolean noLastRunningTime,
-      Long lastKnownActivity,
-      long idleTimeout) {
+      WorkspaceActivity activity, long now, boolean noLastRunningTime, Long lastKnownActivity) {
+
+    // we don't need any rectifications if there already is an expiration time set or if expiration
+    // is not configured
+    if (activity.getExpiration() != null || getIdleTimeout(activity.getWorkspaceId()) == 0) {
+      return;
+    }
+
+    String wsId = activity.getWorkspaceId();
+
     // define the error message upfront to make it easier to follow the actual logic
     final String noActivityFoundWhileHandlingExpiration =
         "Found no expiration time on workspace {}. No prior activity was found on the  workspace."
@@ -27,18 +42,19 @@
     long lastTime = activity.getLastRunning();
 
     if (lastKnownActivity == null) {
-      // here, we have no prior record of any activity. Even thought the code above tried to
-      // fix that, we don't want to report on the half-way fixed state. Let's just fix the
-      // expiration-related part of the problem and report that we fixed it from the original
-      // "condition" of the activity record.
-      update(runningWsId, lastTime);
-      LOG.warn(noActivityFoundWhileHandlingExpiration, runningWsId, lastTime);
+      // here, we have no prior record of any activity. Even though there were attempts to fix that
+      // prior to calling this method, we don't want to report on the half-way fixed state.
+      // Let's just fix the expiration-related part of the problem and report that we fixed it from
+      // the original "condition" of the activity record.
+      update(wsId, lastTime);
+      LOG.warn(noActivityFoundWhileHandlingExpiration, wsId, lastTime);
     } else if (noLastRunningTime) {
       // the DB contained no record of the last time the workspace was running, but we found
-      // it running anyway. The last_running time was already set to "now" in the code above
-      // but we want to report about the expiration being set regardless of that fact.
-      update(runningWsId, lastTime);
-      LOG.warn(noExpirationWithoutLastRunning, runningWsId, lastTime);
+      // it running anyway. The last_running time was already set to "now" in the last running
+      // rectification method (which we consider a prerequisite here) but we want to report about
+      // the expiration being set regardless of that fact.
+      update(wsId, lastTime);
+      LOG.warn(noExpirationWithoutLastRunning, wsId, lastTime);
     } else {
       // we have a record of the workspace entering the running state in the DB but we don't
       // have any expiration timestamp yet. This looks like a coincidence between the schedule
@@ -48,10 +64,10 @@
       long timeAfterRunning = now - lastTime;
 
       if (timeAfterRunning > 1000) {
-        update(runningWsId, lastTime);
-        LOG.warn(noExpirationAfterThresholdTime, runningWsId, timeAfterRunning, lastTime);
+        update(wsId, lastTime);
+        LOG.warn(noExpirationAfterThresholdTime, wsId, timeAfterRunning, lastTime);
       } else {
-        LOG.debug(noExpirationBeforeThresholdTime, runningWsId, timeAfterRunning, lastTime);
+        LOG.debug(noExpirationBeforeThresholdTime, wsId, timeAfterRunning, lastTime);
       }
     }
   }

@@ -1,21 +1,37 @@
-  private void rectifyCreatedTime(WorkspaceActivity activity)
-      throws ServerException, NotFoundException {
-    try {
-      Workspace workspace = workspaceManager.getWorkspace(activity.getWorkspaceId());
-      long createdTime =
-          Long.parseLong(workspace.getAttributes().get(Constants.CREATED_ATTRIBUTE_NAME));
-      LOG.warn(
-          "Workspace {} doesn't have any information about when it was created or last seen"
-              + " starting. Setting the created time to {}.",
-          activity.getWorkspaceId(),
-          createdTime);
-      activityDao.setCreatedTime(activity.getWorkspaceId(), createdTime);
-      activity.setCreated(createdTime);
-    } catch (NumberFormatException e) {
-      LOG.error(
-          "Failed to read the created time of the workspace {} from its attributes.",
-          activity.getWorkspaceId(),
-          e);
+  /**
+   * Makes sure that the activity record of a <b>running</b> has a valid created time.
+   *
+   * <p>The method fails with only a log message if there is an error converting the "created"
+   * attribute of the workspace to a number or if the workspace manager cannot find the workspace
+   * for the activity at all.
+   *
+   * @param activity the activity of the running workspace
+   * @throws ServerException on error when fetching workspace from workspace manager
+   */
+  private void rectifyCreatedTime(WorkspaceActivity activity) throws ServerException {
+    if (activity.getCreated() == null) {
+      try {
+        Workspace workspace = workspaceManager.getWorkspace(activity.getWorkspaceId());
+        long createdTime =
+            Long.parseLong(workspace.getAttributes().get(Constants.CREATED_ATTRIBUTE_NAME));
+        LOG.warn(
+            "Workspace {} doesn't have any information about when it was created or last seen"
+                + " starting. Setting the created time to {}.",
+            activity.getWorkspaceId(),
+            createdTime);
+        activityDao.setCreatedTime(activity.getWorkspaceId(), createdTime);
+        activity.setCreated(createdTime);
+      } catch (NumberFormatException e) {
+        LOG.error(
+            "Failed to read the created time of the workspace {} from its attributes.",
+            activity.getWorkspaceId(),
+            e);
+      } catch (NotFoundException e) {
+        LOG.error(
+            "Detected a running workspace {} but could not find" + " its record.",
+            activity.getWorkspaceId(),
+            e);
+      }
     }
   }
 
