@@ -7,31 +7,40 @@
     if (EphemeralWorkspaceUtility.isEphemeral(k8sEnv.getAttributes())) {
       return;
     }
-    final Collection<PersistentVolumeClaim> claims = k8sEnv.getPersistentVolumeClaims().values();
 
+    log.debug("Preparing PVC started for workspace '{}'", workspaceId);
+
+    Map<String, PersistentVolumeClaim> claims = k8sEnv.getPersistentVolumeClaims();
     if (claims.isEmpty()) {
       return;
     }
+    if (claims.size() > 1) {
+      throw new InfrastructureException(
+          format(
+              "The only one PVC MUST be present in common strategy while it contains: %s.",
+              claims.keySet().stream().collect(joining(", "))));
+    }
 
-    log.debug("Preparing PVC started for workspace '{}'", workspaceId);
+    PersistentVolumeClaim commonPVC = claims.values().iterator().next();
+
     final KubernetesNamespace namespace = factory.create(workspaceId);
     final KubernetesPersistentVolumeClaims pvcs = namespace.persistentVolumeClaims();
     final Set<String> existing =
         pvcs.get().stream().map(p -> p.getMetadata().getName()).collect(toSet());
-    for (PersistentVolumeClaim pvc : claims) {
-      final String[] subpaths =
-          (String[])
-              pvc.getAdditionalProperties().remove(format(SUBPATHS_PROPERTY_FMT, workspaceId));
-      if (!existing.contains(pvc.getMetadata().getName())) {
-        log.debug("Creating PVC for workspace '{}'", workspaceId);
-        pvcs.create(pvc);
-        log.debug("Waiting PVC for workspace '{}' to be bound", workspaceId);
-        pvcs.waitBound(pvc.getMetadata().getName(), timeoutMillis);
-      }
-      if (preCreateDirs && subpaths != null) {
-        pvcSubPathHelper.createDirs(workspaceId, subpaths);
-      }
+    if (!existing.contains(commonPVC.getMetadata().getName())) {
+      log.debug("Creating PVC for workspace '{}'", workspaceId);
+      pvcs.create(commonPVC);
+      log.debug("Waiting PVC for workspace '{}' to be bound", workspaceId);
+      pvcs.waitBound(commonPVC.getMetadata().getName(), timeoutMillis);
     }
+
+    final String[] subpaths =
+        (String[])
+            commonPVC.getAdditionalProperties().remove(format(SUBPATHS_PROPERTY_FMT, workspaceId));
+    if (preCreateDirs && subpaths != null) {
+      pvcSubPathHelper.createDirs(workspaceId, commonPVC.getMetadata().getName(), subpaths);
+    }
+
     log.debug("Preparing PVC done for workspace '{}'", workspaceId);
   }
 
