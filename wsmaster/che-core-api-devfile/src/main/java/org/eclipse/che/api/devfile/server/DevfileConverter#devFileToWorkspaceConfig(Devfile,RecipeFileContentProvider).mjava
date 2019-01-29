@@ -1,5 +1,17 @@
-  public WorkspaceConfigImpl devFileToWorkspaceConfig(Devfile devfile)
-      throws DevfileFormatException {
+  /**
+   * Converts given {@link Devfile} into workspace config.
+   *
+   * @param devfile initial devfile
+   * @param recipeFileContentProvider content provider for recipe-type tool
+   * @return constructed workspace config
+   * @throws DevfileException when general devfile error occurs
+   * @throws DevfileFormatException when devfile format is invalid
+   * @throws DevfileRecipeFormatException when content of the file specified in recipe type tool is
+   *     empty or its format is invalid
+   */
+  public WorkspaceConfigImpl devFileToWorkspaceConfig(
+      Devfile devfile, RecipeFileContentProvider recipeFileContentProvider)
+      throws DevfileException {
     validateCurrentVersion(devfile);
     WorkspaceConfigImpl config = new WorkspaceConfigImpl();
 
@@ -24,8 +36,15 @@
           break;
         case KUBERNETES_TOOL_TYPE:
         case OPENSHIFT_TOOL_TYPE:
-          // this kind of tool ignored here since it contain only reference to tool configuration
-          // which should be resolved and provisioned into workspace config recipe separately.
+          try {
+            EnvironmentImpl environment =
+                devfileEnvironmentFactory.createEnvironment(tool, recipeFileContentProvider);
+            final String environmentName = tool.getName();
+            config.setDefaultEnv(environmentName);
+            config.setEnvironments(singletonMap(environmentName, environment));
+          } catch (IllegalArgumentException e) {
+            throw new DevfileFormatException(e.getMessage(), e);
+          }
           continue;
         default:
           throw new DevfileFormatException(
