@@ -1,0 +1,29 @@
+  @Test
+  public void shouldPrefixVolumeMountsSubpathsAndUseVolumeNameStoredInLabels() {
+    // given
+    String volumeName = "userDataVolume";
+    pvc.getMetadata().getLabels().put(CHE_VOLUME_NAME_LABEL, volumeName);
+
+    // when
+    subpathPrefixes.prefixVolumeMountsSubpaths(k8sEnv, WORKSPACE_ID);
+
+    // then
+    PodSpec podSpec = k8sEnv.getPodsData().get(POD_1_NAME).getSpec();
+
+    io.fabric8.kubernetes.api.model.Volume userPodVolume = podSpec.getVolumes().get(0);
+    assertEquals(userPodVolume.getPersistentVolumeClaim().getClaimName(), USER_DATA_PVC_NAME);
+    assertEquals(
+        podSpec.getVolumes().get(0).getPersistentVolumeClaim().getClaimName(), USER_DATA_PVC_NAME);
+
+    Container initContainer = podSpec.getInitContainers().get(0);
+    VolumeMount initVolumeMount = initContainer.getVolumeMounts().get(0);
+    assertEquals(
+        initVolumeMount.getSubPath(), WORKSPACE_ID + "/" + volumeName + "/tmp/init/userData");
+    assertEquals(initVolumeMount.getName(), userPodVolume.getName());
+
+    Container container = podSpec.getContainers().get(0);
+    VolumeMount volumeMount = container.getVolumeMounts().get(0);
+    assertEquals(volumeMount.getSubPath(), WORKSPACE_ID + "/" + volumeName + "/home/user/data");
+    assertEquals(volumeMount.getName(), userPodVolume.getName());
+  }
+

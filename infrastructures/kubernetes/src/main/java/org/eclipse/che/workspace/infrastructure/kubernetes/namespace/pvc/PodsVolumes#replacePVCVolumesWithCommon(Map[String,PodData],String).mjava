@@ -1,0 +1,33 @@
+  /**
+   * Replaces all pods PVC sourced volumes with the specified one.
+   *
+   * @param pods pods to change
+   * @param commonPVCName PVC name that should be referenced in all existing PVC sources volumes
+   */
+  public void replacePVCVolumesWithCommon(Map<String, PodData> pods, String commonPVCName) {
+    for (PodData pod : pods.values()) {
+      Set<String> pvcSourcedVolumes = reducePVCSourcedVolumes(pod.getSpec().getVolumes());
+
+      if (pvcSourcedVolumes.isEmpty()) {
+        continue;
+      }
+
+      // add common PVC sourced volume instead of removed
+      pod.getSpec()
+          .getVolumes()
+          .add(
+              new VolumeBuilder()
+                  .withName(commonPVCName)
+                  .withNewPersistentVolumeClaim()
+                  .withClaimName(commonPVCName)
+                  .endPersistentVolumeClaim()
+                  .build());
+
+      Stream.concat(
+              pod.getSpec().getContainers().stream(), pod.getSpec().getInitContainers().stream())
+          .flatMap(c -> c.getVolumeMounts().stream())
+          .filter(vm -> pvcSourcedVolumes.contains(vm.getName()))
+          .forEach(vm -> vm.setName(commonPVCName));
+    }
+  }
+

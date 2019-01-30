@@ -1,0 +1,61 @@
+  @Test
+  public void shouldReplaceVolumesWithCommon() {
+    // given
+    podData
+        .getSpec()
+        .getInitContainers()
+        .add(
+            new ContainerBuilder()
+                .withName("userInitContainer")
+                .withVolumeMounts(
+                    new VolumeMountBuilder()
+                        .withName("initData")
+                        .withSubPath("/tmp/init/userData")
+                        .build())
+                .build());
+
+    podData
+        .getSpec()
+        .getContainers()
+        .get(0)
+        .getVolumeMounts()
+        .add(new VolumeMountBuilder().withName("userData").withSubPath("/home/user/data").build());
+
+    podData
+        .getSpec()
+        .getVolumes()
+        .add(
+            new VolumeBuilder()
+                .withName("userData")
+                .withPersistentVolumeClaim(
+                    new PersistentVolumeClaimVolumeSourceBuilder()
+                        .withClaimName("userDataPVC")
+                        .build())
+                .build());
+    podData
+        .getSpec()
+        .getVolumes()
+        .add(
+            new VolumeBuilder()
+                .withName("initData")
+                .withPersistentVolumeClaim(
+                    new PersistentVolumeClaimVolumeSourceBuilder()
+                        .withClaimName("initDataPVC")
+                        .build())
+                .build());
+
+    // when
+    podsVolumes.replacePVCVolumesWithCommon(ImmutableMap.of("pod", podData), "commonPVC");
+
+    // then
+    assertEquals(podData.getSpec().getVolumes().size(), 1);
+    assertEquals(
+        podData.getSpec().getVolumes().get(0).getPersistentVolumeClaim().getClaimName(),
+        "commonPVC");
+    assertEquals(
+        podData.getSpec().getInitContainers().get(0).getVolumeMounts().get(0).getName(),
+        "commonPVC");
+    assertEquals(
+        podData.getSpec().getContainers().get(0).getVolumeMounts().get(0).getName(), "commonPVC");
+  }
+

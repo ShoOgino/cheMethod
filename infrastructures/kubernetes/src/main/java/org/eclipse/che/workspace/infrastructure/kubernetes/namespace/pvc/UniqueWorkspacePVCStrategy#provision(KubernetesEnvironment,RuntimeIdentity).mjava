@@ -9,15 +9,19 @@
 
     LOG.debug("Provisioning PVC strategy for workspace '{}'", workspaceId);
 
+    Map<String, PersistentVolumeClaim> userDefinedPVCs =
+        new HashMap<>(k8sEnv.getPersistentVolumeClaims());
+
+    k8sEnv.getPersistentVolumeClaims().clear();
     fillInExistingPVCs(k8sEnv, workspaceId);
 
-    // fetches all existing PVCs related to given workspace and groups them by volume name
-    final Map<String, PersistentVolumeClaim> volumeName2PVC =
-        groupByVolumeName(k8sEnv.getPersistentVolumeClaims().values());
+    pvcProvisioner.provision(k8sEnv, userDefinedPVCs);
 
-    processUserDefinedPVCs(k8sEnv, identity, workspaceId, volumeName2PVC);
+    pvcProvisioner.convertCheVolumes(k8sEnv, workspaceId);
 
-    provisionCheVolumes(k8sEnv, workspaceId, volumeName2PVC);
+    subpathPrefixes.prefixVolumeMountsSubpaths(k8sEnv, identity.getWorkspaceId());
+
+    provisionWorkspaceIdLabel(k8sEnv.getPersistentVolumeClaims(), identity.getWorkspaceId());
 
     LOG.debug("PVC strategy provisioning done for workspace '{}'", workspaceId);
   }

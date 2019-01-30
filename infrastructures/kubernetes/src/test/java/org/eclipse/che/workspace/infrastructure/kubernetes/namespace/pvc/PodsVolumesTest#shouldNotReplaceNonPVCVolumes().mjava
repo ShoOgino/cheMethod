@@ -1,0 +1,54 @@
+  @Test
+  public void shouldNotReplaceNonPVCVolumes() {
+    // given
+    podData
+        .getSpec()
+        .getInitContainers()
+        .add(
+            new ContainerBuilder()
+                .withName("userInitContainer")
+                .withVolumeMounts(new VolumeMountBuilder().withName("configMap").build())
+                .build());
+
+    podData
+        .getSpec()
+        .getContainers()
+        .get(0)
+        .getVolumeMounts()
+        .add(new VolumeMountBuilder().withName("secret").withSubPath("/home/user/data").build());
+
+    podData
+        .getSpec()
+        .getVolumes()
+        .add(
+            new VolumeBuilder()
+                .withName("configMap")
+                .withConfigMap(new ConfigMapVolumeSourceBuilder().withName("configMap").build())
+                .build());
+    podData
+        .getSpec()
+        .getVolumes()
+        .add(
+            new VolumeBuilder()
+                .withName("secret")
+                .withSecret(new SecretVolumeSourceBuilder().withSecretName("secret").build())
+                .build());
+
+    // when
+    podsVolumes.replacePVCVolumesWithCommon(ImmutableMap.of("pod", podData), "commonPVC");
+
+    // then
+    assertEquals(podData.getSpec().getVolumes().size(), 2);
+    assertNotNull(podData.getSpec().getVolumes().get(0).getConfigMap());
+    assertNull(podData.getSpec().getVolumes().get(0).getPersistentVolumeClaim());
+
+    assertNotNull(podData.getSpec().getVolumes().get(1).getSecret());
+    assertNull(podData.getSpec().getVolumes().get(1).getPersistentVolumeClaim());
+
+    assertEquals(
+        podData.getSpec().getInitContainers().get(0).getVolumeMounts().get(0).getName(),
+        "configMap");
+    assertEquals(
+        podData.getSpec().getContainers().get(0).getVolumeMounts().get(0).getName(), "secret");
+  }
+

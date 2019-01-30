@@ -1,0 +1,26 @@
+  @Test
+  public void shouldNotPrefixNotPVCSourcesVolumes() {
+    // given
+    Volume podVolume = pod.getSpec().getVolumes().get(0);
+    podVolume.setPersistentVolumeClaim(null);
+    podVolume.setConfigMap(new ConfigMapVolumeSourceBuilder().withName("configMap").build());
+
+    // when
+    subpathPrefixes.prefixVolumeMountsSubpaths(k8sEnv, WORKSPACE_ID);
+
+    // then
+    PodSpec podSpec = k8sEnv.getPodsData().get(POD_1_NAME).getSpec();
+
+    io.fabric8.kubernetes.api.model.Volume podDataVolume = podSpec.getVolumes().get(0);
+
+    Container initContainer = podSpec.getInitContainers().get(0);
+    VolumeMount initVolumeMount = initContainer.getVolumeMounts().get(0);
+    assertEquals(initVolumeMount.getSubPath(), "/tmp/init/userData");
+    assertEquals(initVolumeMount.getName(), podDataVolume.getName());
+
+    Container container = podSpec.getContainers().get(0);
+    VolumeMount volumeMount = container.getVolumeMounts().get(0);
+    assertEquals(volumeMount.getSubPath(), "/home/user/data");
+    assertEquals(volumeMount.getName(), podDataVolume.getName());
+  }
+

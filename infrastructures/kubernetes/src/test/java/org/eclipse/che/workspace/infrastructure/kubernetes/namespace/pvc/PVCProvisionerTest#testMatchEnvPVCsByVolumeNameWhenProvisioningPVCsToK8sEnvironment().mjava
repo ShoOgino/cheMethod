@@ -1,0 +1,39 @@
+  @Test
+  public void testMatchEnvPVCsByVolumeNameWhenProvisioningPVCsToK8sEnvironment() throws Exception {
+    // given
+    k8sEnv = KubernetesEnvironment.builder().build();
+    k8sEnv
+        .getPersistentVolumeClaims()
+        .put(
+            "appStorage",
+            newPVC("pvc123123", ImmutableMap.of(CHE_VOLUME_NAME_LABEL, "appStorage")));
+
+    Map<String, PersistentVolumeClaim> toProvision = new HashMap<>();
+    toProvision.put("appStorage", newPVC("appStorage"));
+
+    Pod pod =
+        newPod(POD_1_NAME)
+            .withContainers(
+                newContainer(CONTAINER_1_NAME)
+                    .withVolumeMount("appStorage", "/data", "data")
+                    .withVolumeMount("appStorage", "/config", "config")
+                    .build())
+            .withPVCVolume("appStorage", "appStorage")
+            .build();
+
+    k8sEnv.addPod(pod);
+
+    // when
+    provisioner.provision(k8sEnv, toProvision);
+
+    // then
+    assertEquals(k8sEnv.getPersistentVolumeClaims().size(), 1);
+    PersistentVolumeClaim pvcForUserData =
+        findPvc("appStorage", k8sEnv.getPersistentVolumeClaims());
+    assertNotNull(pvcForUserData);
+    assertEquals("pvc123123", pvcForUserData.getMetadata().getName());
+
+    verify(podsVolumes)
+        .changePVCReferences(k8sEnv.getPodsData().values(), "appStorage", "pvc123123");
+  }
+

@@ -1,0 +1,29 @@
+  /**
+   * Converts {@link Volume} specified in {@link MachineConfig#getVolumes()} to {@link
+   * PersistentVolumeClaim}s and provision them to {@link KubernetesEnvironment}. The machines
+   * corresponding pods and containers are updated in accordance.
+   *
+   * @param k8sEnv environment to provision
+   * @param workspaceId identifier of workspace to which the specified environment belongs to
+   */
+  public void convertCheVolumes(KubernetesEnvironment k8sEnv, String workspaceId) {
+    Map<String, PersistentVolumeClaim> volumeName2PVC =
+        groupByVolumeName(k8sEnv.getPersistentVolumeClaims().values());
+
+    for (PodData pod : k8sEnv.getPodsData().values()) {
+      final PodSpec podSpec = pod.getSpec();
+      List<Container> containers = new ArrayList<>();
+      containers.addAll(podSpec.getContainers());
+      containers.addAll(podSpec.getInitContainers());
+      for (Container container : containers) {
+        final String machineName = Names.machineName(pod, container);
+        InternalMachineConfig machineConfig = k8sEnv.getMachines().get(machineName);
+        if (machineConfig == null) {
+          continue;
+        }
+        Map<String, Volume> volumes = machineConfig.getVolumes();
+        addMachineVolumes(workspaceId, k8sEnv, volumeName2PVC, pod, container, volumes);
+      }
+    }
+  }
+

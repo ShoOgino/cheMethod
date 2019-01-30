@@ -1,0 +1,27 @@
+  @Test
+  public void testProvisionVolumesIntoKubernetesEnvironment() throws Exception {
+    // given
+    PersistentVolumeClaim pvc1 = newPVC("pvc1");
+    PersistentVolumeClaim pvc2 = newPVC("pvc2");
+    k8sEnv.getPersistentVolumeClaims().put("pvc1", pvc1);
+    k8sEnv.getPersistentVolumeClaims().put("pvc2", pvc2);
+
+    PersistentVolumeClaim existingPVC = newPVC("existingPVC");
+    when(pvcs.getByLabel(CHE_WORKSPACE_ID_LABEL, WORKSPACE_ID))
+        .thenReturn(singletonList(existingPVC));
+
+    // when
+    strategy.provision(k8sEnv, IDENTITY);
+
+    // then
+    provisionOrder
+        .verify(pvcProvisioner)
+        .provision(k8sEnvCaptor.capture(), eq(ImmutableMap.of("pvc1", pvc1, "pvc2", pvc2)));
+    provisionOrder.verify(pvcProvisioner).convertCheVolumes(k8sEnv, WORKSPACE_ID);
+    provisionOrder.verify(subpathPrefixes).prefixVolumeMountsSubpaths(k8sEnv, WORKSPACE_ID);
+
+    assertEquals(k8sEnv.getPersistentVolumeClaims().size(), 1);
+    assertNotNull(k8sEnv.getPersistentVolumeClaims().get("existingPVC"));
+    ;
+  }
+

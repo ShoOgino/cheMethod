@@ -1,14 +1,23 @@
   @Test
   public void testProvisionVolumesIntoKubernetesEnvironment() throws Exception {
+    // given
+    k8sEnv.getPersistentVolumeClaims().put("pvc1", newPVC("pvc1"));
+    k8sEnv.getPersistentVolumeClaims().put("pvc2", newPVC("pvc2"));
+
+    // when
     commonPVCStrategy.provision(k8sEnv, IDENTITY);
 
-    // 2 volumes in machine1
-    assertFalse(pod.getSpec().getVolumes().isEmpty());
-    assertFalse(pod.getSpec().getContainers().get(0).getVolumeMounts().isEmpty());
-    assertFalse(pod.getSpec().getContainers().get(1).getVolumeMounts().isEmpty());
-    assertFalse(pod2.getSpec().getVolumes().isEmpty());
-    assertFalse(pod2.getSpec().getContainers().get(0).getVolumeMounts().isEmpty());
-    assertFalse(k8sEnv.getPersistentVolumeClaims().isEmpty());
-    assertTrue(k8sEnv.getPersistentVolumeClaims().containsKey(PVC_NAME));
+    // then
+    provisionOrder.verify(volumeConverter).convertCheVolumes(k8sEnv, WORKSPACE_ID);
+    provisionOrder.verify(subpathPrefixes).prefixVolumeMountsSubpaths(k8sEnv, WORKSPACE_ID);
+    provisionOrder.verify(podsVolumes).replacePVCVolumesWithCommon(k8sEnv.getPodsData(), PVC_NAME);
+    assertEquals(k8sEnv.getPersistentVolumeClaims().size(), 1);
+    PersistentVolumeClaim commonPVC = k8sEnv.getPersistentVolumeClaims().get(PVC_NAME);
+    assertNotNull(commonPVC);
+    assertEquals(commonPVC.getMetadata().getName(), PVC_NAME);
+    assertEquals(commonPVC.getSpec().getAccessModes(), Collections.singletonList(PVC_ACCESS_MODE));
+    assertEquals(
+        commonPVC.getSpec().getResources().getRequests().get("storage"),
+        new Quantity(PVC_QUANTITY));
   }
 

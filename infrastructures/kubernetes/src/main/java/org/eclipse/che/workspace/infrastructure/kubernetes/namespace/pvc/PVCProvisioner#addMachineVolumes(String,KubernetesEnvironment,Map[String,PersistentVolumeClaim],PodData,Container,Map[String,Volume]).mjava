@@ -1,0 +1,56 @@
+  private void addMachineVolumes(
+      String workspaceId,
+      KubernetesEnvironment k8sEnv,
+      Map<String, PersistentVolumeClaim> volumeName2PVC,
+      PodData pod,
+      Container container,
+      Map<String, Volume> volumes) {
+    if (volumes.isEmpty()) {
+      return;
+    }
+
+    for (Entry<String, Volume> volumeEntry : volumes.entrySet()) {
+      final String volumePath = volumeEntry.getValue().getPath();
+      final String volumeName =
+          LOGS_VOLUME_NAME.equals(volumeEntry.getKey())
+              ? volumeEntry.getKey() + '-' + pod.getMetadata().getName()
+              : volumeEntry.getKey();
+      final PersistentVolumeClaim pvc;
+      // checks whether PVC for given workspace and volume present in environment
+      if (volumeName2PVC.containsKey(volumeName)) {
+        pvc = volumeName2PVC.get(volumeName);
+      }
+      // when PVC is not found in environment then create new one
+      else {
+        final String uniqueName = Names.generateName(pvcNamePrefix);
+        pvc = newPVC(uniqueName, pvcAccessMode, pvcQuantity);
+        putLabel(pvc, CHE_WORKSPACE_ID_LABEL, workspaceId);
+        putLabel(pvc, CHE_VOLUME_NAME_LABEL, volumeName);
+        k8sEnv.getPersistentVolumeClaims().put(uniqueName, pvc);
+        volumeName2PVC.put(volumeName, pvc);
+      }
+
+      // binds pvc to pod and container
+      String pvcName = pvc.getMetadata().getName();
+      PodSpec podSpec = pod.getSpec();
+      Optional<io.fabric8.kubernetes.api.model.Volume> volumeOpt =
+          podSpec
+              .getVolumes()
+              .stream()
+              .filter(
+                  volume ->
+                      volume.getPersistentVolumeClaim() != null
+                          && pvcName.equals(volume.getPersistentVolumeClaim().getClaimName()))
+              .findAny();
+      io.fabric8.kubernetes.api.model.Volume podVolume;
+      if (volumeOpt.isPresent()) {
+        podVolume = volumeOpt.get();
+      } else {
+        podVolume = newVolume(pvcName, pvcName);
+        podSpec.getVolumes().add(podVolume);
+      }
+
+      container.getVolumeMounts().add(newVolumeMount(podVolume.getName(), volumePath, ""));
+    }
+  }
+

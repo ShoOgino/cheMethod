@@ -1,0 +1,42 @@
+  /**
+   * Provision the specified PVCs to the environment.
+   *
+   * <p>Note that:<br>
+   * - PVC is not provisioned if environment already contains PVC for corresponding volume;<br>
+   * - PVC is provisioned with generated unique name;<br>
+   * - corresponding PVC references in Kubernetes Environment are updated during provisioning;<br>
+   *
+   * @param k8sEnv environment to provision
+   * @param toProvision PVCs that should be provisioned to the environment
+   */
+  public void provision(
+      KubernetesEnvironment k8sEnv, Map<String, PersistentVolumeClaim> toProvision) {
+    final Map<String, PersistentVolumeClaim> volumeName2PVC =
+        groupByVolumeName(k8sEnv.getPersistentVolumeClaims().values());
+
+    // process user-defined PVCs according to unique strategy
+    final Map<String, PersistentVolumeClaim> envClaims = k8sEnv.getPersistentVolumeClaims();
+    for (PersistentVolumeClaim pvc : toProvision.values()) {
+      String originalPVCName = pvc.getMetadata().getName();
+
+      PersistentVolumeClaim existingPVC = volumeName2PVC.get(originalPVCName);
+
+      if (existingPVC != null) {
+        // Replace pvc in environment with existing. Fix the references in Pods
+        podsVolumes.changePVCReferences(
+            k8sEnv.getPodsData().values(), originalPVCName, existingPVC.getMetadata().getName());
+      } else {
+        // there is no the corresponding existing pvc
+        // new one should be created with generated name
+        putLabel(pvc, CHE_VOLUME_NAME_LABEL, originalPVCName);
+
+        final String uniqueName = Names.generateName(pvcNamePrefix + '-');
+        pvc.getMetadata().setName(uniqueName);
+        envClaims.put(uniqueName, pvc);
+
+        volumeName2PVC.put(originalPVCName, pvc);
+        podsVolumes.changePVCReferences(k8sEnv.getPodsData().values(), originalPVCName, uniqueName);
+      }
+    }
+  }
+
