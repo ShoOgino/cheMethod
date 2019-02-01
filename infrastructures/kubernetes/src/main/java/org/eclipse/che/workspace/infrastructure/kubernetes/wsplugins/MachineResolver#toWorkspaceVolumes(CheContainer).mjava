@@ -1,0 +1,31 @@
+  private Map<String, ? extends org.eclipse.che.api.core.model.workspace.config.Volume>
+      toWorkspaceVolumes(CheContainer container) throws InfrastructureException {
+
+    Map<String, VolumeImpl> result = new HashMap<>();
+
+    if (container.isMountSources()) {
+      result.put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectsRootPathEnvVar.second));
+    }
+
+    for (Volume volume : container.getVolumes()) {
+      if (volume.getName().equals(PROJECTS_VOLUME_NAME)
+          && !projectsRootPathEnvVar.second.equals(volume.getMountPath())) {
+        throw new InfrastructureException(
+            format(
+                "Plugin '%s' tried to manually mount the '%s' volume into its container '%s' on"
+                    + " path '%s'. This is illegal because sources need to be mounted to '%s'. Set"
+                    + " the mountSources attribute to true instead and remove the manual volume"
+                    + " mount in the plugin. After that the mount path of the sources will be"
+                    + " available automatically in the '%s' environment variable.",
+                pluginId,
+                PROJECTS_VOLUME_NAME,
+                container.getName(),
+                volume.getMountPath(),
+                projectsRootPathEnvVar.second,
+                projectsRootPathEnvVar.first));
+      }
+      result.put(volume.getName(), new VolumeImpl().withPath(volume.getMountPath()));
+    }
+    return result;
+  }
+
