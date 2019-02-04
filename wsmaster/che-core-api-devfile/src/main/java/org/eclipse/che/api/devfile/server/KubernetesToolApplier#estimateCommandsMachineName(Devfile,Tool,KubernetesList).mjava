@@ -1,0 +1,35 @@
+  /**
+   * Set {@link MACHINE_NAME_ATTRIBUTE} to commands which are configured in the specified tool.
+   *
+   * <p>Machine name will be set only if the specified recipe objects has the only one container.
+   */
+  private void estimateCommandsMachineName(
+      Devfile devfile, Tool tool, KubernetesList recipeObjects) {
+    List<Command> toolsCommands =
+        devfile
+            .getCommands()
+            .stream()
+            .filter(c -> c.getActions().get(0).getTool().equals(tool.getName()))
+            .collect(toList());
+    if (toolsCommands.isEmpty()) {
+      return;
+    }
+    List<Pod> pods =
+        recipeObjects
+            .getItems()
+            .stream()
+            .filter(hasMetadata -> hasMetadata instanceof Pod)
+            .map(hasMetadata -> (Pod) hasMetadata)
+            .collect(toList());
+
+    Pod pod;
+    if (pods.size() != 1 || (pod = pods.get(0)).getSpec().getContainers().isEmpty()) {
+      // recipe contains several containers
+      // can not estimate commands machine name
+      return;
+    }
+
+    String machineName = Names.machineName(pod, pod.getSpec().getContainers().get(0));
+    toolsCommands.forEach(c -> c.getAttributes().put(MACHINE_NAME_ATTRIBUTE, machineName));
+  }
+
