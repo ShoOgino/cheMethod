@@ -1,8 +1,8 @@
   /**
-   * Converts given {@link Devfile} into workspace config.
+   * Converts given {@link Devfile} into {@link WorkspaceConfigImpl workspace config}.
    *
    * @param devfile initial devfile
-   * @param recipeFileContentProvider content provider for recipe-type tool
+   * @param contentProvider content provider for recipe-type tool
    * @return constructed workspace config
    * @throws DevfileException when general devfile error occurs
    * @throws DevfileFormatException when devfile format is invalid
@@ -10,62 +10,23 @@
    *     empty or its format is invalid
    */
   public WorkspaceConfigImpl devFileToWorkspaceConfig(
-      Devfile devfile, RecipeFileContentProvider recipeFileContentProvider)
-      throws DevfileException {
+      Devfile devfile, RecipeFileContentProvider contentProvider) throws DevfileException {
     validateCurrentVersion(devfile);
     WorkspaceConfigImpl config = new WorkspaceConfigImpl();
 
     config.setName(devfile.getName());
 
-    // Manage projects
+    // fill in WorkspaceConfig with configured projects
     List<ProjectConfigImpl> projects = new ArrayList<>();
     devfile.getProjects().forEach(project -> projects.add(devProjectToProjectConfig(project)));
     config.setProjects(projects);
 
-    // Manage tools
-    Map<String, String> attributes = new HashMap<>();
-    StringJoiner pluginsStringJoiner = new StringJoiner(",");
-    StringJoiner toolIdToNameMappingStringJoiner = new StringJoiner(",");
-    for (Tool tool : devfile.getTools()) {
-      switch (tool.getType()) {
-        case EDITOR_TOOL_TYPE:
-          attributes.put(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE, tool.getId());
-          break;
-        case PLUGIN_TOOL_TYPE:
-          pluginsStringJoiner.add(tool.getId());
-          break;
-        case KUBERNETES_TOOL_TYPE:
-        case OPENSHIFT_TOOL_TYPE:
-          try {
-            EnvironmentImpl environment =
-                devfileEnvironmentFactory.createEnvironment(tool, recipeFileContentProvider);
-            final String environmentName = tool.getName();
-            config.setDefaultEnv(environmentName);
-            config.setEnvironments(singletonMap(environmentName, environment));
-          } catch (IllegalArgumentException e) {
-            throw new DevfileFormatException(e.getMessage(), e);
-          }
-          continue;
-        default:
-          throw new DevfileFormatException(
-              format("Unsupported tool %s type provided: %s", tool.getName(), tool.getType()));
-      }
-      toolIdToNameMappingStringJoiner.add(tool.getId() + "=" + tool.getName());
-    }
-    if (pluginsStringJoiner.length() > 0) {
-      attributes.put(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE, pluginsStringJoiner.toString());
-    }
-    if (toolIdToNameMappingStringJoiner.length() > 0) {
-      attributes.put(ALIASES_WORKSPACE_ATTRIBUTE_NAME, toolIdToNameMappingStringJoiner.toString());
-    }
-    config.setAttributes(attributes);
+    // fill in Workspace Config with configured tools
+    fillInTools(config, devfile, contentProvider);
 
-    // Manage commands
-    List<CommandImpl> commands = new ArrayList<>();
-    devfile
-        .getCommands()
-        .forEach(command -> commands.addAll(devCommandToCommandImpls(devfile, command)));
-    config.setCommands(commands);
+    // fill in Workspace Config with configured commands
+    fillInCommands(config, devfile);
+
     return config;
   }
 
