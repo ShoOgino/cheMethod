@@ -1,12 +1,18 @@
-  @Transactional
-  protected void doStore(FreeResourcesLimitImpl resourcesLimit) throws ServerException {
+  @Transactional(rollbackOn = {RuntimeException.class, ConflictException.class})
+  protected void doStore(FreeResourcesLimitImpl resourcesLimit) throws ConflictException {
     EntityManager manager = managerProvider.get();
     try {
       final FreeResourcesLimitImpl existedLimit = doGet(resourcesLimit.getAccountId());
       existedLimit.setResources(resourcesLimit.getResources());
+      manager.flush();
     } catch (NoResultException n) {
-      manager.persist(resourcesLimit);
+      try {
+        manager.persist(resourcesLimit);
+        manager.flush();
+      } catch (IntegrityConstraintViolationException e) {
+        throw new ConflictException(
+            format("The specified account '%s' does not exist", resourcesLimit.getAccountId()));
+      }
     }
-    manager.flush();
   }
 
