@@ -7,15 +7,33 @@
    */
   public Devfile workspaceToDevFile(WorkspaceConfigImpl wsConfig) throws WorkspaceExportException {
 
-    if (!isNullOrEmpty(wsConfig.getDefaultEnv()) || !wsConfig.getEnvironments().isEmpty()) {
+    Devfile devfile =
+        new Devfile().withSpecVersion(CURRENT_SPEC_VERSION).withName(wsConfig.getName());
+
+    if (wsConfig.getEnvironments().size() > 1) {
       throw new WorkspaceExportException(
           format(
-              "Workspace %s cannot be converted to devfile since it contains environments which have no equivalent in devfile model",
+              "Workspace `%s` cannot be converted to devfile since it has several environments which have no equivalent in devfile model",
               wsConfig.getName()));
     }
 
-    Devfile devfile =
-        new Devfile().withSpecVersion(CURRENT_SPEC_VERSION).withName(wsConfig.getName());
+    String recipeToolName = null;
+    if (!wsConfig.getEnvironments().isEmpty()) {
+      Map<String, EnvironmentImpl> environments = wsConfig.getEnvironments();
+      Entry<String, EnvironmentImpl> environmentEntry = environments.entrySet().iterator().next();
+      String environmentName = environmentEntry.getKey();
+      EnvironmentImpl environment = environmentEntry.getValue();
+      if (!"dockerimage".equals(environment.getRecipe().getType())) {
+        throw new WorkspaceExportException(
+            format(
+                "Workspace `%s` cannot be converted to devfile since it has environment with '%s' recipe type. Currently only workspaces with `dockerimage` recipe can be exported.",
+                wsConfig.getName(), environment.getRecipe().getType()));
+      }
+
+      Tool dockerimageTool = dockerimageToolApplier.from(environmentName, environment);
+      devfile.getTools().add(dockerimageTool);
+      recipeToolName = dockerimageTool.getName();
+    }
 
     // Manage projects
     List<Project> projects = new ArrayList<>();
@@ -26,14 +44,11 @@
 
     // Manage commands
     Map<String, String> toolsIdToName = parseTools(wsConfig);
-    List<Command> commands = new ArrayList<>();
-    wsConfig
-        .getCommands()
-        .forEach(command -> commands.add(commandImplToDevCommand(command, toolsIdToName)));
-    devfile.setCommands(commands);
+    for (CommandImpl command : wsConfig.getCommands()) {
+      devfile.getCommands().add(commandImplToDevCommand(command, toolsIdToName, recipeToolName));
+    }
 
     // Manage tools
-    List<Tool> tools = new ArrayList<>();
     for (Map.Entry<String, String> entry : wsConfig.getAttributes().entrySet()) {
       if (entry.getKey().equals(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE)) {
         String editorId = entry.getValue();
@@ -42,7 +57,7 @@
                 .withType(EDITOR_TOOL_TYPE)
                 .withId(editorId)
                 .withName(toolsIdToName.getOrDefault(editorId, editorId));
-        tools.add(editorTool);
+        devfile.getTools().add(editorTool);
       } else if (entry.getKey().equals(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE)) {
         for (String pluginId : entry.getValue().split(",")) {
           Tool pluginTool =
@@ -50,11 +65,10 @@
                   .withId(pluginId)
                   .withType(PLUGIN_TOOL_TYPE)
                   .withName(toolsIdToName.getOrDefault(pluginId, pluginId));
-          tools.add(pluginTool);
+          devfile.getTools().add(pluginTool);
         }
       }
     }
-    devfile.setTools(tools);
     return devfile;
   }
 
