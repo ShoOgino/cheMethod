@@ -1,0 +1,76 @@
+  /**
+   * Applies Kubernetes tool configuration on provided {@link Devfile} and {@link
+   * WorkspaceConfigImpl}.
+   *
+   * <p>It includes:
+   *
+   * <ul>
+   *   <li>provisioning environment based on specified configuration in tool: dockerimage, env,
+   *       volumes, etc.;
+   *   <li>provisioning machine name attribute to commands that are configured to be run in the
+   *       specified tool;
+   * </ul>
+   *
+   * @param tool dockerimage tool that should be applied to devfile and workspace config
+   * @param devfile devfile that should be changed according to the provided tool
+   * @param workspaceConfig workspace config that should be changed according to the provided tool
+   * @throws IllegalArgumentException when wrong type tool is passed
+   */
+  public void apply(Tool tool, Devfile devfile, WorkspaceConfigImpl workspaceConfig) {
+    checkArgument(tool != null, "Tool must not be null");
+    checkArgument(
+        tool.getType().equals(DOCKERIMAGE_TOOL_TYPE), "The tool must have `dockerimage` type");
+
+    String machineName = tool.getName();
+    MachineConfigImpl machineConfig = new MachineConfigImpl();
+
+    tool.getEnv().forEach(e -> machineConfig.getEnv().put(e.getName(), e.getValue()));
+
+    for (Endpoint endpoint : tool.getEndpoints()) {
+      HashMap<String, String> attributes = new HashMap<>(endpoint.getAttributes());
+
+      String protocol = attributes.remove("protocol");
+      if (isNullOrEmpty(protocol)) {
+        protocol = "http";
+      }
+
+      String path = attributes.remove("path");
+
+      machineConfig
+          .getServers()
+          .put(
+              endpoint.getName(),
+              new ServerConfigImpl(
+                  Integer.toString(endpoint.getPort()), protocol, path, attributes));
+    }
+
+    tool.getVolumes()
+        .forEach(
+            v ->
+                machineConfig
+                    .getVolumes()
+                    .put(v.getName(), new VolumeImpl().withPath(v.getContainerPath())));
+
+    if (tool.getMountSources()) {
+      machineConfig
+          .getVolumes()
+          .put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectFolderPath));
+    }
+
+    machineConfig
+        .getAttributes()
+        .put(MEMORY_LIMIT_ATTRIBUTE, Long.toString(KubernetesSize.toBytes(tool.getMemoryLimit())));
+
+    RecipeImpl recipe = new RecipeImpl(DOCKERIMAGE_RECIPE_TYPE, null, tool.getImage(), null);
+    EnvironmentImpl environment =
+        new EnvironmentImpl(recipe, ImmutableMap.of(machineName, machineConfig));
+    workspaceConfig.getEnvironments().put(tool.getName(), environment);
+    workspaceConfig.setDefaultEnv(tool.getName());
+
+    devfile
+        .getCommands()
+        .stream()
+        .filter(command -> command.getActions().get(0).getTool().equals(tool.getName()))
+        .forEach(c -> c.getAttributes().put(MACHINE_NAME_ATTRIBUTE, machineName));
+  }
+
