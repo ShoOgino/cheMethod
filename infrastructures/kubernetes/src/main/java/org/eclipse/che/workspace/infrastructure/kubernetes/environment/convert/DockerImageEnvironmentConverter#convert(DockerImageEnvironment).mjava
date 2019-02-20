@@ -1,12 +1,22 @@
   public KubernetesEnvironment convert(DockerImageEnvironment environment)
       throws InfrastructureException {
-    final Iterator<String> iterator = environment.getMachines().keySet().iterator();
-    if (!iterator.hasNext()) {
-      throw new InternalInfrastructureException(
-          "DockerImage environment must contain at least one machine configuration");
-    }
-    final String machineName = iterator.next();
+
     final String dockerImage = environment.getRecipe().getContent();
+
+    Map.Entry<String, InternalMachineConfig> e =
+        environment.getMachines().entrySet().iterator().next();
+
+    InternalMachineConfig machine = e.getValue();
+    String machineName = e.getKey();
+
+    ContainerBuilder container =
+        new ContainerBuilder()
+            .withImage(dockerImage)
+            .withName(CONTAINER_NAME)
+            .withImagePullPolicy("Always");
+
+    applyEntryPoint(machine, container);
+
     final Map<String, String> annotations = new HashMap<>();
     annotations.put(format(MACHINE_NAME_ANNOTATION_FMT, CONTAINER_NAME), machineName);
 
@@ -17,18 +27,14 @@
             .withAnnotations(annotations)
             .endMetadata()
             .withNewSpec()
-            .withContainers(
-                new ContainerBuilder()
-                    .withImage(dockerImage)
-                    .withName(CONTAINER_NAME)
-                    .withImagePullPolicy("Always")
-                    .build())
+            .withContainers(container.build())
             .endSpec()
             .build();
+
     return KubernetesEnvironment.builder(environment)
         .setMachines(environment.getMachines())
         .setInternalRecipe(environment.getRecipe())
-        .setPods(ImmutableMap.of(POD_NAME, pod))
+        .setPods(ImmutableMap.of(machineName, pod))
         .build();
   }
 
