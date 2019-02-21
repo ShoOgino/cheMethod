@@ -1,0 +1,45 @@
+  /**
+   * Applies changes on workspace config according to the specified kubernetes/openshift tool.
+   *
+   * @param workspaceConfig workspace config on which changes should be applied
+   * @param k8sTool kubernetes/openshift tool that should be applied
+   * @param contentProvider optional content provider that may be used for external tool resource
+   *     fetching
+   * @throws IllegalArgumentException if specified workspace config or plugin tool is null
+   * @throws IllegalArgumentException if specified tool has type different from chePlugin
+   * @throws DevfileException if specified content provider is null while kubernetes/openshift tool
+   *     required external file content
+   * @throws DevfileException if external file content is empty or any error occurred during content
+   *     retrieving
+   */
+  @Override
+  public void apply(
+      WorkspaceConfigImpl workspaceConfig,
+      Tool k8sTool,
+      @Nullable FileContentProvider contentProvider)
+      throws DevfileException {
+    checkArgument(workspaceConfig != null, "Workspace config must not be null");
+    checkArgument(k8sTool != null, "Tool must not be null");
+    checkArgument(
+        KUBERNETES_TOOL_TYPE.equals(k8sTool.getType())
+            || OPENSHIFT_TOOL_TYPE.equals(k8sTool.getType()),
+        format("Plugin must have `%s` or `%s` type", KUBERNETES_TOOL_TYPE, OPENSHIFT_TOOL_TYPE));
+
+    String recipeFileContent = retrieveContent(k8sTool, contentProvider, k8sTool.getType());
+
+    final KubernetesList list = unmarshal(k8sTool, recipeFileContent);
+
+    if (!k8sTool.getSelector().isEmpty()) {
+      list.setItems(filter(list, k8sTool.getSelector()));
+    }
+
+    estimateCommandsMachineName(workspaceConfig, k8sTool, list);
+
+    RecipeImpl recipe =
+        new RecipeImpl(k8sTool.getType(), YAML_CONTENT_TYPE, asYaml(k8sTool, list), null);
+
+    String envName = k8sTool.getName();
+    workspaceConfig.getEnvironments().put(envName, new EnvironmentImpl(recipe, emptyMap()));
+    workspaceConfig.setDefaultEnv(envName);
+  }
+
