@@ -1,0 +1,82 @@
+  /**
+   * Applies changes on workspace config according to the specified dockerimage tool.
+   *
+   * @param workspaceConfig workspace config on which changes should be applied
+   * @param dockerimageTool dockerimage tool that should be applied
+   * @param contentProvider optional content provider that may be used for external tool resource
+   *     fetching
+   * @throws IllegalArgumentException if specified workspace config or plugin tool is null
+   * @throws IllegalArgumentException if specified tool has type different from dockerimage
+   */
+  @Override
+  public void apply(
+      WorkspaceConfigImpl workspaceConfig,
+      Tool dockerimageTool,
+      FileContentProvider contentProvider) {
+    checkArgument(workspaceConfig != null, "Workspace config must not be null");
+    checkArgument(dockerimageTool != null, "Tool must not be null");
+    checkArgument(
+        DOCKERIMAGE_TOOL_TYPE.equals(dockerimageTool.getType()),
+        format("Plugin must have `%s` type", DOCKERIMAGE_TOOL_TYPE));
+
+    String machineName = dockerimageTool.getName();
+    MachineConfigImpl machineConfig = new MachineConfigImpl();
+
+    dockerimageTool.getEnv().forEach(e -> machineConfig.getEnv().put(e.getName(), e.getValue()));
+
+    for (Endpoint endpoint : dockerimageTool.getEndpoints()) {
+      HashMap<String, String> attributes = new HashMap<>(endpoint.getAttributes());
+
+      String protocol = attributes.remove("protocol");
+      if (isNullOrEmpty(protocol)) {
+        protocol = "http";
+      }
+
+      String path = attributes.remove("path");
+
+      machineConfig
+          .getServers()
+          .put(
+              endpoint.getName(),
+              new ServerConfigImpl(
+                  Integer.toString(endpoint.getPort()), protocol, path, attributes));
+    }
+
+    dockerimageTool
+        .getVolumes()
+        .forEach(
+            v ->
+                machineConfig
+                    .getVolumes()
+                    .put(v.getName(), new VolumeImpl().withPath(v.getContainerPath())));
+
+    if (dockerimageTool.getMountSources()) {
+      machineConfig
+          .getVolumes()
+          .put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectFolderPath));
+    }
+
+    machineConfig
+        .getAttributes()
+        .put(
+            MEMORY_LIMIT_ATTRIBUTE,
+            Long.toString(KubernetesSize.toBytes(dockerimageTool.getMemoryLimit())));
+
+    RecipeImpl recipe =
+        new RecipeImpl(DockerImageEnvironment.TYPE, null, dockerimageTool.getImage(), null);
+    EnvironmentImpl environment =
+        new EnvironmentImpl(recipe, ImmutableMap.of(machineName, machineConfig));
+    workspaceConfig.getEnvironments().put(dockerimageTool.getName(), environment);
+    workspaceConfig.setDefaultEnv(dockerimageTool.getName());
+
+    workspaceConfig
+        .getCommands()
+        .stream()
+        .filter(
+            c ->
+                dockerimageTool
+                    .getName()
+                    .equals(c.getAttributes().get(Constants.TOOL_NAME_COMMAND_ATTRIBUTE)))
+        .forEach(c -> c.getAttributes().put(MACHINE_NAME_ATTRIBUTE, machineName));
+  }
+

@@ -1,0 +1,39 @@
+  /**
+   * Exports workspace config into {@link Devfile}
+   *
+   * @param wsConfig initial workspace config
+   * @return devfile resulted devfile
+   * @throws WorkspaceExportException if export of given workspace config is impossible
+   */
+  public Devfile workspaceToDevFile(WorkspaceConfigImpl wsConfig) throws WorkspaceExportException {
+    if (wsConfig.getEnvironments().size() > 1) {
+      throw new WorkspaceExportException(
+          format(
+              "Workspace '%s' cannot be converted to devfile because it contains multiple environments",
+              wsConfig.getName()));
+    }
+
+    Devfile devfile =
+        DevfileFactory.newDevfile()
+            .withSpecVersion(CURRENT_SPEC_VERSION)
+            .withName(wsConfig.getName());
+
+    // Manage projects
+    devfile.setProjects(
+        wsConfig
+            .getProjects()
+            .stream()
+            .map(projectConverter::toDevfileProject)
+            .collect(toCollection(ArrayList::new)));
+
+    for (CommandImpl command : wsConfig.getCommands()) {
+      devfile.getCommands().add(commandConverter.toDevfileCommand(command));
+    }
+
+    for (ToolProvisioner toolConverter : toolProvisioners) {
+      toolConverter.provision(devfile, wsConfig);
+    }
+
+    return devfile;
+  }
+

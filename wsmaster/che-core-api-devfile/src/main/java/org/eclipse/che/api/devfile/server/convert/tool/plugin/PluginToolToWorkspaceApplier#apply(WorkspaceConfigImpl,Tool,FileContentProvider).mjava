@@ -1,0 +1,53 @@
+  /**
+   * Applies changes on workspace config according to the specified plugin tool.
+   *
+   * @param workspaceConfig workspace config on which changes should be applied
+   * @param pluginTool plugin tool that should be applied
+   * @param contentProvider optional content provider that may be used for external tool resource
+   *     fetching
+   * @throws IllegalArgumentException if specified workspace config or plugin tool is null
+   * @throws IllegalArgumentException if specified tool has type different from chePlugin
+   */
+  @Override
+  public void apply(
+      WorkspaceConfigImpl workspaceConfig,
+      Tool pluginTool,
+      @Nullable FileContentProvider contentProvider) {
+    checkArgument(workspaceConfig != null, "Workspace config must not be null");
+    checkArgument(pluginTool != null, "Tool must not be null");
+    checkArgument(
+        PLUGIN_TOOL_TYPE.equals(pluginTool.getType()),
+        format("Plugin must have `%s` type", PLUGIN_TOOL_TYPE));
+
+    String workspacePluginsAttribute =
+        workspaceConfig.getAttributes().get(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE);
+    workspaceConfig
+        .getAttributes()
+        .put(
+            WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE,
+            append(workspacePluginsAttribute, pluginTool.getId()));
+
+    String pluginsAliases =
+        workspaceConfig.getAttributes().get(PLUGINS_TOOLS_ALIASES_WORKSPACE_ATTRIBUTE);
+    workspaceConfig
+        .getAttributes()
+        .put(
+            PLUGINS_TOOLS_ALIASES_WORKSPACE_ATTRIBUTE,
+            append(pluginsAliases, pluginTool.getId() + "=" + pluginTool.getName()));
+
+    for (CommandImpl command : workspaceConfig.getCommands()) {
+      String commandTool = command.getAttributes().get(TOOL_NAME_COMMAND_ATTRIBUTE);
+
+      if (commandTool == null) {
+        // command does not have tool information
+        continue;
+      }
+
+      if (!commandTool.equals(pluginTool.getName())) {
+        continue;
+      }
+
+      command.getAttributes().put(PLUGIN_ATTRIBUTE, pluginTool.getId());
+    }
+  }
+
