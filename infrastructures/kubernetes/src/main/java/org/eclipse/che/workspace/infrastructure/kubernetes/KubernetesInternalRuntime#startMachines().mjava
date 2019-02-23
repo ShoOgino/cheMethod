@@ -3,6 +3,7 @@
    *
    * @throws InfrastructureException when any error occurs while creating Kubernetes objects
    */
+  @Traced
   protected void startMachines() throws InfrastructureException {
     KubernetesEnvironment k8sEnv = getContext().getEnvironment();
     String workspaceId = getContext().getIdentity().getWorkspaceId();
@@ -15,23 +16,7 @@
     // /workspace{wsid}/server-{port} => service({wsid}):server-port => pod({wsid}):{port}
     List<Ingress> readyIngresses = createIngresses(k8sEnv, workspaceId);
 
-    // TODO https://github.com/eclipse/che/issues/7653
-    // namespace.pods().watch(new AbnormalStopHandler());
-    namespace.deployments().watchEvents(new MachineLogsPublisher());
-    if (unrecoverableEventListenerFactory.isConfigured()) {
-      KubernetesEnvironment environment = getContext().getEnvironment();
-      Set<String> toWatch =
-          environment
-              .getPodsData()
-              .values()
-              .stream()
-              .map(podData -> podData.getMetadata().getName())
-              .collect(Collectors.toSet());
-      namespace
-          .deployments()
-          .watchEvents(
-              unrecoverableEventListenerFactory.create(toWatch, this::handleUnrecoverableEvent));
-    }
+    listenEvents();
 
     final KubernetesServerResolver serverResolver =
         new KubernetesServerResolver(createdServices, readyIngresses);

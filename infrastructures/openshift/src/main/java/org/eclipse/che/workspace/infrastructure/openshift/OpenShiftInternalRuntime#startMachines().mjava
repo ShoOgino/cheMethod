@@ -1,4 +1,5 @@
   @Override
+  @Traced
   protected void startMachines() throws InfrastructureException {
     OpenShiftEnvironment osEnv = getContext().getEnvironment();
     String workspaceId = getContext().getIdentity().getWorkspaceId();
@@ -8,23 +9,7 @@
     List<Service> createdServices = createServices(osEnv, workspaceId);
     List<Route> createdRoutes = createRoutes(osEnv, workspaceId);
 
-    // TODO https://github.com/eclipse/che/issues/7653
-    // project.pods().watch(new AbnormalStopHandler());
-
-    project.deployments().watchEvents(new MachineLogsPublisher());
-    if (unrecoverablePodEventListenerFactory.isConfigured()) {
-      OpenShiftEnvironment environment = getContext().getEnvironment();
-      Set<String> toWatch =
-          environment
-              .getPodsData()
-              .values()
-              .stream()
-              .map(podData -> podData.getMetadata().getName())
-              .collect(Collectors.toSet());
-      UnrecoverablePodEventListener handler =
-          unrecoverablePodEventListenerFactory.create(toWatch, this::handleUnrecoverableEvent);
-      project.deployments().watchEvents(handler);
-    }
+    listenEvents();
 
     doStartMachine(new OpenShiftServerResolver(createdServices, createdRoutes));
   }
