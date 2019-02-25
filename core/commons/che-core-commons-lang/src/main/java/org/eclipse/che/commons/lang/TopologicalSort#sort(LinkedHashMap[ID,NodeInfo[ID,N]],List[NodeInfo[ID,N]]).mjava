@@ -1,0 +1,41 @@
+  private void sort(LinkedHashMap<ID, NodeInfo<ID, N>> nodes, List<NodeInfo<ID, N>> results) {
+
+    while (!nodes.isEmpty()) {
+      NodeInfo<ID, N> curr = removeFirstIndependent(nodes);
+      if (curr != null) {
+        // yay, simple. Just add the found independent node to the results.
+        results.add(curr);
+      } else {
+        // ok, there is a cycle in the graph. Let's remove all the nodes in the first cycle we find
+        // from our predecessors map, add them to the result in their original order and try to
+        // continue normally
+
+        // find the first cycle in the predecessors (in the original list order)
+        Iterator<NodeInfo<ID, N>> nexts = nodes.values().iterator();
+        List<NodeInfo<ID, N>> cycle;
+        do {
+          curr = nexts.next();
+          cycle = findCycle(curr, nodes);
+        } while (cycle.isEmpty() && nexts.hasNext());
+
+        // If we ever find a graph that doesn't have any independent node, yet we fail to find a
+        // cycle in it, the universe must be broken.
+        if (cycle.isEmpty()) {
+          throw new IllegalStateException(
+              String.format(
+                  "Failed to find a cycle in a graph that doesn't seem to  have any independent"
+                      + " node. This should never happen. Please file a bug. Current state of the"
+                      + " sorting is: nodes=%s, results=%s",
+                  nodes.toString(), results.toString()));
+        }
+
+        cycle.sort(Comparator.comparingInt(a -> a.sourcePosition));
+
+        for (NodeInfo<ID, N> n : cycle) {
+          removePredecessorMapping(nodes, n);
+          results.add(n);
+        }
+      }
+    }
+  }
+
