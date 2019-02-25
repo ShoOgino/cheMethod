@@ -1,0 +1,32 @@
+  @Test
+  public void shouldProvisionCommandAndArgs() throws Exception {
+    // given
+    List<String> command = singletonList("/usr/bin/rf");
+    List<String> args = Arrays.asList("-r", "f");
+
+    String serializedCommand = command.toString();
+    String serializedArgs = args.toString();
+
+    doReturn(serializedCommand).when(entryPointParser).serializeEntry(eq(command));
+    doReturn(serializedArgs).when(entryPointParser).serializeEntry(eq(args));
+
+    Tool dockerimageTool =
+        new Tool()
+            .withName("jdk")
+            .withType(DOCKERIMAGE_TOOL_TYPE)
+            .withImage("eclipse/ubuntu_jdk8:latest")
+            .withMemoryLimit("1G")
+            .withCommand(command)
+            .withArgs(args);
+
+    // when
+    dockerimageToolApplier.apply(workspaceConfig, dockerimageTool, null);
+
+    // then
+    MachineConfigImpl machineConfig = getMachineConfig(workspaceConfig, "jdk");
+    Assert.assertEquals(
+        machineConfig.getAttributes().get(CONTAINER_COMMAND_ATTRIBUTE), serializedCommand);
+    Assert.assertEquals(
+        machineConfig.getAttributes().get(CONTAINER_ARGS_ATTRIBUTE), serializedArgs);
+  }
+
