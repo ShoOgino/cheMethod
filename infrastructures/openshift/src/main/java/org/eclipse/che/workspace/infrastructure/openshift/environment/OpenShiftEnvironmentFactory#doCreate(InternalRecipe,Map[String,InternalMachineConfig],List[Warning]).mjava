@@ -9,40 +9,8 @@
     if (sourceWarnings != null) {
       warnings.addAll(sourceWarnings);
     }
-    String content = recipe.getContent();
-    String contentType = recipe.getContentType();
-    checkNotNull(contentType, "OpenShift Recipe content type should not be null");
 
-    switch (contentType) {
-      case "application/x-yaml":
-      case "text/yaml":
-      case "text/x-yaml":
-        break;
-      default:
-        throw new ValidationException(
-            "Provided environment recipe content type '"
-                + contentType
-                + "' is unsupported. Supported values are: "
-                + "application/x-yaml, text/yaml, text/x-yaml");
-    }
-
-    final List<HasMetadata> list;
-    try {
-      // Behavior:
-      // - If `content` is a Kubernetes List, load().get() will get the objects in that list
-      // - If `content` is an OpenShift template, load().get() will get the objects in the template
-      //   with parameters substituted (e.g. with default values).
-      list = clientFactory.create().load(new ByteArrayInputStream(content.getBytes())).get();
-    } catch (KubernetesClientException e) {
-      // KubernetesClient wraps the error when a JsonMappingException occurs so we need the cause
-      String message = e.getCause() == null ? e.getMessage() : e.getCause().getMessage();
-      if (message.contains("\n")) {
-        // Clean up message if it comes from JsonMappingException. Format is e.g.
-        // `No resource type found for:v1#Route1\n at [...]`
-        message = message.split("\\n", 2)[0];
-      }
-      throw new ValidationException(format("Could not parse OpenShift recipe: %s", message));
-    }
+    final List<HasMetadata> list = k8sObjectsParser.parse(recipe);
 
     Map<String, Pod> pods = new HashMap<>();
     Map<String, Deployment> deployments = new HashMap<>();
@@ -55,9 +23,6 @@
       checkNotNull(object.getKind(), "Environment contains object without specified kind field");
       checkNotNull(object.getMetadata(), "%s metadata must not be null", object.getKind());
       checkNotNull(object.getMetadata().getName(), "%s name must not be null", object.getKind());
-
-      // needed because Che master namespace is set by K8s API during list loading
-      object.getMetadata().setNamespace(null);
 
       if (object instanceof DeploymentConfig) {
         throw new ValidationException("Supporting of deployment configs is not implemented yet.");
@@ -90,8 +55,6 @@
       }
     }
 
-    addRamAttributes(machines, pods.values());
-
     OpenShiftEnvironment osEnv =
         OpenShiftEnvironment.builder()
             .setInternalRecipe(recipe)
@@ -105,6 +68,8 @@
             .setConfigMaps(configMaps)
             .setRoutes(routes)
             .build();
+
+    addRamAttributes(osEnv.getMachines(), osEnv.getPodsData().values());
 
     envValidator.validate(osEnv);
 
