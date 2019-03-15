@@ -1,0 +1,20 @@
+  private void handleWorkspaceStatusChange(WorkspaceStatusEvent event) {
+    if (event.getPrevStatus() == WorkspaceStatus.STOPPED
+        && event.getStatus() == WorkspaceStatus.STARTING) {
+      workspaceStartTime.put(event.getWorkspaceId(), System.currentTimeMillis());
+    } else if (event.getPrevStatus() == WorkspaceStatus.STARTING) {
+      Long startTime = workspaceStartTime.remove(event.getWorkspaceId());
+      if (startTime == null) {
+        // this situation is possible when starting workspace is recovered or some bug happened
+        LOG.warn("No workspace start time recorded for workspace {}", event.getWorkspaceId());
+        return;
+      }
+
+      if (event.getStatus() == WorkspaceStatus.RUNNING) {
+        successTimer.record(Duration.ofMillis(System.currentTimeMillis() - startTime));
+      } else if (event.getStatus() == WorkspaceStatus.STOPPED) {
+        failTimer.record(Duration.ofMillis(System.currentTimeMillis() - startTime));
+      }
+    }
+  }
+

@@ -1,0 +1,51 @@
+  @Test
+  public void shouldResolveRelativeFiles() throws Exception {
+    // given
+
+    // we need to set up an "almost real" devfile converter which is a little bit involved
+    DevfileSchemaValidator validator = new DevfileSchemaValidator(new DevfileSchemaProvider());
+    DevfileIntegrityValidator integrityValidator = new DevfileIntegrityValidator();
+    Set<ToolProvisioner> toolProvisioners = new HashSet<>();
+    Map<String, ToolToWorkspaceApplier> appliers = new HashMap<>();
+    ToolToWorkspaceApplier applier = mock(ToolToWorkspaceApplier.class);
+    appliers.put("kubernetes", applier);
+
+    doAnswer(
+            i -> {
+              // in here we mock that the tool applier requests the contents of the referenced
+              // local file. That's all we need to happen
+              FileContentProvider p = i.getArgument(2);
+              Tool tool = i.getArgument(1);
+              p.fetchContent(tool.getLocal());
+              return null;
+            })
+        .when(applier)
+        .apply(any(), any(), any());
+
+    DevfileConverter devfileConverter =
+        new DevfileConverter(
+            new ProjectConverter(), new CommandConverter(), toolProvisioners, appliers);
+
+    WorkspaceManager workspaceManager = mock(WorkspaceManager.class);
+
+    DevfileManager devfileManager =
+        new DevfileManager(validator, integrityValidator, devfileConverter, workspaceManager);
+
+    URLFactoryBuilder factoryBuilder =
+        new URLFactoryBuilder("editor", "plugin", urlFetcher, devfileManager);
+
+    DefaultFactoryParameterResolver res =
+        new DefaultFactoryParameterResolver(factoryBuilder, urlFetcher);
+
+    // set up our factory with the location of our devfile that is referencing our localfile
+    Map<String, String> factoryParameters = new HashMap<>();
+    factoryParameters.put(URL_PARAMETER_NAME, "scheme:/myloc/devfile");
+    doReturn(DEVFILE).when(urlFetcher).fetchSafely(eq("scheme:/myloc/devfile"));
+
+    // when
+    res.createFactory(factoryParameters);
+
+    // then
+    verify(urlFetcher).fetch(eq("scheme:/localfile"));
+  }
+
