@@ -4,17 +4,15 @@
    * @param serverResolver server resolver that provide servers by container
    * @throws InfrastructureException when any error occurs while creating Kubernetes pods
    */
+  @Traced
   protected void doStartMachine(KubernetesServerResolver serverResolver)
       throws InfrastructureException {
-    machineStartupTraces =
-        new ConcurrentHashMap<>(getContext().getEnvironment().getMachines().size());
 
     final KubernetesEnvironment environment = getContext().getEnvironment();
     final Map<String, InternalMachineConfig> machineConfigs = environment.getMachines();
     final String workspaceId = getContext().getIdentity().getWorkspaceId();
     LOG.debug("Begin pods creation for workspace '{}'", workspaceId);
     for (Pod toCreate : environment.getPodsCopy().values()) {
-      startTracingContainersStartup(toCreate.getMetadata(), toCreate.getSpec());
       ObjectMeta toCreateMeta = toCreate.getMetadata();
       final Pod createdPod = namespace.deployments().deploy(toCreate);
       LOG.debug("Creating pod '{}' in workspace '{}'", toCreateMeta.getName(), workspaceId);
@@ -22,7 +20,6 @@
     }
     for (Deployment toCreate : environment.getDeploymentsCopy().values()) {
       PodTemplateSpec template = toCreate.getSpec().getTemplate();
-      startTracingContainersStartup(template.getMetadata(), template.getSpec());
       ObjectMeta toCreateMeta = toCreate.getMetadata();
       final Pod createdPod = namespace.deployments().deploy(toCreate);
       LOG.debug("Creating deployment '{}' in workspace '{}'", toCreateMeta.getName(), workspaceId);

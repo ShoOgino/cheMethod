@@ -44,26 +44,28 @@
       final EnvironmentContext currentContext = EnvironmentContext.getCurrent();
       CompletableFuture<Void> startFailure = startSynchronizer.getStartFailure();
 
-      for (KubernetesMachineImpl machine : machines.getMachines(context.getIdentity()).values()) {
-        String machineName = machine.getName();
-        final CompletableFuture<Void> machineBootChain =
-            waitRunningAsync(toCancelFutures, machine)
-                // since machine running future will be completed from the thread that is not from
-                // kubernetes pool it's needed to explicitly put the executor to not to delay
-                // processing in the external pool.
-                .thenComposeAsync(checkFailure(startFailure), executor)
-                .thenRun(publishRunningStatus(machineName))
-                .thenCompose(checkFailure(startFailure))
-                .thenCompose(setContext(currentContext, bootstrap(toCancelFutures, machine)))
-                // see comments above why executor is explicitly put into arguments
-                .thenComposeAsync(checkFailure(startFailure), executor)
-                .thenCompose(setContext(currentContext, checkServers(toCancelFutures, machine)))
-                .thenRun(finishStartupTracingSpan(machineName))
-                .exceptionally(publishFailedStatusAndRecordFailureTrace(startFailure, machineName));
-        machinesFutures.put(machineName, machineBootChain);
+      try (Scope waitRunningAsyncScope = tracer.buildSpan("WaitMachinesStart").startActive(true)) {
+        TracingTags.WORKSPACE_ID.set(waitRunningAsyncScope.span(), workspaceId);
+        for (KubernetesMachineImpl machine : machines.getMachines(context.getIdentity()).values()) {
+          String machineName = machine.getName();
+          final CompletableFuture<Void> machineBootChain =
+              waitRunningAsync(toCancelFutures, machine)
+                  // since machine running future will be completed from the thread that is not from
+                  // kubernetes pool it's needed to explicitly put the executor to not to delay
+                  // processing in the external pool.
+                  .thenComposeAsync(checkFailure(startFailure), executor)
+                  .thenRun(publishRunningStatus(machineName))
+                  .thenCompose(checkFailure(startFailure))
+                  .thenCompose(setContext(currentContext, bootstrap(toCancelFutures, machine)))
+                  // see comments above why executor is explicitly put into arguments
+                  .thenComposeAsync(checkFailure(startFailure), executor)
+                  .thenCompose(setContext(currentContext, checkServers(toCancelFutures, machine)))
+                  .exceptionally(publishFailedStatus(startFailure, machineName));
+          machinesFutures.put(machineName, machineBootChain);
+        }
+        waitMachines(machinesFutures, toCancelFutures, startFailure);
       }
 
-      waitMachines(machinesFutures, toCancelFutures, startFailure);
       startSynchronizer.complete();
     } catch (InfrastructureException | RuntimeException e) {
       Exception startFailureCause = startSynchronizer.getStartFailureNow();

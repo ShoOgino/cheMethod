@@ -5,6 +5,10 @@
    */
   private Function<Void, CompletionStage<Void>> bootstrap(
       List<CompletableFuture<?>> toCancelFutures, KubernetesMachineImpl machine) {
+
+    // Need to get active span here to allow use in returned function;
+    final Span activeSpan = tracer.activeSpan();
+
     return ignored -> {
       // think about to return copy of machines in environment
       final InternalMachineConfig machineConfig =
@@ -15,6 +19,13 @@
           getContext().getIdentity().getWorkspaceId());
       final CompletableFuture<Void> bootstrapperFuture;
       if (!machineConfig.getInstallers().isEmpty()) {
+        // Span must be created within this lambda block, otherwise the span begins as soon as
+        // this function is called (i.e. before the previous steps in the machine boot chain
+        // are complete
+        Span tracingSpan = tracer.buildSpan("BootstrapInstallers").asChildOf(activeSpan).start();
+        TracingUtil.setWorkspaceIdAndMachineName(
+            tracingSpan, getContext().getIdentity().getWorkspaceId(), machine.getName());
+
         bootstrapperFuture =
             bootstrapperFactory
                 .create(
@@ -24,6 +35,13 @@
                     namespace,
                     startSynchronizer)
                 .bootstrapAsync();
+        bootstrapperFuture.whenComplete(
+            (res, ex) -> {
+              if (ex != null) {
+                TracingUtil.setErrorStatus(tracingSpan, ex);
+              }
+              tracingSpan.finish();
+            });
         toCancelFutures.add(bootstrapperFuture);
       } else {
         bootstrapperFuture = CompletableFuture.completedFuture(null);

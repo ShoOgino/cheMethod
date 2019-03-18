@@ -4,7 +4,18 @@
    */
   private Function<Void, CompletionStage<Void>> checkServers(
       List<CompletableFuture<?>> toCancelFutures, KubernetesMachineImpl machine) {
+
+    // Need to get active span here to allow use in returned function;
+    final Span activeSpan = tracer.activeSpan();
+
     return ignored -> {
+      // Span must be created within this lambda block, otherwise the span begins as soon as
+      // this function is called (i.e. before the previous steps in the machine boot chain
+      // are complete
+      final Span tracingSpan = tracer.buildSpan("CheckServers").asChildOf(activeSpan).start();
+      TracingUtil.setWorkspaceIdAndMachineName(
+          tracingSpan, getContext().getIdentity().getWorkspaceId(), machine.getName());
+
       // This completable future is used to unity the servers checks and start of probes
       final CompletableFuture<Void> serversAndProbesFuture = new CompletableFuture<>();
       final String machineName = machine.getName();
@@ -29,6 +40,8 @@
             });
       } catch (InfrastructureException ex) {
         serversAndProbesFuture.completeExceptionally(ex);
+        TracingUtil.setErrorStatus(tracingSpan, ex);
+        tracingSpan.finish();
         return serversAndProbesFuture;
       }
       serversReadyFuture.whenComplete(
@@ -36,6 +49,8 @@
               (ok, ex) -> {
                 if (ex != null) {
                   serversAndProbesFuture.completeExceptionally(ex);
+                  TracingUtil.setErrorStatus(tracingSpan, ex);
+                  tracingSpan.finish();
                   return;
                 }
                 try {
@@ -46,6 +61,7 @@
                   serversAndProbesFuture.completeExceptionally(iex);
                 }
                 serversAndProbesFuture.complete(null);
+                tracingSpan.finish();
               });
       return serversAndProbesFuture;
     };

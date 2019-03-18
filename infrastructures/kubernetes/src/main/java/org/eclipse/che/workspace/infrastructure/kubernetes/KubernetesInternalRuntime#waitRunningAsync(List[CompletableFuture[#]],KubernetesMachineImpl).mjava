@@ -6,8 +6,20 @@
    */
   public CompletableFuture<Void> waitRunningAsync(
       List<CompletableFuture<?>> toCancelFutures, KubernetesMachineImpl machine) {
+    Span tracingSpan = tracer.buildSpan("WaitRunningAsync").start();
+    TracingUtil.setWorkspaceIdAndMachineName(
+        tracingSpan, machine.getWorkspaceId(), machine.getName());
+
     CompletableFuture<Void> waitFuture =
         namespace.deployments().waitRunningAsync(machine.getPodName());
+
+    waitFuture.whenComplete(
+        (res, ex) -> {
+          if (ex != null) {
+            TracingUtil.setErrorStatus(tracingSpan, ex);
+          }
+          tracingSpan.finish();
+        });
 
     toCancelFutures.add(waitFuture);
     return waitFuture;
