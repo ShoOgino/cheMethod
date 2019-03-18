@@ -1,16 +1,24 @@
   @Override
   public List<ChePlugin> execute() throws InfrastructureException {
+    Span tracingSpan = tracer.buildSpan(WAIT_BROKERS_RESULT_PHASE).start();
+    TracingTags.WORKSPACE_ID.set(tracingSpan, workspaceId);
+
     try {
       LOG.debug("Trying to get brokers result for workspace '{}'", workspaceId);
       return brokersResult.get(resultWaitingTimeout, TimeUnit.MINUTES);
     } catch (InterruptedException e) {
+      TracingTags.setErrorStatus(tracingSpan, e);
       throw new InfrastructureException(
           "Plugins installation process was interrupted. Error: " + e.getMessage(), e);
     } catch (ExecutionException e) {
+      TracingTags.setErrorStatus(tracingSpan, e);
       throw new InfrastructureException(
           "Plugins installation process failed. Error: " + e.getCause().getMessage(), e.getCause());
     } catch (TimeoutException e) {
+      TracingTags.setErrorStatus(tracingSpan, e);
       throw new InfrastructureException("Plugins installation process timed out");
+    } finally {
+      tracingSpan.finish();
     }
   }
 

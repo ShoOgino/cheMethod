@@ -1,6 +1,9 @@
   @Override
   public List<ChePlugin> execute() throws InfrastructureException {
     LOG.debug("Starting brokers pod for workspace '{}'", workspaceId);
+    Span tracingSpan = tracer.buildSpan(DEPLOY_BROKER_PHASE).start();
+    TracingTags.WORKSPACE_ID.set(tracingSpan, workspaceId);
+
     KubernetesDeployments deployments = namespace.deployments();
     try {
       // Creates config map that can inject Che tooling plugins meta files into a Che plugin
@@ -22,7 +25,13 @@
       deployments.create(pluginBrokerPod);
 
       LOG.debug("Brokers pod is created for workspace '{}'", workspaceId);
+      tracingSpan.finish();
       return nextPhase.execute();
+    } catch (InfrastructureException e) {
+      // Ensure span is finished with exception message
+      TracingTags.setErrorStatus(tracingSpan, e);
+      tracingSpan.finish();
+      throw e;
     } finally {
       namespace.deployments().stopWatch();
       try {

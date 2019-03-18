@@ -1,7 +1,17 @@
   @Override
   public List<ChePlugin> execute() throws InfrastructureException {
-    volumesStrategy.prepare(
-        brokerEnvironment, workspaceId, startSynchronizer.getStartTimeoutMillis());
+    Span tracingSpan = tracer.buildSpan(PREPARE_STORAGE_PHASE).start();
+    TracingTags.WORKSPACE_ID.set(tracingSpan, workspaceId);
+
+    try {
+      volumesStrategy.prepare(
+          brokerEnvironment, workspaceId, startSynchronizer.getStartTimeoutMillis());
+    } catch (InfrastructureException e) {
+      TracingTags.setErrorStatus(tracingSpan, e);
+      throw e;
+    } finally {
+      tracingSpan.finish();
+    }
 
     return nextPhase.execute();
   }

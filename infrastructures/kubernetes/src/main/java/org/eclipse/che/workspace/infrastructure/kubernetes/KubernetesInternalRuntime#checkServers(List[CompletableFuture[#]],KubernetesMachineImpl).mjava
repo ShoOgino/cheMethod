@@ -12,9 +12,9 @@
       // Span must be created within this lambda block, otherwise the span begins as soon as
       // this function is called (i.e. before the previous steps in the machine boot chain
       // are complete
-      final Span tracingSpan = tracer.buildSpan("CheckServers").asChildOf(activeSpan).start();
-      TracingUtil.setWorkspaceIdAndMachineName(
-          tracingSpan, getContext().getIdentity().getWorkspaceId(), machine.getName());
+      final Span tracingSpan = tracer.buildSpan(CHECK_SERVERS).asChildOf(activeSpan).start();
+      TracingTags.WORKSPACE_ID.set(tracingSpan, getContext().getIdentity().getWorkspaceId());
+      TracingTags.MACHINE_NAME.set(tracingSpan, machine.getName());
 
       // This completable future is used to unity the servers checks and start of probes
       final CompletableFuture<Void> serversAndProbesFuture = new CompletableFuture<>();
@@ -40,7 +40,7 @@
             });
       } catch (InfrastructureException ex) {
         serversAndProbesFuture.completeExceptionally(ex);
-        TracingUtil.setErrorStatus(tracingSpan, ex);
+        TracingTags.setErrorStatus(tracingSpan, ex);
         tracingSpan.finish();
         return serversAndProbesFuture;
       }
@@ -49,7 +49,7 @@
               (ok, ex) -> {
                 if (ex != null) {
                   serversAndProbesFuture.completeExceptionally(ex);
-                  TracingUtil.setErrorStatus(tracingSpan, ex);
+                  TracingTags.setErrorStatus(tracingSpan, ex);
                   tracingSpan.finish();
                   return;
                 }
