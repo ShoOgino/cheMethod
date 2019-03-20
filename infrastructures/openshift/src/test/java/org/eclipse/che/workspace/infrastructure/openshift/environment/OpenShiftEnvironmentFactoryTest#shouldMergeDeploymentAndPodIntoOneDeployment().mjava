@@ -1,5 +1,5 @@
   @Test
-  public void bothPodsAndDeploymentsIncludedInPodData() throws Exception {
+  public void shouldMergeDeploymentAndPodIntoOneDeployment() throws Exception {
     // given
     PodTemplateSpec podTemplate =
         new PodTemplateSpecBuilder()
@@ -27,19 +27,20 @@
             .endSpec()
             .build();
     when(k8sRecipeParser.parse(any(InternalRecipe.class))).thenReturn(asList(deployment, pod));
+    Deployment merged = createEmptyDeployment("merged");
+    when(podMerger.merge(any())).thenReturn(merged);
 
     // when
-    final KubernetesEnvironment osEnv =
+    final KubernetesEnvironment k8sEnv =
         osEnvFactory.doCreate(internalRecipe, emptyMap(), emptyList());
 
     // then
-    assertEquals(osEnv.getPodsData().size(), 2);
+    verify(podMerger).merge(asList(new PodData(pod), new PodData(deployment)));
+    assertEquals(k8sEnv.getPodsData().size(), 1);
 
-    assertEquals(
-        osEnv.getPodsData().get("deployment-test").getMetadata(), podTemplate.getMetadata());
-    assertEquals(osEnv.getPodsData().get("deployment-test").getSpec(), podTemplate.getSpec());
+    assertTrue(k8sEnv.getPodsCopy().isEmpty());
 
-    assertEquals(osEnv.getPodsData().get("bare-pod").getMetadata(), pod.getMetadata());
-    assertEquals(osEnv.getPodsData().get("bare-pod").getSpec(), pod.getSpec());
+    assertEquals(k8sEnv.getDeploymentsCopy().size(), 1);
+    assertEquals(k8sEnv.getDeploymentsCopy().get("merged"), merged);
   }
 

@@ -1,0 +1,35 @@
+  @Test(
+      expectedExceptions = DevfileException.class,
+      expectedExceptionsMessageRegExp =
+          "Kubernetes tool can only be applied to a workspace with either kubernetes or openshift "
+              + "recipe type but workspace has a recipe of type 'any'")
+  public void shouldThrowAnExceptionIfWorkspaceAlreadyContainNonK8sNorOSRecipe() throws Exception {
+    // given
+    workspaceConfig.setDefaultEnv("default");
+    RecipeImpl existingRecipe = new RecipeImpl("any", "yaml", "existing-content", null);
+    workspaceConfig
+        .getEnvironments()
+        .put("default", new EnvironmentImpl(existingRecipe, emptyMap()));
+
+    List<HasMetadata> toolsObject = new ArrayList<>();
+    Deployment toolDeployment =
+        new DeploymentBuilder()
+            .withNewMetadata()
+            .withName("db")
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    toolsObject.add(new DeploymentBuilder(toolDeployment).build());
+    doReturn(toolsObject).when(k8sRecipeParser).parse(anyString());
+    Tool tool =
+        new Tool()
+            .withType(KUBERNETES_TOOL_TYPE)
+            .withLocal(LOCAL_FILENAME)
+            .withName(TOOL_NAME)
+            .withSelector(new HashMap<>());
+
+    // when
+    applier.apply(workspaceConfig, tool, s -> "content");
+  }
+

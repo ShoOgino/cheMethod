@@ -1,0 +1,44 @@
+  /**
+   * Provision default environment with the specified kubernetes/openshift tool.
+   *
+   * <p>If there is already a default environment with kubernetes/openshift then content will be
+   * updated with new list.
+   *
+   * @param workspaceConfig workspace where recipe should be provisioned
+   * @param k8sTool kubernetes/openshift tool that should be provisioned
+   * @param toolObjects parsed objects of the specified tool
+   * @throws DevfileRecipeFormatException if exception occurred during existing environment parsing
+   * @throws DevfileRecipeFormatException if exception occurred during kubernetes object
+   *     serialization
+   * @throws DevfileException if any other exception occurred
+   */
+  private void provisionEnvironment(
+      WorkspaceConfigImpl workspaceConfig, Tool k8sTool, List<HasMetadata> toolObjects)
+      throws DevfileException, DevfileRecipeFormatException {
+    String defaultEnv = workspaceConfig.getDefaultEnv();
+    EnvironmentImpl environment = workspaceConfig.getEnvironments().get(defaultEnv);
+    if (environment == null) {
+      RecipeImpl recipe =
+          new RecipeImpl(k8sTool.getType(), YAML_CONTENT_TYPE, asYaml(k8sTool, toolObjects), null);
+      String envName = k8sTool.getName();
+      workspaceConfig.getEnvironments().put(envName, new EnvironmentImpl(recipe, emptyMap()));
+      workspaceConfig.setDefaultEnv(envName);
+    } else {
+      RecipeImpl envRecipe = environment.getRecipe();
+
+      // check if it is needed to update recipe type since
+      // kubernetes tool is compatible with openshift but not vice versa
+      if (OPENSHIFT_TOOL_TYPE.equals(k8sTool.getType())
+          && KubernetesEnvironment.TYPE.equals(envRecipe.getType())) {
+        envRecipe.setType(OpenShiftEnvironment.TYPE);
+      }
+
+      // workspace already has k8s/OS recipe
+      // it is needed to merge existing recipe objects with tool's ones
+      List<HasMetadata> envObjects = unmarshalDefaultEnvObjects(workspaceConfig);
+      fillIn(envObjects, toolObjects);
+
+      envRecipe.setContent(asYaml(k8sTool, envObjects));
+    }
+  }
+

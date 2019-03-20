@@ -1,0 +1,63 @@
+  @Test
+  public void shouldReconfigureServiceToMatchMergedDeployment() throws Exception {
+    // given
+    Pod pod1 =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName("bare-pod1")
+            .withLabels(ImmutableMap.of("name", "pod1"))
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    Pod pod2 =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName("bare-pod2")
+            .withLabels(ImmutableMap.of("name", "pod2"))
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    Service service1 =
+        new ServiceBuilder()
+            .withNewMetadata()
+            .withName("pod1-service")
+            .endMetadata()
+            .withNewSpec()
+            .withSelector(ImmutableMap.of("name", "pod1"))
+            .endSpec()
+            .build();
+    Service service2 =
+        new ServiceBuilder()
+            .withNewMetadata()
+            .withName("pod2-service")
+            .endMetadata()
+            .withNewSpec()
+            .withSelector(ImmutableMap.of("name", "pod2"))
+            .endSpec()
+            .build();
+    when(k8sRecipeParser.parse(any(InternalRecipe.class)))
+        .thenReturn(asList(pod1, pod2, service1, service2));
+    Deployment merged = createEmptyDeployment("merged");
+    when(podMerger.merge(any())).thenReturn(merged);
+
+    // when
+    final KubernetesEnvironment k8sEnv =
+        k8sEnvFactory.doCreate(internalRecipe, emptyMap(), emptyList());
+
+    // then
+    verify(podMerger).merge(asList(new PodData(pod1), new PodData(pod2)));
+    PodData mergedPodData = k8sEnv.getPodsData().get("merged");
+    assertEquals(mergedPodData.getMetadata().getLabels().get(DEPLOYMENT_NAME_LABEL), "merged");
+    assertTrue(
+        k8sEnv
+            .getServices()
+            .values()
+            .stream()
+            .allMatch(
+                s ->
+                    ImmutableMap.of(DEPLOYMENT_NAME_LABEL, "merged")
+                        .equals(s.getSpec().getSelector())));
+  }
+
