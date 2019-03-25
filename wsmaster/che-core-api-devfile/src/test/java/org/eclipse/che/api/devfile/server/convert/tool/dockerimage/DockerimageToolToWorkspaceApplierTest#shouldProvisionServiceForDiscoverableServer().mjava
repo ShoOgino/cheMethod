@@ -1,0 +1,57 @@
+  @Test
+  public void shouldProvisionServiceForDiscoverableServer() throws Exception {
+    // given
+    Endpoint endpoint =
+        new Endpoint()
+            .withName("jdk-ls")
+            .withPort(4923)
+            .withAttributes(
+                ImmutableMap.of(
+                    "protocol",
+                    "http",
+                    "path",
+                    "/ls",
+                    PUBLIC_ENDPOINT_ATTRIBUTE,
+                    "false",
+                    "secure",
+                    "false",
+                    DISCOVERABLE_ENDPOINT_ATTRIBUTE,
+                    "true"));
+    Tool dockerimageTool =
+        new Tool()
+            .withName("jdk")
+            .withType(DOCKERIMAGE_TOOL_TYPE)
+            .withImage("eclipse/ubuntu_jdk8:latest")
+            .withMemoryLimit("1G")
+            .withEndpoints(singletonList(endpoint));
+
+    // when
+    dockerimageToolApplier.apply(workspaceConfig, dockerimageTool, null);
+
+    // then
+    verify(k8sEnvProvisioner)
+        .provision(
+            eq(workspaceConfig),
+            eq(KubernetesEnvironment.TYPE),
+            objectsCaptor.capture(),
+            machinesCaptor.capture());
+
+    List<HasMetadata> objects = objectsCaptor.getValue();
+    assertEquals(objects.size(), 2);
+    assertTrue(objects.get(0) instanceof Deployment);
+    Deployment deployment = (Deployment) objects.get(0);
+    assertEquals(
+        deployment.getSpec().getTemplate().getMetadata().getLabels().get(CHE_ORIGINAL_NAME_LABEL),
+        "jdk");
+
+    assertTrue(objects.get(1) instanceof Service);
+    Service service = (Service) objects.get(1);
+    assertEquals(service.getMetadata().getName(), "jdk-ls");
+    assertEquals(service.getSpec().getSelector(), ImmutableMap.of(CHE_ORIGINAL_NAME_LABEL, "jdk"));
+    List<ServicePort> ports = service.getSpec().getPorts();
+    assertEquals(ports.size(), 1);
+    ServicePort port = ports.get(0);
+    assertEquals(port.getPort(), new Integer(4923));
+    assertEquals(port.getTargetPort(), new IntOrString(4923));
+  }
+

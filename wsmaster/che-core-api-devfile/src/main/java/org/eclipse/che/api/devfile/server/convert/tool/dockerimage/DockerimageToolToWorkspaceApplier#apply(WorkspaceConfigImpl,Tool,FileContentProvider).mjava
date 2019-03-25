@@ -50,6 +50,7 @@
           .put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectFolderPath));
     }
 
+    List<HasMetadata> componentObjects = new ArrayList<>();
     Deployment deployment =
         buildDeployment(
             machineName,
@@ -62,11 +63,18 @@
                 .collect(Collectors.toCollection(ArrayList::new)),
             dockerimageTool.getCommand(),
             dockerimageTool.getArgs());
+    componentObjects.add(deployment);
+
+    dockerimageTool
+        .getEndpoints()
+        .stream()
+        .filter(e -> "true".equals(e.getAttributes().get(DISCOVERABLE_ENDPOINT_ATTRIBUTE)))
+        .forEach(e -> componentObjects.add(createService(deployment, e)));
 
     k8sEnvProvisioner.provision(
         workspaceConfig,
         KubernetesEnvironment.TYPE,
-        singletonList(deployment),
+        componentObjects,
         ImmutableMap.of(machineName, machineConfig));
 
     workspaceConfig
