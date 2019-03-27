@@ -1,0 +1,27 @@
+  private BrokerConfig createBrokerConfig(
+      RuntimeIdentity runtimeId,
+      @Nullable Collection<PluginFQN> pluginFQNs,
+      List<EnvVar> envVars,
+      String image,
+      Pod pod)
+      throws InternalInfrastructureException {
+
+    BrokerConfig brokerConfig = new BrokerConfig();
+    String configMapVolume = null;
+    if (pluginFQNs != null) {
+      brokerConfig.configMapName = generateUniqueName(CONFIG_MAP_NAME_SUFFIX);
+      brokerConfig.configMapVolume = generateUniqueName(BROKER_VOLUME);
+      brokerConfig.configMap = newConfigMap(brokerConfig.configMapName, pluginFQNs);
+      configMapVolume = brokerConfig.configMapVolume;
+    }
+    brokerConfig.container = newContainer(runtimeId, envVars, image, configMapVolume);
+    brokerConfig.machineName = Names.machineName(pod, brokerConfig.container);
+    brokerConfig.machineConfig = new InternalMachineConfig();
+    brokerConfig
+        .machineConfig
+        .getVolumes()
+        .put(PLUGINS_VOLUME_NAME, new VolumeImpl().withPath("/plugins"));
+
+    return brokerConfig;
+  }
+

@@ -1,0 +1,47 @@
+  /**
+   * Creates {@link KubernetesEnvironment} with everything needed to deploy Plugin broker.
+   *
+   * @param pluginFQN fully qualified names of plugins that needs to be resolved by the broker
+   * @param runtimeID ID of the runtime the broker would be started
+   * @param brokersResult needs to be called with {@link BrokersResult#oneMoreBroker()} for each
+   *     broker to allow proper waiting of execution of all the brokers
+   * @return kubernetes environment (or its extension) with the Plugin broker objects
+   */
+  public E create(Collection<PluginFQN> pluginFQNs, RuntimeIdentity runtimeID)
+      throws InfrastructureException {
+
+    BrokersConfigs brokersConfigs = new BrokersConfigs();
+    Pod pod = brokersConfigs.pod = newPod();
+    brokersConfigs.configMaps = new HashMap<>();
+    brokersConfigs.machines = new HashMap<>();
+
+    PodSpec spec = pod.getSpec();
+    List<EnvVar> envVars =
+        Stream.of(
+                authEnableEnvVarProvider.get(runtimeID), machineTokenEnvVarProvider.get(runtimeID))
+            .map(this::asEnvVar)
+            .collect(Collectors.toList());
+
+    BrokerConfig brokerConfig =
+        createBrokerConfig(runtimeID, pluginFQNs, envVars, unifiedBrokerImage, pod);
+    brokersConfigs.machines.put(brokerConfig.machineName, brokerConfig.machineConfig);
+    brokersConfigs.configMaps.put(brokerConfig.configMapName, brokerConfig.configMap);
+    spec.getContainers().add(brokerConfig.container);
+    spec.getVolumes()
+        .add(
+            new VolumeBuilder()
+                .withName(brokerConfig.configMapVolume)
+                .withNewConfigMap()
+                .withName(brokerConfig.configMapName)
+                .endConfigMap()
+                .build());
+
+    // Add init broker that cleans up /plugins
+    BrokerConfig initBrokerConfig =
+        createBrokerConfig(runtimeID, null, envVars, initBrokerImage, pod);
+    pod.getSpec().getInitContainers().add(initBrokerConfig.container);
+    brokersConfigs.machines.put(initBrokerConfig.machineName, initBrokerConfig.machineConfig);
+
+    return doCreate(brokersConfigs);
+  }
+

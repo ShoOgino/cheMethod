@@ -1,0 +1,37 @@
+  /**
+   * Deploys Che plugin brokers in a workspace, receives result of theirs execution and returns
+   * resolved workspace tooling or error of plugins brokering execution.
+   *
+   * <p>This API is in <b>Beta</b> and is subject to changes or removal.
+   */
+  @Beta
+  @Traced
+  public List<ChePlugin> getTooling(
+      RuntimeIdentity runtimeID,
+      StartSynchronizer startSynchronizer,
+      Collection<PluginFQN> pluginFQNs,
+      boolean isEphemeral)
+      throws InfrastructureException {
+
+    String workspaceId = runtimeID.getWorkspaceId();
+    KubernetesNamespace kubernetesNamespace = factory.create(workspaceId);
+    BrokersResult brokersResult = new BrokersResult();
+
+    E brokerEnvironment = brokerEnvironmentFactory.create(pluginFQNs, runtimeID);
+    if (isEphemeral) {
+      EphemeralWorkspaceUtility.makeEphemeral(brokerEnvironment.getAttributes());
+    }
+    environmentProvisioner.provision(brokerEnvironment, runtimeID);
+
+    ListenBrokerEvents listenBrokerEvents = getListenEventPhase(workspaceId, brokersResult);
+    PrepareStorage prepareStorage =
+        getPrepareStoragePhase(workspaceId, startSynchronizer, brokerEnvironment);
+    WaitBrokerResult waitBrokerResult = getWaitBrokerPhase(workspaceId, brokersResult);
+    DeployBroker deployBroker =
+        getDeployBrokerPhase(
+            runtimeID.getWorkspaceId(), kubernetesNamespace, brokerEnvironment, brokersResult);
+    LOG.debug("Entering plugin brokers deployment chain workspace '{}'", workspaceId);
+    listenBrokerEvents.then(prepareStorage).then(deployBroker).then(waitBrokerResult);
+    return listenBrokerEvents.execute();
+  }
+

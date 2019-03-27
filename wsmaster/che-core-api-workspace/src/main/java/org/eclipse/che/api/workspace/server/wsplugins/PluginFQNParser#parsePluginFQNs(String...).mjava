@@ -1,0 +1,35 @@
+  private Collection<PluginFQN> parsePluginFQNs(String... plugins) throws InfrastructureException {
+    List<PluginFQN> collectedFQNs = new ArrayList<>();
+    for (String plugin : plugins) {
+      URI repo = null;
+      String idVersionString;
+      final int idVersionTagDelimiter = plugin.lastIndexOf("/");
+      idVersionString = plugin.substring(idVersionTagDelimiter + 1);
+      if (idVersionTagDelimiter > -1) {
+        try {
+          repo = new URI(plugin.substring(0, idVersionTagDelimiter));
+        } catch (URISyntaxException e) {
+          throw new InfrastructureException(
+              String.format(
+                  "Plugin registry URL is incorrect. Problematic plugin entry: %s", plugin));
+        }
+      }
+      String[] idAndVersion = idVersionString.split(":");
+      if (idAndVersion.length != 2 || idAndVersion[0].isEmpty() || idAndVersion[1].isEmpty()) {
+        throw new InfrastructureException(
+            String.format("Plugin format is illegal. Problematic plugin entry: %s", plugin));
+      }
+      if (collectedFQNs
+          .stream()
+          .anyMatch(
+              p -> p.getId().equals(idAndVersion[0]) && p.getVersion().equals(idAndVersion[1]))) {
+        throw new InfrastructureException(
+            String.format(
+                "Invalid Che tooling plugins configuration: plugin %s:%s is duplicated",
+                idAndVersion[0], idAndVersion[1])); // even if different repos
+      }
+      collectedFQNs.add(new PluginFQN(repo, idAndVersion[0], idAndVersion[1]));
+    }
+    return collectedFQNs;
+  }
+
