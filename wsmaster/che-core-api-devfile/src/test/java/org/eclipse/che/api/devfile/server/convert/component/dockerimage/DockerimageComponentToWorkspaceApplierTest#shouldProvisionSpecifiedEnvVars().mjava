@@ -1,0 +1,35 @@
+  @Test
+  public void shouldProvisionSpecifiedEnvVars() throws Exception {
+    // given
+    Component dockerimageComponent =
+        new Component()
+            .withName("jdk")
+            .withType(DOCKERIMAGE_COMPONENT_TYPE)
+            .withImage("eclipse/ubuntu_jdk8:latest")
+            .withMemoryLimit("1G")
+            .withEnv(singletonList(new Env().withName("envName").withValue("envValue")));
+
+    // when
+    dockerimageComponentApplier.apply(workspaceConfig, dockerimageComponent, null);
+
+    // then
+    verify(k8sEnvProvisioner)
+        .provision(
+            eq(workspaceConfig),
+            eq(KubernetesEnvironment.TYPE),
+            objectsCaptor.capture(),
+            machinesCaptor.capture());
+    List<HasMetadata> objects = objectsCaptor.getValue();
+    assertEquals(objects.size(), 1);
+    assertTrue(objects.get(0) instanceof Deployment);
+    Deployment deployment = (Deployment) objects.get(0);
+    PodTemplateSpec podTemplate = deployment.getSpec().getTemplate();
+    assertEquals(podTemplate.getSpec().getContainers().size(), 1);
+    Container container = podTemplate.getSpec().getContainers().get(0);
+    int env = container.getEnv().size();
+    assertEquals(env, 1);
+    EnvVar containerEnvVar = container.getEnv().get(0);
+    assertEquals(containerEnvVar.getName(), "envName");
+    assertEquals(containerEnvVar.getValue(), "envValue");
+  }
+

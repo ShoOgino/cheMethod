@@ -1,0 +1,54 @@
+  /**
+   * Applies changes on workspace config according to the specified plugin component.
+   *
+   * @param workspaceConfig workspace config on which changes should be applied
+   * @param pluginComponent plugin component that should be applied
+   * @param contentProvider optional content provider that may be used for external component
+   *     resource fetching
+   * @throws IllegalArgumentException if specified workspace config or plugin component is null
+   * @throws IllegalArgumentException if specified component has type different from chePlugin
+   */
+  @Override
+  public void apply(
+      WorkspaceConfigImpl workspaceConfig,
+      Component pluginComponent,
+      @Nullable FileContentProvider contentProvider) {
+    checkArgument(workspaceConfig != null, "Workspace config must not be null");
+    checkArgument(pluginComponent != null, "Component must not be null");
+    checkArgument(
+        PLUGIN_COMPONENT_TYPE.equals(pluginComponent.getType()),
+        format("Plugin must have `%s` type", PLUGIN_COMPONENT_TYPE));
+
+    String workspacePluginsAttribute =
+        workspaceConfig.getAttributes().get(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE);
+    workspaceConfig
+        .getAttributes()
+        .put(
+            WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE,
+            append(workspacePluginsAttribute, pluginComponent.getId()));
+
+    String pluginsAliases =
+        workspaceConfig.getAttributes().get(PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE);
+    workspaceConfig
+        .getAttributes()
+        .put(
+            PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE,
+            append(pluginsAliases, pluginComponent.getId() + "=" + pluginComponent.getName()));
+
+    String pluginIdVersion = resolveIdAndVersion(pluginComponent.getId());
+    for (CommandImpl command : workspaceConfig.getCommands()) {
+      String commandComponent = command.getAttributes().get(COMPONENT_NAME_COMMAND_ATTRIBUTE);
+
+      if (commandComponent == null) {
+        // command does not have component information
+        continue;
+      }
+
+      if (!commandComponent.equals(pluginComponent.getName())) {
+        continue;
+      }
+
+      command.getAttributes().put(PLUGIN_ATTRIBUTE, pluginIdVersion);
+    }
+  }
+

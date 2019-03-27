@@ -1,0 +1,37 @@
+  @Test
+  public void
+      shouldProvisionK8sEnvironmentWithMachineConfigAndGeneratedDeploymentForSpecifiedDockerimage()
+          throws Exception {
+    // given
+    Component dockerimageComponent =
+        new Component()
+            .withName("jdk")
+            .withType(DOCKERIMAGE_COMPONENT_TYPE)
+            .withImage("eclipse/ubuntu_jdk8:latest")
+            .withMemoryLimit("1G");
+
+    // when
+    dockerimageComponentApplier.apply(workspaceConfig, dockerimageComponent, null);
+
+    // then
+    verify(k8sEnvProvisioner)
+        .provision(
+            eq(workspaceConfig),
+            eq(KubernetesEnvironment.TYPE),
+            objectsCaptor.capture(),
+            machinesCaptor.capture());
+    MachineConfigImpl machineConfig = machinesCaptor.getValue().get("jdk");
+    assertNotNull(machineConfig);
+
+    List<HasMetadata> objects = objectsCaptor.getValue();
+    assertEquals(objects.size(), 1);
+    assertTrue(objects.get(0) instanceof Deployment);
+    Deployment deployment = (Deployment) objects.get(0);
+    PodTemplateSpec podTemplate = deployment.getSpec().getTemplate();
+    Map<String, String> annotations = podTemplate.getMetadata().getAnnotations();
+    assertEquals(annotations.get(String.format(MACHINE_NAME_ANNOTATION_FMT, "jdk")), "jdk");
+    Container container = podTemplate.getSpec().getContainers().get(0);
+    assertEquals(container.getName(), "jdk");
+    assertEquals(container.getImage(), "eclipse/ubuntu_jdk8:latest");
+  }
+

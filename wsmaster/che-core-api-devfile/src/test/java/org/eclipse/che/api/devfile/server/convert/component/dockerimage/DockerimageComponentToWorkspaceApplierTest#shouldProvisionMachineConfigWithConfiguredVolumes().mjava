@@ -1,0 +1,29 @@
+  @Test
+  public void shouldProvisionMachineConfigWithConfiguredVolumes() throws Exception {
+    // given
+    Component dockerimageComponent =
+        new Component()
+            .withName("jdk")
+            .withType(DOCKERIMAGE_COMPONENT_TYPE)
+            .withImage("eclipse/ubuntu_jdk8:latest")
+            .withMemoryLimit("1G")
+            .withVolumes(
+                singletonList(new Volume().withName("data").withContainerPath("/tmp/data/")));
+
+    // when
+    dockerimageComponentApplier.apply(workspaceConfig, dockerimageComponent, null);
+
+    // then
+    verify(k8sEnvProvisioner)
+        .provision(
+            eq(workspaceConfig),
+            eq(KubernetesEnvironment.TYPE),
+            objectsCaptor.capture(),
+            machinesCaptor.capture());
+    MachineConfigImpl machineConfig = machinesCaptor.getValue().get("jdk");
+    assertNotNull(machineConfig);
+    VolumeImpl volume = machineConfig.getVolumes().get("data");
+    assertNotNull(volume);
+    assertEquals(volume.getPath(), "/tmp/data/");
+  }
+

@@ -1,0 +1,52 @@
+  /**
+   * Set {@link Command#MACHINE_NAME_ATTRIBUTE} to commands which are configured in the specified
+   * component.
+   *
+   * <p>Machine name will be set only if the specified recipe objects has the only one container.
+   */
+  private void estimateCommandsMachineName(
+      WorkspaceConfig workspaceConfig, Component component, List<HasMetadata> componentsObjects) {
+    List<? extends Command> componentCommands =
+        workspaceConfig
+            .getCommands()
+            .stream()
+            .filter(
+                c ->
+                    component
+                        .getName()
+                        .equals(c.getAttributes().get(Constants.COMPONENT_NAME_COMMAND_ATTRIBUTE)))
+            .collect(toList());
+    if (componentCommands.isEmpty()) {
+      return;
+    }
+
+    List<PodData> podsData = new ArrayList<>();
+
+    componentsObjects
+        .stream()
+        .filter(hasMetadata -> hasMetadata instanceof Pod)
+        .map(hasMetadata -> (Pod) hasMetadata)
+        .forEach(p -> podsData.add(new PodData(p)));
+
+    componentsObjects
+        .stream()
+        .filter(hasMetadata -> hasMetadata instanceof Deployment)
+        .map(hasMetadata -> (Deployment) hasMetadata)
+        .forEach(d -> podsData.add(new PodData(d)));
+
+    if (podsData.size() != 1) {
+      // many or no pods - can't estimate the name because of ambiguity or lack of information
+      return;
+    }
+
+    PodData pod = podsData.get(0);
+
+    if (pod.getSpec().getContainers().size() != 1) {
+      // many or no containers - can't estimate the name
+      return;
+    }
+
+    String machineName = Names.machineName(pod, pod.getSpec().getContainers().get(0));
+    componentCommands.forEach(c -> c.getAttributes().put(MACHINE_NAME_ATTRIBUTE, machineName));
+  }
+

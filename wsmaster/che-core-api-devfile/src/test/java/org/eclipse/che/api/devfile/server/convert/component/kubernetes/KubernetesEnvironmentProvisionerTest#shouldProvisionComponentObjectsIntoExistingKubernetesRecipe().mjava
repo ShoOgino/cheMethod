@@ -1,0 +1,50 @@
+  @Test
+  public void shouldProvisionComponentObjectsIntoExistingKubernetesRecipe() throws Exception {
+    // given
+    workspaceConfig.setDefaultEnv("default");
+    RecipeImpl existingRecipe =
+        new RecipeImpl(KUBERNETES_COMPONENT_TYPE, "yaml", "existing-content", null);
+    workspaceConfig
+        .getEnvironments()
+        .put("default", new EnvironmentImpl(existingRecipe, emptyMap()));
+
+    List<HasMetadata> recipeObjects = new ArrayList<>();
+    Deployment recipeDeployment =
+        new DeploymentBuilder()
+            .withNewMetadata()
+            .withName("db")
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    recipeObjects.add(new DeploymentBuilder(recipeDeployment).build());
+    doReturn(recipeObjects).when(k8sRecipeParser).parse(anyString());
+
+    List<HasMetadata> componentsObject = new ArrayList<>();
+    Deployment componentDeployment =
+        new DeploymentBuilder()
+            .withNewMetadata()
+            .withName("web-app")
+            .endMetadata()
+            .withNewSpec()
+            .endSpec()
+            .build();
+    componentsObject.add(new DeploymentBuilder(componentDeployment).build());
+
+    // when
+    k8sEnvProvisioner.provision(
+        workspaceConfig, KubernetesEnvironment.TYPE, componentsObject, emptyMap());
+
+    // then
+    // it is expected that applier wrap original recipes objects in new Kubernetes list
+    KubernetesList expectedKubernetesList =
+        new KubernetesListBuilder()
+            .withItems(Arrays.asList(recipeDeployment, componentDeployment))
+            .build();
+    EnvironmentImpl resultEnv =
+        workspaceConfig.getEnvironments().get(workspaceConfig.getDefaultEnv());
+    assertEquals(
+        toK8SList(resultEnv.getRecipe().getContent()).getItems(),
+        expectedKubernetesList.getItems());
+  }
+

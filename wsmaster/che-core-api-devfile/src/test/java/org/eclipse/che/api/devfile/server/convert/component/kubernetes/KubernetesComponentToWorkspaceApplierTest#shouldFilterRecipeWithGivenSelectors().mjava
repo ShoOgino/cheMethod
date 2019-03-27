@@ -1,0 +1,31 @@
+  @Test
+  public void shouldFilterRecipeWithGivenSelectors() throws Exception {
+    // given
+    String yamlRecipeContent = getResource("petclinic.yaml");
+
+    final Map<String, String> selector = singletonMap("app.kubernetes.io/component", "webapp");
+    Component component =
+        new Component()
+            .withType(OPENSHIFT_COMPONENT_TYPE)
+            .withLocal(LOCAL_FILENAME)
+            .withName(COMPONENT_NAME)
+            .withSelector(selector);
+    doReturn(toK8SList(yamlRecipeContent).getItems()).when(k8sRecipeParser).parse(anyString());
+
+    // when
+    applier.apply(workspaceConfig, component, s -> yamlRecipeContent);
+
+    // then
+    verify(k8sEnvProvisioner)
+        .provision(
+            eq(workspaceConfig),
+            eq(OpenShiftEnvironment.TYPE),
+            objectsCaptor.capture(),
+            eq(emptyMap()));
+    List<HasMetadata> resultItemsList = objectsCaptor.getValue();
+    assertEquals(resultItemsList.size(), 3);
+    assertEquals(1, resultItemsList.stream().filter(it -> "Pod".equals(it.getKind())).count());
+    assertEquals(1, resultItemsList.stream().filter(it -> "Service".equals(it.getKind())).count());
+    assertEquals(1, resultItemsList.stream().filter(it -> "Route".equals(it.getKind())).count());
+  }
+

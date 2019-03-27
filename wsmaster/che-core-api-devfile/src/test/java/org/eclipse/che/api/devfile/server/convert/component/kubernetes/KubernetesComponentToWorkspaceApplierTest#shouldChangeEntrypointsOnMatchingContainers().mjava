@@ -1,0 +1,41 @@
+  @Test
+  public void shouldChangeEntrypointsOnMatchingContainers() throws Exception {
+    // given
+    String yamlRecipeContent = getResource("petclinic.yaml");
+    doReturn(toK8SList(yamlRecipeContent).getItems()).when(k8sRecipeParser).parse(anyString());
+
+    List<String> command = asList("teh", "command");
+    Component component =
+        new Component()
+            .withType(OPENSHIFT_COMPONENT_TYPE)
+            .withLocal(LOCAL_FILENAME)
+            .withName(COMPONENT_NAME)
+            .withEntrypoints(
+                singletonList(new Entrypoint().withParentName("petclinic").withCommand(command)))
+            .withSelector(Collections.emptyMap());
+
+    // when
+    applier.apply(workspaceConfig, component, s -> yamlRecipeContent);
+
+    // then
+    verify(k8sEnvProvisioner).provision(any(), any(), objectsCaptor.capture(), any());
+    List<HasMetadata> list = objectsCaptor.getValue();
+    for (HasMetadata o : list) {
+      if (o instanceof Pod) {
+        Pod p = (Pod) o;
+
+        // ignore pods that don't have containers
+        if (p.getSpec() == null) {
+          continue;
+        }
+
+        Container c = p.getSpec().getContainers().get(0);
+        if (o.getMetadata().getName().equals("petclinic")) {
+          assertEquals(c.getCommand(), command);
+        } else {
+          assertTrue(c.getCommand() == null || c.getCommand().isEmpty());
+        }
+      }
+    }
+  }
+

@@ -1,0 +1,31 @@
+  @Test
+  public void
+      shouldProvisionDockerimageComponentIfDockerimageEnvironmentWithMachineConfigurationWithVolumesIsSpecified()
+          throws Exception {
+    // given
+    EnvironmentImpl dockerEnv = new EnvironmentImpl();
+    dockerEnv.setRecipe(new RecipeImpl("dockerimage", null, "eclipse/ubuntu_jdk8:latest", null));
+    Map<String, VolumeImpl> volumes =
+        ImmutableMap.of("data", new VolumeImpl().withPath("/tmp/data"));
+    dockerEnv
+        .getMachines()
+        .put(
+            "myMachine",
+            new MachineConfigImpl(emptyList(), emptyMap(), emptyMap(), emptyMap(), volumes));
+    WorkspaceConfigImpl workspaceConfig = new WorkspaceConfigImpl();
+    workspaceConfig.getEnvironments().put("dockerEnv", dockerEnv);
+
+    Devfile devfile = new Devfile();
+
+    // when
+    dockerimageComponentProvisioner.provision(devfile, workspaceConfig);
+
+    // then
+    assertEquals(devfile.getComponents().size(), 1);
+    Component dockerimageComponent = devfile.getComponents().get(0);
+    assertEquals(dockerimageComponent.getVolumes().size(), 1);
+    Volume volume = dockerimageComponent.getVolumes().get(0);
+    assertEquals(volume.getName(), "data");
+    assertEquals(volume.getContainerPath(), "/tmp/data");
+  }
+

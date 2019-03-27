@@ -1,0 +1,36 @@
+  @Test
+  public void
+      shouldProvisionDockerimageComponentIfDockerimageEnvironmentWithMachineConfigurationWithServerIsSpecifiedButPathAndProtocolAreMissing()
+          throws Exception {
+    // given
+    EnvironmentImpl dockerEnv = new EnvironmentImpl();
+    dockerEnv.setRecipe(new RecipeImpl("dockerimage", null, "eclipse/ubuntu_jdk8:latest", null));
+    ServerConfigImpl serverConfig = new ServerConfigImpl("8080/TCP", null, null, emptyMap());
+    dockerEnv
+        .getMachines()
+        .put(
+            "myMachine",
+            new MachineConfigImpl(
+                emptyList(),
+                ImmutableMap.of("server", serverConfig),
+                emptyMap(),
+                emptyMap(),
+                emptyMap()));
+    WorkspaceConfigImpl workspaceConfig = new WorkspaceConfigImpl();
+    workspaceConfig.getEnvironments().put("dockerEnv", dockerEnv);
+
+    Devfile devfile = new Devfile();
+
+    // when
+    dockerimageComponentProvisioner.provision(devfile, workspaceConfig);
+
+    // then
+    assertEquals(devfile.getComponents().size(), 1);
+    Component dockerimageComponent = devfile.getComponents().get(0);
+    assertEquals(dockerimageComponent.getEndpoints().size(), 1);
+    Endpoint endpoint = dockerimageComponent.getEndpoints().get(0);
+    assertEquals(endpoint.getName(), "server");
+    assertEquals(endpoint.getPort(), new Integer(8080));
+    assertTrue(endpoint.getAttributes().isEmpty());
+  }
+

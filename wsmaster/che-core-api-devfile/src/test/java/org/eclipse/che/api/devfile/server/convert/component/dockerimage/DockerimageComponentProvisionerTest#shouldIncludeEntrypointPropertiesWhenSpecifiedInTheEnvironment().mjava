@@ -1,0 +1,29 @@
+  @Test
+  public void shouldIncludeEntrypointPropertiesWhenSpecifiedInTheEnvironment() throws Exception {
+    // given
+    EnvironmentImpl dockerEnv = new EnvironmentImpl();
+    dockerEnv.setRecipe(new RecipeImpl("dockerimage", null, "eclipse/ubuntu_jdk8:latest", null));
+    dockerEnv
+        .getMachines()
+        .put(
+            "myMachine",
+            new MachineConfigImpl(emptyList(), emptyMap(), emptyMap(), emptyMap(), emptyMap()));
+    WorkspaceConfigImpl workspaceConfig = new WorkspaceConfigImpl();
+    workspaceConfig.getEnvironments().put("dockerEnv", dockerEnv);
+
+    when(entryPointParser.parse(any()))
+        .thenReturn(new EntryPoint(asList("/bin/sh", "-c"), asList("echo", "hi")));
+
+    Devfile devfile = new Devfile();
+
+    // when
+
+    dockerimageComponentProvisioner.provision(devfile, workspaceConfig);
+
+    // then
+    assertEquals(devfile.getComponents().size(), 1);
+    Component Component = devfile.getComponents().get(0);
+    assertEquals(Component.getCommand(), asList("/bin/sh", "-c"));
+    assertEquals(Component.getArgs(), asList("echo", "hi"));
+  }
+

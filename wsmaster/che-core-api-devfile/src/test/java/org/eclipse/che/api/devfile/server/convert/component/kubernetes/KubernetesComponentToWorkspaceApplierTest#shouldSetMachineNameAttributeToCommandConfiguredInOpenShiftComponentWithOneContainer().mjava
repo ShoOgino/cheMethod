@@ -1,0 +1,26 @@
+  @Test(dependsOnMethods = "shouldFilterRecipeWithGivenSelectors", enabled = false)
+  public void shouldSetMachineNameAttributeToCommandConfiguredInOpenShiftComponentWithOneContainer()
+      throws Exception {
+    // given
+    String yamlRecipeContent = getResource("petclinic.yaml");
+    doReturn(toK8SList(yamlRecipeContent).getItems()).when(k8sRecipeParser).parse(anyString());
+
+    final Map<String, String> selector = singletonMap("app.kubernetes.io/component", "webapp");
+    Component component =
+        new Component()
+            .withType(OPENSHIFT_COMPONENT_TYPE)
+            .withLocal(LOCAL_FILENAME)
+            .withName(COMPONENT_NAME)
+            .withSelector(selector);
+    CommandImpl command = new CommandImpl();
+    command.getAttributes().put(COMPONENT_NAME_COMMAND_ATTRIBUTE, COMPONENT_NAME);
+    workspaceConfig.getCommands().add(command);
+
+    // when
+    applier.apply(workspaceConfig, component, s -> yamlRecipeContent);
+
+    // then
+    CommandImpl actualCommand = workspaceConfig.getCommands().get(0);
+    assertEquals(actualCommand.getAttributes().get(MACHINE_NAME_ATTRIBUTE), "petclinic/server");
+  }
+

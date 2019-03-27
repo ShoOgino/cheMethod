@@ -1,0 +1,90 @@
+  /**
+   * Applies changes on workspace config according to the specified dockerimage component.
+   *
+   * <p>Dockerimage component is provisioned as Deployment in Kubernetes recipe.<br>
+   * Generated deployment contains container with environment variables, memory limit, docker image,
+   * arguments and commands specified in component.<br>
+   * Also, environment is provisioned with machine config with volumes and servers specified, then
+   * Kubernetes infra will created needed PVC, Services, Ingresses, Routes according to specified
+   * configuration.
+   *
+   * @param workspaceConfig workspace config on which changes should be applied
+   * @param dockerimageComponent dockerimage component that should be applied
+   * @param contentProvider optional content provider that may be used for external component
+   *     resource fetching
+   * @throws DevfileException if specified workspace config already has default environment where
+   *     dockerimage component should be stored
+   * @throws IllegalArgumentException if specified workspace config or plugin component is null
+   * @throws IllegalArgumentException if specified component has type different from dockerimage
+   */
+  @Override
+  public void apply(
+      WorkspaceConfigImpl workspaceConfig,
+      Component dockerimageComponent,
+      FileContentProvider contentProvider)
+      throws DevfileException {
+    checkArgument(workspaceConfig != null, "Workspace config must not be null");
+    checkArgument(dockerimageComponent != null, "Component must not be null");
+    checkArgument(
+        DOCKERIMAGE_COMPONENT_TYPE.equals(dockerimageComponent.getType()),
+        format("Plugin must have `%s` type", DOCKERIMAGE_COMPONENT_TYPE));
+
+    String machineName = dockerimageComponent.getName();
+
+    MachineConfigImpl machineConfig = new MachineConfigImpl();
+    dockerimageComponent
+        .getEndpoints()
+        .forEach(e -> machineConfig.getServers().put(e.getName(), toServerConfig(e)));
+
+    dockerimageComponent
+        .getVolumes()
+        .forEach(
+            v ->
+                machineConfig
+                    .getVolumes()
+                    .put(v.getName(), new VolumeImpl().withPath(v.getContainerPath())));
+
+    if (dockerimageComponent.getMountSources()) {
+      machineConfig
+          .getVolumes()
+          .put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectFolderPath));
+    }
+
+    List<HasMetadata> componentObjects = new ArrayList<>();
+    Deployment deployment =
+        buildDeployment(
+            machineName,
+            dockerimageComponent.getImage(),
+            dockerimageComponent.getMemoryLimit(),
+            dockerimageComponent
+                .getEnv()
+                .stream()
+                .map(e -> new EnvVar(e.getName(), e.getValue(), null))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            dockerimageComponent.getCommand(),
+            dockerimageComponent.getArgs());
+    componentObjects.add(deployment);
+
+    dockerimageComponent
+        .getEndpoints()
+        .stream()
+        .filter(e -> "true".equals(e.getAttributes().get(DISCOVERABLE_ENDPOINT_ATTRIBUTE)))
+        .forEach(e -> componentObjects.add(createService(deployment, e)));
+
+    k8sEnvProvisioner.provision(
+        workspaceConfig,
+        KubernetesEnvironment.TYPE,
+        componentObjects,
+        ImmutableMap.of(machineName, machineConfig));
+
+    workspaceConfig
+        .getCommands()
+        .stream()
+        .filter(
+            c ->
+                dockerimageComponent
+                    .getName()
+                    .equals(c.getAttributes().get(Constants.COMPONENT_NAME_COMMAND_ATTRIBUTE)))
+        .forEach(c -> c.getAttributes().put(MACHINE_NAME_ATTRIBUTE, machineName));
+  }
+
