@@ -1,6 +1,13 @@
   /**
    * Applies changes on workspace config according to the specified dockerimage tool.
    *
+   * <p>Dockerimage tool is provisioned as Deployment in Kubernetes recipe.<br>
+   * Generated deployment contains container with environment variables, memory limit, docker image,
+   * arguments and commands specified in tool.<br>
+   * Also, environment is provisioned with machine config with volumes and servers specified, then
+   * Kubernetes infra will created needed PVC, Services, Ingresses, Routes according to specified
+   * configuration.
+   *
    * @param workspaceConfig workspace config on which changes should be applied
    * @param dockerimageTool dockerimage tool that should be applied
    * @param contentProvider optional content provider that may be used for external tool resource
@@ -21,32 +28,13 @@
     checkArgument(
         DOCKERIMAGE_TOOL_TYPE.equals(dockerimageTool.getType()),
         format("Plugin must have `%s` type", DOCKERIMAGE_TOOL_TYPE));
-    if (workspaceConfig.getDefaultEnv() != null) {
-      throw new DevfileException("Workspace already contains environment");
-    }
 
     String machineName = dockerimageTool.getName();
+
     MachineConfigImpl machineConfig = new MachineConfigImpl();
-
-    dockerimageTool.getEnv().forEach(e -> machineConfig.getEnv().put(e.getName(), e.getValue()));
-
-    for (Endpoint endpoint : dockerimageTool.getEndpoints()) {
-      HashMap<String, String> attributes = new HashMap<>(endpoint.getAttributes());
-
-      String protocol = attributes.remove("protocol");
-      if (isNullOrEmpty(protocol)) {
-        protocol = "http";
-      }
-
-      String path = attributes.remove("path");
-
-      machineConfig
-          .getServers()
-          .put(
-              endpoint.getName(),
-              new ServerConfigImpl(
-                  Integer.toString(endpoint.getPort()), protocol, path, attributes));
-    }
+    dockerimageTool
+        .getEndpoints()
+        .forEach(e -> machineConfig.getServers().put(e.getName(), toServerConfig(e)));
 
     dockerimageTool
         .getVolumes()
@@ -62,22 +50,32 @@
           .put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectFolderPath));
     }
 
-    machineConfig
-        .getAttributes()
-        .put(
-            MEMORY_LIMIT_ATTRIBUTE,
-            Long.toString(KubernetesSize.toBytes(dockerimageTool.getMemoryLimit())));
+    List<HasMetadata> componentObjects = new ArrayList<>();
+    Deployment deployment =
+        buildDeployment(
+            machineName,
+            dockerimageTool.getImage(),
+            dockerimageTool.getMemoryLimit(),
+            dockerimageTool
+                .getEnv()
+                .stream()
+                .map(e -> new EnvVar(e.getName(), e.getValue(), null))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            dockerimageTool.getCommand(),
+            dockerimageTool.getArgs());
+    componentObjects.add(deployment);
 
-    setEntryPointAttribute(
-        machineConfig, CONTAINER_COMMAND_ATTRIBUTE, dockerimageTool.getCommand());
-    setEntryPointAttribute(machineConfig, CONTAINER_ARGS_ATTRIBUTE, dockerimageTool.getArgs());
+    dockerimageTool
+        .getEndpoints()
+        .stream()
+        .filter(e -> "true".equals(e.getAttributes().get(DISCOVERABLE_ENDPOINT_ATTRIBUTE)))
+        .forEach(e -> componentObjects.add(createService(deployment, e)));
 
-    RecipeImpl recipe =
-        new RecipeImpl(DockerImageEnvironment.TYPE, null, dockerimageTool.getImage(), null);
-    EnvironmentImpl environment =
-        new EnvironmentImpl(recipe, ImmutableMap.of(machineName, machineConfig));
-    workspaceConfig.getEnvironments().put(dockerimageTool.getName(), environment);
-    workspaceConfig.setDefaultEnv(dockerimageTool.getName());
+    k8sEnvProvisioner.provision(
+        workspaceConfig,
+        KubernetesEnvironment.TYPE,
+        componentObjects,
+        ImmutableMap.of(machineName, machineConfig));
 
     workspaceConfig
         .getCommands()

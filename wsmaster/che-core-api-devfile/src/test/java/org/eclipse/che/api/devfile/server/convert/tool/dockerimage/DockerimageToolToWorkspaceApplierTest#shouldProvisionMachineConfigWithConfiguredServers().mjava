@@ -11,12 +11,10 @@
                     "http",
                     "path",
                     "/ls",
-                    "public",
+                    PUBLIC_ENDPOINT_ATTRIBUTE,
                     "false",
                     "secure",
-                    "false",
-                    "discoverable",
-                    "true"));
+                    "false"));
     Tool dockerimageTool =
         new Tool()
             .withName("jdk")
@@ -29,16 +27,22 @@
     dockerimageToolApplier.apply(workspaceConfig, dockerimageTool, null);
 
     // then
-    MachineConfigImpl machineConfig = getMachineConfig(workspaceConfig, "jdk");
+    verify(k8sEnvProvisioner)
+        .provision(
+            eq(workspaceConfig),
+            eq(KubernetesEnvironment.TYPE),
+            objectsCaptor.capture(),
+            machinesCaptor.capture());
+    MachineConfigImpl machineConfig = machinesCaptor.getValue().get("jdk");
+    assertNotNull(machineConfig);
     assertEquals(machineConfig.getServers().size(), 1);
     ServerConfigImpl serverConfig = machineConfig.getServers().get("jdk-ls");
     assertEquals(serverConfig.getProtocol(), "http");
     assertEquals(serverConfig.getPath(), "/ls");
     assertEquals(serverConfig.getPort(), "4923");
     Map<String, String> attributes = serverConfig.getAttributes();
-    assertEquals(attributes.size(), 3);
-    assertEquals(attributes.get("public"), "false");
+    assertEquals(attributes.size(), 2);
+    assertEquals(attributes.get(ServerConfig.INTERNAL_SERVER_ATTRIBUTE), "true");
     assertEquals(attributes.get("secure"), "false");
-    assertEquals(attributes.get("discoverable"), "true");
   }
 

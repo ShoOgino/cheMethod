@@ -1,17 +1,14 @@
   @Test
-  public void shouldProvisionCommandAndArgs() throws Exception {
+  public void
+      shouldProvisionK8sEnvironmentWithMachineConfigAndGeneratedDeploymentForSpecifiedDockerimage()
+          throws Exception {
     // given
-    List<String> command = singletonList("/usr/bin/rf");
-    List<String> args = Arrays.asList("-r", "f");
-
     Tool dockerimageTool =
         new Tool()
             .withName("jdk")
             .withType(DOCKERIMAGE_TOOL_TYPE)
             .withImage("eclipse/ubuntu_jdk8:latest")
-            .withMemoryLimit("1G")
-            .withCommand(command)
-            .withArgs(args);
+            .withMemoryLimit("1G");
 
     // when
     dockerimageToolApplier.apply(workspaceConfig, dockerimageTool, null);
@@ -23,14 +20,18 @@
             eq(KubernetesEnvironment.TYPE),
             objectsCaptor.capture(),
             machinesCaptor.capture());
+    MachineConfigImpl machineConfig = machinesCaptor.getValue().get("jdk");
+    assertNotNull(machineConfig);
+
     List<HasMetadata> objects = objectsCaptor.getValue();
     assertEquals(objects.size(), 1);
     assertTrue(objects.get(0) instanceof Deployment);
     Deployment deployment = (Deployment) objects.get(0);
     PodTemplateSpec podTemplate = deployment.getSpec().getTemplate();
-    assertEquals(podTemplate.getSpec().getContainers().size(), 1);
+    Map<String, String> annotations = podTemplate.getMetadata().getAnnotations();
+    assertEquals(annotations.get(String.format(MACHINE_NAME_ANNOTATION_FMT, "jdk")), "jdk");
     Container container = podTemplate.getSpec().getContainers().get(0);
-    assertEquals(container.getCommand(), command);
-    assertEquals(container.getArgs(), args);
+    assertEquals(container.getName(), "jdk");
+    assertEquals(container.getImage(), "eclipse/ubuntu_jdk8:latest");
   }
 
