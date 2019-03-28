@@ -1,0 +1,40 @@
+  private String sanitizeClonePath(String clonePath) throws DevfileException {
+    URI uri = clonePathToURI(clonePath);
+
+    if (uri.isAbsolute()) {
+      throw new DevfileException(
+          "The clonePath must be a relative path. This seems to be an URI with a scheme: "
+              + clonePath);
+    }
+
+    uri = uri.normalize();
+
+    String path = uri.getPath();
+
+    if (path.isEmpty()) {
+      // the user tried to trick us with something like "blah/.."
+      throw new DevfileException(
+          "Cloning directly into projects root is not allowed."
+              + " The clonePath that resolves to empty path: "
+              + clonePath);
+    }
+
+    if (path.startsWith("/")) {
+      // while technically we could allow this, because the project config contains what resembles
+      // an absolute path, it is better to explicitly disallow this in devfile, which is
+      // user-authored. Just don't give the user impression we can support absolute paths.
+      throw new DevfileException(
+          "The clonePath must be a relative. This seems to be an absolute path: " + clonePath);
+    }
+
+    if (path.startsWith("..")) {
+      // an attempt to escape the projects root, e.g. "ich/../muss/../../raus". That's a no-no.
+      throw new DevfileException(
+          "The clonePath cannot escape the projects root. Don't use .. to try and do that."
+              + " The invalid path was: "
+              + clonePath);
+    }
+
+    return path;
+  }
+
