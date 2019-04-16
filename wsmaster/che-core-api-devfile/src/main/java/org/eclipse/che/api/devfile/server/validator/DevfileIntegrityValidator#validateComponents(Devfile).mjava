@@ -1,18 +1,34 @@
   private Set<String> validateComponents(Devfile devfile) throws DevfileFormatException {
-    Set<String> existingNames = new HashSet<>();
+    Set<String> definedAliases = new HashSet<>();
     Component editorComponent = null;
+
+    Map<String, Set<String>> idsPerComponentType = new HashMap<>();
+
     for (Component component : devfile.getComponents()) {
-      if (!existingNames.add(component.getName())) {
+      if (component.getAlias() != null && !definedAliases.add(component.getAlias())) {
         throw new DevfileFormatException(
-            format("Duplicate component name found:'%s'", component.getName()));
+            format("Duplicate component alias found:'%s'", component.getAlias()));
       }
+
+      if (!idsPerComponentType
+          .computeIfAbsent(component.getType(), __ -> new HashSet<>())
+          .add(getIdentifiableComponentName(component))) {
+
+        throw new DevfileFormatException(
+            format(
+                "There are multiple components '%s' of type '%s' that cannot be uniquely"
+                    + " identified. Please add aliases that would distinguish the components.",
+                getIdentifiableComponentName(component), component.getType()));
+      }
+
       switch (component.getType()) {
         case EDITOR_COMPONENT_TYPE:
           if (editorComponent != null) {
             throw new DevfileFormatException(
                 format(
                     "Multiple editor components found: '%s', '%s'",
-                    editorComponent.getName(), component.getName()));
+                    getIdentifiableComponentName(editorComponent),
+                    getIdentifiableComponentName(component)));
           }
           editorComponent = component;
           break;
@@ -28,9 +44,9 @@
           throw new DevfileFormatException(
               format(
                   "Unsupported component '%s' type provided:'%s'",
-                  component.getName(), component.getType()));
+                  getIdentifiableComponentName(component), component.getType()));
       }
     }
-    return existingNames;
+    return definedAliases;
   }
 
