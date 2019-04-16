@@ -1,0 +1,34 @@
+  @Test
+  public void shouldCreateConfigmapWithPluginFQNs() throws Exception {
+    // given
+    Collection<PluginFQN> pluginFQNs =
+        ImmutableList.of(
+            new PluginFQN(null, "testPlugin1", "testver1"),
+            new PluginFQN(new URI("testregistry"), "testPlugin2", "testver2"));
+    ArgumentCaptor<BrokersConfigs> captor = ArgumentCaptor.forClass(BrokersConfigs.class);
+
+    // when
+    factory.create(pluginFQNs, runtimeId);
+
+    // then
+    verify(factory).doCreate(captor.capture());
+    BrokersConfigs brokersConfigs = captor.getValue();
+    ConfigMap brokerConfigMap = brokersConfigs.configMaps.values().iterator().next();
+    String config = brokerConfigMap.getData().get(BrokerEnvironmentFactory.CONFIG_FILE);
+
+    assertFalse(config.contains("\"registry\":null"), "Should not serialize null registry");
+    List<String> expected =
+        ImmutableList.of(
+            "\"id\":\"testPlugin1\"",
+            "\"version\":\"testver2\"",
+            "\"registry\":\"testregistry\"",
+            "\"id\":\"testPlugin2\"",
+            "\"version\":\"testver2\"");
+    for (String expect : expected) {
+      assertTrue(
+          config.contains(expect),
+          String.format(
+              "Missing field from serialized config: expected '%s' in '%s'", expect, config));
+    }
+  }
+
