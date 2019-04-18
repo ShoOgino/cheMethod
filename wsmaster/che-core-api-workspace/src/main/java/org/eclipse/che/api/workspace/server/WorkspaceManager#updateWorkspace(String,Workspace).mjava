@@ -18,12 +18,21 @@
       throws ConflictException, ServerException, NotFoundException, ValidationException {
     requireNonNull(id, "Required non-null workspace id");
     requireNonNull(update, "Required non-null workspace update");
-    requireNonNull(update.getConfig(), "Required non-null workspace configuration update");
-    validator.validateConfig(update.getConfig());
+    checkArgument(
+        update.getConfig() != null ^ update.getDevfile() != null,
+        "Required non-null workspace configuration or devfile update but not both");
+    if (update.getConfig() != null) {
+      validator.validateConfig(update.getConfig());
+    }
     validator.validateAttributes(update.getAttributes());
 
     WorkspaceImpl workspace = workspaceDao.get(id);
-    workspace.setConfig(new WorkspaceConfigImpl(update.getConfig()));
+    if (workspace.getConfig() != null) {
+      workspace.setConfig(new WorkspaceConfigImpl(update.getConfig()));
+    }
+    if (workspace.getDevfile() != null) {
+      workspace.setDevfile(new DevfileImpl(update.getDevfile()));
+    }
     workspace.setAttributes(update.getAttributes());
     workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
     workspace.setTemporary(update.isTemporary());

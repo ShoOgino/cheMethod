@@ -6,7 +6,7 @@
    * WorkspaceStatus#STARTING} status.
    *
    * @param workspace workspace which environment should be started
-   * @param envName the name of the environment to start
+   * @param environment optional environment to run
    * @param options whether machines should be recovered(true) or not(false)
    * @return completable future of start execution.
    * @throws ConflictException when workspace is already running
@@ -18,37 +18,33 @@
    */
   @Traced
   public CompletableFuture<Void> startAsync(
-      Workspace workspace, @Nullable String envName, Map<String, String> options)
+      WorkspaceImpl workspace,
+      @Nullable Pair<String, Environment> environment,
+      List<? extends Command> commands,
+      Map<String, String> attributes,
+      Map<String, String> options)
       throws ConflictException, NotFoundException, ServerException {
     TracingTags.WORKSPACE_ID.set(workspace.getId());
     TracingTags.STACK_ID.set(() -> workspace.getAttributes().getOrDefault("stackId", "no stack"));
 
     final String workspaceId = workspace.getId();
-    // Sidecar-based workspaces allowed not to have environments
-    EnvironmentImpl environment = null;
-    if (envName != null) {
-      environment = copyEnv(workspace, envName);
-      requireNonNull(environment, "Environment should not be null " + workspaceId);
-      requireNonNull(environment.getRecipe(), "Recipe should not be null " + workspaceId);
-      requireNonNull(
-          environment.getRecipe().getType(), "Recipe type should not be null " + workspaceId);
-    }
-
-    WorkspaceConfig workspaceConfig = workspace.getConfig();
     if (isStartRefused.get()) {
       throw new ConflictException(
           format(
               "Start of the workspace '%s' is rejected by the system, "
                   + "no more workspaces are allowed to start",
-              workspaceConfig.getName()));
+              workspace.getName()));
     }
 
     final String ownerId = EnvironmentContext.getCurrent().getSubject().getUserId();
-    final RuntimeIdentity runtimeId = new RuntimeIdentityImpl(workspaceId, envName, ownerId);
+    final RuntimeIdentity runtimeId =
+        new RuntimeIdentityImpl(
+            workspaceId, environment == null ? null : environment.first, ownerId);
     try {
       InternalEnvironment internalEnv =
           createInternalEnvironment(
-              environment, workspaceConfig.getAttributes(), workspaceConfig.getCommands());
+              environment == null ? null : environment.second, attributes, commands);
+
       RuntimeContext runtimeContext = infrastructure.prepare(runtimeId, internalEnv);
       InternalRuntime runtime = runtimeContext.getRuntime();
 
@@ -66,7 +62,7 @@
       LOG.info(
           "Starting workspace '{}/{}' with id '{}' by user '{}'",
           workspace.getNamespace(),
-          workspaceConfig.getName(),
+          workspace.getName(),
           workspace.getId(),
           sessionUserNameOr("undefined"));
 
