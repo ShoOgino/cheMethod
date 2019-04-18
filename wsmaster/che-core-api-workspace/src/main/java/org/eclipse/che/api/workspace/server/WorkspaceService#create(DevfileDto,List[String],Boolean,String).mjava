@@ -1,13 +1,16 @@
+  @Beta
+  @Path("/devfile")
   @POST
   @Consumes(APPLICATION_JSON)
   @Produces(APPLICATION_JSON)
   @ApiOperation(
-      value = "Create a new workspace based on the configuration",
+      value = "Creates a new workspace based on the Devfile.",
       notes =
-          "This operation can be performed only by authorized user,"
-              + "this user will be the owner of the created workspace",
+          "This method is in beta phase. It's strongly recommended to use `POST /devfile` instead"
+              + " to get a workspace from Devfile. Workspaces created with this method are not stable yet.",
       consumes = APPLICATION_JSON,
       produces = APPLICATION_JSON,
+      nickname = "createFromDevfile",
       response = WorkspaceConfigDto.class)
   @ApiResponses({
     @ApiResponse(code = 201, message = "The workspace successfully created"),
@@ -22,7 +25,7 @@
   })
   public Response create(
       @ApiParam(value = "The configuration to create the new workspace", required = true)
-          WorkspaceConfigDto config,
+          DevfileDto devfile,
       @ApiParam(
               value =
                   "Workspace attribute defined in 'attrName:attrValue' format. "
@@ -42,18 +45,19 @@
           Boolean startAfterCreate,
       @ApiParam("Namespace where workspace should be created") @QueryParam("namespace")
           String namespace)
-      throws ConflictException, ServerException, BadRequestException, ForbiddenException,
-          NotFoundException {
-    requiredNotNull(config, "Workspace configuration");
+      throws ConflictException, BadRequestException, ForbiddenException, NotFoundException,
+          ServerException {
+    requiredNotNull(devfile, "Devfile");
+
     final Map<String, String> attributes = parseAttrs(attrsList);
-    relativizeRecipeLinks(config);
+
     if (namespace == null) {
       namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
     }
 
     WorkspaceImpl workspace;
     try {
-      workspace = workspaceManager.createWorkspace(config, namespace, attributes);
+      workspace = workspaceManager.createWorkspace(devfile, namespace, attributes);
     } catch (ValidationException x) {
       throw new BadRequestException(x.getMessage());
     }
