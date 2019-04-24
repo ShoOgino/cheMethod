@@ -1,0 +1,70 @@
+  @Beta
+  @Path("/devfile")
+  @POST
+  @Consumes(APPLICATION_JSON)
+  @Produces(APPLICATION_JSON)
+  @ApiOperation(
+      value = "Creates a new workspace based on the Devfile.",
+      notes =
+          "This method is in beta phase. It's strongly recommended to use `POST /devfile` instead"
+              + " to get a workspace from Devfile. Workspaces created with this method are not stable yet.",
+      consumes = APPLICATION_JSON,
+      produces = APPLICATION_JSON,
+      nickname = "createFromDevfile",
+      response = WorkspaceConfigDto.class)
+  @ApiResponses({
+    @ApiResponse(code = 201, message = "The workspace successfully created"),
+    @ApiResponse(code = 400, message = "Missed required parameters, parameters are not valid"),
+    @ApiResponse(code = 403, message = "The user does not have access to create a new workspace"),
+    @ApiResponse(
+        code = 409,
+        message =
+            "Conflict error occurred during the workspace creation"
+                + "(e.g. The workspace with such name already exists)"),
+    @ApiResponse(code = 500, message = "Internal server error occurred")
+  })
+  public Response create(
+      @ApiParam(value = "The configuration to create the new workspace", required = true)
+          DevfileDto devfile,
+      @ApiParam(
+              value =
+                  "Workspace attribute defined in 'attrName:attrValue' format. "
+                      + "The first ':' is considered as attribute name and value separator",
+              examples =
+                  @Example({
+                    @ExampleProperty("stackId:stack123"),
+                    @ExampleProperty("attrName:value-with:colon")
+                  }))
+          @QueryParam("attribute")
+          List<String> attrsList,
+      @ApiParam(
+              "If true then the workspace will be immediately "
+                  + "started after it is successfully created")
+          @QueryParam("start-after-create")
+          @DefaultValue("false")
+          Boolean startAfterCreate,
+      @ApiParam("Namespace where workspace should be created") @QueryParam("namespace")
+          String namespace)
+      throws ConflictException, BadRequestException, ForbiddenException, NotFoundException,
+          ServerException {
+    requiredNotNull(devfile, "Devfile");
+
+    final Map<String, String> attributes = parseAttrs(attrsList);
+
+    if (namespace == null) {
+      namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
+    }
+
+    WorkspaceImpl workspace;
+    try {
+      workspace = workspaceManager.createWorkspace(devfile, namespace, attributes);
+    } catch (ValidationException x) {
+      throw new BadRequestException(x.getMessage());
+    }
+
+    if (startAfterCreate) {
+      workspaceManager.startWorkspace(workspace.getId(), null, new HashMap<>());
+    }
+    return Response.status(201).entity(asDtoWithLinksAndToken(workspace)).build();
+  }
+
