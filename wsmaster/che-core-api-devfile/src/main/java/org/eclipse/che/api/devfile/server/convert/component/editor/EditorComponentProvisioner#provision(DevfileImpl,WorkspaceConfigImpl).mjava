@@ -6,23 +6,31 @@
    * @param workspaceConfig workspace config that may contain environments to convert
    */
   @Override
-  public void provision(DevfileImpl devfile, WorkspaceConfigImpl workspaceConfig) {
+  public void provision(DevfileImpl devfile, WorkspaceConfigImpl workspaceConfig)
+      throws WorkspaceExportException {
     String editorAttribute =
         workspaceConfig.getAttributes().get(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE);
     if (editorAttribute == null) {
       return;
     }
 
-    ComponentImpl editorComponent = new ComponentImpl(EDITOR_COMPONENT_TYPE, editorAttribute);
+    ExtendedPluginFQN fqn;
+    try {
+      fqn = fqnParser.parsePluginFQN(editorAttribute);
+    } catch (InfrastructureException e) {
+      throw new WorkspaceExportException(e.getMessage(), e);
+    }
+
+    ComponentImpl editorComponent = new ComponentImpl(EDITOR_COMPONENT_TYPE, fqn.getId());
 
     editorComponent.setAlias(
         workspaceConfig
             .getAttributes()
-            .getOrDefault(EDITOR_COMPONENT_ALIAS_WORKSPACE_ATTRIBUTE, editorAttribute));
+            .getOrDefault(EDITOR_COMPONENT_ALIAS_WORKSPACE_ATTRIBUTE, fqn.getId()));
     editorComponent.setMemoryLimit(
         workspaceConfig
             .getAttributes()
-            .get(format(SIDECAR_MEMORY_LIMIT_ATTR_TEMPLATE, editorAttribute.split(":")[0])));
+            .get(format(SIDECAR_MEMORY_LIMIT_ATTR_TEMPLATE, fqn.getPublisherAndName())));
     devfile.getComponents().add(editorComponent);
   }
 

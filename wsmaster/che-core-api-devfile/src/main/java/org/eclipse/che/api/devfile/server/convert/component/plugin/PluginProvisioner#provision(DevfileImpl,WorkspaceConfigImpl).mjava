@@ -7,7 +7,8 @@
    * @throws IllegalArgumentException if the specified workspace config or devfile is null
    */
   @Override
-  public void provision(DevfileImpl devfile, WorkspaceConfigImpl workspaceConfig) {
+  public void provision(DevfileImpl devfile, WorkspaceConfigImpl workspaceConfig)
+      throws WorkspaceExportException {
     checkArgument(workspaceConfig != null, "Workspace config must not be null");
     checkArgument(devfile != null, "Workspace config must not be null");
 
@@ -20,13 +21,20 @@
     Map<String, String> pluginIdToComponentAlias = extractPluginIdToComponentAlias(workspaceConfig);
 
     for (String pluginId : pluginsAttribute.split(",")) {
-      ComponentImpl pluginComponent = new ComponentImpl(PLUGIN_COMPONENT_TYPE, pluginId);
+      final ExtendedPluginFQN fqn;
+      try {
+        fqn = fqnParser.parsePluginFQN(pluginId);
+      } catch (InfrastructureException e) {
+        throw new WorkspaceExportException(e.getMessage(), e);
+      }
 
-      pluginComponent.setAlias(pluginIdToComponentAlias.get(pluginId));
+      ComponentImpl pluginComponent = new ComponentImpl(PLUGIN_COMPONENT_TYPE, fqn.getId());
+
+      pluginComponent.setAlias(pluginIdToComponentAlias.get(fqn.getId()));
       pluginComponent.setMemoryLimit(
           workspaceConfig
               .getAttributes()
-              .get(format(SIDECAR_MEMORY_LIMIT_ATTR_TEMPLATE, pluginId.split(":")[0])));
+              .get(format(SIDECAR_MEMORY_LIMIT_ATTR_TEMPLATE, fqn.getPublisherAndName())));
       devfile.getComponents().add(pluginComponent);
     }
   }
