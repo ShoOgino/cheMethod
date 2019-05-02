@@ -1,15 +1,22 @@
   public JsonNode validateBySchema(String yamlContent) throws DevfileFormatException {
-    ProcessingReport report;
-    JsonNode data;
+    JsonNode contentNode;
     try {
-      data = yamlReader.readTree(yamlContent);
-      report = validator.validate(schemaProvider.getJsoneNode(), data);
-    } catch (IOException | ProcessingException e) {
+      contentNode = yamlReader.readTree(yamlContent);
+      List<Problem> validationErrors = new ArrayList<>();
+      ProblemHandler handler = ProblemHandler.collectingTo(validationErrors);
+      try (JsonReader reader =
+          service.createReader(
+              new StringReader(jsonWriter.writeValueAsString(contentNode)), schema, handler)) {
+        reader.read();
+      }
+      if (validationErrors.isEmpty()) {
+        return contentNode;
+      }
+      String error = errorMessageComposer.extractMessages(validationErrors, new StringBuilder());
+      throw new DevfileFormatException(
+          format("Devfile schema validation failed. Error: %s", error));
+    } catch (IOException e) {
       throw new DevfileFormatException("Unable to validate Devfile. Error: " + e.getMessage());
     }
-    if (!report.isSuccess()) {
-      throw new DevfileFormatException(messageComposer.prepareErrorMessage(report));
-    }
-    return data;
   }
 
