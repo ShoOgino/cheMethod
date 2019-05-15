@@ -1,0 +1,69 @@
+  /**
+   * Validates the specified workspace configuration.
+   *
+   * <p>The typical usage of this method is performing validating before asynchronous start of
+   * workspace.
+   *
+   * @param workspace workspace config that contains environment or devfile to start
+   * @param envName environment to start. Default will be used if null.
+   * @throws NotFoundException if workspace does not have environment with the specified name
+   * @throws NotFoundException if workspace has environment with type that is not supported
+   * @throws ValidationException if environment is not a valid and can not be run
+   * @throws ServerException if any other issue occurred during validation
+   */
+  public void validate(WorkspaceImpl workspace, @Nullable String envName)
+      throws ValidationException, NotFoundException, ServerException {
+    WorkspaceConfig config = workspace.getConfig();
+
+    if (workspace.getDevfile() != null) {
+      config = devfileConverter.convert(workspace.getDevfile());
+    }
+
+    if (envName != null && !config.getEnvironments().containsKey(envName)) {
+      throw new NotFoundException(
+          format(
+              "Workspace '%s:%s' doesn't contain environment '%s'",
+              workspace.getNamespace(), config.getName(), envName));
+    }
+
+    if (envName == null) {
+      // use default environment if it is not defined
+      envName = config.getDefaultEnv();
+    }
+
+    if (envName == null
+        && SidecarToolingWorkspaceUtil.isSidecarBasedWorkspace(config.getAttributes())) {
+      // Sidecar-based workspaces are allowed not to have any environments
+      return;
+    }
+
+    // validate environment in advance
+    if (envName == null) {
+      throw new NotFoundException(
+          format(
+              "Workspace %s:%s can't use null environment",
+              workspace.getNamespace(), config.getName()));
+    }
+
+    Environment environment = config.getEnvironments().get(envName);
+
+    if (environment == null) {
+      throw new NotFoundException(
+          format(
+              "Workspace does not have environment with name %s that specified to be run",
+              envName));
+    }
+
+    String type = environment.getRecipe().getType();
+    if (!infrastructure.getRecipeTypes().contains(type)) {
+      throw new NotFoundException("Infrastructure not found for type: " + type);
+    }
+
+    // try to create internal environment to check if the specified environment is valid
+    try {
+      createInternalEnvironment(environment, emptyMap(), emptyList());
+    } catch (InfrastructureException e) {
+      throw new ServerException(e.getMessage(), e);
+    }
+  }
+

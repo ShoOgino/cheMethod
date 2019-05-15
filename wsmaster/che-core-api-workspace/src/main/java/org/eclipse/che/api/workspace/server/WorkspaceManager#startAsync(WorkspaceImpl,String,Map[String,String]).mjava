@@ -3,24 +3,17 @@
       WorkspaceImpl workspace, @Nullable String envName, Map<String, String> options)
       throws ConflictException, NotFoundException, ServerException {
 
-    Optional<Pair<String, Environment>> validEnvOpt = getValidatedEnvironment(workspace, envName);
-
-    // Sidecar-based workspaces are allowed not to have environments
-    Pair<String, Environment> environment = null;
-    if (validEnvOpt.isPresent()) {
-      environment = validEnvOpt.get();
+    try {
+      runtimes.validate(workspace, envName);
+    } catch (ValidationException e) {
+      throw new ConflictException(e.getMessage(), e);
     }
 
     workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
     workspaceDao.update(workspace);
 
     runtimes
-        .startAsync(
-            workspace,
-            environment,
-            getCommands(workspace),
-            getAttributes(workspace),
-            firstNonNull(options, Collections.emptyMap()))
+        .startAsync(workspace, envName, firstNonNull(options, Collections.emptyMap()))
         .thenAccept(aVoid -> handleStartupSuccess(workspace))
         .exceptionally(
             ex -> {

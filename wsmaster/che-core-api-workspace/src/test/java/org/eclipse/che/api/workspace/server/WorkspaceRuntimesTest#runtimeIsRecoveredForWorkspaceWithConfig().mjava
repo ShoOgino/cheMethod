@@ -1,0 +1,20 @@
+  @Test
+  public void runtimeIsRecoveredForWorkspaceWithConfig() throws Exception {
+    RuntimeIdentity identity = new RuntimeIdentityImpl("workspace123", "my-env", "myId");
+    mockWorkspaceWithConfig(identity);
+    RuntimeContext context = mockContext(identity);
+    when(context.getRuntime())
+        .thenReturn(new TestInternalRuntime(context, emptyMap(), WorkspaceStatus.STARTING));
+    doReturn(context).when(infrastructure).prepare(eq(identity), any());
+    doReturn(mock(InternalEnvironment.class)).when(testEnvFactory).create(any());
+    when(statuses.get(anyString())).thenReturn(WorkspaceStatus.STARTING);
+
+    // try recover
+    runtimes.recoverOne(infrastructure, identity);
+
+    WorkspaceImpl workspace = WorkspaceImpl.builder().setId(identity.getWorkspaceId()).build();
+    runtimes.injectRuntime(workspace);
+    assertNotNull(workspace.getRuntime());
+    assertEquals(workspace.getStatus(), WorkspaceStatus.STARTING);
+  }
+

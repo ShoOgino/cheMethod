@@ -6,7 +6,7 @@
    * WorkspaceStatus#STARTING} status.
    *
    * @param workspace workspace which environment should be started
-   * @param environment optional environment to run
+   * @param envName optional environment name to run
    * @param options whether machines should be recovered(true) or not(false)
    * @return completable future of start execution.
    * @throws ConflictException when workspace is already running
@@ -18,11 +18,7 @@
    */
   @Traced
   public CompletableFuture<Void> startAsync(
-      WorkspaceImpl workspace,
-      @Nullable Pair<String, Environment> environment,
-      List<? extends Command> commands,
-      Map<String, String> attributes,
-      Map<String, String> options)
+      WorkspaceImpl workspace, @Nullable String envName, Map<String, String> options)
       throws ConflictException, NotFoundException, ServerException {
     TracingTags.WORKSPACE_ID.set(workspace.getId());
     TracingTags.STACK_ID.set(() -> workspace.getAttributes().getOrDefault("stackId", "no stack"));
@@ -36,14 +32,21 @@
               workspace.getName()));
     }
 
+    WorkspaceConfig config = workspace.getConfig();
+    if (config == null) {
+      config = devfileConverter.convert(workspace.getDevfile());
+    }
+
+    if (envName == null) {
+      envName = config.getDefaultEnv();
+    }
+
     final String ownerId = EnvironmentContext.getCurrent().getSubject().getUserId();
-    final RuntimeIdentity runtimeId =
-        new RuntimeIdentityImpl(
-            workspaceId, environment == null ? null : environment.first, ownerId);
+    final RuntimeIdentity runtimeId = new RuntimeIdentityImpl(workspaceId, envName, ownerId);
     try {
       InternalEnvironment internalEnv =
           createInternalEnvironment(
-              environment == null ? null : environment.second, attributes, commands);
+              config.getEnvironments().get(envName), config.getAttributes(), config.getCommands());
 
       RuntimeContext runtimeContext = infrastructure.prepare(runtimeId, internalEnv);
       InternalRuntime runtime = runtimeContext.getRuntime();
