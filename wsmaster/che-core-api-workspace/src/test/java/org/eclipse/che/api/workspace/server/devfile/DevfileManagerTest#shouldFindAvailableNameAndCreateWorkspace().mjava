@@ -1,0 +1,36 @@
+  @Test
+  public void shouldFindAvailableNameAndCreateWorkspace() throws Exception {
+    // given
+    ArgumentCaptor<WorkspaceConfigImpl> captor = ArgumentCaptor.forClass(WorkspaceConfigImpl.class);
+
+    EnvironmentContext current = new EnvironmentContext();
+    current.setSubject(TEST_SUBJECT);
+    EnvironmentContext.setCurrent(current);
+
+    when(workspaceManager.getWorkspace(anyString(), anyString()))
+        .thenAnswer(
+            invocation -> {
+              String wsname = invocation.getArgument(0);
+              if ("petclinic-dev-environment".equals(wsname)
+                  || "petclinic-dev-environment_1".equals(wsname)) {
+                return mock(WorkspaceImpl.class);
+              }
+              throw new NotFoundException("ws not found");
+            });
+
+    WorkspaceConfigImpl wsConfig = mock(WorkspaceConfigImpl.class);
+    when(wsConfig.getName()).thenReturn("petclinic-dev-environment");
+    doReturn(new WorkspaceConfigImpl(wsConfig))
+        .when(devfileConverter)
+        .devFileToWorkspaceConfig(any(), any());
+    FileContentProvider fileContentProvider = mock(FileContentProvider.class);
+
+    // when
+    devfileManager.createWorkspace(devfile, fileContentProvider);
+
+    // then
+    verify(workspaceManager).createWorkspace(captor.capture(), anyString(), anyMap());
+    assertEquals("petclinic-dev-environment_2", captor.getValue().getName());
+    verify(devfileConverter).devFileToWorkspaceConfig(eq(devfile), any());
+  }
+

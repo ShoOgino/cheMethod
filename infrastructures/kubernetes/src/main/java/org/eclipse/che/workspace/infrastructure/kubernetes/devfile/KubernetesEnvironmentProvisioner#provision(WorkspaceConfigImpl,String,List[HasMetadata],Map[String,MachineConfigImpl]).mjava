@@ -1,0 +1,63 @@
+  /**
+   * Provisions default K8s/OS environment with specified objects (K8s/OS objects, machines) into
+   * {@link WorkspaceConfigImpl}.
+   *
+   * <p>If there is already a default environment with kubernetes/openshift recipe then content will
+   * be updated with result or merging existing objects and specified ones.
+   *
+   * @param workspaceConfig workspace where recipe should be provisioned
+   * @param environmentType type of environment that should be provisioned. Should be one of the
+   *     Kubernetes-based environments.
+   * @param componentObjects objects that should be provisioned into the workspace config
+   * @param machines machines that should be provisioned into the workspace config
+   * @throws DevfileRecipeFormatException if exception occurred during existing environment parsing
+   * @throws DevfileRecipeFormatException if exception occurred during kubernetes object
+   *     serialization
+   * @throws DevfileException if any other exception occurred
+   */
+  public void provision(
+      WorkspaceConfigImpl workspaceConfig,
+      String environmentType,
+      List<HasMetadata> componentObjects,
+      Map<String, MachineConfigImpl> machines)
+      throws DevfileException, DevfileRecipeFormatException {
+    String defaultEnv = workspaceConfig.getDefaultEnv();
+    EnvironmentImpl environment = workspaceConfig.getEnvironments().get(defaultEnv);
+    if (environment == null) {
+      checkItemsHasUniqueKindToName(componentObjects);
+
+      RecipeImpl recipe =
+          new RecipeImpl(environmentType, YAML_CONTENT_TYPE, asYaml(componentObjects), null);
+      String envName = "default";
+      EnvironmentImpl env = new EnvironmentImpl(recipe, emptyMap());
+      env.getMachines().putAll(machines);
+      workspaceConfig.getEnvironments().put(envName, env);
+      workspaceConfig.setDefaultEnv(envName);
+    } else {
+      RecipeImpl envRecipe = environment.getRecipe();
+
+      for (Entry<String, MachineConfigImpl> machineEntry : machines.entrySet()) {
+        if (environment.getMachines().put(machineEntry.getKey(), machineEntry.getValue()) != null) {
+          throw new DevfileException(
+              format("Environment already contains machine '%s'", machineEntry.getKey()));
+        }
+      }
+      environment.getMachines().putAll(machines);
+
+      // check if it is needed to update recipe type since
+      // kubernetes component is compatible with openshift but not vice versa
+
+      Set<String> allowedEnvTypeBases = allowedEnvironmentTypeUpgrades.get(environmentType);
+      if (allowedEnvTypeBases != null) {
+        envRecipe.setType(environmentType);
+      }
+
+      // workspace already has k8s/OS recipe
+      // it is needed to merge existing recipe objects with component's ones
+      List<HasMetadata> envObjects = unmarshalObjects(envRecipe);
+      envObjects.addAll(componentObjects);
+
+      envRecipe.setContent(asYaml(envObjects));
+    }
+  }
+
