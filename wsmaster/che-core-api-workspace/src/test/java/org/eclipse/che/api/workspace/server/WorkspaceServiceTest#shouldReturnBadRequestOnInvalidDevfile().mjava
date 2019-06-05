@@ -1,9 +1,9 @@
   @Test
-  public void shouldCreateWorkspaceFromDevfile() throws Exception {
+  public void shouldReturnBadRequestOnInvalidDevfile() throws Exception {
     final DevfileDtoImpl devfileDto = createDevfileDto();
     final WorkspaceImpl workspace = createWorkspace(devfileDto);
 
-    when(devfileManager.parseJson(any())).thenReturn(new DevfileImpl());
+    when(devfileManager.parseJson(any())).thenThrow(new DevfileFormatException("boom"));
 
     when(wsManager.createWorkspace(any(Devfile.class), anyString(), any(), any()))
         .thenReturn(workspace);
@@ -23,18 +23,10 @@
                     + "&attribute=factoryId:factory123"
                     + "&attribute=custom:custom:value");
 
-    assertEquals(response.getStatusCode(), 201);
-    assertEquals(
-        new WorkspaceImpl(unwrapDto(response, WorkspaceDto.class), TEST_ACCOUNT), workspace);
-    verify(wsManager)
-        .createWorkspace(
-            any(Devfile.class),
-            eq("test"),
-            eq(
-                ImmutableMap.of(
-                    "stackId", "stack123",
-                    "factoryId", "factory123",
-                    "custom", "custom:value")),
-            any());
+    assertEquals(response.getStatusCode(), 400);
+    String error = unwrapError(response);
+    assertEquals(error, "boom");
+
+    verify(wsManager, never()).createWorkspace(any(Devfile.class), any(), any(), any());
   }
 

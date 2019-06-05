@@ -1,14 +1,14 @@
   @Beta
   @Path("/devfile")
   @POST
-  @Consumes(APPLICATION_JSON)
+  @Consumes({APPLICATION_JSON, "text/yaml", "text/x-yaml"})
   @Produces(APPLICATION_JSON)
   @ApiOperation(
       value = "Creates a new workspace based on the Devfile.",
       notes =
           "This method is in beta phase. It's strongly recommended to use `POST /devfile` instead"
               + " to get a workspace from Devfile. Workspaces created with this method are not stable yet.",
-      consumes = APPLICATION_JSON,
+      consumes = "application/json, text/yaml, text/x-yaml",
       produces = APPLICATION_JSON,
       nickname = "createFromDevfile",
       response = WorkspaceConfigDto.class)
@@ -24,8 +24,7 @@
     @ApiResponse(code = 500, message = "Internal server error occurred")
   })
   public Response create(
-      @ApiParam(value = "The configuration to create the new workspace", required = true)
-          DevfileDto devfile,
+      @ApiParam(value = "The devfile of the workspace to create", required = true) String devfile,
       @ApiParam(
               value =
                   "Workspace attribute defined in 'attrName:attrValue' format. "
@@ -44,10 +43,22 @@
           @DefaultValue("false")
           Boolean startAfterCreate,
       @ApiParam("Namespace where workspace should be created") @QueryParam("namespace")
-          String namespace)
+          String namespace,
+      @HeaderParam(CONTENT_TYPE) MediaType contentType)
       throws ConflictException, BadRequestException, ForbiddenException, NotFoundException,
           ServerException {
     requiredNotNull(devfile, "Devfile");
+
+    DevfileImpl devfileModel;
+    try {
+      if (APPLICATION_JSON_TYPE.isCompatible(contentType)) {
+        devfileModel = devfileManager.parseJson(devfile);
+      } else {
+        devfileModel = devfileManager.parseYaml(devfile);
+      }
+    } catch (DevfileException e) {
+      throw new BadRequestException(e.getMessage());
+    }
 
     final Map<String, String> attributes = parseAttrs(attrsList);
 
@@ -57,7 +68,16 @@
 
     WorkspaceImpl workspace;
     try {
-      workspace = workspaceManager.createWorkspace(devfile, namespace, attributes);
+      workspace =
+          workspaceManager.createWorkspace(
+              devfileModel,
+              namespace,
+              attributes,
+              // create a new cache for each request so that we don't have to care about lifetime
+              // of the cache, etc. The content is cached only for the duration of this call
+              // (i.e. all the validation and provisioning of the devfile will download each
+              // referenced file only once per request)
+              FileContentProvider.cached(devfileContentProvider));
     } catch (ValidationException x) {
       throw new BadRequestException(x.getMessage());
     }
