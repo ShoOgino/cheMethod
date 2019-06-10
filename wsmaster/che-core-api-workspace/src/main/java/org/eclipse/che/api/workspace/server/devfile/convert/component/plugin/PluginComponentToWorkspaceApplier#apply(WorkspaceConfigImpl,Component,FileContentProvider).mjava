@@ -22,27 +22,25 @@
 
     String workspacePluginsAttribute =
         workspaceConfig.getAttributes().get(WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE);
-    workspaceConfig
-        .getAttributes()
-        .put(
-            WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE,
-            append(workspacePluginsAttribute, pluginComponent.getId()));
 
-    String pluginsAliases =
-        workspaceConfig.getAttributes().get(PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE);
-    if (pluginComponent.getAlias() != null) {
+    final String pluginId = pluginComponent.getId();
+    final String registryUrl = pluginComponent.getRegistryUrl();
+
+    final ExtendedPluginFQN fqn = componentFQNParser.evaluateFQN(pluginComponent, contentProvider);
+    if (!isNullOrEmpty(fqn.getReference())) {
       workspaceConfig
           .getAttributes()
           .put(
-              PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE,
-              append(pluginsAliases, pluginComponent.getId() + "=" + pluginComponent.getAlias()));
-    }
-
-    ExtendedPluginFQN fqn;
-    try {
-      fqn = fqnParser.parsePluginFQN(pluginComponent.getId());
-    } catch (InfrastructureException e) {
-      throw new DevfileException(e.getMessage(), e);
+              WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE,
+              append(workspacePluginsAttribute, fqn.getReference()));
+    } else {
+      workspaceConfig
+          .getAttributes()
+          .put(
+              WORKSPACE_TOOLING_PLUGINS_ATTRIBUTE,
+              append(
+                  workspacePluginsAttribute,
+                  componentFQNParser.getCompositeId(registryUrl, pluginId)));
     }
     String memoryLimit = pluginComponent.getMemoryLimit();
     if (memoryLimit != null) {
@@ -73,6 +71,22 @@
       }
 
       command.getAttributes().put(PLUGIN_ATTRIBUTE, fqn.getId());
+    }
+
+    String pluginsAliases =
+        workspaceConfig.getAttributes().get(PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE);
+    if (pluginComponent.getAlias() != null) {
+      workspaceConfig
+          .getAttributes()
+          .put(
+              PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE,
+              append(
+                  pluginsAliases,
+                  componentFQNParser.getCompositeId(
+                          fqn.getRegistry() != null ? fqn.getRegistry().toString() : null,
+                          fqn.getId())
+                      + "="
+                      + pluginComponent.getAlias()));
     }
   }
 

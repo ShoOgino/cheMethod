@@ -1,0 +1,34 @@
+  /**
+   * Evaluates plugin FQN from provided reference by trying to fetch and parse its meta information.
+   *
+   * @param reference plugin reference to evaluate FQN from
+   * @param fileContentProvider content provider instance to perform plugin meta requests
+   * @return plugin FQN evaluated from given reference
+   * @throws InfrastructureException if plugin reference is invalid or inaccessible
+   */
+  public ExtendedPluginFQN evaluateFqn(String reference, FileContentProvider fileContentProvider)
+      throws InfrastructureException {
+    JsonNode contentNode;
+    try {
+      String pluginMetaContent = fileContentProvider.fetchContent(reference);
+      contentNode = yamlReader.readTree(pluginMetaContent);
+    } catch (DevfileException | IOException e) {
+      throw new InfrastructureException(
+          format("Plugin reference URL '%s' is invalid.", reference), e);
+    }
+    JsonNode publisher = contentNode.path("publisher");
+    if (publisher.isMissingNode()) {
+      throw new InfrastructureException(formatMessage(reference, "publisher"));
+    }
+    JsonNode name = contentNode.get("name");
+    if (name.isMissingNode()) {
+      throw new InfrastructureException(formatMessage(reference, "name"));
+    }
+    JsonNode version = contentNode.get("version");
+    if (version.isMissingNode()) {
+      throw new InfrastructureException(formatMessage(reference, "version"));
+    }
+    return new ExtendedPluginFQN(
+        reference, publisher.textValue(), name.textValue(), version.textValue());
+  }
+

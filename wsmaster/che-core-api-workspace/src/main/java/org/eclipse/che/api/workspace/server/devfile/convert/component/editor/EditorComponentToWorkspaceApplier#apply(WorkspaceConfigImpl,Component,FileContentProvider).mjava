@@ -20,23 +20,25 @@
         EDITOR_COMPONENT_TYPE.equals(editorComponent.getType()),
         format("Plugin must have `%s` type", EDITOR_COMPONENT_TYPE));
 
-    String editorComponentAlias = editorComponent.getAlias();
-    String editorId = editorComponent.getId();
-    String memoryLimit = editorComponent.getMemoryLimit();
-
-    workspaceConfig.getAttributes().put(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE, editorId);
+    final String editorComponentAlias = editorComponent.getAlias();
+    final String editorId = editorComponent.getId();
+    final String registryUrl = editorComponent.getRegistryUrl();
+    final String memoryLimit = editorComponent.getMemoryLimit();
 
     if (editorComponentAlias != null) {
       workspaceConfig
           .getAttributes()
           .put(EDITOR_COMPONENT_ALIAS_WORKSPACE_ATTRIBUTE, editorComponentAlias);
     }
-
-    final ExtendedPluginFQN fqn;
-    try {
-      fqn = fqnParser.parsePluginFQN(editorId);
-    } catch (InfrastructureException e) {
-      throw new DevfileException(e.getMessage(), e);
+    final ExtendedPluginFQN fqn = componentFQNParser.evaluateFQN(editorComponent, contentProvider);
+    if (!isNullOrEmpty(fqn.getReference())) {
+      workspaceConfig.getAttributes().put(WORKSPACE_TOOLING_EDITOR_ATTRIBUTE, fqn.getReference());
+    } else {
+      workspaceConfig
+          .getAttributes()
+          .put(
+              WORKSPACE_TOOLING_EDITOR_ATTRIBUTE,
+              componentFQNParser.getCompositeId(registryUrl, editorId));
     }
     if (memoryLimit != null) {
       workspaceConfig
