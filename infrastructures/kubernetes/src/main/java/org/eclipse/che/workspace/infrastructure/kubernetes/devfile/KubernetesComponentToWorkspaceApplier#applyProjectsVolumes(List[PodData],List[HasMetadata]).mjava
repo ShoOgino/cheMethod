@@ -1,0 +1,37 @@
+  private void applyProjectsVolumes(List<PodData> podsData, List<HasMetadata> componentObjects) {
+    if (componentObjects
+        .stream()
+        .noneMatch(
+            hasMeta ->
+                hasMeta instanceof PersistentVolumeClaim
+                    && hasMeta.getMetadata().getName().equals(PROJECTS_VOLUME_NAME))) {
+      PersistentVolumeClaim volumeClaim =
+          newPVC(
+              PROJECTS_VOLUME_NAME,
+              defaultPVCAccessMode,
+              defaultProjectPVCSize,
+              pvcStorageClassName);
+      componentObjects.add(volumeClaim);
+    }
+
+    for (PodData podData : podsData) {
+      if (podData
+          .getSpec()
+          .getVolumes()
+          .stream()
+          .noneMatch(volume -> volume.getName().equals(PROJECTS_VOLUME_NAME))) {
+        Volume volume = newVolume(PROJECTS_VOLUME_NAME, PROJECTS_VOLUME_NAME);
+        podData.getSpec().getVolumes().add(volume);
+      }
+      for (Container container : podData.getSpec().getContainers()) {
+        if (container
+            .getVolumeMounts()
+            .stream()
+            .noneMatch(mount -> mount.getName().equals(PROJECTS_VOLUME_NAME))) {
+          VolumeMount volumeMount = newVolumeMount(PROJECTS_VOLUME_NAME, projectFolderPath, null);
+          container.getVolumeMounts().add(volumeMount);
+        }
+      }
+    }
+  }
+
