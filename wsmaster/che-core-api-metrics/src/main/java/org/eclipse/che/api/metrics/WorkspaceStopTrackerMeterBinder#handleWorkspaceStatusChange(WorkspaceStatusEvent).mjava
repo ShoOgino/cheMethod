@@ -1,0 +1,20 @@
+  private void handleWorkspaceStatusChange(WorkspaceStatusEvent event) {
+    if ((event.getPrevStatus() == RUNNING || event.getPrevStatus() == STARTING)
+        && event.getStatus() == STOPPING) {
+      workspaceStopTime.put(event.getWorkspaceId(), System.currentTimeMillis());
+    } else if (event.getPrevStatus() == STOPPING) {
+      Long stopTime = workspaceStopTime.remove(event.getWorkspaceId());
+      if (stopTime == null) {
+        LOG.warn("No workspace stop time recorded for workspace {}", event.getWorkspaceId());
+        return;
+      }
+
+      if (event.getStatus() == STOPPED) {
+        stopTimer.record(Duration.ofMillis(System.currentTimeMillis() - stopTime));
+      } else {
+        LOG.error("Unexpected change of status from STOPPING to {}", event.getStatus());
+        return;
+      }
+    }
+  }
+
