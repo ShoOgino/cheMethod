@@ -25,21 +25,28 @@
                                 newDto(FactoryDto.class)
                                     .withV(CURRENT_VERSION)
                                     .withSource("repo")));
-    // add workspace configuration if not defined
-    if (factory.getWorkspace() == null) {
-      factory.setWorkspace(
-          urlFactoryBuilder.buildDefaultWorkspaceConfig(githubUrl.getRepository()));
-    }
 
-    // apply merging operation from existing and computed settings if needed
-    return projectConfigDtoMerger.merge(
-        factory,
-        () -> {
-          // Compute project configuration
-          return newDto(ProjectConfigDto.class)
-              .withSource(githubSourceStorageBuilder.build(githubUrl))
-              .withName(githubUrl.getRepository())
-              .withPath("/".concat(githubUrl.getRepository()));
-        });
+    if (factory.getWorkspace() != null) {
+      return projectConfigDtoMerger.merge(
+          factory,
+          () -> {
+            // Compute project configuration
+            return newDto(ProjectConfigDto.class)
+                .withSource(githubSourceStorageBuilder.buildWorkspaceConfigSource(githubUrl))
+                .withName(githubUrl.getRepository())
+                .withPath("/".concat(githubUrl.getRepository()));
+          });
+    } else if (factory.getDevfile() == null) {
+      // initialize default devfile and github project
+      factory.setDevfile(urlFactoryBuilder.buildDefaultDevfile(githubUrl.getRepository()));
+      factory
+          .getDevfile()
+          .setProjects(
+              Collections.singletonList(
+                  newDto(ProjectDto.class)
+                      .withSource(githubSourceStorageBuilder.buildDevfileSource(githubUrl))
+                      .withName(githubUrl.getRepository())));
+    }
+    return factory;
   }
 

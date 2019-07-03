@@ -1,0 +1,31 @@
+  /**
+   * Resolve devfile component references into their reference content.
+   *
+   * @param devfile input devfile
+   * @param fileContentProvider provider to fetch reference content
+   */
+  public void resolveReference(DevfileImpl devfile, FileContentProvider fileContentProvider)
+      throws DevfileException {
+    List<ComponentImpl> toResolve =
+        devfile
+            .getComponents()
+            .stream()
+            .filter(
+                c ->
+                    c.getType().equals(KUBERNETES_COMPONENT_TYPE)
+                        || c.getType().equals(OPENSHIFT_COMPONENT_TYPE))
+            .filter(c -> !isNullOrEmpty(c.getReference()))
+            .collect(Collectors.toList());
+    for (ComponentImpl c : toResolve) {
+      try {
+        c.setReferenceContent(fileContentProvider.fetchContent(c.getReference()));
+      } catch (IOException e) {
+        throw new DevfileException(
+            format(
+                "Unable to resolve reference of component: %s",
+                firstNonNull(c.getAlias(), c.getReference())),
+            e);
+      }
+    }
+  }
+
