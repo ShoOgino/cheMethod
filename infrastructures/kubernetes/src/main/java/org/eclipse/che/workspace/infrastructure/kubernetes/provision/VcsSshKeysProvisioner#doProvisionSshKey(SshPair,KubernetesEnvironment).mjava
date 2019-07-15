@@ -1,0 +1,23 @@
+  private void doProvisionSshKey(SshPair sshPair, KubernetesEnvironment k8sEnv) {
+    if (isNullOrEmpty(sshPair.getName()) || isNullOrEmpty(sshPair.getPrivateKey())) {
+      return;
+    }
+    Secret secret =
+        new SecretBuilder()
+            .addToData(
+                SSH_PRIVATE_KEY,
+                Base64.getEncoder().encodeToString(sshPair.getPrivateKey().getBytes()))
+            .withType(SECRET_TYPE_SSH)
+            .withNewMetadata()
+            .withName(getValidNameForSecret(sshPair.getName()))
+            .endMetadata()
+            .build();
+
+    k8sEnv.getSecrets().put(secret.getMetadata().getName(), secret);
+
+    k8sEnv
+        .getPodsData()
+        .values()
+        .forEach(p -> mountSshKeySecret(secret.getMetadata().getName(), p.getSpec()));
+  }
+
