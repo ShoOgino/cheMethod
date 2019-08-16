@@ -1,0 +1,20 @@
+  private Watch pvcIsBoundWatcher(
+      CompletableFuture<PersistentVolumeClaim> future,
+      Resource<PersistentVolumeClaim, DoneablePersistentVolumeClaim> pvcResource) {
+    return pvcResource.watch(
+        new Watcher<PersistentVolumeClaim>() {
+          @Override
+          public void eventReceived(Action action, PersistentVolumeClaim pvc) {
+            if (pvc.getStatus().getPhase().equals(PVC_BOUND_PHASE)) {
+              LOG.debug("pvc '" + pvc.getMetadata().getName() + "' is bound");
+              future.complete(pvc);
+            }
+          }
+
+          @Override
+          public void onClose(KubernetesClientException cause) {
+            safelyFinishFutureOnClose(cause, future, pvcResource.get().getMetadata().getName());
+          }
+        });
+  }
+

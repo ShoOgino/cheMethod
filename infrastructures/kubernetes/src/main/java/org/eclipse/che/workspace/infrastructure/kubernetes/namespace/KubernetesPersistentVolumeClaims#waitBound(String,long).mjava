@@ -1,15 +1,52 @@
   /**
-   * Waits until persistent volume claim state is bound.
+   * Waits until persistent volume claim state is bound. If used k8s Storage Class has
+   * 'volumeBindingMode: WaitForFirstConsumer', we don't wait to avoid deadlock.
    *
    * @param name name of persistent volume claim that should be watched
    * @param timeoutMillis waiting timeout in milliseconds
-   * @return persistent volume claim that satisfies the specified predicate
+   * @return persistent volume claim that is bound or in waiting for consumer state
    * @throws InfrastructureException when specified timeout is reached
    * @throws InfrastructureException when {@link Thread} is interrupted while waiting
    * @throws InfrastructureException when any other exception occurs
    */
   public PersistentVolumeClaim waitBound(String name, long timeoutMillis)
       throws InfrastructureException {
-    return wait(name, timeoutMillis, pvc -> pvc.getStatus().getPhase().equals(PVC_BOUND_PHASE));
+    try {
+      Resource<PersistentVolumeClaim, DoneablePersistentVolumeClaim> pvcResource =
+          clientFactory
+              .create(workspaceId)
+              .persistentVolumeClaims()
+              .inNamespace(namespace)
+              .withName(name);
+
+      PersistentVolumeClaim actualPvc = pvcResource.get();
+      if (actualPvc.getStatus().getPhase().equals(PVC_BOUND_PHASE)) {
+        return actualPvc;
+      }
+
+      CompletableFuture<PersistentVolumeClaim> future = new CompletableFuture<>();
+      // any of these watchers can finish the operation resolving the future
+      try (Watch boundWatcher = pvcIsBoundWatcher(future, pvcResource);
+          Watch waitingWatcher = pvcIsWaitingForConsumerWatcher(future, actualPvc)) {
+        return future.get(timeoutMillis, TimeUnit.MILLISECONDS);
+      } catch (ExecutionException e) {
+        // May happen only if WebSocket Connection is closed before needed event received.
+        // Throw internal exception because there may be some cluster/network issues that admin
+        // should take a look.
+        throw new InternalInfrastructureException(e.getCause().getMessage(), e);
+      } catch (TimeoutException e) {
+        // May happen when PVC is not bound in the time.
+        // Throw internal exception because there may be some cluster configuration/performance
+        // issues that admin should take a look.
+        throw new InternalInfrastructureException(
+            "Waiting for persistent volume claim '" + name + "' reached timeout");
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new InfrastructureException(
+            "Waiting for persistent volume claim '" + name + "' was interrupted");
+      }
+    } catch (KubernetesClientException e) {
+      throw new KubernetesInfrastructureException(e);
+    }
   }
 

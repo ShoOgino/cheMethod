@@ -1,0 +1,30 @@
+  /**
+   * Creates and returns {@link Watch} that watches for 'WaitForFirstConsumer' events on given PVC.
+   */
+  private Watch pvcIsWaitingForConsumerWatcher(
+      CompletableFuture<PersistentVolumeClaim> future, PersistentVolumeClaim actualPvc)
+      throws InfrastructureException {
+    return clientFactory
+        .create(workspaceId)
+        .events()
+        .inNamespace(namespace)
+        .withField(PVC_EVENT_REASON_FIELD_KEY, PVC_EVENT_WAIT_CONSUMER_REASON)
+        .withField(PVC_EVENT_UID_FIELD_KEY, actualPvc.getMetadata().getUid())
+        .watch(
+            new Watcher<Event>() {
+              @Override
+              public void eventReceived(Action action, Event resource) {
+                LOG.debug(
+                    "PVC '"
+                        + actualPvc.getMetadata().getName()
+                        + "' is waiting for first consumer. Don't wait to bound to avoid deadlock.");
+                future.complete(actualPvc);
+              }
+
+              @Override
+              public void onClose(KubernetesClientException cause) {
+                safelyFinishFutureOnClose(cause, future, actualPvc.getMetadata().getName());
+              }
+            });
+  }
+
