@@ -1,0 +1,27 @@
+  @Test
+  public void shouldNotApplyProxySettingsToJWTProxyContainer() throws Exception {
+
+    Map<String, Pod> pods = new HashMap<>();
+    pods.put(JWT_PROXY_POD_NAME, buildPod(JWT_PROXY_POD_NAME, buildContainers(2)));
+
+    KubernetesEnvironment k8sEnv = KubernetesEnvironment.builder().setPods(pods).build();
+    provisioner.provision(k8sEnv, runtimeId);
+
+    assertTrue(
+        k8sEnv
+            .getPodsData()
+            .values()
+            .stream()
+            .filter(pod -> pod.getMetadata().getName().equals(JWT_PROXY_POD_NAME))
+            .flatMap(pod -> pod.getSpec().getContainers().stream())
+            .noneMatch(
+                container ->
+                    container.getEnv().contains(new EnvVar(HTTP_PROXY, HTTP_PROXY_VALUE, null))
+                        || container
+                            .getEnv()
+                            .contains(new EnvVar(HTTPS_PROXY, HTTPS_PROXY_VALUE, null))
+                        || container
+                            .getEnv()
+                            .contains(new EnvVar(NO_PROXY, NO_PROXY_VALUE, null))));
+  }
+
