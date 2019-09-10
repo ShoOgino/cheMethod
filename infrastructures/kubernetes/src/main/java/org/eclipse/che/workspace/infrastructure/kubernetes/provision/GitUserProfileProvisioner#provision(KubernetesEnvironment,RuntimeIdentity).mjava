@@ -1,21 +1,32 @@
   @Override
   public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
       throws InfrastructureException {
-    getPreferenceValue(PREFERENCES_KEY_FILTER)
-        .ifPresent(
-            preferenceJsonValue -> {
-              Map<String, String> theiaPreferences = getMapFromJsonObject(preferenceJsonValue);
-
-              getGlobalGitConfigFileContent(
-                      theiaPreferences.get(GIT_USER_NAME_PROPERTY),
-                      theiaPreferences.get(GIT_USER_EMAIL_PROPERTY))
-                  .ifPresent(
-                      gitConfigFileContent -> {
-                        String gitConfigMapName =
-                            identity.getWorkspaceId() + GIT_CONFIG_MAP_NAME_SUFFIX;
-
-                        doProvisionGlobalGitConfig(gitConfigMapName, gitConfigFileContent, k8sEnv);
-                      });
-            });
+    try {
+      doInternalProvision(k8sEnv, identity);
+    } catch (ServerException e) {
+      String warnMsg =
+          format(
+              Warnings
+                  .INTERNAL_SERVER_ERROR_OCCURRED_DURING_OPERATING_WITH_USER_PREFERENCES_MESSAGE_FMT,
+              e.getMessage());
+      k8sEnv
+          .getWarnings()
+          .add(
+              new WarningImpl(
+                  Warnings
+                      .INTERNAL_SERVER_ERROR_OCCURRED_DURING_OPERATING_WITH_USER_PREFERENCES_WARNING_CODE,
+                  warnMsg));
+    } catch (JsonSyntaxException e) {
+      String warnMsg =
+          format(
+              Warnings.JSON_IS_NOT_A_VALID_REPRESENTATION_FOR_AN_OBJECT_OF_TYPE_MESSAGE_FMT,
+              e.getMessage());
+      k8sEnv
+          .getWarnings()
+          .add(
+              new WarningImpl(
+                  Warnings.JSON_IS_NOT_A_VALID_REPRESENTATION_FOR_AN_OBJECT_OF_TYPE_WARNING_CODE,
+                  warnMsg));
+    }
   }
 
