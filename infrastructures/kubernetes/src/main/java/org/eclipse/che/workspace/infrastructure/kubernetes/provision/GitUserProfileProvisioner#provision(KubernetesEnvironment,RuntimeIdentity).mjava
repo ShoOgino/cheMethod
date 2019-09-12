@@ -1,32 +1,30 @@
   @Override
   public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
       throws InfrastructureException {
+
     try {
-      doInternalProvision(k8sEnv, identity);
-    } catch (ServerException e) {
-      String warnMsg =
+      Pair<String, String> userAndEmail = getUserFromPreferences();
+
+      if (userAndEmail == null) {
+        userAndEmail = getUserFromUserManager();
+      }
+
+      prepareAndProvisionGitConfiguration(
+          userAndEmail.first, userAndEmail.second, k8sEnv, identity);
+    } catch (ServerException | NotFoundException e) {
+      reportWarning(
+          k8sEnv,
+          Warnings.EXCEPTION_IN_USER_MANAGEMENT_DURING_GIT_PROVISION_WARNING_CODE,
           format(
-              Warnings
-                  .INTERNAL_SERVER_ERROR_OCCURRED_DURING_OPERATING_WITH_USER_PREFERENCES_MESSAGE_FMT,
-              e.getMessage());
-      k8sEnv
-          .getWarnings()
-          .add(
-              new WarningImpl(
-                  Warnings
-                      .INTERNAL_SERVER_ERROR_OCCURRED_DURING_OPERATING_WITH_USER_PREFERENCES_WARNING_CODE,
-                  warnMsg));
+              Warnings.EXCEPTION_IN_USER_MANAGEMENT_DURING_GIT_PROVISION_MESSAGE_FMT,
+              e.getMessage()));
     } catch (JsonSyntaxException e) {
-      String warnMsg =
+      reportWarning(
+          k8sEnv,
+          Warnings.JSON_IS_NOT_A_VALID_REPRESENTATION_FOR_AN_OBJECT_OF_TYPE_WARNING_CODE,
           format(
               Warnings.JSON_IS_NOT_A_VALID_REPRESENTATION_FOR_AN_OBJECT_OF_TYPE_MESSAGE_FMT,
-              e.getMessage());
-      k8sEnv
-          .getWarnings()
-          .add(
-              new WarningImpl(
-                  Warnings.JSON_IS_NOT_A_VALID_REPRESENTATION_FOR_AN_OBJECT_OF_TYPE_WARNING_CODE,
-                  warnMsg));
+              e.getMessage()));
     }
   }
 
