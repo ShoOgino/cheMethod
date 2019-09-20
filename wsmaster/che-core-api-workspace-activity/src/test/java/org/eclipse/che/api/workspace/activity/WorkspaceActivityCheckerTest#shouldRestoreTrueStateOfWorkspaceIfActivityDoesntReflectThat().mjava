@@ -1,0 +1,33 @@
+  @Test
+  public void shouldRestoreTrueStateOfWorkspaceIfActivityDoesntReflectThat() throws Exception {
+    // given
+    String wsId = "1";
+    WorkspaceActivity activity = new WorkspaceActivity();
+    activity.setCreated(clock.millis());
+    activity.setWorkspaceId(wsId);
+    activity.setStatus(WorkspaceStatus.STARTING);
+    activity.setLastStarting(clock.millis());
+    doAnswer(
+            inv -> {
+              int maxItems = inv.getArgument(0);
+              long skipCount = inv.getArgument(1);
+
+              if (skipCount < 1) {
+                return new Page<>(singleton(activity), skipCount, maxItems, 1);
+              } else {
+                return new Page<>(emptyList(), skipCount, maxItems, 1);
+              }
+            })
+        .when(workspaceActivityDao)
+        .getAll(anyInt(), anyLong());
+
+    when(workspaceRuntimes.getStatus(eq(wsId))).thenReturn(WorkspaceStatus.STOPPED);
+
+    // when
+    checker.cleanup();
+
+    // then
+    verify(workspaceActivityDao)
+        .setStatusChangeTime(eq(wsId), eq(WorkspaceStatus.STOPPED), eq(clock.millis()));
+  }
+

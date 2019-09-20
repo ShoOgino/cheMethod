@@ -1,0 +1,23 @@
+  /**
+   * Makes sure that any activity records are rectified if they do not reflect the true state of the
+   * workspace anymore.
+   *
+   * @throws ServerException or error
+   */
+  private void reconcileActivityStatuses() throws ServerException {
+    for (WorkspaceActivity a : Pages.iterateLazily(activityDao::getAll, 200)) {
+      WorkspaceStatus status = workspaceRuntimes.getStatus(a.getWorkspaceId());
+      if (a.getStatus() != status) {
+        if (LOG.isWarnEnabled()) {
+          LOG.warn(
+              "Activity record for workspace {} was registering {} status while the workspace was {} in reality."
+                  + " Rectifying the activity record to reflect the true state of the workspace.",
+              a.getWorkspaceId(),
+              a.getStatus(),
+              status);
+        }
+        activityDao.setStatusChangeTime(a.getWorkspaceId(), status, clock.millis());
+      }
+    }
+  }
+
