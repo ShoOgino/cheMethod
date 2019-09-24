@@ -1,0 +1,32 @@
+  @Test
+  public void shouldProvisionMachinesMapWithComponentAttributePreSet() throws Exception {
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, MachineConfigImpl>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+    // given
+    String yamlRecipeContent = getResource("devfile/petclinic.yaml");
+    List<HasMetadata> k8sList = toK8SList(yamlRecipeContent).getItems();
+    doReturn(k8sList).when(k8sRecipeParser).parse(anyString());
+    ComponentImpl component = new ComponentImpl();
+    component.setType(KUBERNETES_COMPONENT_TYPE);
+    component.setReference(REFERENCE_FILENAME);
+    component.setAlias(COMPONENT_NAME);
+    component.setMountSources(true);
+
+    // when
+    applier.apply(workspaceConfig, component, s -> yamlRecipeContent);
+
+    // then
+    verify(k8sEnvProvisioner).provision(any(), any(), any(), mapCaptor.capture());
+    Map<String, MachineConfigImpl> machines = mapCaptor.getValue();
+    assertTrue(
+        machines
+            .values()
+            .stream()
+            .allMatch(
+                config ->
+                    config
+                        .getAttributes()
+                        .get(DEVFILE_COMPONENT_ALIAS_ATTRIBUTE)
+                        .equals(component.getAlias())));
+  }
+
