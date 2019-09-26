@@ -11,7 +11,7 @@
       PodData pod,
       CheContainer container,
       ChePlugin chePlugin,
-      KubernetesEnvironment kubernetesEnvironment,
+      KubernetesEnvironment k8sEnv,
       Collection<CommandImpl> sidecarRelatedCommands,
       RuntimeIdentity runtimeIdentity)
       throws InfrastructureException {
@@ -21,6 +21,7 @@
     List<ChePluginEndpoint> containerEndpoints = k8sContainerResolver.getEndpoints();
 
     Container k8sContainer = k8sContainerResolver.resolve();
+    chePluginsVolumeApplier.applyVolumes(pod, k8sContainer, container.getVolumes(), k8sEnv);
 
     String machineName = k8sContainer.getName();
     Names.putMachineName(pod.getMetadata(), k8sContainer.getName(), machineName);
@@ -32,7 +33,7 @@
             .setContainer(k8sContainer)
             .setContainerEndpoints(containerEndpoints)
             .setDefaultSidecarMemorySizeAttribute(defaultSidecarMemoryLimitBytes)
-            .setAttributes(kubernetesEnvironment.getAttributes())
+            .setAttributes(k8sEnv.getAttributes())
             .setProjectsRootPathEnvVar(projectsRootEnvVariableProvider.get(runtimeIdentity))
             .setPluginPublisher(chePlugin.getPublisher())
             .setPluginName(chePlugin.getName())
@@ -42,7 +43,7 @@
     InternalMachineConfig machineConfig = machineResolver.resolve();
     machineConfig.getAttributes().put(CONTAINER_SOURCE_ATTRIBUTE, TOOL_CONTAINER_SOURCE);
     machineConfig.getAttributes().put(PLUGIN_MACHINE_ATTRIBUTE, chePlugin.getId());
-    kubernetesEnvironment.getMachines().put(machineName, machineConfig);
+    k8sEnv.getMachines().put(machineName, machineConfig);
 
     sidecarRelatedCommands.forEach(
         c ->
@@ -55,10 +56,10 @@
         .getCommands()
         .stream()
         .map(c -> asCommand(machineName, c))
-        .forEach(c -> kubernetesEnvironment.getCommands().add(c));
+        .forEach(c -> k8sEnv.getCommands().add(c));
 
     SidecarServicesProvisioner sidecarServicesProvisioner =
         new SidecarServicesProvisioner(containerEndpoints, pod.getMetadata().getName());
-    sidecarServicesProvisioner.provision(kubernetesEnvironment);
+    sidecarServicesProvisioner.provision(k8sEnv);
   }
 

@@ -8,13 +8,13 @@
       return;
     }
 
-    KubernetesEnvironment kubernetesEnvironment = (KubernetesEnvironment) internalEnvironment;
+    KubernetesEnvironment k8sEnv = (KubernetesEnvironment) internalEnvironment;
 
-    Map<String, PodData> pods = kubernetesEnvironment.getPodsData();
+    Map<String, PodData> pods = k8sEnv.getPodsData();
     switch (pods.size()) {
       case 0:
-        addToolingPod(kubernetesEnvironment);
-        pods = kubernetesEnvironment.getPodsData();
+        addToolingPod(k8sEnv);
+        pods = k8sEnv.getPodsData();
         break;
       case 1:
         break;
@@ -24,31 +24,27 @@
     }
     PodData pod = pods.values().iterator().next();
 
-    CommandsResolver commandsResolver = new CommandsResolver(kubernetesEnvironment);
+    CommandsResolver commandsResolver = new CommandsResolver(k8sEnv);
     for (ChePlugin chePlugin : chePlugins) {
       for (CheContainer container : chePlugin.getInitContainers()) {
-        pod.getSpec().getInitContainers().add(toK8sContainer(container));
+        Container k8sInitContainer = toK8sContainer(container);
+        pod.getSpec().getInitContainers().add(k8sInitContainer);
+        chePluginsVolumeApplier.applyVolumes(pod, k8sInitContainer, container.getVolumes(), k8sEnv);
       }
 
       Collection<CommandImpl> pluginRelatedCommands = commandsResolver.resolve(chePlugin);
 
       for (CheContainer container : chePlugin.getContainers()) {
-        addSidecar(
-            pod,
-            container,
-            chePlugin,
-            kubernetesEnvironment,
-            pluginRelatedCommands,
-            runtimeIdentity);
+        addSidecar(pod, container, chePlugin, k8sEnv, pluginRelatedCommands, runtimeIdentity);
       }
     }
 
-    chePlugins.forEach(chePlugin -> populateWorkspaceEnvVars(chePlugin, kubernetesEnvironment));
+    chePlugins.forEach(chePlugin -> populateWorkspaceEnvVars(chePlugin, k8sEnv));
 
     if (isAuthEnabled) {
       // enable per-workspace security with JWT proxy for sidecar based workspaces
       // because it is the only workspace security implementation supported for now
-      kubernetesEnvironment.getAttributes().putIfAbsent(SECURE_EXPOSER_IMPL_PROPERTY, "jwtproxy");
+      k8sEnv.getAttributes().putIfAbsent(SECURE_EXPOSER_IMPL_PROPERTY, "jwtproxy");
     }
   }
 

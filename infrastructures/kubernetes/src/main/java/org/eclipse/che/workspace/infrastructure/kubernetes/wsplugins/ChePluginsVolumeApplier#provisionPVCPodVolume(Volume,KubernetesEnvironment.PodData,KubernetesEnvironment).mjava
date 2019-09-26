@@ -1,0 +1,30 @@
+  private io.fabric8.kubernetes.api.model.Volume provisionPVCPodVolume(
+      Volume volume, KubernetesEnvironment.PodData pod, KubernetesEnvironment k8sEnv) {
+    String pvcName = volume.getName();
+
+    if (!k8sEnv.getPersistentVolumeClaims().containsKey(pvcName)) {
+      final PersistentVolumeClaim pvc =
+          newPVC(pvcName, pvcAccessMode, pvcQuantity, pvcStorageClassName);
+      k8sEnv.getPersistentVolumeClaims().put(pvcName, pvc);
+    }
+
+    PodSpec podSpec = pod.getSpec();
+    Optional<io.fabric8.kubernetes.api.model.Volume> volumeOpt =
+        podSpec
+            .getVolumes()
+            .stream()
+            .filter(
+                vm ->
+                    vm.getPersistentVolumeClaim() != null
+                        && pvcName.equals(vm.getPersistentVolumeClaim().getClaimName()))
+            .findAny();
+    io.fabric8.kubernetes.api.model.Volume podVolume;
+    if (volumeOpt.isPresent()) {
+      podVolume = volumeOpt.get();
+    } else {
+      podVolume = newVolume(pvcName, pvcName);
+      podSpec.getVolumes().add(podVolume);
+    }
+    return podVolume;
+  }
+
