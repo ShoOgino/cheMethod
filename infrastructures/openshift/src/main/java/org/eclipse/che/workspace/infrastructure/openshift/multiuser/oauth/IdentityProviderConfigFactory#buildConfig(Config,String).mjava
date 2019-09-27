@@ -1,63 +1,53 @@
   /**
-   * Builds the Openshift {@link Config} object based on a default {@link Config} object and an
+   * Builds the OpenShift {@link Config} object based on a default {@link Config} object and an
    * optional workspace Id.
    */
   public Config buildConfig(Config defaultConfig, @Nullable String workspaceId)
       throws InfrastructureException {
     Subject subject = EnvironmentContext.getCurrent().getSubject();
 
-    String workspaceOwnerId = null;
-    if (workspaceId != null) {
-      @SuppressWarnings("rawtypes")
-      Optional<RuntimeContext> context =
-          workspaceRuntimeProvider.get().getRuntimeContext(workspaceId);
-      workspaceOwnerId = context.map(c -> c.getIdentity().getOwnerId()).orElse(null);
+    if (oauthIdentityProvider == null) {
+      LOG.debug("OAuth Provider is not configured, default config is used.");
+      return defaultConfig;
     }
 
-    if (oauthIdentityProvider != null
-        && subject != Subject.ANONYMOUS
-        && (workspaceOwnerId == null || subject.getUserId().equals(workspaceOwnerId))) {
-      try {
-        KeycloakTokenResponse keycloakTokenInfos =
-            keycloakServiceClient.getIdentityProviderToken(oauthIdentityProvider);
-        if ("user:full".equals(keycloakTokenInfos.getScope())) {
-          return new OpenShiftConfigBuilder(OpenShiftConfig.wrap(defaultConfig))
-              .withOauthToken(keycloakTokenInfos.getAccessToken())
-              .build();
-        } else {
-          throw new InfrastructureException(
-              "Cannot retrieve user Openshift token: '"
-                  + oauthIdentityProvider
-                  + "' identity provider is not granted full rights: "
-                  + oauthIdentityProvider);
-        }
-      } catch (UnauthorizedException e) {
-        LOG.error("cannot retrieve User Openshift token from the identity provider", e);
-
-        throw new InfrastructureException(messageToLinkAccount);
-      } catch (BadRequestException e) {
-        LOG.error(
-            "cannot retrieve User Openshift token from the '"
-                + oauthIdentityProvider
-                + "' identity provider",
-            e);
-        if (e.getMessage().endsWith("Invalid token.")) {
-          throw new InfrastructureException(
-              "Your session has expired. \nPlease "
-                  + "<a href='javascript:location.reload();' target='_top'>"
-                  + "login"
-                  + "</a> to Che again to get access to your Openshift account");
-        }
-        throw new InfrastructureException(e.getMessage(), e);
-      } catch (Exception e) {
-        LOG.error(
-            "cannot retrieve User Openshift token from the  '"
-                + oauthIdentityProvider
-                + "' identity provider",
-            e);
-        throw new InfrastructureException(e.getMessage(), e);
-      }
+    if (subject == Subject.ANONYMOUS) {
+      LOG.debug(
+          "OAuth Provider is configured but default subject is anonymous, default config is used.");
+      return defaultConfig;
     }
-    return defaultConfig;
+
+    if (workspaceId == null) {
+      LOG.debug(
+          "OAuth Provider is configured and this request is not related to any workspace. OAuth token will be retrieved.");
+      return personalizeConfig(defaultConfig);
+    }
+
+    Optional<RuntimeContext> context =
+        workspaceRuntimeProvider.get().getRuntimeContext(workspaceId);
+    if (!context.isPresent()) {
+      // there is no cached info for this workspace in workspace API.
+      // it means that it's not started yet and it's initial call for preparing context
+      LOG.debug(
+          "There is no runtime context for the specified workspace '%s'. It's the first workspace "
+              + "related call, so context is personalized with OAuth token.");
+      return personalizeConfig(defaultConfig);
+    }
+    String workspaceOwnerId = context.map(c -> c.getIdentity().getOwnerId()).orElse(null);
+
+    boolean isRuntimeOwner = subject.getUserId().equals(workspaceOwnerId);
+
+    if (!isRuntimeOwner) {
+      LOG.debug(
+          "OAuth Provider is configured, but current subject is not runtime owner, default config is used."
+              + "Subject user id: '{}'. Runtime owner id: '{}'",
+          subject.getUserId(),
+          workspaceOwnerId);
+      return defaultConfig;
+    }
+
+    LOG.debug(
+        "OAuth Provider is configured and current subject is runtime owner. OAuth token will be retrieved.");
+    return personalizeConfig(defaultConfig);
   }
 
