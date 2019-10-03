@@ -1,65 +1,16 @@
   public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
       throws InfrastructureException {
     LOG.debug("Provisioning PVC strategy for workspace '{}'", identity.getWorkspaceId());
+
+    Map<String, PersistentVolumeClaim> userDefinedPVCs =
+        new HashMap<>(k8sEnv.getPersistentVolumeClaims());
+
     k8sEnv.getPersistentVolumeClaims().clear();
-    for (PodData pod : k8sEnv.getPodsData().values()) {
-      PodSpec podSpec = pod.getSpec();
+    pvcProvisioner.provision(k8sEnv, userDefinedPVCs);
+    pvcProvisioner.convertCheVolumes(k8sEnv, identity.getWorkspaceId());
+    subPathPrefixes.prefixVolumeMountsSubpaths(k8sEnv, identity.getWorkspaceId());
 
-      // To ensure same volumes get mounted correctly in different containers, we need to track
-      // which volumes have been "created"
-      Map<String, String> cheVolumeNameToPodVolumeName = new HashMap<>();
-
-      podSpec
-          .getVolumes()
-          .stream()
-          .filter(v -> v.getPersistentVolumeClaim() != null)
-          .forEach(
-              v -> {
-                String claimName = v.getPersistentVolumeClaim().getClaimName();
-                cheVolumeNameToPodVolumeName.put(claimName, v.getName());
-                v.setPersistentVolumeClaim(null);
-                v.setEmptyDir(new EmptyDirVolumeSource());
-              });
-
-      List<Container> containers = new ArrayList<>();
-      containers.addAll(podSpec.getContainers());
-      containers.addAll(podSpec.getInitContainers());
-      for (Container container : containers) {
-        String machineName = Names.machineName(pod, container);
-        InternalMachineConfig machineConfig = k8sEnv.getMachines().get(machineName);
-        if (machineConfig == null) {
-          return;
-        }
-        Map<String, Volume> volumes = machineConfig.getVolumes();
-        if (volumes.isEmpty()) {
-          continue;
-        }
-
-        for (Entry<String, Volume> volumeEntry : volumes.entrySet()) {
-          final String volumePath = volumeEntry.getValue().getPath();
-          final String cheVolumeName =
-              LOGS_VOLUME_NAME.equals(volumeEntry.getKey())
-                  ? volumeEntry.getKey() + '-' + pod.getMetadata().getName()
-                  : volumeEntry.getKey();
-
-          final String uniqueVolumeName;
-          if (cheVolumeNameToPodVolumeName.containsKey(cheVolumeName)) {
-            uniqueVolumeName = cheVolumeNameToPodVolumeName.get(cheVolumeName);
-          } else {
-            uniqueVolumeName = Names.generateName(EPHEMERAL_VOLUME_NAME_PREFIX);
-            cheVolumeNameToPodVolumeName.put(cheVolumeName, uniqueVolumeName);
-          }
-          // binds volume to pod and container
-          container
-              .getVolumeMounts()
-              .add(
-                  newVolumeMount(
-                      uniqueVolumeName,
-                      volumePath,
-                      getSubPath(identity.getWorkspaceId(), cheVolumeName, machineName)));
-          addEmptyDirVolumeIfAbsent(pod.getSpec(), uniqueVolumeName);
-        }
-      }
-    }
+    replacePVCsWithEmptyDir(k8sEnv);
+    k8sEnv.getPersistentVolumeClaims().clear();
   }
 
