@@ -1,9 +1,13 @@
+  @Beta
   @Path("/devfile")
   @POST
   @Consumes({APPLICATION_JSON, "text/yaml", "text/x-yaml"})
   @Produces(APPLICATION_JSON)
   @ApiOperation(
       value = "Creates a new workspace based on the Devfile.",
+      notes =
+          "This method is in beta phase. It's strongly recommended to use `POST /devfile` instead"
+              + " to get a workspace from Devfile. Workspaces created with this method are not stable yet.",
       consumes = "application/json, text/yaml, text/x-yaml",
       produces = APPLICATION_JSON,
       nickname = "createFromDevfile",
@@ -20,8 +24,7 @@
     @ApiResponse(code = 500, message = "Internal server error occurred")
   })
   public Response create(
-      @ApiParam(value = "The devfile of the workspace to create", required = true)
-          DevfileDto devfile,
+      @ApiParam(value = "The devfile of the workspace to create", required = true) String devfile,
       @ApiParam(
               value =
                   "Workspace attribute defined in 'attrName:attrValue' format. "
@@ -41,15 +44,29 @@
       throws ConflictException, BadRequestException, ForbiddenException, NotFoundException,
           ServerException {
     requiredNotNull(devfile, "Devfile");
+
+    DevfileImpl devfileModel;
+    try {
+      if (APPLICATION_JSON_TYPE.isCompatible(contentType)) {
+        devfileModel = devfileManager.parseJson(devfile);
+      } else {
+        devfileModel = devfileManager.parseYaml(devfile);
+      }
+    } catch (DevfileException e) {
+      throw new BadRequestException(e.getMessage());
+    }
+
     final Map<String, String> attributes = parseAttrs(attrsList);
+
     if (namespace == null) {
       namespace = EnvironmentContext.getCurrent().getSubject().getUserName();
     }
+
     WorkspaceImpl workspace;
     try {
       workspace =
           workspaceManager.createWorkspace(
-              devfile,
+              devfileModel,
               namespace,
               attributes,
               // create a new cache for each request so that we don't have to care about lifetime
