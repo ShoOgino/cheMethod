@@ -1,0 +1,43 @@
+  private Config personalizeConfig(Config defaultConfig) throws InfrastructureException {
+    try {
+      KeycloakTokenResponse keycloakTokenInfos =
+          keycloakServiceClient.getIdentityProviderToken(oauthIdentityProvider);
+      if ("user:full".equals(keycloakTokenInfos.getScope())) {
+        return new OpenShiftConfigBuilder(OpenShiftConfig.wrap(defaultConfig))
+            .withOauthToken(keycloakTokenInfos.getAccessToken())
+            .build();
+      } else {
+        throw new InfrastructureException(
+            "Cannot retrieve user OpenShift token: '"
+                + oauthIdentityProvider
+                + "' identity provider is not granted full rights: "
+                + oauthIdentityProvider);
+      }
+    } catch (UnauthorizedException e) {
+      LOG.error("Cannot retrieve User OpenShift token from the identity provider", e);
+
+      throw new InfrastructureException(messageToLinkAccount);
+    } catch (BadRequestException e) {
+      LOG.error(
+          "Cannot retrieve User OpenShift token from the '"
+              + oauthIdentityProvider
+              + "' identity provider",
+          e);
+      if (e.getMessage().endsWith("Invalid token.")) {
+        throw new InfrastructureException(
+            "Your session has expired. \nPlease "
+                + "<a href='javascript:location.reload();' target='_top'>"
+                + "login"
+                + "</a> to Che again to get access to your OpenShift account");
+      }
+      throw new InfrastructureException(e.getMessage(), e);
+    } catch (Exception e) {
+      LOG.error(
+          "Cannot retrieve User OpenShift token from the  '"
+              + oauthIdentityProvider
+              + "' identity provider",
+          e);
+      throw new InfrastructureException(e.getMessage(), e);
+    }
+  }
+
