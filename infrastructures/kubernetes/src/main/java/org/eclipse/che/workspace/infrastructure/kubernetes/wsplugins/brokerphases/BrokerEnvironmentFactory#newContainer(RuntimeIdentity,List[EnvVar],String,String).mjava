@@ -3,9 +3,19 @@
       List<EnvVar> envVars,
       String image,
       @Nullable String brokerVolumeName) {
+    // There's a chance the full image reference may be over the name limit of 63 chars
+    // so we need to remove registry hostname
+    Matcher matcher = IMAGE_PATTERN.matcher(image);
+    String containerName;
+    if (matcher.matches()) {
+      containerName = String.format("%s/%s", matcher.group("org"), matcher.group("image"));
+    } else {
+      containerName = image;
+    }
+    containerName = containerName.toLowerCase().replaceAll("[^\\d\\w-]", "-");
     final ContainerBuilder cb =
         new ContainerBuilder()
-            .withName(image.toLowerCase().replaceAll("[^\\d\\w-]", "-"))
+            .withName(containerName)
             .withImage(image)
             .withArgs(
                 "-push-endpoint",
