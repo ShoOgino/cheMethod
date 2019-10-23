@@ -1,0 +1,46 @@
+  @Test(dataProvider = "creatingNamespaceConditions")
+  public void testNotManagingNamespacesWheneverNotCreatingThem(
+      String legacyProperty,
+      boolean legacyNamespaceExists,
+      String namespaceProperty,
+      Boolean expectedCreating)
+      throws InfrastructureException {
+
+    // it is possible that we are creating namespaces that we are not fully managing, e.g. <user*>
+    // namespaces are created but not fully deleted afterwards. We just clean them.
+    // However, whenever a namespace is NOT being created, we should never claim we're managing the
+    // namespace.
+    // This is what this test asserts.
+
+    // given
+    namespaceFactory =
+        new KubernetesNamespaceFactory(
+            legacyProperty, "", "", namespaceProperty, true, clientFactory, workspaceManager);
+
+    Namespace existingLegacyNamespace = legacyNamespaceExists ? mock(Namespace.class) : null;
+    when(namespaceResource.get()).thenReturn(existingLegacyNamespace);
+
+    // when
+    boolean creating;
+    try {
+      creating = namespaceFactory.isCreatingNamespace("123");
+    } catch (InfrastructureException e) {
+      // if we can't determine whether we're potentially creating a namespace, we shouldn't claim
+      // we're managing it
+      if (expectedCreating != null) {
+        fail("Shouldn't have failed.");
+      }
+      creating = false;
+    }
+    boolean managing = namespaceFactory.isManagingNamespace("123");
+
+    // then
+    if (!creating) {
+      assertFalse(
+          managing,
+          format(
+              "legacyProp=%s, legacyExists=%s, namespaceProp=%s, expectedCreating=%s",
+              legacyProperty, legacyNamespaceExists, namespaceProperty, expectedCreating));
+    }
+  }
+
