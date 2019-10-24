@@ -1,0 +1,32 @@
+  @Test
+  public void shouldProvisionServiceAndRouteWhenNotFound() throws InternalInfrastructureException {
+    final int PORT = 8080;
+    final String SERVER_PORT_NAME = "server-" + PORT;
+
+    CommandImpl command =
+        new CommandImpl("a", "a", "a", new PreviewUrlImpl(PORT, null), Collections.emptyMap());
+
+    OpenShiftEnvironment env =
+        OpenShiftEnvironment.builder()
+            .setCommands(singletonList(new CommandImpl(command)))
+            .setRoutes(new HashMap<>())
+            .setServices(new HashMap<>())
+            .build();
+
+    previewUrlEndpointsProvisioner.expose(env);
+
+    assertEquals(env.getRoutes().size(), 1);
+    assertEquals(env.getServices().size(), 1);
+
+    Service provisionedService = env.getServices().values().iterator().next();
+    ServicePort provisionedServicePort = provisionedService.getSpec().getPorts().get(0);
+    assertEquals(provisionedServicePort.getName(), SERVER_PORT_NAME);
+    assertEquals(provisionedServicePort.getPort().intValue(), PORT);
+
+    Route provisionedRoute = env.getRoutes().values().iterator().next();
+    assertEquals(
+        provisionedRoute.getSpec().getTo().getName(), provisionedService.getMetadata().getName());
+    assertEquals(
+        provisionedRoute.getSpec().getPort().getTargetPort().getStrVal(), SERVER_PORT_NAME);
+  }
+

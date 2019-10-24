@@ -1,0 +1,44 @@
+  @Test
+  public void shouldUpdateCommandWhenServiceAndIngressFound() throws InfrastructureException {
+    final int PORT = 8080;
+    final String SERVICE_PORT_NAME = "service-" + PORT;
+    List<CommandImpl> commands =
+        Collections.singletonList(
+            new CommandImpl("a", "a", "a", new PreviewUrlImpl(PORT, null), Collections.emptyMap()));
+    KubernetesEnvironment env =
+        KubernetesEnvironment.builder().setCommands(new ArrayList<>(commands)).build();
+
+    Mockito.when(mockNamespace.services()).thenReturn(mockServices);
+    Service service = new Service();
+    ObjectMeta metadata = new ObjectMeta();
+    metadata.setName("servicename");
+    service.setMetadata(metadata);
+    ServiceSpec spec = new ServiceSpec();
+    spec.setPorts(
+        Collections.singletonList(
+            new ServicePort(SERVICE_PORT_NAME, null, PORT, "TCP", new IntOrString(PORT))));
+    service.setSpec(spec);
+    Mockito.when(mockServices.get()).thenReturn(Collections.singletonList(service));
+
+    Ingress ingress = new Ingress();
+    IngressSpec ingressSpec = new IngressSpec();
+    IngressRule rule =
+        new IngressRule(
+            "testhost",
+            new HTTPIngressRuleValue(
+                Collections.singletonList(
+                    new HTTPIngressPath(
+                        new IngressBackend("servicename", new IntOrString(SERVICE_PORT_NAME)),
+                        null))));
+    ingressSpec.setRules(Collections.singletonList(rule));
+    ingress.setSpec(ingressSpec);
+    Mockito.when(mockNamespace.ingresses()).thenReturn(mockIngresses);
+    Mockito.when(mockIngresses.get()).thenReturn(Collections.singletonList(ingress));
+
+    previewUrlCommandProvisioner.provision(env, mockNamespace);
+
+    assertTrue(env.getCommands().get(0).getAttributes().containsKey("previewUrl"));
+    assertEquals(env.getCommands().get(0).getAttributes().get("previewUrl"), "testhost");
+    assertTrue(env.getWarnings().isEmpty());
+  }
+

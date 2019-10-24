@@ -1,0 +1,28 @@
+  @Test
+  public void shouldDoNothingWhenCantFindRouteForPreviewUrl() throws InfrastructureException {
+    int port = 8080;
+    List<CommandImpl> commands =
+        Collections.singletonList(
+            new CommandImpl("a", "a", "a", new PreviewUrlImpl(port, null), Collections.emptyMap()));
+    OpenShiftEnvironment env =
+        OpenShiftEnvironment.builder().setCommands(new ArrayList<>(commands)).build();
+
+    Mockito.when(mockProject.services()).thenReturn(mockServices);
+    Service service = new Service();
+    ServiceSpec spec = new ServiceSpec();
+    spec.setPorts(
+        Collections.singletonList(new ServicePort("a", null, port, "TCP", new IntOrString(port))));
+    service.setSpec(spec);
+    Mockito.when(mockServices.get()).thenReturn(Collections.singletonList(service));
+
+    Mockito.when(mockProject.routes()).thenReturn(mockRoutes);
+    Mockito.when(mockRoutes.get()).thenReturn(Collections.emptyList());
+
+    previewUrlCommandProvisioner.provision(env, mockProject);
+
+    assertTrue(commands.containsAll(env.getCommands()));
+    assertTrue(env.getCommands().containsAll(commands));
+    assertEquals(
+        env.getWarnings().get(0).getCode(), Warnings.NOT_ABLE_TO_PROVISION_OBJECTS_FOR_PREVIEW_URL);
+  }
+

@@ -1,0 +1,54 @@
+  /**
+   * Go through all commands, find matching service and exposed host. Then construct full preview
+   * url from this data and set it as Command's parameter under `previewUrl` key.
+   *
+   * @param env environment to get commands
+   * @param namespace current kubernetes namespace where we're looking for services and ingresses
+   */
+  private void injectsPreviewUrlToCommands(E env, KubernetesNamespace namespace)
+      throws InfrastructureException {
+    if (env.getCommands() == null) {
+      return;
+    }
+
+    List<T> exposureObjects = loadExposureObjects(namespace);
+    List<Service> services = namespace.services().get();
+    for (CommandImpl command :
+        env.getCommands()
+            .stream()
+            .filter(c -> c.getPreviewUrl() != null)
+            .collect(Collectors.toList())) {
+      Optional<Service> foundService =
+          Services.findServiceWithPort(services, command.getPreviewUrl().getPort());
+      if (!foundService.isPresent()) {
+        String message =
+            String.format(
+                "unable to find service for port '%s' for command '%s'",
+                command.getPreviewUrl().getPort(), command.getName());
+        LOG.warn(message);
+        env.addWarning(
+            new WarningImpl(
+                NOT_ABLE_TO_PROVISION_OBJECTS_FOR_PREVIEW_URL,
+                String.format(NOT_ABLE_TO_PROVISION_OBJECTS_FOR_PREVIEW_URL_MESSAGE, message)));
+        continue;
+      }
+
+      Optional<String> foundHost =
+          findHostForServicePort(
+              exposureObjects, foundService.get(), command.getPreviewUrl().getPort());
+      if (foundHost.isPresent()) {
+        command.getAttributes().put(PREVIEW_URL_ATTRIBUTE, foundHost.get());
+      } else {
+        String message =
+            String.format(
+                "unable to find ingress for service '%s' and port '%s'",
+                foundService.get(), command.getPreviewUrl().getPort());
+        LOG.warn(message);
+        env.addWarning(
+            new WarningImpl(
+                NOT_ABLE_TO_PROVISION_OBJECTS_FOR_PREVIEW_URL,
+                String.format(NOT_ABLE_TO_PROVISION_OBJECTS_FOR_PREVIEW_URL_MESSAGE, message)));
+      }
+    }
+  }
+

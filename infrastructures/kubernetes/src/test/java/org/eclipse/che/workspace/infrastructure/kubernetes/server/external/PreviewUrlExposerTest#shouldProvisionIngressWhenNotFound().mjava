@@ -1,0 +1,41 @@
+  @Test
+  public void shouldProvisionIngressWhenNotFound() throws InternalInfrastructureException {
+    Mockito.when(
+            externalServiceExposureStrategy.getExternalPath(Mockito.anyString(), Mockito.any()))
+        .thenReturn("some-server-path");
+
+    final int PORT = 8080;
+    final String SERVER_PORT_NAME = "server-" + PORT;
+    final String SERVICE_NAME = "servicename";
+
+    CommandImpl command =
+        new CommandImpl("a", "a", "a", new PreviewUrlImpl(PORT, null), Collections.emptyMap());
+
+    Service service = new Service();
+    ObjectMeta serviceMeta = new ObjectMeta();
+    serviceMeta.setName(SERVICE_NAME);
+    service.setMetadata(serviceMeta);
+    ServiceSpec serviceSpec = new ServiceSpec();
+    serviceSpec.setPorts(
+        singletonList(new ServicePort(SERVER_PORT_NAME, null, PORT, "TCP", new IntOrString(PORT))));
+    service.setSpec(serviceSpec);
+
+    Map<String, Service> services = new HashMap<>();
+    services.put(SERVICE_NAME, service);
+
+    KubernetesEnvironment env =
+        KubernetesEnvironment.builder()
+            .setCommands(singletonList(new CommandImpl(command)))
+            .setServices(services)
+            .setIngresses(new HashMap<>())
+            .build();
+
+    previewUrlExposer.expose(env);
+    assertEquals(env.getIngresses().size(), 1);
+    Ingress provisionedIngress = env.getIngresses().values().iterator().next();
+    IngressBackend provisionedIngressBackend =
+        provisionedIngress.getSpec().getRules().get(0).getHttp().getPaths().get(0).getBackend();
+    assertEquals(provisionedIngressBackend.getServicePort().getStrVal(), SERVER_PORT_NAME);
+    assertEquals(provisionedIngressBackend.getServiceName(), SERVICE_NAME);
+  }
+

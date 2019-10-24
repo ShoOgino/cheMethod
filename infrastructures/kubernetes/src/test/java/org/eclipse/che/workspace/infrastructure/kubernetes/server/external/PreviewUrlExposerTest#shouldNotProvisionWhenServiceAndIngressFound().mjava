@@ -1,0 +1,49 @@
+  @Test
+  public void shouldNotProvisionWhenServiceAndIngressFound()
+      throws InternalInfrastructureException {
+    final int PORT = 8080;
+    final String SERVER_PORT_NAME = "server-" + PORT;
+
+    CommandImpl command =
+        new CommandImpl("a", "a", "a", new PreviewUrlImpl(PORT, null), Collections.emptyMap());
+
+    Service service = new Service();
+    ObjectMeta serviceMeta = new ObjectMeta();
+    serviceMeta.setName("servicename");
+    service.setMetadata(serviceMeta);
+    ServiceSpec serviceSpec = new ServiceSpec();
+    serviceSpec.setPorts(
+        singletonList(new ServicePort(SERVER_PORT_NAME, null, PORT, "TCP", new IntOrString(PORT))));
+    service.setSpec(serviceSpec);
+
+    Ingress ingress = new Ingress();
+    ObjectMeta ingressMeta = new ObjectMeta();
+    ingressMeta.setName("ingressname");
+    ingress.setMetadata(ingressMeta);
+    IngressSpec ingressSpec = new IngressSpec();
+    IngressRule ingressRule = new IngressRule();
+    ingressRule.setHost("ingresshost");
+    IngressBackend ingressBackend =
+        new IngressBackend("servicename", new IntOrString(SERVER_PORT_NAME));
+    ingressRule.setHttp(
+        new HTTPIngressRuleValue(singletonList(new HTTPIngressPath(ingressBackend, null))));
+    ingressSpec.setRules(singletonList(ingressRule));
+    ingress.setSpec(ingressSpec);
+
+    Map<String, Service> services = new HashMap<>();
+    services.put("servicename", service);
+    Map<String, Ingress> ingresses = new HashMap<>();
+    ingresses.put("ingressname", ingress);
+
+    KubernetesEnvironment env =
+        KubernetesEnvironment.builder()
+            .setCommands(singletonList(new CommandImpl(command)))
+            .setServices(services)
+            .setIngresses(ingresses)
+            .build();
+
+    assertEquals(env.getIngresses().size(), 1);
+    previewUrlExposer.expose(env);
+    assertEquals(env.getIngresses().size(), 1);
+  }
+

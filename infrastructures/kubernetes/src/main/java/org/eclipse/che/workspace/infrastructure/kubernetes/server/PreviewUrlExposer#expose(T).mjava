@@ -1,0 +1,48 @@
+  public void expose(T env) throws InternalInfrastructureException {
+    List<CommandImpl> previewUrlCommands =
+        env.getCommands()
+            .stream()
+            .filter(c -> c.getPreviewUrl() != null)
+            .collect(Collectors.toList());
+
+    List<ServicePort> portsToProvision = new ArrayList<>();
+    for (CommandImpl command : previewUrlCommands) {
+      int port = command.getPreviewUrl().getPort();
+      Optional<Service> foundService =
+          Services.findServiceWithPort(env.getServices().values(), port);
+      if (foundService.isPresent()) {
+        if (!hasMatchingEndpoint(env, foundService.get(), port)) {
+          ServicePort servicePort =
+              Services.findPort(foundService.get(), port)
+                  .orElseThrow(
+                      () ->
+                          new InternalInfrastructureException(
+                              String.format(
+                                  "Port '%d' in service '%s' not found. This is not expected, please report a bug!",
+                                  port, foundService.get().getMetadata().getName())));
+          externalServerExposer.expose(
+              env,
+              null,
+              foundService.get().getMetadata().getName(),
+              servicePort,
+              Collections.emptyMap());
+        }
+      } else {
+        portsToProvision.add(createServicePort(port));
+      }
+    }
+
+    if (!portsToProvision.isEmpty()) {
+      Service service =
+          new ServerServiceBuilder()
+              .withName(generate(SERVER_PREFIX, SERVER_UNIQUE_PART_SIZE) + "-previewUrl")
+              .withPorts(portsToProvision)
+              .build();
+      env.getServices().put(service.getMetadata().getName(), service);
+      portsToProvision.forEach(
+          port ->
+              externalServerExposer.expose(
+                  env, null, service.getMetadata().getName(), port, Collections.emptyMap()));
+    }
+  }
+

@@ -1,0 +1,27 @@
+  /**
+   * In given {@code ingresses} finds {@link IngressRule} for given {@code service} and {@code
+   * port}.
+   *
+   * @return found {@link IngressRule} or {@link Optional#empty()}
+   */
+  public static Optional<IngressRule> findIngressRuleForServicePort(
+      Collection<Ingress> ingresses, Service service, int port) {
+    Optional<ServicePort> foundPort = Services.findPort(service, port);
+    if (!foundPort.isPresent()) {
+      return Optional.empty();
+    }
+
+    for (Ingress ingress : ingresses) {
+      for (IngressRule rule : ingress.getSpec().getRules()) {
+        for (HTTPIngressPath path : rule.getHttp().getPaths()) {
+          IngressBackend backend = path.getBackend();
+          if (backend.getServiceName().equals(service.getMetadata().getName())
+              && matchesServicePort(backend.getServicePort(), foundPort.get())) {
+            return Optional.of(rule);
+          }
+        }
+      }
+    }
+    return Optional.empty();
+  }
+

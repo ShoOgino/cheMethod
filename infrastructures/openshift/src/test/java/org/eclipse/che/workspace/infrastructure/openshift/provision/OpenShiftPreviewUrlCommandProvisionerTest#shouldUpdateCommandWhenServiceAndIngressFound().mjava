@@ -1,0 +1,38 @@
+  @Test
+  public void shouldUpdateCommandWhenServiceAndIngressFound() throws InfrastructureException {
+    int port = 8080;
+    List<CommandImpl> commands =
+        Collections.singletonList(
+            new CommandImpl("a", "a", "a", new PreviewUrlImpl(port, null), Collections.emptyMap()));
+    OpenShiftEnvironment env =
+        OpenShiftEnvironment.builder().setCommands(new ArrayList<>(commands)).build();
+
+    Mockito.when(mockProject.services()).thenReturn(mockServices);
+    Service service = new Service();
+    ObjectMeta metadata = new ObjectMeta();
+    metadata.setName("servicename");
+    service.setMetadata(metadata);
+    ServiceSpec spec = new ServiceSpec();
+    spec.setPorts(
+        Collections.singletonList(
+            new ServicePort("8080", null, port, "TCP", new IntOrString(port))));
+    service.setSpec(spec);
+    Mockito.when(mockServices.get()).thenReturn(Collections.singletonList(service));
+
+    Route route = new Route();
+    RouteSpec routeSpec = new RouteSpec();
+    routeSpec.setPort(new RoutePort(new IntOrString("8080")));
+    routeSpec.setTo(new RouteTargetReference("a", "servicename", 1));
+    routeSpec.setHost("testhost");
+    route.setSpec(routeSpec);
+
+    Mockito.when(mockProject.routes()).thenReturn(mockRoutes);
+    Mockito.when(mockRoutes.get()).thenReturn(Collections.singletonList(route));
+
+    previewUrlCommandProvisioner.provision(env, mockProject);
+
+    assertTrue(env.getCommands().get(0).getAttributes().containsKey("previewUrl"));
+    assertEquals(env.getCommands().get(0).getAttributes().get("previewUrl"), "testhost");
+    assertTrue(env.getWarnings().isEmpty());
+  }
+

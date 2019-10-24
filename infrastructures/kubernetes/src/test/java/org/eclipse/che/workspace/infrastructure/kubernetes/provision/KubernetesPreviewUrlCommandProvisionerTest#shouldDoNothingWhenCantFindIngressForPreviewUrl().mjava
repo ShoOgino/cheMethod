@@ -1,0 +1,28 @@
+  @Test
+  public void shouldDoNothingWhenCantFindIngressForPreviewUrl() throws InfrastructureException {
+    int port = 8080;
+    List<CommandImpl> commands =
+        Collections.singletonList(
+            new CommandImpl("a", "a", "a", new PreviewUrlImpl(port, null), Collections.emptyMap()));
+    KubernetesEnvironment env =
+        KubernetesEnvironment.builder().setCommands(new ArrayList<>(commands)).build();
+
+    Mockito.when(mockNamespace.services()).thenReturn(mockServices);
+    Service service = new Service();
+    ServiceSpec spec = new ServiceSpec();
+    spec.setPorts(
+        Collections.singletonList(new ServicePort("a", null, port, "TCP", new IntOrString(port))));
+    service.setSpec(spec);
+    Mockito.when(mockServices.get()).thenReturn(Collections.singletonList(service));
+
+    Mockito.when(mockNamespace.ingresses()).thenReturn(mockIngresses);
+    Mockito.when(mockIngresses.get()).thenReturn(Collections.emptyList());
+
+    previewUrlCommandProvisioner.provision(env, mockNamespace);
+
+    assertTrue(commands.containsAll(env.getCommands()));
+    assertTrue(env.getCommands().containsAll(commands));
+    assertEquals(
+        env.getWarnings().get(0).getCode(), Warnings.NOT_ABLE_TO_PROVISION_OBJECTS_FOR_PREVIEW_URL);
+  }
+

@@ -1,0 +1,43 @@
+  /**
+   * Takes commands from given {@code workspace}. For all commands that have defined previewUrl,
+   * creates variable name in defined format and final preview url link. It updates the command so
+   * it's `previewUrl` attribute will contain variable in proper format. Method then returns map of
+   * all preview url links with these variables as keys:
+   *
+   * <pre>
+   *   links:
+   *     "previewURl/run_123": http://your.domain
+   *   command:
+   *     attributes:
+   *       previewUrl: '${previewUrl/run_123}/some/path'
+   * </pre>
+   *
+   * @return map of all <commandPreviewUrlVariable, previewUrlFullLink>
+   */
+  Map<String, String> genLinksMapAndUpdateCommands(WorkspaceImpl workspace, UriBuilder uriBuilder) {
+    if (workspace == null
+        || workspace.getRuntime() == null
+        || workspace.getRuntime().getCommands() == null
+        || uriBuilder == null) {
+      return Collections.emptyMap();
+    }
+
+    Map<String, String> links = new HashMap<>();
+    for (Command command : workspace.getRuntime().getCommands()) {
+      Map<String, String> commandAttributes = command.getAttributes();
+
+      if (command.getPreviewUrl() != null
+          && commandAttributes != null
+          && commandAttributes.containsKey(PREVIEW_URL_ATTRIBUTE)) {
+        String previewUrlLinkValue = createPreviewUrlLinkValue(uriBuilder, command);
+        String previewUrlLinkKey = createPreviewUrlLinkKey(command);
+        links.put(previewUrlLinkKey, previewUrlLinkValue);
+
+        commandAttributes.replace(
+            PREVIEW_URL_ATTRIBUTE,
+            formatAttributeValue(previewUrlLinkKey, command.getPreviewUrl().getPath()));
+      }
+    }
+    return links;
+  }
+
