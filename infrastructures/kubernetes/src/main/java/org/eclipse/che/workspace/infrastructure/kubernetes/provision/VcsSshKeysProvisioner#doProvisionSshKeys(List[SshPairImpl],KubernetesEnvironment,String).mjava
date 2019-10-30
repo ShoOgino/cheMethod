@@ -1,0 +1,30 @@
+  private void doProvisionSshKeys(
+      List<SshPairImpl> sshPairs, KubernetesEnvironment k8sEnv, String wsId) {
+
+    Map<String, String> data =
+        sshPairs
+            .stream()
+            .filter(sshPair -> !isNullOrEmpty(sshPair.getPrivateKey()))
+            .collect(
+                toMap(
+                    SshPairImpl::getName,
+                    sshPair ->
+                        Base64.getEncoder().encodeToString(sshPair.getPrivateKey().getBytes())));
+
+    Secret secret =
+        new SecretBuilder()
+            .addToData(data)
+            .withType(SSH_SECRET_TYPE)
+            .withNewMetadata()
+            .withName(wsId + SSH_SECRET_NAME_SUFFIX)
+            .endMetadata()
+            .build();
+
+    k8sEnv.getSecrets().put(secret.getMetadata().getName(), secret);
+
+    k8sEnv
+        .getPodsData()
+        .values()
+        .forEach(p -> mountSshKeySecret(secret.getMetadata().getName(), p.getSpec()));
+  }
+
