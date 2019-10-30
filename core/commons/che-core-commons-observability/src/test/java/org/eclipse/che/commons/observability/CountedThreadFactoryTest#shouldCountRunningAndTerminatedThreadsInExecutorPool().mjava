@@ -1,0 +1,75 @@
+  @Test
+  public void shouldCountRunningAndTerminatedThreadsInExecutorPool()
+      throws InterruptedException, TimeoutException, ExecutionException {
+    // given
+    JoinableThreadFactory factory =
+        new JoinableThreadFactory(
+            new CountedThreadFactory(
+                Executors.defaultThreadFactory(),
+                registry,
+                CountedThreadFactoryTest.class.getName(),
+                userTags));
+    ExecutorService executor = Executors.newCachedThreadPool(factory);
+
+    CountDownLatch runnableTaskStart = new CountDownLatch(10);
+    CountDownLatch runnableTaskComplete = new CountDownLatch(1);
+
+    Runnable task =
+        () -> {
+          runnableTaskStart.countDown();
+          try {
+            Assert.assertTrue(runnableTaskComplete.await(10, TimeUnit.SECONDS));
+          } catch (InterruptedException e) {
+            throw new IllegalStateException("runnable interrupted before completion");
+          }
+        };
+    List<Future> futures = new ArrayList<>(10);
+    for (int i = 0; i < 10; i++) {
+      futures.add(executor.submit(task));
+    }
+    runnableTaskStart.await();
+    assertEquals(
+        registry
+            .get("thread.factory.running")
+            .tags(userTags)
+            .tag("name", CountedThreadFactoryTest.class.getName())
+            .gauge()
+            .value(),
+        10.0);
+    assertEquals(
+        registry
+            .get("thread.factory.terminated")
+            .tags(userTags)
+            .tag("name", CountedThreadFactoryTest.class.getName())
+            .counter()
+            .count(),
+        0.0);
+
+    runnableTaskComplete.countDown();
+
+    for (Future future : futures) {
+      future.get(1, TimeUnit.MINUTES);
+    }
+    executor.shutdownNow();
+    Assert.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+    factory.joinAll();
+    assertEquals(
+        registry
+            .get("thread.factory.running")
+            .tags(userTags)
+            .tag("name", CountedThreadFactoryTest.class.getName())
+            .gauge()
+            .value(),
+        0.0);
+    assertEquals(
+        registry
+            .get("thread.factory.terminated")
+            .tags(userTags)
+            .tag("name", CountedThreadFactoryTest.class.getName())
+            .counter()
+            .count(),
+        10.0);
+    // put here to ensure that factory are not GCd
+    assertNotNull(factory);
+  }
+

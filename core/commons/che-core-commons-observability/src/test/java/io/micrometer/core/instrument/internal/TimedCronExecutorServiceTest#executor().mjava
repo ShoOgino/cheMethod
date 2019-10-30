@@ -1,0 +1,38 @@
+  @Test
+  public void executor() throws InterruptedException, ParseException {
+    // given
+    TimedCronExecutorService executorService =
+        new TimedCronExecutorService(
+            registry,
+            new CronThreadPoolExecutor(1),
+            TimedCronExecutorServiceTest.class.getName(),
+            userTags);
+    CountDownLatch lock = new CountDownLatch(1);
+    // when
+    executorService.schedule(
+        () -> {
+          lock.countDown();
+        },
+        // one time per second
+        new CronExpression(" * * * ? * * *"));
+
+    lock.await();
+    // then
+    assertEquals(
+        registry
+            .get("executor.scheduled.cron")
+            .tags(userTags)
+            .tag("name", TimedCronExecutorServiceTest.class.getName())
+            .counter()
+            .count(),
+        1.0);
+    assertEquals(
+        registry
+            .get("executor")
+            .tags(userTags)
+            .tag("name", TimedCronExecutorServiceTest.class.getName())
+            .timer()
+            .count(),
+        1L);
+  }
+

@@ -1,0 +1,132 @@
+  @Test
+  public void shouldRecordCronExecutorServiceMetrics() throws InterruptedException, ParseException {
+    // given
+    CronExecutorService executor =
+        executorServiceWrapper.wrap(
+            new CronThreadPoolExecutor(1),
+            MeteredExecutorServiceWrapperTest.class.getName(),
+            "userTagKey",
+            "userTagValue");
+    CountDownLatch runnableTaskStart = new CountDownLatch(1);
+    // when
+    executor.schedule(
+        () -> {
+          runnableTaskStart.countDown();
+        },
+        new CronExpression(" * * * ? * * *"));
+    // then
+    runnableTaskStart.await(10, TimeUnit.SECONDS);
+    assertEquals(
+        registry
+            .get("thread.factory.terminated")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .counter()
+            .count(),
+        0.0);
+    assertEquals(
+        registry
+            .get("thread.factory.running")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .gauge()
+            .value(),
+        2.0);
+    assertEquals(
+        registry
+            .get("thread.factory.created")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .counter()
+            .count(),
+        2.0);
+    assertEquals(
+        registry
+            .get("executor.rejected")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .counter()
+            .count(),
+        0.0);
+
+    assertEquals(
+        registry
+            .get("executor.pool.size")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .gauge()
+            .value(),
+        2.0);
+    assertEquals(
+        registry
+            .get("executor.completed")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .functionCounter()
+            .count(),
+        1.0);
+    assertWithRetry(
+        () ->
+            registry
+                .get("executor.queued")
+                .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+                .tags(userTags)
+                .gauge()
+                .value(),
+        1.0,
+        10,
+        50);
+    assertEquals(
+        registry
+            .get("executor.idle")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .timer()
+            .count(),
+        0);
+    assertTrue(
+        registry
+                .get("executor.queue.remaining")
+                .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+                .tags(userTags)
+                .gauge()
+                .value()
+            > 0.0);
+    assertEquals(
+        registry
+            .get("executor")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .timer()
+            .count(),
+        1);
+    assertEquals(
+        registry
+            .get("executor.active")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .gauge()
+            .value(),
+        1.0);
+    assertEquals(
+        registry
+            .get("executor.scheduled.once")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .counter()
+            .count(),
+        0.0);
+    assertEquals(
+        registry
+            .get("executor.scheduled.repetitively")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .counter()
+            .count(),
+        0.0);
+    assertEquals(
+        registry
+            .get("executor.scheduled.cron")
+            .tag("name", MeteredExecutorServiceWrapperTest.class.getName())
+            .tags(userTags)
+            .counter()
+            .count(),
+        1.0);
+  }
+

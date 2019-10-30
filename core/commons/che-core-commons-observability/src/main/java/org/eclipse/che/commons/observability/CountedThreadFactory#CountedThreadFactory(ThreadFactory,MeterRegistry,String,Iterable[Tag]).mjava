@@ -1,0 +1,32 @@
+  /**
+   * Wraps a {@link ThreadFactory} with an explicit name and records the number of created, running
+   * and terminated threads.
+   *
+   * @param delegate {@link ThreadFactory} to wrap.
+   * @param registry {@link MeterRegistry} that will contain the metrics.
+   * @param name name for this delegate.
+   * @param tags tags that can provide additional context.
+   */
+  public CountedThreadFactory(
+      ThreadFactory delegate, MeterRegistry registry, String name, Iterable<Tag> tags) {
+    this.delegate = delegate;
+    this.created =
+        Counter.builder("thread.factory.created")
+            .tags(Tags.concat(tags, "name", name))
+            .description("The approximate number of threads that create with thread factory")
+            .baseUnit(BaseUnits.THREADS)
+            .register(registry);
+    this.terminated =
+        Counter.builder("thread.factory.terminated")
+            .tags(Tags.concat(tags, "name", name))
+            .description("The approximate number of threads that is finished execution")
+            .baseUnit(BaseUnits.THREADS)
+            .register(registry);
+    Gauge.builder("thread.factory.running", running, AtomicInteger::get)
+        .tags(Tags.concat(tags, "name", name))
+        .description(
+            "The approximate number of threads that are started executing, but not terminated")
+        .baseUnit(BaseUnits.THREADS)
+        .register(registry);
+  }
+

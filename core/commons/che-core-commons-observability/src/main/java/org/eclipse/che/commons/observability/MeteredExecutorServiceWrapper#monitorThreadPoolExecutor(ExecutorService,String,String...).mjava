@@ -1,0 +1,21 @@
+  private void monitorThreadPoolExecutor(ExecutorService executor, String name, String... tags) {
+    String className = executor.getClass().getName();
+    ThreadPoolExecutor unwrappedThreadPoolExecutor = null;
+    if (executor instanceof ThreadPoolExecutor) {
+      unwrappedThreadPoolExecutor = (ThreadPoolExecutor) executor;
+    } else if (className.equals(
+        "java.util.concurrent.Executors$DelegatedScheduledExecutorService")) {
+      unwrappedThreadPoolExecutor = unwrapThreadPoolExecutor(executor, executor.getClass());
+    } else if (className.equals(
+        "java.util.concurrent.Executors$FinalizableDelegatedExecutorService")) {
+      unwrappedThreadPoolExecutor =
+          unwrapThreadPoolExecutor(executor, executor.getClass().getSuperclass());
+    }
+    if (unwrappedThreadPoolExecutor != null) {
+      CountedThreadFactory.monitorThreads(
+          meterRegistry, unwrappedThreadPoolExecutor, name, Tags.of(tags));
+      CountedRejectedExecutionHandler.monitorRejections(
+          meterRegistry, unwrappedThreadPoolExecutor, name, Tags.of(tags));
+    }
+  }
+

@@ -1,0 +1,41 @@
+  @Test
+  public void countRejections() {
+    // given
+    ThreadPoolExecutor executor =
+        new ThreadPoolExecutor(0, 1, 60L, TimeUnit.SECONDS, new SynchronousQueue<>());
+    executor.setRejectedExecutionHandler((r, executor1) -> {});
+
+    CountedRejectedExecutionHandler.monitorRejections(
+        registry, executor, CountedRejectedExecutionHandler.class.getName(), userTags);
+    CountDownLatch runnableTaskComplete = new CountDownLatch(1);
+    Runnable stub =
+        () -> {
+          try {
+            runnableTaskComplete.await(10, TimeUnit.SECONDS);
+          } catch (InterruptedException e) {
+            throw new IllegalStateException("runnable interrupted before completion");
+          }
+        };
+    executor.submit(stub);
+
+    // then
+    for (int i = 0; i < 14; i++) {
+      executor.submit(
+          () -> {
+            // do nothing. Task has to be rejected.
+          });
+    }
+    // when
+    assertEquals(
+        registry
+            .get("executor.rejected")
+            .tags(userTags)
+            .tag("name", CountedRejectedExecutionHandler.class.getName())
+            .counter()
+            .count(),
+        14.0);
+    // cleanup
+    runnableTaskComplete.countDown();
+    executor.shutdownNow();
+  }
+

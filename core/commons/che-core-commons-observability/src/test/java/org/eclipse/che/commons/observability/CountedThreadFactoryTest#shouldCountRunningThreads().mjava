@@ -1,0 +1,54 @@
+  @Test
+  public void shouldCountRunningThreads() throws InterruptedException {
+    // given
+    ThreadFactory factory =
+        new CountedThreadFactory(
+            Executors.defaultThreadFactory(),
+            registry,
+            CountedThreadFactoryTest.class.getName(),
+            userTags);
+
+    CountDownLatch runnableTaskStart = new CountDownLatch(1);
+    CountDownLatch runnableTaskComplete = new CountDownLatch(1);
+    Runnable task =
+        () -> {
+          runnableTaskStart.countDown();
+          try {
+            Assert.assertTrue(runnableTaskComplete.await(10, TimeUnit.SECONDS));
+          } catch (InterruptedException e) {
+            throw new IllegalStateException("runnable interrupted before completion");
+          }
+        };
+
+    // when
+    Thread thread = factory.newThread(task);
+    thread.start();
+
+    // then
+    runnableTaskStart.await();
+    assertEquals(
+        registry
+            .get("thread.factory.running")
+            .tags(userTags)
+            .tag("name", CountedThreadFactoryTest.class.getName())
+            .gauge()
+            .value(),
+        1.0);
+
+    runnableTaskComplete.countDown();
+    thread.join();
+    assertEquals(
+        registry
+            .get("thread.factory.running")
+            .tags(userTags)
+            .tag("name", CountedThreadFactoryTest.class.getName())
+            .gauge()
+            .value(),
+        0.0);
+
+    // put here to ensure that thread are not GCd
+    assertFalse(thread.isAlive());
+    // put here to ensure that factory are not GCd
+    assertNotNull(factory);
+  }
+
