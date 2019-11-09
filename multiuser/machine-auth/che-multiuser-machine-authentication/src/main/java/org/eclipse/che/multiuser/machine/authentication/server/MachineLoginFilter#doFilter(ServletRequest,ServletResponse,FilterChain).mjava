@@ -1,43 +1,16 @@
   @Override
-  public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+  public void doFilter(ServletRequest request, ServletResponse response, FilterChain filterChain)
       throws IOException, ServletException {
-    final HttpServletRequest httpRequest = (HttpServletRequest) request;
-    final String token = tokenExtractor.getToken(httpRequest);
-    if (isNullOrEmpty(token)) {
-      chain.doFilter(request, response);
-      return;
-    }
-    // check token signature and verify is this token machine or not
     try {
-      HttpSession session = ((HttpServletRequest) request).getSession(true);
-      Subject sessionSubject = (Subject) session.getAttribute("che_subject");
-      if (sessionSubject == null || !sessionSubject.getToken().equals(token)) {
-        try {
-          sessionSubject = extractSubject(token);
-          session.setAttribute("che_subject", sessionSubject);
-        } catch (NotFoundException e) {
-          sendErr(
-              response,
-              SC_UNAUTHORIZED,
-              "Authentication with machine token failed because user for this token no longer exist.");
-          return;
-        }
-      }
-
-      try {
-        EnvironmentContext.getCurrent().setSubject(sessionSubject);
-        chain.doFilter(addUserInRequest(httpRequest, sessionSubject), response);
-      } finally {
-        EnvironmentContext.reset();
-      }
-    } catch (NotMachineTokenJwtException ex) {
-      // not a machine token, bypass
-      chain.doFilter(request, response);
-    } catch (ServerException | JwtException e) {
-      sendErr(
+      super.doFilter(request, response, filterChain);
+    } catch (NotMachineTokenJwtException mte) {
+      filterChain.doFilter(request, response);
+    } catch (JwtException e) {
+      sendError(
           response,
           SC_UNAUTHORIZED,
-          format("Authentication with machine token failed cause: %s", e.getMessage()));
+          format("Machine token authentication failed: %s", e.getMessage()));
+      return;
     }
   }
 

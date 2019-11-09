@@ -1,0 +1,31 @@
+  @Test
+  public void shouldRefreshSubjectWhenTokensNotMatch() throws Exception {
+
+    Subject existingSubject = new SubjectImpl("name", "id1", "token", false);
+    UserImpl user = new UserImpl("id2", "test2@test.com", "username2");
+
+    ArgumentCaptor<AuthorizedSubject> captor = ArgumentCaptor.forClass(AuthorizedSubject.class);
+    DefaultJws<Claims> claims = createJws();
+    Subject expectedSubject = new SubjectImpl(user.getName(), user.getId(), "token2", false);
+    // given
+    when(tokenExtractor.getToken(any(HttpServletRequest.class))).thenReturn("token2");
+    when(jwtParser.parseClaimsJws(anyString())).thenReturn(claims);
+    when(session.getAttribute(eq(CHE_SUBJECT_ATTRIBUTE))).thenReturn(existingSubject);
+    when(userManager.getOrCreateUser(anyString(), anyString(), anyString())).thenReturn(user);
+    EnvironmentContext context = spy(EnvironmentContext.getCurrent());
+    EnvironmentContext.setCurrent(context);
+
+    // when
+    filter.doFilter(request, response, chain);
+
+    // then
+    verify(session).setAttribute(eq(CHE_SUBJECT_ATTRIBUTE), captor.capture());
+    verify(context).setSubject(captor.capture());
+    assertEquals(expectedSubject.getToken(), captor.getAllValues().get(0).getToken());
+    assertEquals(expectedSubject.getToken(), captor.getAllValues().get(1).getToken());
+    assertEquals(expectedSubject.getUserId(), captor.getAllValues().get(0).getUserId());
+    assertEquals(expectedSubject.getUserId(), captor.getAllValues().get(1).getUserId());
+    assertEquals(expectedSubject.getUserName(), captor.getAllValues().get(0).getUserName());
+    assertEquals(expectedSubject.getUserName(), captor.getAllValues().get(1).getUserName());
+  }
+

@@ -1,0 +1,27 @@
+  @Test
+  public void shouldRetrieveTheEmailWhenItIsNotInJwtToken() throws Exception {
+
+    Map<String, Object> claimParams = new HashMap<>();
+    claimParams.put("preferred_username", "username");
+    Claims claims = new DefaultClaims(claimParams).setSubject("id");
+    DefaultJws<Claims> jws = new DefaultJws<>(new DefaultJwsHeader(), claims, "");
+    UserImpl user = new UserImpl("id", "test@test.com", "username");
+    keycloakSettingsMap.put(KeycloakConstants.USERNAME_CLAIM_SETTING, "preferred_username");
+    // given
+    when(tokenExtractor.getToken(any(HttpServletRequest.class))).thenReturn("token");
+    when(jwtParser.parseClaimsJws(anyString())).thenReturn(jws);
+    when(userManager.getById(anyString())).thenThrow(NotFoundException.class);
+    when(userManager.getOrCreateUser(anyString(), anyString(), anyString())).thenReturn(user);
+    keycloakAttributes.put("email", "test@test.com");
+
+    try {
+      // when
+      filter.doFilter(request, response, chain);
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw e;
+    }
+
+    verify(userManager).getOrCreateUser("id", "test@test.com", "username");
+  }
+

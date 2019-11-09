@@ -1,0 +1,30 @@
+  @Override
+  public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+      throws IOException, ServletException {
+
+    Subject sessionSubject;
+    HttpServletRequest httpRequest = (HttpServletRequest) request;
+    final String token = tokenExtractor.getToken(httpRequest);
+    if (token == null) {
+      handleMissingToken(request, response, chain);
+      return;
+    }
+    String userId = getUserId(token); // make sure token still valid before continue
+    // retrieve cached session if any or create new
+    httpRequest = new SessionCachedHttpRequest(request, userId);
+    HttpSession session = httpRequest.getSession(true);
+    // retrieve and check / create new subject
+    sessionSubject = (Subject) session.getAttribute(CHE_SUBJECT_ATTRIBUTE);
+    if (sessionSubject == null || !sessionSubject.getToken().equals(token)) {
+      sessionSubject = extractSubject(token);
+      session.setAttribute(CHE_SUBJECT_ATTRIBUTE, sessionSubject);
+    }
+    // set current subject
+    try {
+      EnvironmentContext.getCurrent().setSubject(sessionSubject);
+      chain.doFilter(new SubjectHttpRequestWrapper(httpRequest, sessionSubject), response);
+    } finally {
+      EnvironmentContext.reset();
+    }
+  }
+
