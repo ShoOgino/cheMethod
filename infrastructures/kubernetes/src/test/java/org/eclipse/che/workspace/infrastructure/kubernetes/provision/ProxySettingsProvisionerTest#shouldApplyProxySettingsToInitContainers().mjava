@@ -1,9 +1,9 @@
   @Test
-  public void shouldApplyProxySettingsToAllContainers() throws Exception {
-
+  public void shouldApplyProxySettingsToInitContainers() throws Exception {
     Map<String, Pod> pods = new HashMap<>();
-    Pod pod1 = pods.put("pod1", buildPod("pod1", buildContainers(2)));
-    pods.put("pod2", buildPod("pod2", buildContainers(3)));
+    Pod pod1 = buildPod("pod1", buildContainers(3));
+    pod1.getSpec().setInitContainers(Arrays.asList(buildContainers(2)));
+    pods.put("pod1", pod1);
 
     KubernetesEnvironment k8sEnv = KubernetesEnvironment.builder().setPods(pods).build();
     provisioner.provision(k8sEnv, runtimeId);
@@ -13,7 +13,11 @@
             .getPodsData()
             .values()
             .stream()
-            .flatMap(pod -> pod.getSpec().getContainers().stream())
+            .flatMap(
+                pod ->
+                    Stream.concat(
+                        pod.getSpec().getContainers().stream(),
+                        pod.getSpec().getInitContainers().stream()))
             .allMatch(
                 container ->
                     container.getEnv().contains(new EnvVar(HTTP_PROXY, HTTP_PROXY_VALUE, null))
