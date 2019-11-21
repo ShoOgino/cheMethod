@@ -1,8 +1,8 @@
   @Override
   public List<ChePlugin> execute() throws InfrastructureException {
-    LOG.debug("Starting brokers pod for workspace '{}'", workspaceId);
+    LOG.debug("Starting brokers pod for workspace '{}'", runtimeId.getWorkspaceId());
     Span tracingSpan = tracer.buildSpan(DEPLOY_BROKER_PHASE).start();
-    TracingTags.WORKSPACE_ID.set(tracingSpan, workspaceId);
+    TracingTags.WORKSPACE_ID.set(tracingSpan, runtimeId.getWorkspaceId());
 
     KubernetesDeployments deployments = namespace.deployments();
     try {
@@ -26,9 +26,17 @@
         namespace.deployments().watchEvents(unrecoverableEventListener);
       }
 
+      namespace
+          .deployments()
+          .watchEvents(
+              new RuntimeLogsPublisher(
+                  runtimeEventsPublisher,
+                  runtimeId,
+                  ImmutableSet.of(pluginBrokerPod.getMetadata().getName())));
+
       deployments.create(pluginBrokerPod);
 
-      LOG.debug("Brokers pod is created for workspace '{}'", workspaceId);
+      LOG.debug("Brokers pod is created for workspace '{}'", runtimeId.getWorkspaceId());
       tracingSpan.finish();
       return nextPhase.execute();
     } catch (InfrastructureException e) {
