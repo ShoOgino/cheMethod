@@ -1,0 +1,40 @@
+  @Override
+  public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+    if (!isConfigured()) {
+      return;
+    }
+    String selfSignedCertConfigMapName =
+        identity.getWorkspaceId() + CHE_GIT_SELF_SIGNED_CERT_CONFIG_MAP_SUFFIX;
+    k8sEnv
+        .getConfigMaps()
+        .put(
+            selfSignedCertConfigMapName,
+            new ConfigMapBuilder()
+                .withNewMetadata()
+                .withName(selfSignedCertConfigMapName)
+                .endMetadata()
+                .withData(singletonMap(CA_CERT_FILE, certificate))
+                .build());
+
+    for (PodData pod : k8sEnv.getPodsData().values()) {
+      Optional<Volume> certVolume =
+          pod.getSpec()
+              .getVolumes()
+              .stream()
+              .filter(v -> v.getName().equals(CHE_GIT_SELF_SIGNED_VOLUME))
+              .findAny();
+
+      if (!certVolume.isPresent()) {
+        pod.getSpec().getVolumes().add(buildCertVolume(selfSignedCertConfigMapName));
+      }
+
+      for (Container container : pod.getSpec().getInitContainers()) {
+        provisionCertVolumeMountIfNeeded(container);
+      }
+      for (Container container : pod.getSpec().getContainers()) {
+        provisionCertVolumeMountIfNeeded(container);
+      }
+    }
+  }
+

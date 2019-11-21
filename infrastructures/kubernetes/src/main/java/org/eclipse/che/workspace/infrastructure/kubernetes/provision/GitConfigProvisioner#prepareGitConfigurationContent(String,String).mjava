@@ -1,0 +1,46 @@
+  private Optional<String> prepareGitConfigurationContent(String userName, String userEmail) {
+    if (isNullOrEmpty(userName) && isNullOrEmpty(userEmail)) {
+      return empty();
+    }
+
+    StringBuilder config = new StringBuilder();
+    config.append("[user]").append('\n');
+
+    if (userName != null) {
+      config.append('\t').append("name = ").append(userName).append('\n');
+    }
+
+    if (userEmail != null) {
+      config.append('\t').append("email = ").append(userEmail).append('\n');
+    }
+
+    if (vcsSslCertificateProvisioner.isConfigured()) {
+      String host = vcsSslCertificateProvisioner.getGitServerHost();
+
+      // Will add leading scheme (https://) if it not provide in configuration.
+      // If host not configured wil return empty string, it will means that
+      // provided certificate will used for all https connections.
+
+      StringBuilder gitServerHosts = new StringBuilder();
+      if (!isNullOrEmpty(host)) {
+        gitServerHosts.append(" \"");
+        if (!host.startsWith(HTTPS)) {
+          gitServerHosts.append(HTTPS);
+        }
+        gitServerHosts.append(host);
+        gitServerHosts.append("\"");
+      }
+
+      config
+          .append("[http")
+          .append(gitServerHosts.toString())
+          .append("]")
+          .append('\n')
+          .append('\t')
+          .append("sslCAInfo = ")
+          .append(vcsSslCertificateProvisioner.getCertPath());
+    }
+
+    return of(config.toString());
+  }
+
