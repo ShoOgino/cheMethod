@@ -1,0 +1,26 @@
+  @Test
+  public void shouldContinueCheckActivitiesValidityIfExceptionOccurredOnRestoringOne()
+      throws Exception {
+    // given
+    String id = "1";
+    WorkspaceActivity invalidActivity = new WorkspaceActivity();
+    invalidActivity.setWorkspaceId(id);
+    when(workspaceRuntimes.getRunning()).thenReturn(ImmutableSet.of("problematic", id));
+    doThrow(new ServerException("error"))
+        .when(workspaceActivityDao)
+        .findActivity(eq("problematic"));
+    doReturn(invalidActivity).when(workspaceActivityDao).findActivity(eq(id));
+    when(workspaceManager.getWorkspace(eq(id)))
+        .thenReturn(
+            WorkspaceImpl.builder()
+                .setId(id)
+                .setAttributes(ImmutableMap.of(Constants.CREATED_ATTRIBUTE_NAME, "15"))
+                .build());
+
+    // when
+    checker.cleanup();
+
+    // then
+    verify(workspaceActivityDao).setCreatedTime(eq(id), eq(15L));
+  }
+
