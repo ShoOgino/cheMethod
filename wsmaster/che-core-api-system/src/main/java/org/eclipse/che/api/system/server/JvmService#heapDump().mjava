@@ -1,0 +1,25 @@
+  @GET
+  @Path("/dump/heap")
+  @Produces("application/zip")
+  @ApiOperation("Get heap dump of jvm")
+  @ApiResponses(@ApiResponse(code = 200, message = "The response contains jvm heap dump"))
+  @ApiResponse(code = 500, message = "Internal server error occurred")
+  public Response heapDump() throws IOException {
+    File heapDump = manager.createZippedHeapDump();
+    heapDump.deleteOnExit();
+    return Response.ok(
+            new FileInputStream(heapDump) {
+              @Override
+              public void close() throws IOException {
+                super.close();
+                if (!heapDump.delete()) {
+                  LOG.warn("Not able to delete temporary file {}", heapDump);
+                }
+              }
+            },
+            "application/zip")
+        .header("Content-Length", String.valueOf(Files.size(heapDump.toPath())))
+        .header("Content-Disposition", "attachment; filename=heapdump.hprof.zip")
+        .build();
+  }
+
