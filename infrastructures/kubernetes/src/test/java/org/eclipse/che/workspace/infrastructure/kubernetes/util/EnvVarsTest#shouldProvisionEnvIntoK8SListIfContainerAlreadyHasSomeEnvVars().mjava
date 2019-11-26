@@ -1,0 +1,41 @@
+  @Test
+  public void shouldProvisionEnvIntoK8SListIfContainerAlreadyHasSomeEnvVars() throws Exception {
+
+    // given
+    EnvVar existingInitCEnvVar = new EnvVar("ENV", "value", null);
+    EnvVar existingCEnvVar = new EnvVar("ENV", null, new EnvVarSource());
+    PodData pod =
+        new PodData(
+            new PodBuilder()
+                .withNewMetadata()
+                .withName("pod")
+                .endMetadata()
+                .withNewSpec()
+                .withInitContainers(
+                    new ContainerBuilder()
+                        .withName("initContainer")
+                        .withEnv(copy(existingInitCEnvVar))
+                        .build())
+                .withContainers(
+                    new ContainerBuilder()
+                        .withName("container")
+                        .withEnv(copy(existingCEnvVar))
+                        .build())
+                .endSpec()
+                .build());
+
+    // when
+    envVars.apply(pod, singletonList(new EnvImpl("TEST_ENV", "anyValue")));
+
+    // then
+    List<EnvVar> initCEnv = pod.getSpec().getInitContainers().get(0).getEnv();
+    assertEquals(initCEnv.size(), 2);
+    assertEquals(initCEnv.get(0), existingInitCEnvVar);
+    assertEquals(initCEnv.get(1), new EnvVar("TEST_ENV", "anyValue", null));
+
+    List<EnvVar> containerEnv = pod.getSpec().getContainers().get(0).getEnv();
+    assertEquals(containerEnv.size(), 2);
+    assertEquals(containerEnv.get(0), existingCEnvVar);
+    assertEquals(containerEnv.get(1), new EnvVar("TEST_ENV", "anyValue", null));
+  }
+
