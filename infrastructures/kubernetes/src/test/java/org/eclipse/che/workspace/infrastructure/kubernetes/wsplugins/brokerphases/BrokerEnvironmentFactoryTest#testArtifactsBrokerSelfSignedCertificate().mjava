@@ -1,0 +1,41 @@
+  public void testArtifactsBrokerSelfSignedCertificate() throws Exception {
+    when(certProvisioner.isConfigured()).thenReturn(true);
+    when(certProvisioner.getCertPath()).thenReturn("/tmp/che/cacert");
+    // given
+    Collection<PluginFQN> pluginFQNs = singletonList(new PluginFQN(null, "id"));
+    ArgumentCaptor<BrokersConfigs> captor = ArgumentCaptor.forClass(BrokersConfigs.class);
+
+    // when
+    factory.createForArtifactsBroker(pluginFQNs, runtimeId);
+
+    // then
+    verify(factory).doCreate(captor.capture());
+    BrokersConfigs brokersConfigs = captor.getValue();
+
+    List<Container> containers =
+        brokersConfigs
+            .pods
+            .values()
+            .stream()
+            .flatMap(p -> p.getSpec().getContainers().stream())
+            .collect(Collectors.toList());
+    assertEquals(containers.size(), 1);
+    Container container = containers.get(0);
+    assertEquals(
+        container.getArgs().toArray(),
+        new String[] {
+          "-push-endpoint",
+          PUSH_ENDPOINT,
+          "-runtime-id",
+          String.format(
+              "%s:%s:%s",
+              runtimeId.getWorkspaceId(), runtimeId.getEnvName(), runtimeId.getOwnerId()),
+          "-cacert",
+          "/tmp/che/cacert",
+          "--registry-address",
+          DEFAULT_REGISTRY,
+          "-metas",
+          "/broker-config/config.json",
+        });
+  }
+
