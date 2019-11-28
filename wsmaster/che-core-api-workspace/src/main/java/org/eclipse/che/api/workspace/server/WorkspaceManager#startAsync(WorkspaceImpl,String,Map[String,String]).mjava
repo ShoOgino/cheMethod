@@ -9,6 +9,21 @@
       throw new ConflictException(e.getMessage(), e);
     }
 
+    // handle the situation where a workspace created by a previous Che version doesn't have a
+    // namespace stored for it. We use the legacy-aware method to figure out the namespace to
+    // correctly capture the workspaces which have PVCs already in a namespace defined by the legacy
+    // configuration variable.
+    if (isNullOrEmpty(
+        workspace.getAttributes().get(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE))) {
+      try {
+        String namespace =
+            runtimes.evalLegacyInfrastructureNamespace(buildResolutionContext(workspace));
+        workspace.getAttributes().put(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE, namespace);
+      } catch (InfrastructureException e) {
+        throw new ServerException(e);
+      }
+    }
+
     workspace.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
     workspaceDao.update(workspace);
 

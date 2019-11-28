@@ -1,0 +1,31 @@
+  @Traced
+  @Override
+  public void prepare(KubernetesEnvironment k8sEnv, RuntimeIdentity identity, long timeoutMillis)
+      throws InfrastructureException {
+    String workspaceId = identity.getWorkspaceId();
+
+    TracingTags.WORKSPACE_ID.set(workspaceId);
+
+    if (EphemeralWorkspaceUtility.isEphemeral(k8sEnv.getAttributes())) {
+      return;
+    }
+
+    if (k8sEnv.getPersistentVolumeClaims().isEmpty()) {
+      // no PVCs to prepare
+      return;
+    }
+
+    final KubernetesPersistentVolumeClaims k8sClaims =
+        factory.getOrCreate(identity).persistentVolumeClaims();
+    LOG.debug("Creating PVCs for workspace '{}'", workspaceId);
+    k8sClaims.createIfNotExist(k8sEnv.getPersistentVolumeClaims().values());
+
+    if (waitBound) {
+      LOG.debug("Waiting for PVC(s) of workspace '{}' to be bound", workspaceId);
+      for (PersistentVolumeClaim pvc : k8sEnv.getPersistentVolumeClaims().values()) {
+        k8sClaims.waitBound(pvc.getMetadata().getName(), timeoutMillis);
+      }
+    }
+    LOG.debug("Preparing PVCs done for workspace '{}'", workspaceId);
+  }
+

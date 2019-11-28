@@ -1,0 +1,36 @@
+  /**
+   * Deletes the namespace. Deleting a non-existent namespace is not an error as is not an attempt
+   * to delete a namespace that is already being deleted.
+   *
+   * @throws InfrastructureException if the namespace is not marked managed or when any unexpected
+   *     exception occurs during namespace deletion
+   */
+  void deleteIfManaged() throws InfrastructureException {
+    KubernetesClient client = clientFactory.create(workspaceId);
+
+    if (!isManagedInternal(client)) {
+      throw new InfrastructureException(
+          format(
+              "Can't delete namespace '%s' that contains"
+                  + " runtime of workspace '%s' because it doesn't have the '"
+                  + MANAGED_NAMESPACE_LABEL
+                  + "' label equal to 'true'.",
+              name,
+              workspaceId));
+    }
+
+    try {
+      delete(name, client);
+    } catch (KubernetesClientException e) {
+      if (e.getCode() == 403) {
+        throw new InfrastructureException(
+            format(
+                "Could not access the namespace %s when deleting it for workspace %s",
+                name, workspaceId),
+            e);
+      }
+
+      throw new KubernetesInfrastructureException(e);
+    }
+  }
+

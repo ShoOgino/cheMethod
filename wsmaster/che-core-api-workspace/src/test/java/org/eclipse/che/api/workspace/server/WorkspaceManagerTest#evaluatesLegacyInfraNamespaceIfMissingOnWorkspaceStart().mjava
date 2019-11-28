@@ -1,0 +1,37 @@
+  @Test
+  public void evaluatesLegacyInfraNamespaceIfMissingOnWorkspaceStart() throws Exception {
+    DevfileImpl devfile = mock(DevfileImpl.class);
+    WorkspaceImpl workspace = createAndMockWorkspace(devfile, NAMESPACE_1, new HashMap<>());
+    when(runtimes.evalLegacyInfrastructureNamespace(any())).thenReturn("evaluatedLegacy");
+
+    EnvironmentImpl environment = new EnvironmentImpl(null, emptyMap());
+    Command command = new CommandImpl("cmd", "echo hello", "custom");
+    WorkspaceConfig convertedConfig =
+        new WorkspaceConfigImpl(
+            "any",
+            "",
+            "default",
+            singletonList(command),
+            emptyList(),
+            ImmutableMap.of("default", environment),
+            ImmutableMap.of("attr", "value"));
+    when(devfileConverter.convert(any())).thenReturn(convertedConfig);
+
+    mockAnyWorkspaceStart();
+
+    workspaceManager.startWorkspace(workspace.getId(), null, emptyMap());
+
+    verify(runtimes).startAsync(eq(workspace), eq(null), anyMap());
+    verify(workspaceDao, times(2)).update(workspaceCaptor.capture());
+    assertEquals(
+        workspaceCaptor
+            .getAllValues()
+            .get(0)
+            .getAttributes()
+            .get(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE),
+        "evaluatedLegacy");
+    verify(runtimes)
+        .evalLegacyInfrastructureNamespace(
+            new NamespaceResolutionContext(workspace.getId(), USER_ID, NAMESPACE_1));
+  }
+

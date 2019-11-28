@@ -1,0 +1,38 @@
+  @Test
+  public void doNotEvaluateInfraNamespaceIfItIsSpecifiedOnWorkspaceStart() throws Exception {
+    DevfileImpl devfile = mock(DevfileImpl.class);
+    WorkspaceImpl workspace =
+        createAndMockWorkspace(
+            devfile,
+            NAMESPACE_1,
+            ImmutableMap.of(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE, "user-defined"));
+
+    EnvironmentImpl environment = new EnvironmentImpl(null, emptyMap());
+    Command command = new CommandImpl("cmd", "echo hello", "custom");
+    WorkspaceConfig convertedConfig =
+        new WorkspaceConfigImpl(
+            "any",
+            "",
+            "default",
+            singletonList(command),
+            emptyList(),
+            ImmutableMap.of("default", environment),
+            ImmutableMap.of("attr", "value"));
+    when(devfileConverter.convert(any())).thenReturn(convertedConfig);
+
+    mockAnyWorkspaceStart();
+
+    workspaceManager.startWorkspace(workspace.getId(), null, emptyMap());
+
+    verify(runtimes).startAsync(eq(workspace), eq(null), anyMap());
+    verify(workspaceDao, times(2)).update(workspaceCaptor.capture());
+    assertEquals(
+        workspaceCaptor
+            .getAllValues()
+            .get(0)
+            .getAttributes()
+            .get(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE),
+        "user-defined");
+    verify(runtimes, never()).evalLegacyInfrastructureNamespace(any());
+  }
+

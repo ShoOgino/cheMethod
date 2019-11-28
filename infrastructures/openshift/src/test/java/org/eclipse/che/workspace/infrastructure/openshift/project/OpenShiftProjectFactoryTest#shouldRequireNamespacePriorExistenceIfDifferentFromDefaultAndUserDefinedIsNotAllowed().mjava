@@ -1,0 +1,35 @@
+  @Test
+  public void shouldRequireNamespacePriorExistenceIfDifferentFromDefaultAndUserDefinedIsNotAllowed()
+      throws Exception {
+    // There is only one scenario where this can happen. The workspace was created and started in
+    // some default namespace. Then server was reconfigured to use a different default namespace
+    // AND the namespace of the workspace was MANUALLY deleted in the cluster. In this case, we
+    // should NOT try to re-create the namespace because it would be created in a namespace that
+    // is not configured. We DO allow it to start if the namespace still exists though.
+
+    // given
+    projectFactory =
+        spy(
+            new OpenShiftProjectFactory(
+                "predefined",
+                "",
+                "",
+                "new-default",
+                false,
+                clientFactory,
+                configFactory,
+                userManager));
+    OpenShiftProject toReturnProject = mock(OpenShiftProject.class);
+    doReturn(toReturnProject).when(projectFactory).doCreateProjectAccess(any(), any());
+
+    // when
+    RuntimeIdentity identity =
+        new RuntimeIdentityImpl("workspace123", null, USER_ID, "old-default");
+    OpenShiftProject project = projectFactory.getOrCreate(identity);
+
+    // then
+    assertEquals(toReturnProject, project);
+    verify(projectFactory, never()).doCreateServiceAccount(any(), any());
+    verify(toReturnProject).prepare(eq(false), eq(false));
+  }
+
