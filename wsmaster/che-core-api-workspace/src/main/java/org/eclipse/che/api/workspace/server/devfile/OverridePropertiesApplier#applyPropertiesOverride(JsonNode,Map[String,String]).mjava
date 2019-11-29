@@ -1,0 +1,47 @@
+  public JsonNode applyPropertiesOverride(
+      JsonNode devfileNode, Map<String, String> overrideProperties)
+      throws OverrideParameterException {
+    for (Map.Entry<String, String> entry : overrideProperties.entrySet()) {
+      String[] pathSegments = entry.getKey().split("\\.");
+      if (pathSegments.length < 1) {
+        continue;
+      }
+      validateFirstSegment(pathSegments);
+      String lastSegment = pathSegments[pathSegments.length - 1];
+      JsonNode currentNode = devfileNode;
+      Iterator<String> pathSegmentsIterator = Stream.of(pathSegments).iterator();
+      do {
+        String currentSegment = pathSegmentsIterator.next();
+        JsonNode nextNode = currentNode.path(currentSegment);
+        if (nextNode.isMissingNode() && pathSegmentsIterator.hasNext()) {
+          // no such intermediate node, let's create it as a empty object
+          currentNode = ((ObjectNode) currentNode).putObject(currentSegment);
+          continue;
+        } else if (nextNode.isArray()) {
+          // ok we have reference to array, so need to make sure that we have next path segment
+          // and then try to retrieve it from array
+          if (!pathSegmentsIterator.hasNext()) {
+            throw new OverrideParameterException(
+                format(
+                    "Override property reference '%s' points to an array type object. Please add an item qualifier by name.",
+                    entry.getKey()));
+          }
+          // retrieve object by name from array
+          String arrayObjectName = pathSegmentsIterator.next();
+          currentNode = findNodeByName((ArrayNode) nextNode, arrayObjectName, currentSegment);
+          continue;
+        } else {
+          // because it's impossible to change value of the current Json node,
+          // so to set value, we should be 1 level up and do put(key, value),
+          // so not set latest segment as an current node
+          if (pathSegmentsIterator.hasNext()) {
+            currentNode = nextNode;
+          }
+        }
+      } while (pathSegmentsIterator.hasNext());
+      // end of path segments reached, now we can set value
+      ((ObjectNode) currentNode).put(lastSegment, entry.getValue());
+    }
+    return devfileNode;
+  }
+
