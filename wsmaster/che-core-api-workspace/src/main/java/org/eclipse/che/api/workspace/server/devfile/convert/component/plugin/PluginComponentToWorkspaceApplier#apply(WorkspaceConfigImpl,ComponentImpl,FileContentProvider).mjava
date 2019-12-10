@@ -11,7 +11,7 @@
   @Override
   public void apply(
       WorkspaceConfigImpl workspaceConfig,
-      Component pluginComponent,
+      ComponentImpl pluginComponent,
       @Nullable FileContentProvider contentProvider)
       throws DevfileException {
     checkArgument(workspaceConfig != null, "Workspace config must not be null");
@@ -42,12 +42,6 @@
                   workspacePluginsAttribute,
                   componentFQNParser.getCompositeId(registryUrl, pluginId)));
     }
-    String memoryLimit = pluginComponent.getMemoryLimit();
-    if (memoryLimit != null) {
-      workspaceConfig
-          .getAttributes()
-          .put(format(SIDECAR_MEMORY_LIMIT_ATTR_TEMPLATE, fqn.getPublisherAndName()), memoryLimit);
-    }
 
     for (CommandImpl command : workspaceConfig.getCommands()) {
       String commandComponent = command.getAttributes().get(COMPONENT_ALIAS_COMMAND_ATTRIBUTE);
@@ -64,29 +58,8 @@
       command.getAttributes().put(PLUGIN_ATTRIBUTE, fqn.getId());
     }
 
-    String pluginsAliases =
-        workspaceConfig.getAttributes().get(PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE);
-    if (pluginComponent.getAlias() != null) {
-      workspaceConfig
-          .getAttributes()
-          .put(
-              PLUGINS_COMPONENTS_ALIASES_WORKSPACE_ATTRIBUTE,
-              append(
-                  pluginsAliases,
-                  componentFQNParser.getCompositeId(
-                          fqn.getRegistry() != null ? fqn.getRegistry().toString() : null,
-                          fqn.getId())
-                      + "="
-                      + pluginComponent.getAlias()));
-    }
-
-    final List<? extends Env> env = pluginComponent.getEnv();
-    if (!env.isEmpty()) {
-      workspaceConfig.getAttributes()
-          .put(format(SIDECAR_ENV_VARIABLES_ATTR_TEMPLATE, fqn.getPublisherAndName()),
-              String.join(",", env.stream().map(
-                  (java.util.function.Function<Env, String>) e -> e.getName() + "=" + e.getValue())
-                  .collect(toList())));
-    }
+    // make sure id is set to be able to match component with plugin broker result
+    // when referenceContent is used
+    pluginComponent.setId(fqn.getId());
   }
 
