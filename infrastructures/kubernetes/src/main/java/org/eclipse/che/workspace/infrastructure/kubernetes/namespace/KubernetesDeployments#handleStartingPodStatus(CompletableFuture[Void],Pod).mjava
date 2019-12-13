@@ -1,17 +1,46 @@
   private void handleStartingPodStatus(CompletableFuture<Void> podRunningFuture, Pod pod) {
-    if (POD_STATUS_PHASE_RUNNING.equals(pod.getStatus().getPhase())) {
-      podRunningFuture.complete(null);
+    PodStatus status = pod.getStatus();
+    String podPhase = status.getPhase();
+    if (POD_STATUS_PHASE_RUNNING.equals(podPhase)) {
+      // check that all the containers are ready...
+      Map<String, String> terminatedContainers = new HashMap<>();
+
+      for (ContainerStatus cs : status.getContainerStatuses()) {
+        ContainerStateTerminated terminated = cs.getState().getTerminated();
+        if (terminated != null) {
+          terminatedContainers.put(
+              cs.getName(),
+              format(
+                  "reason = '%s', exit code = %d, message = '%s'",
+                  terminated.getReason(), terminated.getExitCode(), terminated.getMessage()));
+        }
+      }
+
+      if (terminatedContainers.isEmpty()) {
+        podRunningFuture.complete(null);
+      } else {
+        String errorMessage =
+            "The following containers have terminated:\n"
+                + terminatedContainers
+                    .entrySet()
+                    .stream()
+                    .map(e -> e.getKey() + ": " + e.getValue())
+                    .collect(Collectors.joining("" + "\n"));
+
+        podRunningFuture.completeExceptionally(new InfrastructureException(errorMessage));
+      }
+
       return;
     }
 
-    if (POD_STATUS_PHASE_SUCCEEDED.equals(pod.getStatus().getPhase())) {
+    if (POD_STATUS_PHASE_SUCCEEDED.equals(podPhase)) {
       podRunningFuture.completeExceptionally(
           new InfrastructureException(
               "Pod container has been terminated. Container must be configured to use a non-terminating command."));
       return;
     }
 
-    if (POD_STATUS_PHASE_FAILED.equals(pod.getStatus().getPhase())) {
+    if (POD_STATUS_PHASE_FAILED.equals(podPhase)) {
       String exceptionMessage = "Pod '" + pod.getMetadata().getName() + "' failed to start.";
       String reason = pod.getStatus().getReason();
       if (Strings.isNullOrEmpty(reason)) {
