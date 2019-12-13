@@ -32,10 +32,33 @@
         chePluginsVolumeApplier.applyVolumes(pod, k8sInitContainer, container.getVolumes(), k8sEnv);
       }
 
+      Map<String, ComponentImpl> devfilePlugins =
+          k8sEnv
+              .getDevfile()
+              .getComponents()
+              .stream()
+              .filter(c -> c.getType().equals("cheEditor") || c.getType().equals("chePlugin"))
+              .collect(Collectors.toMap(ComponentImpl::getId, Function.identity()));
+      if (!devfilePlugins.containsKey(chePlugin.getId())) {
+        throw new InfrastructureException(
+            String.format(
+                "The downloaded plugin '%s' configuration does not have the "
+                    + "corresponding component in devfile. Devfile contains the following cheEditor/chePlugins: %s",
+                chePlugin.getId(), devfilePlugins.keySet()));
+      }
+      ComponentImpl pluginRelatedComponent = devfilePlugins.get(chePlugin.getId());
+
       Collection<CommandImpl> pluginRelatedCommands = commandsResolver.resolve(chePlugin);
 
       for (CheContainer container : chePlugin.getContainers()) {
-        addSidecar(pod, container, chePlugin, k8sEnv, pluginRelatedCommands, runtimeIdentity);
+        addSidecar(
+            pod,
+            container,
+            chePlugin,
+            k8sEnv,
+            pluginRelatedCommands,
+            pluginRelatedComponent,
+            runtimeIdentity);
       }
     }
 
