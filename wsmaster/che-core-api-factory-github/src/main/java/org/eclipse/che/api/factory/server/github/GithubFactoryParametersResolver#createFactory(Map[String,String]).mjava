@@ -39,8 +39,13 @@
                 .withPath("/".concat(githubUrl.getRepository()));
           });
     } else if (factory.getDevfile() == null) {
-      // initialize default devfile and github project
+      // initialize default devfile
       factory.setDevfile(urlFactoryBuilder.buildDefaultDevfile(githubUrl.getRepository()));
+    }
+
+    List<ProjectDto> projects = factory.getDevfile().getProjects();
+    // if no projects set, set the default one from GitHub url
+    if (projects.isEmpty()) {
       factory
           .getDevfile()
           .setProjects(
@@ -48,6 +53,16 @@
                   newDto(ProjectDto.class)
                       .withSource(githubSourceStorageBuilder.buildDevfileSource(githubUrl))
                       .withName(githubUrl.getRepository())));
+    } else {
+      // update existing project with same repository, set current branch if needed
+      projects.forEach(
+          project -> {
+            final String location = project.getSource().getLocation();
+            if (location.equals(githubUrl.repositoryLocation())
+                || location.equals(githubUrl.repositoryLocation() + ".git")) {
+              project.getSource().setBranch(githubUrl.getBranch());
+            }
+          });
     }
     return factory;
   }
