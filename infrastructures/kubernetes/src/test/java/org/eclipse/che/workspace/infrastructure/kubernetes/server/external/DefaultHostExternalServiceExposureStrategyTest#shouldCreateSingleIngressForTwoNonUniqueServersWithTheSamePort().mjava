@@ -1,8 +1,10 @@
   @Test
-  public void shouldCreateIngressForServer() {
+  public void shouldCreateSingleIngressForTwoNonUniqueServersWithTheSamePort() {
     // given
     ServerConfigImpl httpServerConfig =
         new ServerConfigImpl("8080/tcp", "http", "/api", ATTRIBUTES_MAP);
+    ServerConfigImpl wsServerConfig =
+        new ServerConfigImpl("8080/tcp", "ws", "/connect", ATTRIBUTES_MAP);
     ServicePort servicePort =
         new ServicePortBuilder()
             .withName("server-8080")
@@ -10,18 +12,29 @@
             .withProtocol("TCP")
             .withTargetPort(new IntOrString(8080))
             .build();
-    Map<String, ServerConfig> serversToExpose = ImmutableMap.of("http-server", httpServerConfig);
+
+    Map<String, ServerConfig> serversToExpose =
+        ImmutableMap.of(
+            "http-server", httpServerConfig,
+            "ws-server", wsServerConfig);
 
     // when
     externalServerExposer.expose(
         kubernetesEnvironment, MACHINE_NAME, SERVICE_NAME, null, servicePort, serversToExpose);
 
     // then
+    assertEquals(kubernetesEnvironment.getIngresses().size(), 1);
     assertThatExternalServerIsExposed(
         MACHINE_NAME,
         SERVICE_NAME,
         "http-server",
         servicePort,
         new ServerConfigImpl(httpServerConfig).withAttributes(ATTRIBUTES_MAP));
+    assertThatExternalServerIsExposed(
+        MACHINE_NAME,
+        SERVICE_NAME,
+        "ws-server",
+        servicePort,
+        new ServerConfigImpl(wsServerConfig).withAttributes(ATTRIBUTES_MAP));
   }
 

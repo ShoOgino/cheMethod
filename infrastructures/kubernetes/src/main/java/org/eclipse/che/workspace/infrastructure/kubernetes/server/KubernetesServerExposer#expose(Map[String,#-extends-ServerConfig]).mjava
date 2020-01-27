@@ -15,13 +15,13 @@
 
     servers.forEach(
         (key, value) -> {
-          if ("true".equals(value.getAttributes().get(INTERNAL_SERVER_ATTRIBUTE))) {
+          if (value.isInternal()) {
             // Server is internal. It doesn't make sense to make an it secure since
             // it is available only within workspace servers
             internalServers.put(key, value);
           } else {
             // Server is external. Check if it should be secure or not
-            if ("true".equals(value.getAttributes().get(ServerConfig.SECURE_SERVER_ATTRIBUTE))) {
+            if (value.isSecure()) {
               secureServers.put(key, value);
             } else {
               externalServers.put(key, value);
@@ -46,15 +46,23 @@
       // expose service port related external servers if exist
       Map<String, ServerConfig> matchedExternalServers = match(externalServers, servicePort);
       if (!matchedExternalServers.isEmpty()) {
-        externalServerExposer.expose(
-            k8sEnv, machineName, serviceName, servicePort, matchedExternalServers);
+        onEachExposableServerSet(
+            matchedExternalServers,
+            (serverId, srvrs) -> {
+              externalServerExposer.expose(
+                  k8sEnv, machineName, serviceName, serverId, servicePort, srvrs);
+            });
       }
 
       // expose service port related secure servers if exist
       Map<String, ServerConfig> matchedSecureServers = match(secureServers, servicePort);
       if (!matchedSecureServers.isEmpty()) {
-        secureServerExposer.expose(
-            k8sEnv, machineName, serviceName, servicePort, matchedSecureServers);
+        onEachExposableServerSet(
+            matchedSecureServers,
+            (serverId, srvrs) -> {
+              secureServerExposer.expose(
+                  k8sEnv, machineName, serviceName, serverId, servicePort, matchedSecureServers);
+            });
       }
     }
   }

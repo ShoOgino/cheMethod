@@ -7,18 +7,32 @@
       ServerConfigImpl expected) {
 
     // ensure that required ingress is created
-    Ingress ingress = kubernetesEnvironment.getIngresses().values().iterator().next();
-    IngressRule ingressRule = ingress.getSpec().getRules().get(0);
-    IngressBackend backend = ingressRule.getHttp().getPaths().get(0).getBackend();
-    assertEquals(backend.getServiceName(), serviceName);
-    assertEquals(backend.getServicePort().getStrVal(), servicePort.getName());
+    for (Ingress ingress : kubernetesEnvironment.getIngresses().values()) {
+      IngressRule ingressRule = ingress.getSpec().getRules().get(0);
+      IngressBackend backend = ingressRule.getHttp().getPaths().get(0).getBackend();
+      if (serviceName.equals(backend.getServiceName())) {
+        assertEquals(backend.getServicePort().getStrVal(), servicePort.getName());
 
-    Annotations.Deserializer ingressAnnotations =
-        Annotations.newDeserializer(ingress.getMetadata().getAnnotations());
-    Map<String, ServerConfigImpl> servers = ingressAnnotations.servers();
-    ServerConfig serverConfig = servers.get(serverNameRegex);
-    assertEquals(serverConfig, expected);
+        Annotations.Deserializer ingressAnnotations =
+            Annotations.newDeserializer(ingress.getMetadata().getAnnotations());
+        Map<String, ServerConfigImpl> servers = ingressAnnotations.servers();
+        ServerConfig serverConfig = servers.get(serverNameRegex);
 
-    assertEquals(ingressAnnotations.machineName(), machineName);
+        if (serverConfig == null) {
+          // ok, this ingress is not for this particular server
+          continue;
+        }
+
+        assertEquals(serverConfig, expected);
+
+        assertEquals(ingressAnnotations.machineName(), machineName);
+        return;
+      }
+    }
+
+    Assert.fail(
+        format(
+            "Could not find an ingress for machine '%s' and service '%s'",
+            machineName, serviceName));
   }
 
