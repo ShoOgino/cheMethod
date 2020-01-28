@@ -1,11 +1,12 @@
   @Test
-  public void startsWorkspaceWithDevfile() throws Exception {
+  public void evaluatesDefaultInfraNamespaceIfInvalidOnWorkspaceStart() throws Exception {
     DevfileImpl devfile = mock(DevfileImpl.class);
     WorkspaceImpl workspace =
         createAndMockWorkspace(
             devfile,
             NAMESPACE_1,
-            ImmutableMap.of(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE, INFRA_NAMESPACE));
+            ImmutableMap.of(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE, "-invalid-dns-name"));
+    when(runtimes.evalInfrastructureNamespace(any())).thenReturn("evaluated-legal");
 
     EnvironmentImpl environment = new EnvironmentImpl(null, emptyMap());
     Command command = new CommandImpl("cmd", "echo hello", "custom");
@@ -19,11 +20,23 @@
             ImmutableMap.of("default", environment),
             ImmutableMap.of("attr", "value"));
     when(devfileConverter.convert(any())).thenReturn(convertedConfig);
+    when(runtimes.isInfrastructureNamespaceValid(eq("-invalid-dns-name"))).thenReturn(false);
 
     mockAnyWorkspaceStart();
 
     workspaceManager.startWorkspace(workspace.getId(), null, emptyMap());
 
     verify(runtimes).startAsync(eq(workspace), eq(null), anyMap());
+    verify(workspaceDao, times(2)).update(workspaceCaptor.capture());
+    assertEquals(
+        workspaceCaptor
+            .getAllValues()
+            .get(0)
+            .getAttributes()
+            .get(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE),
+        "evaluated-legal");
+    verify(runtimes)
+        .evalInfrastructureNamespace(
+            new NamespaceResolutionContext(workspace.getId(), USER_ID, NAMESPACE_1));
   }
 
