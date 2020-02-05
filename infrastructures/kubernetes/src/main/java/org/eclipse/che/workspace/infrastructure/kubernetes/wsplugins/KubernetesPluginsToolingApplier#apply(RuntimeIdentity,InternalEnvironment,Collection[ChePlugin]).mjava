@@ -26,12 +26,6 @@
 
     CommandsResolver commandsResolver = new CommandsResolver(k8sEnv);
     for (ChePlugin chePlugin : chePlugins) {
-      for (CheContainer container : chePlugin.getInitContainers()) {
-        Container k8sInitContainer = toK8sContainer(container);
-        pod.getSpec().getInitContainers().add(k8sInitContainer);
-        chePluginsVolumeApplier.applyVolumes(pod, k8sInitContainer, container.getVolumes(), k8sEnv);
-      }
-
       Map<String, ComponentImpl> devfilePlugins =
           k8sEnv
               .getDevfile()
@@ -47,6 +41,13 @@
                 chePlugin.getId(), devfilePlugins.keySet()));
       }
       ComponentImpl pluginRelatedComponent = devfilePlugins.get(chePlugin.getId());
+
+      for (CheContainer container : chePlugin.getInitContainers()) {
+        Container k8sInitContainer = toK8sContainer(container);
+        envVars.apply(k8sInitContainer, pluginRelatedComponent.getEnv());
+        chePluginsVolumeApplier.applyVolumes(pod, k8sInitContainer, container.getVolumes(), k8sEnv);
+        pod.getSpec().getInitContainers().add(k8sInitContainer);
+      }
 
       Collection<CommandImpl> pluginRelatedCommands = commandsResolver.resolve(chePlugin);
 

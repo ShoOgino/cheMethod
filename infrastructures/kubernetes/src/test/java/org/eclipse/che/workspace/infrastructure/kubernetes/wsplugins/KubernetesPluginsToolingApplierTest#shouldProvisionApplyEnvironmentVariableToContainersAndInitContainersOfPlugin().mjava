@@ -1,0 +1,27 @@
+  @Test
+  public void shouldProvisionApplyEnvironmentVariableToContainersAndInitContainersOfPlugin()
+      throws Exception {
+    // given
+    CheContainer container = new CheContainer();
+    container.setName("container");
+    CheContainer initContainer = new CheContainer();
+    initContainer.setName("initContainer");
+
+    ChePlugin chePlugin =
+        createChePlugin(
+            "publisher/id/1.0.0", singletonList(container), singletonList(initContainer));
+    ComponentImpl component = internalEnvironment.getDevfile().getComponents().get(0);
+    component.getEnv().add(new EnvImpl("TEST", "VALUE"));
+    ArgumentCaptor<Container> containerArgumentCaptor = ArgumentCaptor.forClass(Container.class);
+
+    // when
+    applier.apply(runtimeIdentity, internalEnvironment, singletonList(chePlugin));
+
+    // then
+    verify(envVars, times(2)).apply(containerArgumentCaptor.capture(), eq(component.getEnv()));
+    List<Container> containers = containerArgumentCaptor.getAllValues();
+    // containers names are suffixed to provide uniqueness and converted to be k8s API compatible
+    assertTrue(containers.get(0).getName().startsWith("initcontainer"));
+    assertTrue(containers.get(1).getName().startsWith("container"));
+  }
+
