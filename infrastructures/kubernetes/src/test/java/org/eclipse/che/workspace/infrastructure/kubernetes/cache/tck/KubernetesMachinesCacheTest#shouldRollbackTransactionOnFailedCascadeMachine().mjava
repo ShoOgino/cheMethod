@@ -1,0 +1,38 @@
+  // This test ensure that if during cascade removal of machine from cache (initiated during removal
+  // of runtime
+  // from cache) will happen an exception then transaction in runtime cache will rollback removal of
+  // machine cache.
+  // see
+  // @Transactional(rollbackOn = {RuntimeException.class, ServerException.class})
+  // protected void doRemove(RuntimeIdentity runtimeIdentity) throws ServerException
+  // Note that any checked exception that happened during RemoveEvent(extends CascadeEvent) would be
+  // transformed to
+  // ServerException. See RemoveEvent.propagateException.
+  @Test
+  public void shouldRollbackTransactionOnFailedCascadeMachine() throws Exception {
+    // given
+    assertTrue(machineCache.getMachines(runtimeStates[0].getRuntimeId()).size() > 0);
+    CascadeEventSubscriber subscriber =
+        new CascadeEventSubscriber<BeforeKubernetesRuntimeStateRemovedEvent>() {
+          @Override
+          public void onCascadeEvent(BeforeKubernetesRuntimeStateRemovedEvent event)
+              throws Exception {
+            machineCache.remove(event.getRuntimeState().getRuntimeId());
+            throw new InfrastructureException("exception");
+          }
+        };
+    eventService.subscribe(subscriber, BeforeKubernetesRuntimeStateRemovedEvent.class);
+    // when
+    try {
+      runtimesStatesCache.remove(runtimeStates[0].getRuntimeId());
+      fail("Should fail with InfrastructureException");
+    } catch (InfrastructureException exc) {
+      // ok
+    } finally {
+      eventService.unsubscribe(subscriber, BeforeKubernetesRuntimeStateRemovedEvent.class);
+    }
+
+    // then
+    assertTrue(machineCache.getMachines(runtimeStates[0].getRuntimeId()).size() > 0);
+  }
+

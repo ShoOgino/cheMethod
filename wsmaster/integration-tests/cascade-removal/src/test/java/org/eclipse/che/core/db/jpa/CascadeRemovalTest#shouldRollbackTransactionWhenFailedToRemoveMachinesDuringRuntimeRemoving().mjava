@@ -1,0 +1,22 @@
+  @Test
+  public void shouldRollbackTransactionWhenFailedToRemoveMachinesDuringRuntimeRemoving()
+      throws Exception {
+    createTestData();
+    JpaKubernetesMachineCache.RemoveKubernetesMachinesBeforeRuntimesRemoved instance =
+        injector.getInstance(
+            JpaKubernetesMachineCache.RemoveKubernetesMachinesBeforeRuntimesRemoved.class);
+    eventService.unsubscribe(instance, BeforeKubernetesRuntimeStateRemovedEvent.class);
+    // Remove the user, all entries must be rolled back after fail
+    try {
+      k8sRuntimes.remove(k8sRuntimeState.getRuntimeId());
+      fail("k8sRuntimes#remove had to throw exception");
+    } catch (Exception ignored) {
+    }
+    try {
+      assertNotNull(k8sRuntimes.get(k8sRuntimeState.getRuntimeId()));
+    } finally {
+      eventService.subscribe(instance, BeforeKubernetesRuntimeStateRemovedEvent.class);
+      wipeTestData();
+    }
+  }
+
