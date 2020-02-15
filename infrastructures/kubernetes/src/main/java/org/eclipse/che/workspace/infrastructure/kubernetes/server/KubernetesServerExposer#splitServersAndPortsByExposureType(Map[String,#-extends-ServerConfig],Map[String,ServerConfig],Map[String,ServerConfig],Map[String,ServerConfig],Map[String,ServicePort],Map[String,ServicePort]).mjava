@@ -1,0 +1,30 @@
+  private void splitServersAndPortsByExposureType(
+      Map<String, ? extends ServerConfig> servers,
+      Map<String, ServerConfig> internalServers,
+      Map<String, ServerConfig> externalServers,
+      Map<String, ServerConfig> secureServers,
+      Map<String, ServicePort> unsecuredPorts,
+      Map<String, ServicePort> securedPorts) {
+
+    servers.forEach(
+        (key, value) -> {
+          ServicePort sp = getServicePort(value);
+          exposeInContainerIfNeeded(sp);
+          if (value.isInternal()) {
+            // Server is internal. It doesn't make sense to make an it secure since
+            // it is available only within workspace servers
+            internalServers.put(key, value);
+            unsecuredPorts.put(value.getPort(), sp);
+          } else {
+            // Server is external. Check if it should be secure or not
+            if (value.isSecure()) {
+              secureServers.put(key, value);
+              securedPorts.put(value.getPort(), sp);
+            } else {
+              externalServers.put(key, value);
+              unsecuredPorts.put(value.getPort(), sp);
+            }
+          }
+        });
+  }
+

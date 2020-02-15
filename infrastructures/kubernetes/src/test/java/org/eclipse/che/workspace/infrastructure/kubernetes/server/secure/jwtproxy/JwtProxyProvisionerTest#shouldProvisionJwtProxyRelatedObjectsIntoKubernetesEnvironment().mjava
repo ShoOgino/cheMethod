@@ -1,15 +1,20 @@
   @Test
   public void shouldProvisionJwtProxyRelatedObjectsIntoKubernetesEnvironment() throws Exception {
     // given
-    ServerConfigImpl secureServer =
-        new ServerConfigImpl("4401/tcp", "ws", "/", Collections.emptyMap());
+    ServerConfigImpl secureServer = new ServerConfigImpl("4401/tcp", "ws", "/", emptyMap());
 
     ServicePort port = new ServicePort();
     port.setTargetPort(new IntOrString(4401));
 
     // when
     jwtProxyProvisioner.expose(
-        k8sEnv, "terminal", port, "TCP", ImmutableMap.of("server", secureServer));
+        k8sEnv,
+        podWithName(),
+        "machine",
+        "terminal",
+        port,
+        "TCP",
+        ImmutableMap.of("server", secureServer));
 
     // then
     InternalMachineConfig jwtProxyMachine =
@@ -25,7 +30,8 @@
             + PUBLIC_KEY_FOOTER);
     assertNotNull(configMap.getData().get(JWT_PROXY_CONFIG_FILE));
 
-    Pod jwtProxyPod = k8sEnv.getPodsCopy().get("che-jwtproxy");
+    Pod jwtProxyPod =
+        k8sEnv.getInjectablePodsCopy().getOrDefault("machine", emptyMap()).get("che-jwtproxy");
     assertNotNull(jwtProxyPod);
 
     Service jwtProxyService = k8sEnv.getServices().get(jwtProxyProvisioner.getServiceName());

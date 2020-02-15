@@ -1,7 +1,9 @@
-  private void ensureJwtProxyInjected(KubernetesEnvironment k8sEnv) throws InfrastructureException {
+  private void ensureJwtProxyInjected(KubernetesEnvironment k8sEnv, String machineName, PodData pod)
+      throws InfrastructureException {
     if (!k8sEnv.getMachines().containsKey(JWT_PROXY_MACHINE_NAME)) {
       k8sEnv.getMachines().put(JWT_PROXY_MACHINE_NAME, createJwtProxyMachine());
-      k8sEnv.addPod(createJwtProxyPod());
+      Pod jwtProxyPod = createJwtProxyPod();
+      k8sEnv.addInjectablePod(machineName, JWT_PROXY_MACHINE_NAME, jwtProxyPod);
 
       KeyPair keyPair;
       try {
@@ -32,7 +34,9 @@
       Service jwtProxyService =
           new ServerServiceBuilder()
               .withName(serviceName)
-              .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, JWT_PROXY_MACHINE_NAME)
+              // we're merely injecting the pod, so we need a selector that is going to hit the
+              // pod that runs the server that we're exposing
+              .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, pod.getMetadata().getName())
               .withMachineName(JWT_PROXY_MACHINE_NAME)
               .withPorts(emptyList())
               .build();

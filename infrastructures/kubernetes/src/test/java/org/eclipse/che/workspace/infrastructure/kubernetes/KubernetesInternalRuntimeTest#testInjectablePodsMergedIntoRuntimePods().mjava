@@ -1,0 +1,52 @@
+  @Test
+  public void testInjectablePodsMergedIntoRuntimePods() throws Exception {
+    // given
+    Map<String, Pod> injectedPods =
+        ImmutableMap.of("injected", mockPod(singletonList(mockContainer("injectedContainer"))));
+
+    doReturn(ImmutableMap.of(M1_NAME, injectedPods)).when(k8sEnv).getInjectablePodsCopy();
+
+    doReturn(
+            concat(podsMap.entrySet().stream(), injectedPods.entrySet().stream())
+                .collect(toMap(Map.Entry::getKey, e -> new PodData(e.getValue()))))
+        .when(k8sEnv)
+        .getPodsData();
+
+    doReturn(
+            ImmutableMap.of(
+                M1_NAME,
+                mock(InternalMachineConfig.class),
+                M2_NAME,
+                mock(InternalMachineConfig.class),
+                WORKSPACE_POD_NAME + "/injectedContainer",
+                mock(InternalMachineConfig.class)))
+        .when(k8sEnv)
+        .getMachines();
+
+    // when
+    internalRuntime.start(emptyMap());
+
+    // then
+    ArgumentCaptor<Deployment> podCaptor = ArgumentCaptor.forClass(Deployment.class);
+
+    verify(deployments).deploy(podCaptor.capture());
+
+    List<Deployment> depls = podCaptor.getAllValues();
+    assertEquals(depls.size(), 1);
+    Deployment deployedPod = depls.get(0);
+    List<String> containerNames =
+        deployedPod
+            .getSpec()
+            .getTemplate()
+            .getSpec()
+            .getContainers()
+            .stream()
+            .map(Container::getName)
+            .collect(toList());
+
+    assertEquals(containerNames.size(), 3);
+    assertEquals(
+        new HashSet<>(containerNames),
+        new HashSet<>(asList(CONTAINER_NAME_1, CONTAINER_NAME_2, "injectedContainer")));
+  }
+

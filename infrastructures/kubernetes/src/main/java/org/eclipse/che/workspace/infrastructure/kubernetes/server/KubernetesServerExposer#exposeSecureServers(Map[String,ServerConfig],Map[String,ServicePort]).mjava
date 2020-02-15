@@ -1,0 +1,41 @@
+  private void exposeSecureServers(
+      Map<String, ServerConfig> securedServers, Map<String, ServicePort> securedPorts)
+      throws InfrastructureException {
+
+    if (securedPorts.isEmpty()) {
+      return;
+    }
+
+    Optional<Service> secureService =
+        secureServerExposer.createService(securedPorts.values(), pod, machineName, securedServers);
+
+    String secureServiceName =
+        secureService
+            .map(
+                s -> {
+                  String n = s.getMetadata().getName();
+                  k8sEnv.getServices().put(n, s);
+                  return n;
+                })
+            .orElse(null);
+
+    for (ServicePort servicePort : securedPorts.values()) {
+      // expose service port related secure servers if exist
+      Map<String, ServerConfig> matchedSecureServers = match(securedServers, servicePort);
+      if (!matchedSecureServers.isEmpty()) {
+        onEachExposableServerSet(
+            matchedSecureServers,
+            (serverId, srvrs) -> {
+              secureServerExposer.expose(
+                  k8sEnv,
+                  pod,
+                  machineName,
+                  secureServiceName,
+                  serverId,
+                  servicePort,
+                  matchedSecureServers);
+            });
+      }
+    }
+  }
+

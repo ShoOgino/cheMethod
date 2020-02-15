@@ -1,0 +1,37 @@
+  private void exposeNonSecureServers(
+      Map<String, ServerConfig> internalServers,
+      Map<String, ServerConfig> externalServers,
+      Map<String, ServicePort> unsecuredPorts)
+      throws InfrastructureException {
+
+    if (unsecuredPorts.isEmpty()) {
+      return;
+    }
+
+    Map<String, ServerConfig> allNonSecureServers = new HashMap<>(internalServers);
+    allNonSecureServers.putAll(externalServers);
+    Service service =
+        new ServerServiceBuilder()
+            .withName(generate(SERVER_PREFIX, SERVER_UNIQUE_PART_SIZE) + '-' + machineName)
+            .withMachineName(machineName)
+            .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, pod.getMetadata().getName())
+            .withPorts(new ArrayList<>(unsecuredPorts.values()))
+            .withServers(allNonSecureServers)
+            .build();
+
+    String serviceName = service.getMetadata().getName();
+    k8sEnv.getServices().put(serviceName, service);
+
+    for (ServicePort servicePort : unsecuredPorts.values()) {
+      // expose service port related external servers if exist
+      Map<String, ServerConfig> matchedExternalServers = match(externalServers, servicePort);
+      if (!matchedExternalServers.isEmpty()) {
+        onEachExposableServerSet(
+            matchedExternalServers,
+            (serverId, srvrs) ->
+                externalServerExposer.expose(
+                    k8sEnv, machineName, serviceName, serverId, servicePort, srvrs));
+      }
+    }
+  }
+

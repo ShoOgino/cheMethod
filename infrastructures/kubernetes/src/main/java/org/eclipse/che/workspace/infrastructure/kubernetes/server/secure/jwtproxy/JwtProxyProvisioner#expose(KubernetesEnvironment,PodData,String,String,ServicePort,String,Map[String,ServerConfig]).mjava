@@ -2,6 +2,7 @@
    * Modifies Kubernetes environment to expose the specified service port via JWTProxy.
    *
    * @param k8sEnv Kubernetes environment to modify
+   * @param pod the pod that runs the server being exposed
    * @param backendServiceName service name that will be exposed
    * @param backendServicePort service port that will be exposed
    * @param protocol protocol that will be used for exposed port
@@ -11,6 +12,8 @@
    */
   public ServicePort expose(
       KubernetesEnvironment k8sEnv,
+      PodData pod,
+      String machineName,
       String backendServiceName,
       ServicePort backendServicePort,
       String protocol,
@@ -18,7 +21,7 @@
       throws InfrastructureException {
     Preconditions.checkArgument(
         secureServers != null && !secureServers.isEmpty(), "Secure servers are missing");
-    ensureJwtProxyInjected(k8sEnv);
+    ensureJwtProxyInjected(k8sEnv, machineName, pod);
 
     Set<String> excludes = new HashSet<>();
     Boolean cookiesAuthEnabled = null;
@@ -54,6 +57,16 @@
 
     k8sEnv.getServices().get(serviceName).getSpec().getPorts().add(exposedPort);
 
+    // JwtProxySecureServerExposer creates no service for the exposed secure servers and
+    // assumes everything will be proxied from localhost, because JWT proxy is collocated
+    // with the workspace pod (because it is added to the environment as an injectable pod).
+    // This method historically supported proxying secure servers exposed through a service
+    // (which is not secure in absence of a appropriate network policy). The support for
+    // accessing the backend server through a service was kept here because it doesn't add
+    // any additional complexity to this method and keeps the door open for the
+    // JwtProxySecureServerExposer to be enhanced in the future with support for service-handled
+    // secure servers.
+    backendServiceName = backendServiceName == null ? "127.0.0.1" : backendServiceName;
     proxyConfigBuilder.addVerifierProxy(
         listenPort,
         "http://" + backendServiceName + ":" + backendServicePort.getTargetPort().getIntVal(),
