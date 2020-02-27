@@ -1,0 +1,36 @@
+  @Test
+  public void shouldStartWorkspaceWithStartupDebug() throws Exception {
+    final WorkspaceImpl workspace = createWorkspace(createConfigDto());
+    when(wsManager.startWorkspace(any(), any(), any())).thenReturn(workspace);
+    when(wsManager.getWorkspace(workspace.getId())).thenReturn(workspace);
+
+    final Response response =
+        given()
+            .auth()
+            .basic(ADMIN_USER_NAME, ADMIN_USER_PASSWORD)
+            .when()
+            .post(
+                SECURE_PATH
+                    + "/workspace/"
+                    + workspace.getId()
+                    + "/runtime"
+                    + "?environment="
+                    + workspace.getConfig().getDefaultEnv()
+                    + "&"
+                    + DEBUG_WORKSPACE_START
+                    + "=true");
+
+    assertEquals(response.getStatusCode(), 200);
+    assertEquals(
+        new WorkspaceImpl(unwrapDto(response, WorkspaceDto.class), TEST_ACCOUNT), workspace);
+    verify(wsManager)
+        .startWorkspace(
+            workspace.getId(),
+            workspace.getConfig().getDefaultEnv(),
+            ImmutableMap.of(
+                DEBUG_WORKSPACE_START,
+                Boolean.TRUE.toString(),
+                DEBUG_WORKSPACE_START_LOG_LIMIT_BYTES,
+                "64"));
+  }
+

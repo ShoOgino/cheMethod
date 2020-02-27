@@ -1,0 +1,43 @@
+  @Test
+  public void shouldRetryWhenOutputIsNullFirst() throws IOException, InterruptedException {
+    logWatch.setInputStream(null);
+
+    LogWatchMock logWatchRegularMessage = new LogWatchMock();
+    // prepare regular message logwatch
+    PipedInputStream inputStream = new PipedInputStream();
+    PipedOutputStream outputStream = new PipedOutputStream(inputStream);
+    outputStream.write("message\n".getBytes());
+    outputStream.close();
+    logWatchRegularMessage.setInputStream(inputStream);
+    CountDownLatch messageHandleLatch = new CountDownLatch(1);
+    logWatchRegularMessage.setLatch(messageHandleLatch);
+    doAnswer(
+            (a) -> {
+              messageHandleLatch.countDown();
+              return null;
+            })
+        .when(podLogHandler)
+        .handle("message", container);
+
+    // return null stream first and regular message stream on second call
+    when(pods.watchLog()).thenReturn(logWatch).thenReturn(logWatchRegularMessage);
+
+    ContainerLogWatch clw =
+        new ContainerLogWatch(
+            client, namespace, podname, container, podLogHandler, TIMEOUTS, LOG_LIMIT_BYTES);
+    new Thread(clw).start();
+
+    // wait for logwatch close, it means that error message was processed
+    CountDownLatch closeLatch = new CountDownLatch(1);
+    logWatch.setLatch(closeLatch);
+    closeLatch.await(1, TimeUnit.SECONDS);
+    assertTrue(logWatch.isClosed);
+
+    // wait for regular message
+    messageHandleLatch.await(1, TimeUnit.SECONDS);
+
+    // message was processed
+    verify(podLogHandler).handle("message", container);
+    assertTrue(logWatchRegularMessage.isClosed);
+  }
+

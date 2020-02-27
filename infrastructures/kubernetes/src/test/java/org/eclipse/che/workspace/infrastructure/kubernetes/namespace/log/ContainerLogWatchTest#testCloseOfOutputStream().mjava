@@ -1,0 +1,30 @@
+  @Test
+  public void testCloseOfOutputStream() throws IOException, InterruptedException {
+    PipedInputStream inputStream = new PipedInputStream();
+    PipedOutputStream outputStream = new PipedOutputStream(inputStream);
+    outputStream.write("message\n".getBytes());
+    logWatch.setInputStream(inputStream);
+
+    CountDownLatch messageHandleLatch = new CountDownLatch(1);
+    doAnswer(
+            (a) -> {
+              messageHandleLatch.countDown();
+              return null;
+            })
+        .when(podLogHandler)
+        .handle("message", container);
+
+    ContainerLogWatch clw =
+        new ContainerLogWatch(
+            client, namespace, podname, container, podLogHandler, TIMEOUTS, LOG_LIMIT_BYTES);
+    new Thread(clw).start();
+
+    messageHandleLatch.await(1, TimeUnit.SECONDS);
+    outputStream.close();
+
+    CountDownLatch closeLatch = new CountDownLatch(1);
+    logWatch.setLatch(closeLatch);
+    closeLatch.await(1, TimeUnit.SECONDS);
+    assertTrue(logWatch.isClosed);
+  }
+

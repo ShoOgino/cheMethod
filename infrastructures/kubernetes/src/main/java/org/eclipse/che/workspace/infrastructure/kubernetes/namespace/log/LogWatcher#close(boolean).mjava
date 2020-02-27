@@ -1,0 +1,32 @@
+  /**
+   * Closes all opened log watchers. In case of failed workspace, we want to block the pod for some
+   * time before removing it so we have better chance to get all the logs from it. If that's the
+   * case, use {@code needWait=false}. Otherwise watchers will be cleaned immediately, which does
+   * not ensure that we get all the logs.
+   *
+   * @param needWait true if we need to pause before cleanup
+   */
+  public void close(boolean needWait) {
+    try {
+      if (needWait) {
+        LOG.debug(
+            "Waiting '{}ms' before closing all log watchers for workspace '{}'.",
+            timeouts.getWaitBeforeCleanupMs(),
+            workspaceId);
+        Thread.sleep(timeouts.getWaitBeforeCleanupMs());
+      }
+    } catch (InterruptedException e) {
+      LOG.error(
+          "Interrupted while waiting before closing the log watch for workspace '{}'.",
+          workspaceId,
+          e);
+    } finally {
+      LOG.debug("Closing all log watchers for '{}'", workspaceId);
+      synchronized (this) {
+        closed = true;
+        currentContainerWatchers.values().forEach(ContainerLogWatch::close);
+        currentContainerWatchers.clear();
+      }
+    }
+  }
+

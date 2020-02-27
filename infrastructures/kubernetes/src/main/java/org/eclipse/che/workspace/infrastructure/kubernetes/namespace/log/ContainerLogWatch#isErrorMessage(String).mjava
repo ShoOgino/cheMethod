@@ -1,0 +1,41 @@
+  /**
+   * Tells whether given `message` is error message so we should try to watch again.
+   *
+   * <p>error message should look like this:
+   *
+   * <pre>
+   *   {
+   *    "kind":"Status",
+   *    "apiVersion":"v1",
+   *    "metadata":{},
+   *    "status":"Failure",
+   *    "message":"container \"che-plugin-metadata-broker-v3-1-1\" in pod
+   *      \"workspace1a7u0mmfknhsgzqc.che-plugin-broker\" is waiting to start: ContainerCreating",
+   *    "reason":"BadRequest",
+   *    "code":400}
+   * </pre>
+   *
+   * <p>Regular message is usually not a json, so we first try to find pod name. That should
+   * eliminate close to 100% regular messages to being checked for error, because container app
+   * should not know where it runs. If this initial check fails, we try to parse the message as a
+   * json and match it for more details.
+   *
+   * @param message to check
+   * @return true if message is an json error message, false otherwise
+   */
+  private boolean isErrorMessage(String message) {
+    if (!message.contains(podName)) {
+      return false;
+    }
+    try {
+      JsonObject json = jsonParser.parse(message).getAsJsonObject();
+      return !(!"Status".equals(json.get("kind").getAsString())
+          || !"Failure".equals(json.get("status").getAsString())
+          || !json.has("code")
+          || !json.get("code").getAsString().contains("40"));
+    } catch (JsonParseException jpe) {
+      LOG.debug("Can't parse the message as a json.", jpe);
+      return false;
+    }
+  }
+

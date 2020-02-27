@@ -1,0 +1,38 @@
+  /**
+   * Reads given inputStream. If we receive error message about pod is initializing from k8s (see:
+   * {@link ContainerLogWatch#isErrorMessage(String)}, returns false immediately so we can try again
+   * later. Otherwise keeps reading the messages from the stream and gives them to given handler. Be
+   * aware that it is blocking and potentially long operation!
+   *
+   * @param inputStream to read log messages from
+   * @param handler we delegate log messages to this handler.
+   * @return false if error message received from k8s, true at the end of the stream or if
+   *     interrupted
+   */
+  private boolean readAndHandle(InputStream inputStream, PodLogHandler handler) {
+    try (BufferedReader in = new BufferedReader(new InputStreamReader(inputStream))) {
+      String logMessage;
+      while ((logMessage = in.readLine()) != null) {
+        if (!this.isErrorMessage(logMessage)) {
+          handler.handle(logMessage, containerName);
+        } else {
+          LOG.debug("error message [{}]", logMessage);
+          LOG.debug(
+              "failed to get the logs for [{} : {}], should try again if enough time.",
+              podName,
+              containerName);
+          return false;
+        }
+      }
+    } catch (IOException e) {
+      // TODO: can we somehow recognize if it is failure or intended close()?
+      LOG.debug(
+          "End of watching log of [{} : {} : {}]. It could be either intended or some connection failure.",
+          namespace,
+          podName,
+          containerName);
+      LOG.trace("End of watching log of [{} : {} : {}]", namespace, podName, containerName, e);
+    }
+    return true;
+  }
+

@@ -1,0 +1,38 @@
+  private void watchLogsIfDebugEnabled(Map<String, String> startOptions)
+      throws InfrastructureException {
+    if (startOptions == null || startOptions.isEmpty()) {
+      LOG.debug(
+          "'startOptions' is null or empty so we won't watch the container logs for workspace '{}'",
+          getContext().getIdentity().getWorkspaceId());
+      return;
+    }
+    boolean shouldWatchContainerStartupLogs =
+        Boolean.parseBoolean(
+            startOptions.getOrDefault(DEBUG_WORKSPACE_START, Boolean.FALSE.toString()));
+
+    if (shouldWatchContainerStartupLogs) {
+      // get all the pods we care about
+      Set<String> podNames =
+          machines
+              .getMachines(getContext().getIdentity())
+              .values()
+              .stream()
+              .filter(Objects::nonNull)
+              .map(KubernetesMachineImpl::getPodName)
+              .filter(Objects::nonNull)
+              .collect(Collectors.toSet());
+      LOG.debug(
+          "Watch '{}' pods in workspace '{}'",
+          podNames,
+          getContext().getIdentity().getWorkspaceId());
+
+      namespace
+          .deployments()
+          .watchLogs(
+              new PodLogToEventPublisher(this.eventPublisher, this.getContext().getIdentity()),
+              LogWatchTimeouts.DEFAULT,
+              podNames,
+              LogWatcher.getLogLimitBytes(startOptions));
+    }
+  }
+

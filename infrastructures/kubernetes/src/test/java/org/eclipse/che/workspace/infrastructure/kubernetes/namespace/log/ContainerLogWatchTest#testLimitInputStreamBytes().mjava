@@ -1,0 +1,20 @@
+  @Test
+  public void testLimitInputStreamBytes() throws IOException {
+    PipedInputStream inputStream = new PipedInputStream();
+    PipedOutputStream outputStream = new PipedOutputStream(inputStream);
+    outputStream.write("This is long message that won't fit into the limit.".getBytes());
+    outputStream.close();
+    logWatch.setInputStream(inputStream);
+
+    ContainerLogWatch clw =
+        new ContainerLogWatch(client, namespace, podname, container, podLogHandler, TIMEOUTS, 4);
+    clw.run();
+
+    ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> containerCaptor = ArgumentCaptor.forClass(String.class);
+    verify(podLogHandler, times(1)).handle(messageCaptor.capture(), containerCaptor.capture());
+    assertEquals(messageCaptor.getValue(), "This");
+    assertEquals(containerCaptor.getValue(), container);
+    assertTrue(logWatch.isClosed);
+  }
+

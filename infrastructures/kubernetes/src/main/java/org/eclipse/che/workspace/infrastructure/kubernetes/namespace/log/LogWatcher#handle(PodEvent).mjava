@@ -1,0 +1,41 @@
+  @Override
+  public void handle(PodEvent event) {
+    final String podName = event.getPodName();
+
+    final String containerName = event.getContainerName();
+    if (containerName != null && event.getReason().equals(STARTED_EVENT_REASON)) {
+      for (PodLogHandler logHandler : logHandlers) {
+        // we need to synchronize here so we won't add new watcher while we're cleaning them
+        synchronized (this) {
+          if (closed) {
+            return;
+          }
+          if (podsOfInterest.contains(podName)
+              && !currentContainerWatchers.containsKey(podContainerKey(podName, containerName))) {
+            ContainerLogWatch logWatch =
+                new ContainerLogWatch(
+                    client,
+                    namespace,
+                    podName,
+                    containerName,
+                    logHandler,
+                    timeouts,
+                    inputStreamLimit);
+            currentContainerWatchers.put(podContainerKey(podName, containerName), logWatch);
+            LOG.trace(
+                "adding [{}] to watching containers now watching [{}]",
+                containerName,
+                currentContainerWatchers.keySet());
+            containerWatchersThreadPool.execute(logWatch);
+          } else {
+            LOG.debug(
+                "Not for this handler or already watching '{} : {} : {}'",
+                namespace,
+                podName,
+                containerName);
+          }
+        }
+      }
+    }
+  }
+
