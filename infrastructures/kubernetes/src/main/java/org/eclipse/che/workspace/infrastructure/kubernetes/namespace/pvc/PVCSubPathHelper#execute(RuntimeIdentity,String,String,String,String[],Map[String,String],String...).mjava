@@ -1,0 +1,46 @@
+  private void execute(
+      RuntimeIdentity identity,
+      String workspaceId,
+      String namespace,
+      String pvcName,
+      String[] commandBase,
+      Map<String, String> startOptions,
+      String... arguments) {
+    final String jobName = commandBase[0];
+    final String podName = jobName + '-' + workspaceId;
+    final String[] command = buildCommand(commandBase, arguments);
+    final Pod pod = newPod(podName, pvcName, command);
+    securityContextProvisioner.provision(pod.getSpec());
+
+    KubernetesDeployments deployments = null;
+    try {
+      deployments = factory.access(workspaceId, namespace).deployments();
+      deployments.create(pod);
+      watchLogsIfDebugEnabled(deployments, pod, identity, startOptions);
+      final Pod finished = deployments.wait(podName, WAIT_POD_TIMEOUT_MIN, POD_PREDICATE::apply);
+      PodStatus finishedStatus = finished.getStatus();
+      if (POD_PHASE_FAILED.equals(finishedStatus.getPhase())) {
+        String logs = deployments.getPodLogs(podName);
+        LOG.error(
+            "Job command '{}' execution is failed. Logs: {}",
+            Arrays.toString(command),
+            Strings.nullToEmpty(logs).replace("\n", " \\n")); // Force logs onto one line
+      }
+    } catch (InfrastructureException ex) {
+      LOG.error(
+          "Unable to perform '{}' command for the workspace '{}' cause: '{}'",
+          Arrays.toString(command),
+          workspaceId,
+          ex.getMessage());
+      deployments.stopWatch(true);
+    } finally {
+      if (deployments != null) {
+        deployments.stopWatch();
+        try {
+          deployments.delete(podName);
+        } catch (InfrastructureException ignored) {
+        }
+      }
+    }
+  }
+
