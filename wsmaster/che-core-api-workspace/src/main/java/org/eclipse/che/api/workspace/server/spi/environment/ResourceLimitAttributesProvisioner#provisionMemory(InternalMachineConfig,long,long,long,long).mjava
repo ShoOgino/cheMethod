@@ -1,0 +1,44 @@
+  /**
+   * Configures memory attributes, if they are missing in {@link MachineConfig}
+   *
+   * @param machineConfig - given machine configuration
+   * @param memoryLimit - resource limit parameter configured by user in specific infra recipe. Can
+   *     be 0 if defaults should be used
+   * @param memoryRequest - memory request parameter configured by user in specific infra recipe.
+   *     Can be 0 if defaults should be used
+   * @param defaultMemoryLimit - default memory limit resource parameter value
+   * @param defaultMemoryRequest - default memory request resource parameter value
+   */
+  public static void provisionMemory(
+      InternalMachineConfig machineConfig,
+      long memoryLimit,
+      long memoryRequest,
+      long defaultMemoryLimit,
+      long defaultMemoryRequest) {
+    if (defaultMemoryRequest > defaultMemoryLimit) {
+      defaultMemoryRequest = defaultMemoryLimit;
+      LOG.warn(
+          "Requested default container resource limit is less than default request. Request parameter will be ignored.");
+    }
+
+    if (memoryLimit <= 0) { // if limit only is undefined
+      memoryLimit = defaultMemoryLimit;
+    }
+    if (memoryRequest <= 0) { // if request only is undefined
+      memoryRequest = defaultMemoryRequest;
+    }
+    if (memoryRequest > memoryLimit) { // if both properties are defined, but not consistent
+      memoryRequest = memoryLimit;
+    }
+
+    final Map<String, String> attributes = machineConfig.getAttributes();
+    String configuredLimit = attributes.get(MEMORY_LIMIT_ATTRIBUTE);
+    String configuredRequest = attributes.get(MEMORY_REQUEST_ATTRIBUTE);
+    if (isNullOrEmpty(configuredLimit)) {
+      attributes.put(MEMORY_LIMIT_ATTRIBUTE, String.valueOf(memoryLimit));
+    }
+    if (isNullOrEmpty(configuredRequest)) {
+      attributes.put(MEMORY_REQUEST_ATTRIBUTE, String.valueOf(memoryRequest));
+    }
+  }
+

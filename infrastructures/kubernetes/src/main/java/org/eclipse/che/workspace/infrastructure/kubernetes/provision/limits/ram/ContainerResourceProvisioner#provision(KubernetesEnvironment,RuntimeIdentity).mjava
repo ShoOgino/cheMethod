@@ -1,0 +1,41 @@
+  @Override
+  @Traced
+  public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+
+    TracingTags.WORKSPACE_ID.set(identity::getWorkspaceId);
+
+    final Map<String, InternalMachineConfig> machines = k8sEnv.getMachines();
+    for (PodData pod : k8sEnv.getPodsData().values()) {
+      for (Container container : pod.getSpec().getContainers()) {
+
+        // make sure that machine configs have settings for RAM limit and request
+        InternalMachineConfig machineConfig = machines.get(machineName(pod, container));
+        resourceLimitAttributesProvisioner.provisionMemory(
+            machineConfig,
+            Containers.getRamLimit(container),
+            Containers.getRamRequest(container),
+            defaultMachineMaxMemorySizeAttribute,
+            defaultMachineRequestMemorySizeAttribute);
+
+        // make sure that machine configs have settings for CPU limit and request
+        resourceLimitAttributesProvisioner.provisionCPU(
+            machineConfig,
+            Containers.getCpuLimit(container),
+            Containers.getCpuRequest(container),
+            defaultMachineCpuLimitAttribute,
+            defaultMachineCpuRequestAttribute);
+
+        // reapply memory  and CPU settings to k8s container to make sure that provisioned
+        // values above are set
+        final Map<String, String> attributes = machineConfig.getAttributes();
+        Containers.addRamLimit(container, Long.parseLong(attributes.get(MEMORY_LIMIT_ATTRIBUTE)));
+        Containers.addRamRequest(
+            container, Long.parseLong(attributes.get(MEMORY_REQUEST_ATTRIBUTE)));
+        Containers.addCpuLimit(container, Float.parseFloat(attributes.get(CPU_LIMIT_ATTRIBUTE)));
+        Containers.addCpuRequest(
+            container, Float.parseFloat(attributes.get(CPU_REQUEST_ATTRIBUTE)));
+      }
+    }
+  }
+

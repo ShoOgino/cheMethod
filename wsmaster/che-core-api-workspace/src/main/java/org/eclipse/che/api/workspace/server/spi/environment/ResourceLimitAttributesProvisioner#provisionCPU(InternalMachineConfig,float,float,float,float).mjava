@@ -1,0 +1,44 @@
+  /**
+   * Configures CPU attributes, if they are missing in {@link MachineConfig}
+   *
+   * @param machineConfig - given machine configuration
+   * @param cpuLimit - CPU resource limit parameter configured by user in specific infra recipe. Can
+   *     be 0 if defaults should be used
+   * @param cpuRequest - CPU resource request parameter configured by user in specific infra recipe.
+   *     Can be 0 if defaults should be used
+   * @param defaultCPULimit - default CPU limit resource parameter value
+   * @param defaultCPURequest - default CPU request resource parameter value
+   */
+  public static void provisionCPU(
+      InternalMachineConfig machineConfig,
+      float cpuLimit,
+      float cpuRequest,
+      float defaultCPULimit,
+      float defaultCPURequest) {
+    if (defaultCPURequest > defaultCPULimit) {
+      defaultCPURequest = defaultCPULimit;
+      LOG.warn(
+          "Requested default container resource limit is less than default request. Request parameter will be ignored.");
+    }
+
+    if (cpuLimit <= 0) { // if limit only is undefined
+      cpuLimit = defaultCPULimit;
+    }
+    if (cpuRequest <= 0) { // if request only is undefined
+      cpuRequest = defaultCPURequest;
+    }
+    if (cpuRequest > cpuLimit) { // if both properties are defined, but not consistent
+      cpuRequest = cpuLimit;
+    }
+
+    final Map<String, String> attributes = machineConfig.getAttributes();
+    String configuredLimit = attributes.get(CPU_LIMIT_ATTRIBUTE);
+    String configuredRequest = attributes.get(CPU_REQUEST_ATTRIBUTE);
+    if (isNullOrEmpty(configuredLimit)) {
+      attributes.put(CPU_LIMIT_ATTRIBUTE, Float.toString(cpuLimit));
+    }
+    if (isNullOrEmpty(configuredRequest)) {
+      attributes.put(CPU_REQUEST_ATTRIBUTE, Float.toString(cpuRequest));
+    }
+  }
+
