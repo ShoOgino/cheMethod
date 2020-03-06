@@ -1,0 +1,42 @@
+  @Test
+  public void shouldConfigureProxyWithExcludes() throws Exception {
+    // given
+    KubernetesEnvironment k8sEnv = KubernetesEnvironment.builder().build();
+    JwtProxyConfigBuilderFactory configBuilderFactory = mock(JwtProxyConfigBuilderFactory.class);
+    JwtProxyConfigBuilder configBuilder = mock(JwtProxyConfigBuilder.class);
+    when(configBuilderFactory.create(any())).thenReturn(configBuilder);
+
+    PassThroughProxyProvisioner passThroughProxyProvisioner =
+        new PassThroughProxyProvisioner(
+            configBuilderFactory,
+            mock(ExternalServiceExposureStrategy.class),
+            new CookiePathStrategy(MULTI_HOST_STRATEGY),
+            "eclipse/che-jwtproxy",
+            "128mb",
+            "Always",
+            runtimeId);
+
+    Map<String, String> attrs = new HashMap<>();
+    ServerConfig.setCookiesAuthEnabled(attrs, true);
+    ServerConfig.setSecure(attrs, true);
+    ServerConfigImpl server1 = new ServerConfigImpl("4401/tcp", "http", "/", attrs);
+
+    ServicePort port = new ServicePort();
+    port.setTargetPort(new IntOrString(8080));
+
+    // when
+    passThroughProxyProvisioner.expose(
+        k8sEnv,
+        podWithName(),
+        "machine",
+        "terminal",
+        port,
+        "TCP",
+        ImmutableMap.of("server1", server1));
+
+    // then
+    verify(configBuilder)
+        .addVerifierProxy(
+            eq(4400), eq("http://terminal:8080"), eq(singleton("/")), eq(false), eq("/"), isNull());
+  }
+

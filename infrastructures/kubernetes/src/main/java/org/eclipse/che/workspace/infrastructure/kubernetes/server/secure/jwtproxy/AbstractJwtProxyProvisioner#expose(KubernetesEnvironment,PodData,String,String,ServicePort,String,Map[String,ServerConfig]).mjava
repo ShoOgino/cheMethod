@@ -10,6 +10,7 @@
    * @return JWTProxy service port that expose the specified one
    * @throws InfrastructureException if any exception occurs during port exposing
    */
+  @Override
   public ServicePort expose(
       KubernetesEnvironment k8sEnv,
       PodData pod,
@@ -25,22 +26,23 @@
 
     Set<String> excludes = new HashSet<>();
     Boolean cookiesAuthEnabled = null;
-    for (ServerConfig config : secureServers.values()) {
+    for (ServerConfig serverConfig : secureServers.values()) {
+      ExposureConfiguration config = getExposureConfiguration(serverConfig);
+
       // accumulate unsecured paths
-      if (config.getAttributes().containsKey(UNSECURED_PATHS_ATTRIBUTE)) {
-        Collections.addAll(
-            excludes, config.getAttributes().get(UNSECURED_PATHS_ATTRIBUTE).split(","));
+      if (config.excludedPaths != null) {
+        excludes.addAll(config.excludedPaths);
       }
 
       // calculate `cookiesAuthEnabled` attributes
-      Boolean serverCookiesAuthEnabled =
-          parseBoolean(config.getAttributes().get(SECURE_SERVER_COOKIES_AUTH_ENABLED_ATTRIBUTE));
-      if (cookiesAuthEnabled == null) {
-        cookiesAuthEnabled = serverCookiesAuthEnabled;
-      } else {
-        if (!cookiesAuthEnabled.equals(serverCookiesAuthEnabled)) {
-          throw new InfrastructureException(
-              "Secure servers which expose the same port should have the same `cookiesAuthEnabled` value.");
+      if (detectCookieAuth) {
+        if (cookiesAuthEnabled == null) {
+          cookiesAuthEnabled = config.cookiesAuthEnabled;
+        } else {
+          if (!cookiesAuthEnabled.equals(config.cookiesAuthEnabled)) {
+            throw new InfrastructureException(
+                "Secure servers which expose the same port should have the same `cookiesAuthEnabled` value.");
+          }
         }
       }
     }
@@ -71,7 +73,7 @@
         listenPort,
         "http://" + backendServiceName + ":" + backendServicePort.getTargetPort().getIntVal(),
         excludes,
-        cookiesAuthEnabled,
+        cookiesAuthEnabled == null ? false : cookiesAuthEnabled,
         cookiePathStrategy.get(serviceName, exposedPort),
         externalServiceExposureStrategy.getExternalPath(serviceName, exposedPort.getName()));
     k8sEnv
