@@ -1,0 +1,29 @@
+  @Test
+  public void shouldUseLastTimestampIfAvailable() throws InfrastructureException {
+    // Given
+    when(objectReference.getKind()).thenReturn(POD_OBJECT_KIND);
+    kubernetesDeployments.watchEvents(podEventHandler);
+    verify(eventNamespaceMixedOperation).watch(eventWatcherCaptor.capture());
+    Watcher<Event> watcher = eventWatcherCaptor.getValue();
+    Event event = mock(Event.class);
+    when(event.getInvolvedObject()).thenReturn(objectReference);
+    when(event.getMetadata()).thenReturn(new ObjectMeta());
+    Calendar cal = Calendar.getInstance();
+    cal.add(Calendar.YEAR, 2);
+    Date nextYear = cal.getTime();
+    when(event.getLastTimestamp()).thenReturn(PodEvents.convertDateToEventTimestamp(nextYear));
+    when(event.getFirstTimestamp()).thenReturn(PodEvents.convertDateToEventTimestamp(new Date()));
+
+    // When
+    watcher.eventReceived(Watcher.Action.ADDED, event);
+
+    // Then
+    verify(event, times(1)).getLastTimestamp();
+    verify(event, times(1)).getFirstTimestamp();
+    ArgumentCaptor<PodEvent> captor = ArgumentCaptor.forClass(PodEvent.class);
+    verify(podEventHandler).handle(captor.capture());
+    PodEvent podEvent = captor.getValue();
+    Assert.assertEquals(
+        podEvent.getLastTimestamp(), PodEvents.convertDateToEventTimestamp(nextYear));
+  }
+
