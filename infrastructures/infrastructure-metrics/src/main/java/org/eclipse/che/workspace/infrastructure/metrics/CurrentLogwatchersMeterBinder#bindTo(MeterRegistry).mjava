@@ -1,0 +1,18 @@
+  @Override
+  public void bindTo(MeterRegistry registry) {
+    Gauge.builder("log_watchers", this::current).register(registry);
+
+    eventService.subscribe(
+        (e) -> currentWatchersCounter.incrementAndGet(), WatchLogStartedEvent.class);
+    eventService.subscribe(
+        (e) -> {
+          long counter = currentWatchersCounter.decrementAndGet();
+          if (counter < 0) {
+            LOG.warn(
+                "WatchLog current instances counter decremented below 0. Counter set explicitly to 0. This should not happen. Please report a bug if you see this message in the log.");
+            currentWatchersCounter.set(0);
+          }
+        },
+        WatchLogStoppedEvent.class);
+  }
+

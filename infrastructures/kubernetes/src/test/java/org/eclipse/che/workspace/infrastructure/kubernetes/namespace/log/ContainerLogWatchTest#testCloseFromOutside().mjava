@@ -2,7 +2,7 @@
   public void testCloseFromOutside() throws IOException, InterruptedException {
     PipedInputStream inputStream = new PipedInputStream();
     PipedOutputStream outputStream = new PipedOutputStream(inputStream);
-    outputStream.write("message\n".getBytes());
+    outputStream.write("message\na\na\na\na\na".getBytes());
     logWatch.setInputStream(inputStream);
 
     CountDownLatch latch = new CountDownLatch(1);
@@ -16,12 +16,23 @@
 
     ContainerLogWatch clw =
         new ContainerLogWatch(
-            client, namespace, podname, container, podLogHandler, TIMEOUTS, LOG_LIMIT_BYTES);
+            client,
+            eventsPublisher,
+            namespace,
+            podname,
+            container,
+            podLogHandler,
+            TIMEOUTS,
+            LOG_LIMIT_BYTES);
     new Thread(clw).start();
 
     latch.await(1, TimeUnit.SECONDS);
     clw.close();
 
     assertTrue(logWatch.isClosed);
+
+    // verify events were properly fired
+    verify(eventsPublisher, times(1)).sendWatchLogStartedEvent(any(String.class));
+    verify(eventsPublisher, timeout(1000).times(1)).sendWatchLogStoppedEvent(any(String.class));
   }
 
