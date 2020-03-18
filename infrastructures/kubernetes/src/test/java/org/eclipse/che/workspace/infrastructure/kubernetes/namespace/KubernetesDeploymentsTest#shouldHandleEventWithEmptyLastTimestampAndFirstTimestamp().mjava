@@ -1,28 +1,33 @@
   @Test
-  public void shouldUseLastTimestampIfAvailable() throws InfrastructureException {
+  public void shouldHandleEventWithEmptyLastTimestampAndFirstTimestamp() throws Exception {
     // Given
     when(objectReference.getKind()).thenReturn(POD_OBJECT_KIND);
     kubernetesDeployments.watchEvents(podEventHandler);
+    Calendar cal = Calendar.getInstance();
+    cal.add(Calendar.MINUTE, -1);
+    Date minuteAgo = cal.getTime();
+
+    Field f = KubernetesDeployments.class.getDeclaredField("watcherInitializationDate");
+    f.setAccessible(true);
+    f.set(kubernetesDeployments, minuteAgo);
+
     verify(eventNamespaceMixedOperation).watch(eventWatcherCaptor.capture());
     Watcher<Event> watcher = eventWatcherCaptor.getValue();
     Event event = mock(Event.class);
     when(event.getInvolvedObject()).thenReturn(objectReference);
     when(event.getMetadata()).thenReturn(new ObjectMeta());
-    Calendar cal = Calendar.getInstance();
-    cal.add(Calendar.YEAR, 2);
-    Date nextYear = cal.getTime();
-    when(event.getLastTimestamp()).thenReturn(PodEvents.convertDateToEventTimestamp(nextYear));
-    when(event.getFirstTimestamp()).thenReturn(PodEvents.convertDateToEventTimestamp(new Date()));
+    when(event.getLastTimestamp()).thenReturn(null);
+    when(event.getFirstTimestamp()).thenReturn(null);
 
     // When
     watcher.eventReceived(Watcher.Action.ADDED, event);
 
     // Then
     verify(event, times(1)).getLastTimestamp();
-    verify(event, never()).getFirstTimestamp();
+    verify(event, times(1)).getFirstTimestamp();
     ArgumentCaptor<PodEvent> captor = ArgumentCaptor.forClass(PodEvent.class);
     verify(podEventHandler).handle(captor.capture());
     PodEvent podEvent = captor.getValue();
-    assertEquals(podEvent.getLastTimestamp(), PodEvents.convertDateToEventTimestamp(nextYear));
+    assertNotNull(podEvent.getLastTimestamp());
   }
 
