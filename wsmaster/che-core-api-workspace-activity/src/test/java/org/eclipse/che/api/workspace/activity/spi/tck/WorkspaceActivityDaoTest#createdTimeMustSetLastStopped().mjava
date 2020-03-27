@@ -1,0 +1,23 @@
+  @Test
+  public void createdTimeMustSetLastStopped() throws TckRepositoryException, ServerException {
+    // given new workspace with created activity
+    AccountImpl newAccount = new AccountImpl("new_account", "new_account", "test");
+    WorkspaceImpl workspace = createWorkspace("new_ws", newAccount, "new_ws");
+    accountTckRepository.createAll(singletonList(newAccount));
+    wsTckRepository.createAll(singletonList(workspace));
+
+    Page<String> stopped =
+        workspaceActivityDao.findInStatusSince(Instant.now().toEpochMilli(), STOPPED, 100, 0);
+    assertTrue(stopped.isEmpty());
+
+    // when created workspace activity
+    workspaceActivityDao.setCreatedTime("new_ws", Instant.now().toEpochMilli());
+
+    // then find STOPPED must return it and activity must have set last_stopped timestamp
+    stopped = workspaceActivityDao.findInStatusSince(Instant.now().toEpochMilli(), STOPPED, 100, 0);
+    assertFalse(stopped.isEmpty());
+    assertEquals(stopped.getItemsCount(), 1);
+    WorkspaceActivity activity = workspaceActivityDao.findActivity("new_ws");
+    assertNotNull(activity.getLastStopped());
+  }
+
