@@ -1,13 +1,11 @@
   @Test
-  public void
-      shouldProvisionK8sEnvironmentWithMachineConfigAndGeneratedDeploymentForSpecifiedDockerimage()
-          throws Exception {
-    // given
+  public void shouldBeAbleToSetupSpecificImagePullPolicy() throws DevfileException {
     ComponentImpl dockerimageComponent = new ComponentImpl();
     dockerimageComponent.setType(DOCKERIMAGE_COMPONENT_TYPE);
-    dockerimageComponent.setAlias("jdk");
     dockerimageComponent.setImage("eclipse/ubuntu_jdk8:latest");
     dockerimageComponent.setMemoryLimit("1G");
+    dockerimageComponentApplier =
+        new DockerimageComponentToWorkspaceApplier(PROJECTS_MOUNT_PATH, "Never", k8sEnvProvisioner);
 
     // when
     dockerimageComponentApplier.apply(workspaceConfig, dockerimageComponent, null);
@@ -15,11 +13,11 @@
     // then
     verify(k8sEnvProvisioner)
         .provision(
-            eq(workspaceConfig),
+            any(),
             eq(KubernetesEnvironment.TYPE),
             objectsCaptor.capture(),
             machinesCaptor.capture());
-    MachineConfigImpl machineConfig = machinesCaptor.getValue().get("jdk");
+    MachineConfigImpl machineConfig = machinesCaptor.getValue().get("eclipse-ubuntu_jdk8-latest");
     assertNotNull(machineConfig);
 
     List<HasMetadata> objects = objectsCaptor.getValue();
@@ -28,17 +26,14 @@
     Deployment deployment = (Deployment) objects.get(0);
     PodTemplateSpec podTemplate = deployment.getSpec().getTemplate();
     ObjectMeta podMeta = podTemplate.getMetadata();
-    assertEquals(podMeta.getName(), "jdk");
+    assertEquals(podMeta.getName(), "eclipse-ubuntu_jdk8-latest");
 
     Map<String, String> deploymentSelector = deployment.getSpec().getSelector().getMatchLabels();
     assertFalse(deploymentSelector.isEmpty());
     assertTrue(podMeta.getLabels().entrySet().containsAll(deploymentSelector.entrySet()));
 
     Container container = podTemplate.getSpec().getContainers().get(0);
-    assertEquals(container.getName(), "jdk");
-    assertEquals(container.getImage(), "eclipse/ubuntu_jdk8:latest");
-    assertEquals(container.getImagePullPolicy(), "Always");
-
-    assertEquals(Names.machineName(podMeta, container), "jdk");
+    assertEquals(container.getName(), "eclipse-ubuntu_jdk8-latest");
+    assertEquals(container.getImagePullPolicy(), "Never");
   }
 
