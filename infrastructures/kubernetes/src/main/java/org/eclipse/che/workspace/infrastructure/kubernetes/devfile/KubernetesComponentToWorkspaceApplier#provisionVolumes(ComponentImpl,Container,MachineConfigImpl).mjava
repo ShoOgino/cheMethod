@@ -1,0 +1,43 @@
+  private void provisionVolumes(
+      ComponentImpl component, Container container, MachineConfigImpl config)
+      throws DevfileException {
+    for (org.eclipse.che.api.workspace.server.model.impl.devfile.VolumeImpl componentVolume :
+        component.getVolumes()) {
+      Optional<VolumeMount> sameNameMount =
+          container
+              .getVolumeMounts()
+              .stream()
+              .filter(vm -> vm.getName().equals(componentVolume.getName()))
+              .findFirst();
+      if (sameNameMount.isPresent()
+          && sameNameMount.get().getMountPath().equals(componentVolume.getContainerPath())) {
+        continue;
+      } else if (sameNameMount.isPresent()) {
+        throw new DevfileException(
+            format(
+                "Conflicting volume with same name ('%s') but different path ('%s') found for component '%s' and its container '%s'.",
+                componentVolume.getName(),
+                componentVolume.getContainerPath(),
+                getIdentifiableComponentName(component),
+                container.getName()));
+      }
+      if (container
+          .getVolumeMounts()
+          .stream()
+          .anyMatch(vm -> vm.getMountPath().equals(componentVolume.getContainerPath()))) {
+        throw new DevfileException(
+            format(
+                "Conflicting volume with same path ('%s') but different name ('%s') found for component '%s' and its container '%s'.",
+                componentVolume.getContainerPath(),
+                componentVolume.getName(),
+                getIdentifiableComponentName(component),
+                container.getName()));
+      }
+      config
+          .getVolumes()
+          .put(
+              componentVolume.getName(),
+              new VolumeImpl().withPath(componentVolume.getContainerPath()));
+    }
+  }
+
