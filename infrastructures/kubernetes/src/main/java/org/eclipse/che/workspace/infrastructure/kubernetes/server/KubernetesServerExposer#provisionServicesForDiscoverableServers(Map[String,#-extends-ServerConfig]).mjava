@@ -1,0 +1,32 @@
+  // TODO: this creates discoverable services as an extra services. Service for same {@link
+  //  ServerConfig} is also created later in in {@link #exposeNonSecureServers(Map, Map, Map)} or
+  //  {@link #exposeSecureServers(Map, Map)} as a non-discoverable one. This was added during
+  //  working on adding endpoints for kubernetes/openshift components, to keep behavior consistent.
+  //  However, this logic is probably broken and should be changed.
+  /**
+   * Creates services with defined names for discoverable {@link ServerConfig}s. The name is taken
+   * from {@link ServerConfig}'s attributes under {@link ServerConfig#SERVER_NAME_ATTRIBUTE} and
+   * must be set, otherwise service won't be created.
+   */
+  private void provisionServicesForDiscoverableServers(
+      Map<String, ? extends ServerConfig> servers) {
+    for (String serverName : servers.keySet()) {
+      ServerConfig server = servers.get(serverName);
+      if (server.getAttributes().containsKey(SERVER_NAME_ATTRIBUTE)) {
+        // remove the name from attributes so we don't send it to the client
+        String endpointName = server.getAttributes().remove(SERVER_NAME_ATTRIBUTE);
+        if (server.isDiscoverable()) {
+          Service service =
+              new ServerServiceBuilder()
+                  .withName(endpointName)
+                  .withMachineName(machineName)
+                  .withSelectorEntry(CHE_ORIGINAL_NAME_LABEL, pod.getMetadata().getName())
+                  .withPorts(Collections.singletonList(getServicePort(server)))
+                  .withServers(Collections.singletonMap(serverName, server))
+                  .build();
+          k8sEnv.getServices().put(service.getMetadata().getName(), service);
+        }
+      }
+    }
+  }
+

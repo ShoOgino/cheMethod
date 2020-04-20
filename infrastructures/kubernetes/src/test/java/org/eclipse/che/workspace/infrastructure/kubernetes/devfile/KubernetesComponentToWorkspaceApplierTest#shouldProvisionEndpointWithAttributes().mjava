@@ -1,0 +1,61 @@
+  @Test
+  public void shouldProvisionEndpointWithAttributes()
+      throws IOException, ValidationException, InfrastructureException, DevfileException {
+    // given
+    String endpointName = "petclinic-endpoint";
+    Integer endpointPort = 8081;
+    String endpointProtocol = "tcp";
+    String endpointPath = "path";
+    String endpointPublic = "false";
+    String endpointSecure = "false";
+
+    String yamlRecipeContent = getResource("devfile/petclinicPods.yaml");
+    doReturn(toK8SList(yamlRecipeContent).getItems()).when(k8sRecipeParser).parse(anyString());
+
+    ComponentImpl component = new ComponentImpl();
+    component.setType(KUBERNETES_COMPONENT_TYPE);
+    component.setReference(REFERENCE_FILENAME);
+    component.setAlias(COMPONENT_NAME);
+    component.setEndpoints(
+        singletonList(
+            new EndpointImpl(
+                endpointName,
+                endpointPort,
+                ImmutableMap.of(
+                    "protocol",
+                    endpointProtocol,
+                    "path",
+                    endpointPath,
+                    "public",
+                    endpointPublic,
+                    "secure",
+                    endpointSecure))));
+
+    // when
+    applier.apply(workspaceConfig, component, s -> yamlRecipeContent);
+
+    // then
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, MachineConfigImpl>> objectsCaptor =
+        ArgumentCaptor.forClass(Map.class);
+    verify(k8sEnvProvisioner).provision(any(), any(), any(), objectsCaptor.capture());
+    Map<String, MachineConfigImpl> configs = objectsCaptor.getValue();
+    assertEquals(configs.size(), 3);
+    configs
+        .values()
+        .forEach(
+            machineConfig -> {
+              Map<String, ServerConfigImpl> serverConfigs = machineConfig.getServers();
+              assertEquals(serverConfigs.size(), 1);
+              assertTrue(serverConfigs.containsKey(endpointName));
+              assertEquals(serverConfigs.get(endpointName).getPort(), endpointPort.toString());
+              assertEquals(serverConfigs.get(endpointName).getPath(), endpointPath);
+              assertEquals(serverConfigs.get(endpointName).getProtocol(), endpointProtocol);
+              assertEquals(
+                  serverConfigs.get(endpointName).isSecure(), Boolean.parseBoolean(endpointSecure));
+              assertEquals(
+                  serverConfigs.get(endpointName).isInternal(),
+                  !Boolean.parseBoolean(endpointPublic));
+            });
+  }
+

@@ -33,51 +33,8 @@
     String machineName =
         componentAlias == null ? toMachineName(dockerimageComponent.getImage()) : componentAlias;
 
-    MachineConfigImpl machineConfig = new MachineConfigImpl();
-    dockerimageComponent
-        .getEndpoints()
-        .forEach(e -> machineConfig.getServers().put(e.getName(), toServerConfig(e)));
-
-    dockerimageComponent
-        .getVolumes()
-        .forEach(
-            v ->
-                machineConfig
-                    .getVolumes()
-                    .put(v.getName(), new VolumeImpl().withPath(v.getContainerPath())));
-
-    if (Boolean.TRUE.equals(dockerimageComponent.getMountSources())) {
-      machineConfig
-          .getVolumes()
-          .put(PROJECTS_VOLUME_NAME, new VolumeImpl().withPath(projectFolderPath));
-    }
-
-    if (!isNullOrEmpty(componentAlias)) {
-      machineConfig.getAttributes().put(DEVFILE_COMPONENT_ALIAS_ATTRIBUTE, componentAlias);
-    }
-
-    List<HasMetadata> componentObjects = new ArrayList<>();
-    Deployment deployment =
-        buildDeployment(
-            machineName,
-            dockerimageComponent.getImage(),
-            dockerimageComponent.getMemoryLimit(),
-            dockerimageComponent.getCpuRequest(),
-            dockerimageComponent.getCpuLimit(),
-            dockerimageComponent
-                .getEnv()
-                .stream()
-                .map(e -> new EnvVar(e.getName(), e.getValue(), null))
-                .collect(Collectors.toCollection(ArrayList::new)),
-            dockerimageComponent.getCommand(),
-            dockerimageComponent.getArgs());
-    componentObjects.add(deployment);
-
-    dockerimageComponent
-        .getEndpoints()
-        .stream()
-        .filter(e -> "true".equals(e.getAttributes().get(DISCOVERABLE_ENDPOINT_ATTRIBUTE)))
-        .forEach(e -> componentObjects.add(createService(deployment, e)));
+    MachineConfigImpl machineConfig = createMachineConfig(dockerimageComponent, componentAlias);
+    List<HasMetadata> componentObjects = createComponentObjects(dockerimageComponent, machineName);
 
     k8sEnvProvisioner.provision(
         workspaceConfig,
