@@ -1,0 +1,44 @@
+  @Test
+  public void testExposeUniqueSecureServersWithOnlyMatchingServers()
+      throws InfrastructureException {
+    // https://github.com/eclipse/che/issues/16330
+    // given 2 servers which one of them is unique
+    ServerConfigImpl theiaSC =
+        new ServerConfigImpl(
+            "3100/tcp",
+            "https",
+            null,
+            ImmutableMap.of(
+                "internal", "false", "discoverable", "false", "secure", "true", "type", "ide"));
+
+    ServerConfigImpl webviewsSC =
+        new ServerConfigImpl(
+            "3100/tcp",
+            "https",
+            null,
+            ImmutableMap.of(
+                "internal",
+                "false",
+                "discoverable",
+                "false",
+                "unique",
+                "true",
+                "secure",
+                "true",
+                "type",
+                "webview"));
+    Map<String, ServerConfigImpl> serversToExpose =
+        ImmutableMap.of("theia", theiaSC, "webviews", webviewsSC);
+
+    // when
+    serverExposer.expose(serversToExpose);
+
+    // then expose is called twice with only one server each
+    ArgumentCaptor<Map<String, ServerConfig>> serversCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(secureServerExposer, times(2))
+        .expose(any(), any(), any(), any(), any(), any(), serversCaptor.capture());
+    for (Map<String, ServerConfig> captures : serversCaptor.getAllValues()) {
+      assertEquals(captures.size(), 1);
+    }
+  }
+
