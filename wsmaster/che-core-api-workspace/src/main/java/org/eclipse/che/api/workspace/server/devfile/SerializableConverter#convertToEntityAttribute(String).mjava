@@ -1,7 +1,16 @@
   @Override
   public Serializable convertToEntityAttribute(String dbData) {
     try {
-      return objectMapper.readValue(dbData, Serializable.class);
+      JsonNode node = objectMapper.readTree(dbData);
+      if (node.isValueNode()) {
+        return serializableNodeValue(node);
+      } else if (node.isArray()) {
+        List<Serializable> values = new ArrayList<>();
+        node.elements().forEachRemaining(n -> values.add(serializableNodeValue(n)));
+        return values.toArray();
+      } else {
+        throw new RuntimeException("Unable to deserialize preference value:" + dbData);
+      }
     } catch (IOException e) {
       throw new RuntimeException("Unable to deserialize preference value:" + e.getMessage(), e);
     }
