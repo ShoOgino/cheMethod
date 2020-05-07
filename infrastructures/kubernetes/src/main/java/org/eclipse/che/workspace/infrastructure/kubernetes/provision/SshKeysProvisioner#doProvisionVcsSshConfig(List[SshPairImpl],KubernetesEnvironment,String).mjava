@@ -1,0 +1,27 @@
+  private void doProvisionVcsSshConfig(
+      List<SshPairImpl> vcsSshPairs, KubernetesEnvironment k8sEnv, String wsId) {
+    StringBuilder sshConfigData = new StringBuilder();
+    for (SshPair sshPair : vcsSshPairs) {
+      sshConfigData.append(buildConfig(sshPair.getName()));
+    }
+
+    String sshConfigMapName = wsId + SSH_CONFIG_MAP_NAME_SUFFIX;
+
+    Map<String, String> sshConfig = new HashMap<>();
+    sshConfig.put(SSH_CONFIG, sshConfigData.toString());
+    ConfigMap configMap =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName(sshConfigMapName)
+            .endMetadata()
+            .withData(sshConfig)
+            .build();
+
+    k8sEnv.getConfigMaps().put(configMap.getMetadata().getName(), configMap);
+    k8sEnv
+        .getPodsData()
+        .values()
+        .forEach(
+            p -> mountConfigFile(p.getSpec(), sshConfigMapName, p.getRole() != PodRole.INJECTABLE));
+  }
+

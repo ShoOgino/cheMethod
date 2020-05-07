@@ -1,0 +1,41 @@
+  /**
+   * Return list of keys related to the VCS (Version Control Systems), Git, SVN and etc. Usually
+   * managed by user
+   *
+   * @param identity
+   * @return list of ssh pairs
+   */
+  private List<SshPairImpl> getVcsSshPairs(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+    List<SshPairImpl> sshPairs;
+    try {
+      sshPairs = sshManager.getPairs(identity.getOwnerId(), "vcs");
+    } catch (ServerException e) {
+      String message = format("Unable to get SSH Keys. Cause: %s", e.getMessage());
+      LOG.warn(message);
+      k8sEnv.addWarning(
+          new WarningImpl(
+              NOT_ABLE_TO_PROVISION_SSH_KEYS,
+              format(NOT_ABLE_TO_PROVISION_SSH_KEYS_MESSAGE, message)));
+      throw new InfrastructureException(e);
+    }
+    if (sshPairs.isEmpty()) {
+      try {
+        sshPairs =
+            singletonList(
+                sshManager.generatePair(
+                    identity.getOwnerId(), "vcs", "default-" + new Date().getTime()));
+      } catch (ServerException | ConflictException e) {
+        String message =
+            format("Unable to generate the initial SSH key. Cause: %s", e.getMessage());
+        LOG.warn(message);
+        k8sEnv.addWarning(
+            new WarningImpl(
+                NOT_ABLE_TO_PROVISION_SSH_KEYS,
+                format(NOT_ABLE_TO_PROVISION_SSH_KEYS_MESSAGE, message)));
+        throw new InfrastructureException(e);
+      }
+    }
+    return sshPairs;
+  }
+
