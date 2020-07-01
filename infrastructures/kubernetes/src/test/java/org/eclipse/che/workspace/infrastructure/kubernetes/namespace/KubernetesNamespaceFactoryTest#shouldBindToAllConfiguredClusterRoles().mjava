@@ -1,0 +1,64 @@
+  @Test
+  public void shouldBindToAllConfiguredClusterRoles() throws Exception {
+    // given
+    namespaceFactory =
+        spy(
+            new KubernetesNamespaceFactory(
+                "",
+                "serviceAccount",
+                "cr2, cr3",
+                "<workspaceid>",
+                false,
+                clientFactory,
+                userManager,
+                pool));
+    KubernetesNamespace toReturnNamespace = mock(KubernetesNamespace.class);
+    when(toReturnNamespace.getWorkspaceId()).thenReturn("workspace123");
+    when(toReturnNamespace.getName()).thenReturn("workspace123");
+    doReturn(toReturnNamespace).when(namespaceFactory).doCreateNamespaceAccess(any(), any());
+    when(clientFactory.create(any())).thenReturn(k8sClient);
+
+    // pre-create the cluster roles
+    Stream.of("cr1", "cr2", "cr3")
+        .forEach(
+            cr ->
+                k8sClient
+                    .rbac()
+                    .clusterRoles()
+                    .createOrReplaceWithNew()
+                    .withNewMetadata()
+                    .withName(cr)
+                    .endMetadata()
+                    .done());
+
+    // when
+    RuntimeIdentity identity =
+        new RuntimeIdentityImpl("workspace123", null, USER_ID, "workspace123");
+    namespaceFactory.getOrCreate(identity);
+
+    // then
+    verify(namespaceFactory).doCreateServiceAccount("workspace123", "workspace123");
+
+    ServiceAccountList sas = k8sClient.serviceAccounts().inNamespace("workspace123").list();
+    assertEquals(sas.getItems().size(), 1);
+    assertEquals(sas.getItems().get(0).getMetadata().getName(), "serviceAccount");
+
+    RoleList roles = k8sClient.rbac().roles().inNamespace("workspace123").list();
+    assertEquals(
+        Sets.newHashSet("workspace-view", "exec"),
+        roles.getItems().stream().map(r -> r.getMetadata().getName()).collect(Collectors.toSet()));
+
+    RoleBindingList bindings = k8sClient.rbac().roleBindings().inNamespace("workspace123").list();
+    assertEquals(
+        bindings
+            .getItems()
+            .stream()
+            .map(r -> r.getMetadata().getName())
+            .collect(Collectors.toSet()),
+        Sets.newHashSet(
+            "serviceAccount-cluster0",
+            "serviceAccount-cluster1",
+            "serviceAccount-view",
+            "serviceAccount-exec"));
+  }
+
