@@ -1,0 +1,27 @@
+  @Test
+  public void shouldMergeProjectPVCIntoOne() throws Exception {
+    // given
+    PersistentVolumeClaim volumeClaim = newPVC(PROJECTS_VOLUME_NAME, "ReadWriteMany", "1Gb");
+    workspaceConfig.setDefaultEnv("default");
+    RecipeImpl existingRecipe =
+        new RecipeImpl("kubernetes", YAML_CONTENT_TYPE, Serialization.asYaml(volumeClaim), null);
+    doReturn(singletonList(volumeClaim)).when(k8sRecipeParser).parse(anyString());
+
+    workspaceConfig
+        .getEnvironments()
+        .put("default", new EnvironmentImpl(existingRecipe, emptyMap()));
+
+    // try add same claim one more time (like another component adds it)
+    List<HasMetadata> componentsObject = new ArrayList<>();
+    componentsObject.add(volumeClaim);
+
+    // when
+    k8sEnvProvisioner.provision(
+        workspaceConfig, KubernetesEnvironment.TYPE, componentsObject, emptyMap());
+
+    // we still have only one PVC
+    EnvironmentImpl resultEnv =
+        workspaceConfig.getEnvironments().get(workspaceConfig.getDefaultEnv());
+    assertEquals(toK8SList(resultEnv.getRecipe().getContent()).getItems().size(), 1);
+  }
+
