@@ -1,6 +1,17 @@
   private void stopAllExpired() {
     try {
-      activityDao.findExpired(clock.millis()).forEach(this::stopExpiredQuietly);
+      activityDao
+          .findExpiredIdle(clock.millis())
+          .forEach(wsId -> stopExpiredQuietly(wsId, WORKSPACE_IDLE_TIMEOUT_EXCEEDED));
+      if (workspaceActivityManager.getRunTimeout() > 0) {
+        activityDao
+            .findExpiredRunTimeout(clock.millis(), workspaceActivityManager.getRunTimeout())
+            .forEach(
+                wsId -> {
+                  LOG.info("{} for workspace {}", WORKSPACE_RUN_TIMEOUT_EXCEEDED, wsId);
+                  stopExpiredQuietly(wsId, WORKSPACE_RUN_TIMEOUT_EXCEEDED);
+                });
+      }
     } catch (ServerException e) {
       LOG.error("Failed to list all expired to perform stop. Cause: {}", e.getMessage(), e);
     }
