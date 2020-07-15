@@ -1,0 +1,28 @@
+  @Test
+  public void shouldDoDeletePodIfWorkspaceWithEmptyAttributes() throws InfrastructureException {
+    when(identity.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+    when(identity.getInfrastructureNamespace()).thenReturn(NAMESPACE);
+
+    when(clientFactory.create(WORKSPACE_ID)).thenReturn(osClient);
+    when(openShiftEnvironment.getAttributes()).thenReturn(emptyMap());
+
+    when(osClient.pods()).thenReturn(mixedOperationPod);
+    when(mixedOperationPod.inNamespace(NAMESPACE)).thenReturn(namespacePodOperation);
+    when(namespacePodOperation.withName(ASYNC_STORAGE)).thenReturn(podResource);
+
+    ObjectMeta meta = new ObjectMeta();
+    meta.setName(ASYNC_STORAGE);
+    Pod pod = new Pod();
+    pod.setMetadata(meta);
+
+    when(podResource.get()).thenReturn(pod);
+    when(podResource.withPropagationPolicy("Background")).thenReturn(deletable);
+
+    Watch watch = mock(Watch.class);
+    when(podResource.watch(any())).thenReturn(watch);
+
+    asyncStoragePodInterceptor.intercept(openShiftEnvironment, identity);
+    verify(deletable).delete();
+    verify(watch).close();
+  }
+

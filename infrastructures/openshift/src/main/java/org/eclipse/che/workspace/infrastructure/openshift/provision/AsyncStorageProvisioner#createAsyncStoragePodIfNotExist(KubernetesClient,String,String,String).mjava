@@ -1,0 +1,85 @@
+  /**
+   * Create storage Pod with container with mounted volume for storing project source backups, SSH
+   * key and exposed port for rsync connection
+   */
+  private void createAsyncStoragePodIfNotExist(
+      KubernetesClient oc, String namespace, String configMap, String userId) {
+    PodResource<Pod, DoneablePod> podResource =
+        oc.pods().inNamespace(namespace).withName(ASYNC_STORAGE);
+    if (podResource.get() != null) {
+      return; // pod already exist
+    }
+
+    String containerName = Names.generateName(ASYNC_STORAGE);
+
+    Volume storageVolume =
+        new VolumeBuilder()
+            .withName(STORAGE_VOLUME)
+            .withPersistentVolumeClaim(
+                new PersistentVolumeClaimVolumeSourceBuilder()
+                    .withClaimName(pvcName)
+                    .withReadOnly(false)
+                    .build())
+            .build();
+
+    Volume sshKeyVolume =
+        new VolumeBuilder()
+            .withName(CONFIG_MAP_VOLUME_NAME)
+            .withConfigMap(
+                new ConfigMapVolumeSourceBuilder()
+                    .withName(configMap)
+                    .withDefaultMode(0600)
+                    .build())
+            .build();
+
+    VolumeMount storageVolumeMount =
+        new VolumeMountBuilder()
+            .withMountPath(ASYNC_STORAGE_DATA_PATH)
+            .withName(STORAGE_VOLUME)
+            .withReadOnly(false)
+            .build();
+
+    VolumeMount sshVolumeMount =
+        new VolumeMountBuilder()
+            .withMountPath(SSH_KEY_PATH)
+            .withSubPath(AUTHORIZED_KEYS)
+            .withName(CONFIG_MAP_VOLUME_NAME)
+            .withReadOnly(true)
+            .build();
+
+    Container container =
+        new ContainerBuilder()
+            .withName(containerName)
+            .withImage(asyncStorageImage)
+            .withImagePullPolicy(sidecarImagePullPolicy)
+            .withNewResources()
+            .addToLimits("memory", new Quantity("512Mi"))
+            .addToRequests("memory", new Quantity("256Mi"))
+            .endResources()
+            .withPorts(
+                new ContainerPortBuilder()
+                    .withContainerPort(SERVICE_PORT)
+                    .withProtocol("TCP")
+                    .build())
+            .withVolumeMounts(storageVolumeMount, sshVolumeMount)
+            .build();
+
+    PodSpecBuilder podSpecBuilder = new PodSpecBuilder();
+    PodSpec podSpec =
+        podSpecBuilder.withContainers(container).withVolumes(storageVolume, sshKeyVolume).build();
+
+    Pod pod =
+        new PodBuilder()
+            .withApiVersion("v1")
+            .withKind("Pod")
+            .withNewMetadata()
+            .withName(ASYNC_STORAGE)
+            .withNamespace(namespace)
+            .withLabels(of("app", ASYNC_STORAGE, CHE_USER_ID_LABEL, userId))
+            .endMetadata()
+            .withSpec(podSpec)
+            .build();
+
+    oc.pods().inNamespace(namespace).create(pod);
+  }
+

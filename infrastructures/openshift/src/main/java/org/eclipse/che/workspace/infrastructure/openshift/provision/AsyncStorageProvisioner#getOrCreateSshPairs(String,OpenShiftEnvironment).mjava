@@ -1,0 +1,34 @@
+  /** Get or create new pair of SSH keys, this is need for securing rsync connection */
+  private List<SshPairImpl> getOrCreateSshPairs(String userId, OpenShiftEnvironment osEnv)
+      throws InfrastructureException {
+    List<SshPairImpl> sshPairs;
+    try {
+      sshPairs = sshManager.getPairs(userId, "internal");
+    } catch (ServerException e) {
+      String message = format("Unable to get SSH Keys. Cause: %s", e.getMessage());
+      LOG.warn(message);
+      osEnv.addWarning(
+          new WarningImpl(
+              NOT_ABLE_TO_PROVISION_SSH_KEYS,
+              format(NOT_ABLE_TO_PROVISION_SSH_KEYS_MESSAGE, message)));
+      throw new InfrastructureException(e);
+    }
+    if (sshPairs.isEmpty()) {
+      try {
+        sshPairs = singletonList(sshManager.generatePair(userId, "internal", SSH_KEY_NAME));
+      } catch (ServerException | ConflictException e) {
+        String message =
+            format(
+                "Unable to generate the SSH key for async storage service. Cause: %S",
+                e.getMessage());
+        LOG.warn(message);
+        osEnv.addWarning(
+            new WarningImpl(
+                NOT_ABLE_TO_PROVISION_SSH_KEYS,
+                format(NOT_ABLE_TO_PROVISION_SSH_KEYS_MESSAGE, message)));
+        throw new InfrastructureException(e);
+      }
+    }
+    return sshPairs;
+  }
+

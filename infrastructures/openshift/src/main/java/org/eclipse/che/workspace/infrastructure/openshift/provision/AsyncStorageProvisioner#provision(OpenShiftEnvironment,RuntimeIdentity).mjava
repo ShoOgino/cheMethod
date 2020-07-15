@@ -1,0 +1,37 @@
+  public void provision(OpenShiftEnvironment osEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+    if (!parseBoolean(osEnv.getAttributes().get(ASYNC_PERSIST_ATTRIBUTE))) {
+      return;
+    }
+
+    if (!COMMON_STRATEGY.equals(pvcStrategy)) {
+      String message =
+          format(
+              "Workspace configuration not valid: Asynchronous storage available only for 'common' PVC strategy, but got %s",
+              pvcStrategy);
+      LOG.warn(message);
+      osEnv.addWarning(new WarningImpl(4200, message));
+      throw new InfrastructureException(message);
+    }
+
+    if (!isEphemeral(osEnv.getAttributes())) {
+      String message =
+          format(
+              "Workspace configuration not valid: Asynchronous storage available only if '%s' attribute set to false",
+              ASYNC_PERSIST_ATTRIBUTE);
+      LOG.warn(message);
+      osEnv.addWarning(new WarningImpl(4200, message));
+      throw new InfrastructureException(message);
+    }
+
+    String namespace = identity.getInfrastructureNamespace();
+    String userId = identity.getOwnerId();
+    KubernetesClient oc = clientFactory.create(identity.getWorkspaceId());
+    String configMapName = namespace + ASYNC_STORAGE_CONFIG;
+
+    createPvcIfNotExist(oc, namespace, userId);
+    createConfigMapIfNotExist(oc, namespace, configMapName, userId, osEnv);
+    createAsyncStoragePodIfNotExist(oc, namespace, configMapName, userId);
+    createStorageServiceIfNotExist(oc, namespace, userId);
+  }
+

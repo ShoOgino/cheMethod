@@ -1,0 +1,46 @@
+  @Test
+  public void shouldNotCreateConfigMap()
+      throws InfrastructureException, ServerException, ConflictException {
+    when(openShiftEnvironment.getAttributes()).thenReturn(attributes);
+    when(clientFactory.create(anyString())).thenReturn(osClient);
+    when(identity.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+    when(identity.getInfrastructureNamespace()).thenReturn(NAMESPACE);
+    when(identity.getOwnerId()).thenReturn(USER);
+
+    when(osClient.persistentVolumeClaims()).thenReturn(mixedOperationPvc);
+    when(mixedOperationPvc.inNamespace(NAMESPACE)).thenReturn(namespacePvcOperation);
+    when(namespacePvcOperation.withName(VPC_NAME)).thenReturn(pvcResource);
+    when(pvcResource.get()).thenReturn(null);
+
+    when(osClient.configMaps()).thenReturn(mixedOperationConfigMap);
+    when(mixedOperationConfigMap.inNamespace(NAMESPACE)).thenReturn(namespaceConfigMapOperation);
+    when(namespaceConfigMapOperation.withName(CONFIGMAP_NAME)).thenReturn(mapResource);
+    ObjectMeta meta = new ObjectMeta();
+    meta.setName(CONFIGMAP_NAME);
+    ConfigMap configMap = new ConfigMap();
+    configMap.setMetadata(meta);
+    when(mapResource.get()).thenReturn(configMap);
+
+    when(osClient.pods()).thenReturn(mixedOperationPod);
+    when(mixedOperationPod.inNamespace(NAMESPACE)).thenReturn(namespacePodOperation);
+    when(namespacePodOperation.withName(ASYNC_STORAGE)).thenReturn(podResource);
+    when(podResource.get()).thenReturn(null);
+
+    when(osClient.services()).thenReturn(mixedOperationService);
+    when(mixedOperationService.inNamespace(NAMESPACE)).thenReturn(namespaceServiceOperation);
+    when(namespaceServiceOperation.withName(ASYNC_STORAGE)).thenReturn(serviceResource);
+    when(serviceResource.get()).thenReturn(null);
+
+    asyncStorageProvisioner.provision(openShiftEnvironment, identity);
+    verify(identity, times(1)).getInfrastructureNamespace();
+    verify(identity, times(1)).getOwnerId();
+    verify(identity, times(1)).getWorkspaceId();
+    verify(sshManager, never()).getPairs(USER, "internal");
+    verify(sshManager, never()).generatePair(USER, "internal", SSH_KEY_NAME);
+    verify(osClient.services().inNamespace(NAMESPACE), times(1)).create(any(Service.class));
+    verify(osClient.configMaps().inNamespace(NAMESPACE), never()).create(any(ConfigMap.class));
+    verify(osClient.pods().inNamespace(NAMESPACE), times(1)).create(any(Pod.class));
+    verify(osClient.persistentVolumeClaims().inNamespace(NAMESPACE), times(1))
+        .create(any(PersistentVolumeClaim.class));
+  }
+
