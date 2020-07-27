@@ -1,6 +1,6 @@
-  public void provision(OpenShiftEnvironment osEnv, RuntimeIdentity identity)
+  public void provision(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
       throws InfrastructureException {
-    if (!parseBoolean(osEnv.getAttributes().get(ASYNC_PERSIST_ATTRIBUTE))) {
+    if (!parseBoolean(k8sEnv.getAttributes().get(ASYNC_PERSIST_ATTRIBUTE))) {
       return;
     }
 
@@ -10,28 +10,28 @@
               "Workspace configuration not valid: Asynchronous storage available only for 'common' PVC strategy, but got %s",
               pvcStrategy);
       LOG.warn(message);
-      osEnv.addWarning(new WarningImpl(4200, message));
+      k8sEnv.addWarning(new WarningImpl(4200, message));
       throw new InfrastructureException(message);
     }
 
-    if (!isEphemeral(osEnv.getAttributes())) {
+    if (!isEphemeral(k8sEnv.getAttributes())) {
       String message =
           format(
               "Workspace configuration not valid: Asynchronous storage available only if '%s' attribute set to false",
               ASYNC_PERSIST_ATTRIBUTE);
       LOG.warn(message);
-      osEnv.addWarning(new WarningImpl(4200, message));
+      k8sEnv.addWarning(new WarningImpl(4200, message));
       throw new InfrastructureException(message);
     }
 
     String namespace = identity.getInfrastructureNamespace();
     String userId = identity.getOwnerId();
-    KubernetesClient oc = clientFactory.create(identity.getWorkspaceId());
+    KubernetesClient k8sClient = kubernetesClientFactory.create(identity.getWorkspaceId());
     String configMapName = namespace + ASYNC_STORAGE_CONFIG;
 
-    createPvcIfNotExist(oc, namespace, userId);
-    createConfigMapIfNotExist(oc, namespace, configMapName, userId, osEnv);
-    createAsyncStoragePodIfNotExist(oc, namespace, configMapName, userId);
-    createStorageServiceIfNotExist(oc, namespace, userId);
+    createPvcIfNotExist(k8sClient, namespace, userId);
+    createConfigMapIfNotExist(k8sClient, namespace, configMapName, userId, k8sEnv);
+    createAsyncStoragePodIfNotExist(k8sClient, namespace, configMapName, userId);
+    createStorageServiceIfNotExist(k8sClient, namespace, userId);
   }
 
