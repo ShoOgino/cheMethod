@@ -1,0 +1,22 @@
+  @Test
+  public void shouldProvisionTrustStoreMapAndMountIt() throws Exception {
+    Pod pod = newPod();
+    PodData podData = new PodData(pod.getSpec(), pod.getMetadata());
+    doReturn(of(POD_NAME, podData)).when(k8sEnv).getPodsData();
+
+    trustedCAProvisioner.provision(k8sEnv, openShiftProject);
+
+    assertEquals(envConfigMaps.size(), 1);
+    assertTrue(envConfigMaps.get(CONFIGMAP_NAME).getMetadata().getLabels().containsKey("foo"));
+    assertEquals(envConfigMaps.get(CONFIGMAP_NAME).getMetadata().getLabels().get("foo"), "bar");
+    PodSpec podSpec = pod.getSpec();
+    assertEquals(podSpec.getVolumes().size(), 1);
+    assertEquals(podSpec.getVolumes().get(0).getConfigMap().getName(), CONFIGMAP_NAME);
+    assertTrue(
+        podSpec
+            .getContainers()
+            .stream()
+            .allMatch(
+                c -> c.getVolumeMounts().get(0).getMountPath().equals(CERTIFICATE_MOUNT_PATH)));
+  }
+

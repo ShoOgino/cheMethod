@@ -1,0 +1,45 @@
+  public void provision(KubernetesEnvironment k8sEnv, OpenShiftProject project)
+      throws InfrastructureException {
+    if (!trustedStoreInitialized) {
+      return;
+    }
+
+    if (!project.configMaps().get(configMapName).isPresent()) {
+      // create new map
+      k8sEnv
+          .getConfigMaps()
+          .put(
+              configMapName,
+              new ConfigMapBuilder()
+                  .withMetadata(
+                      new ObjectMetaBuilder()
+                          .withName(configMapName)
+                          .withLabels(configMapLabelKeyValue)
+                          .build())
+                  .build());
+    }
+    for (PodData pod : k8sEnv.getPodsData().values()) {
+      if (pod.getRole() == PodRole.DEPLOYMENT) {
+        if (pod.getSpec()
+            .getVolumes()
+            .stream()
+            .noneMatch(v -> v.getName().equals(CHE_TRUST_STORE_VOLUME))) {
+          pod.getSpec()
+              .getVolumes()
+              .add(
+                  new VolumeBuilder()
+                      .withName(CHE_TRUST_STORE_VOLUME)
+                      .withConfigMap(
+                          new ConfigMapVolumeSourceBuilder().withName(configMapName).build())
+                      .build());
+        }
+      }
+      for (Container container : pod.getSpec().getInitContainers()) {
+        provisionTrustStoreVolumeMountIfNeeded(container);
+      }
+      for (Container container : pod.getSpec().getContainers()) {
+        provisionTrustStoreVolumeMountIfNeeded(container);
+      }
+    }
+  }
+
