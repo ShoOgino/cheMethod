@@ -17,6 +17,8 @@
       workspace.getAttributes().put(STOPPED_ABNORMALLY_ATTRIBUTE_NAME, Boolean.toString(false));
       workspaceDao.update(workspace);
     }
+    String namespace = workspace.getAttributes().get(WORKSPACE_INFRASTRUCTURE_NAMESPACE_ATTRIBUTE);
+    final String owner = workspace.getRuntime().getOwner();
 
     runtimes
         .stopAsync(workspace, options)
@@ -24,6 +26,13 @@
             (aVoid, throwable) -> {
               if (workspace.isTemporary()) {
                 removeWorkspaceQuietly(workspace.getId());
+              }
+              try {
+                if (runtimes.getActive(owner).isEmpty()) {
+                  recordLastWorkspaceStoppedTime(namespace, owner);
+                }
+              } catch (ServerException | InfrastructureException e) {
+                LOG.error(e.getMessage(), e);
               }
             });
   }
