@@ -1,11 +1,44 @@
+  /**
+   * Exposes service port on given service externally (outside kubernetes cluster) using the Gateway
+   * specific configurations.
+   *
+   * @param k8sEnv Kubernetes environment
+   * @param machineName machine containing servers
+   * @param serviceName service associated with machine, mapping all machine server ports
+   * @param serverId non-null for a unique server, null for a compound set of servers that should be
+   *     exposed together.
+   * @param servicePort specific service port to be exposed externally
+   * @param externalServers server configs of servers to be exposed externally
+   */
   @Override
   public void expose(
       T k8sEnv,
-      String machineName,
+      @Nullable String machineName,
       String serviceName,
       String serverId,
       ServicePort servicePort,
       Map<String, ServerConfig> externalServers) {
-    throw new UnsupportedOperationException("Not implemented yet.");
+
+    if (serverId == null) {
+      // this is the ID for non-unique servers
+      serverId = servicePort.getName();
+    }
+
+    for (String esKey : externalServers.keySet()) {
+      final String serverName = KubernetesServerExposer.makeServerNameValidForDns(serverId);
+      final String name = createName(serviceName, serverName);
+      k8sEnv
+          .getConfigMaps()
+          .put(
+              name,
+              createGatewayRouteConfigmap(
+                  name,
+                  machineName,
+                  serviceName,
+                  servicePort,
+                  serverName,
+                  esKey,
+                  externalServers.get(esKey)));
+    }
   }
 

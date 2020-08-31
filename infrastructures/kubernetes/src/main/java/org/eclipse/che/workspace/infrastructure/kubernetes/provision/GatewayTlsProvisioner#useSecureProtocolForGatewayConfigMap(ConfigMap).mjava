@@ -1,0 +1,27 @@
+  private void useSecureProtocolForGatewayConfigMap(ConfigMap configMap)
+      throws InfrastructureException {
+    Map<String, ServerConfigImpl> servers =
+        Annotations.newDeserializer(configMap.getMetadata().getAnnotations()).servers();
+
+    if (servers.isEmpty()) {
+      return;
+    }
+    if (servers.size() != 1) {
+      throw new InfrastructureException(
+          "Expected exactly 1 server in Gateway configuration ConfigMap '"
+              + configMap.getMetadata().getName()
+              + "'. This is a bug, please report.");
+    }
+    Entry<String, ServerConfigImpl> serverConfigEntry = servers.entrySet().iterator().next();
+    ServerConfigImpl serverConfig = serverConfigEntry.getValue();
+
+    serverConfig.setProtocol(getSecureProtocol(serverConfig.getProtocol()));
+    configMap
+        .getMetadata()
+        .getAnnotations()
+        .putAll(
+            Annotations.newSerializer()
+                .server(serverConfigEntry.getKey(), serverConfig)
+                .annotations());
+  }
+

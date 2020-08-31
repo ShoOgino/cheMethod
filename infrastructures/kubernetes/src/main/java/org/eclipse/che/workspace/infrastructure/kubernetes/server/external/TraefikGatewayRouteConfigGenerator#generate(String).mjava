@@ -1,0 +1,38 @@
+  /**
+   * Generates configuration for all configs added by {@link
+   * TraefikGatewayRouteConfigGenerator#addRouteConfig(String, ConfigMap)} so far. It does not
+   * change them, so this method can be used repeatedly.
+   *
+   * <p>Returned {@code Map<String, String>} has keys created from {@code name} parameter of {@link
+   * TraefikGatewayRouteConfigGenerator#addRouteConfig(String, ConfigMap)} + '.yml' suffix. Values
+   * are full configuration for single gateway route. This map is suppose to be directly used as
+   * {@link ConfigMap}'s data.
+   *
+   * @return map with added routes configurations
+   */
+  @Override
+  public Map<String, String> generate(String namespace) throws InfrastructureException {
+    Map<String, String> cmData = new HashMap<>();
+    for (Entry<String, ConfigMap> routeConfig : routeConfigs.entrySet()) {
+      Map<String, ServerConfigImpl> servers =
+          new Annotations.Deserializer(routeConfig.getValue().getMetadata().getAnnotations())
+              .servers();
+      if (servers.size() != 1) {
+        throw new InfrastructureException(
+            "Expected exactly 1 server [" + routeConfig.getValue().toString() + "]");
+      }
+      ServerConfigImpl server = servers.get(servers.keySet().iterator().next());
+      String serviceName = server.getAttributes().get(SERVICE_NAME_ATTRIBUTE);
+      String servicePort = server.getAttributes().get(SERVICE_PORT_ATTRIBUTE);
+
+      String traefikRouteConfig =
+          generate(
+              routeConfig.getKey(),
+              createServiceUrl(serviceName, servicePort, namespace),
+              server.getPath(),
+              server.getProtocol());
+      cmData.put(routeConfig.getKey() + ".yml", traefikRouteConfig);
+    }
+    return cmData;
+  }
+
