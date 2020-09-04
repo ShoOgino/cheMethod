@@ -4,10 +4,11 @@
    */
   private void createAsyncStoragePodIfNotExist(
       KubernetesClient k8sClient, String namespace, String configMap, String userId) {
-    PodResource<Pod, DoneablePod> podResource =
-        k8sClient.pods().inNamespace(namespace).withName(ASYNC_STORAGE);
-    if (podResource.get() != null) {
-      return; // pod already exist
+
+    RollableScalableResource<Deployment, DoneableDeployment> resource =
+        k8sClient.apps().deployments().inNamespace(namespace).withName(ASYNC_STORAGE);
+    if (resource.get() != null) {
+      return; // deployment already exist
     }
 
     String containerName = Names.generateName(ASYNC_STORAGE);
@@ -68,18 +69,36 @@
     PodSpec podSpec =
         podSpecBuilder.withContainers(container).withVolumes(storageVolume, sshKeyVolume).build();
 
-    Pod pod =
-        new PodBuilder()
-            .withApiVersion("v1")
-            .withKind("Pod")
-            .withNewMetadata()
-            .withName(ASYNC_STORAGE)
+    ObjectMetaBuilder metaBuilder = new ObjectMetaBuilder();
+    ObjectMeta meta =
+        metaBuilder
+            .withLabels(
+                of(
+                    "app",
+                    "che",
+                    CHE_USER_ID_LABEL,
+                    userId,
+                    CHE_DEPLOYMENT_NAME_LABEL,
+                    ASYNC_STORAGE))
             .withNamespace(namespace)
-            .withLabels(of("app", ASYNC_STORAGE, CHE_USER_ID_LABEL, userId))
-            .endMetadata()
-            .withSpec(podSpec)
+            .withName(ASYNC_STORAGE)
             .build();
 
-    k8sClient.pods().inNamespace(namespace).create(pod);
+    Deployment deployment =
+        new DeploymentBuilder()
+            .withMetadata(meta)
+            .withNewSpec()
+            .withNewSelector()
+            .withMatchLabels(meta.getLabels())
+            .endSelector()
+            .withReplicas(1)
+            .withNewTemplate()
+            .withMetadata(meta)
+            .withSpec(podSpec)
+            .endTemplate()
+            .endSpec()
+            .build();
+
+    k8sClient.apps().deployments().inNamespace(namespace).create(deployment);
   }
 
