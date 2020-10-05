@@ -1,0 +1,32 @@
+  /** Create configmap with public part of SSH key */
+  private void createConfigMapIfNotExist(
+      KubernetesClient k8sClient,
+      String namespace,
+      String configMapName,
+      String userId,
+      KubernetesEnvironment k8sEnv)
+      throws InfrastructureException {
+    Resource<ConfigMap, DoneableConfigMap> mapResource =
+        k8sClient.configMaps().inNamespace(namespace).withName(configMapName);
+    if (mapResource.get() != null) { // map already exist
+      return;
+    }
+
+    List<SshPairImpl> sshPairs = getOrCreateSshPairs(userId, k8sEnv);
+    if (sshPairs == null) {
+      return;
+    }
+    SshPair sshPair = sshPairs.get(0);
+    Map<String, String> sshConfigData = of(AUTHORIZED_KEYS, sshPair.getPublicKey() + "\n");
+    ConfigMap configMap =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName(configMapName)
+            .withNamespace(namespace)
+            .withLabels(of(CHE_USER_ID_LABEL, userId))
+            .endMetadata()
+            .withData(sshConfigData)
+            .build();
+    k8sClient.configMaps().inNamespace(namespace).create(configMap);
+  }
+

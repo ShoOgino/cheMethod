@@ -1,0 +1,45 @@
+  @ScheduleDelay(
+      unit = MINUTES,
+      initialDelay = 1,
+      delayParameterName = "che.infra.kubernetes.async.storage.shutdown_check_period_min")
+  public void check() {
+    if (isAsyncStoragePodCanBeRun
+        && shutdownTimeoutSec
+            > 0) { // if system not support async storage mode or idling time set to 0 or less
+      // do nothing
+      for (User user :
+          iterateLazily((maxItems, skipCount) -> userManager.getAll(maxItems, skipCount))) {
+        try {
+          String owner = user.getId();
+          Map<String, String> preferences = preferenceManager.find(owner);
+          String lastTimeAccess = preferences.get(LAST_ACTIVITY_TIME);
+          String namespace = preferences.get(LAST_ACTIVE_INFRASTRUCTURE_NAMESPACE);
+
+          if (isNullOrEmpty(namespace)
+              || isNullOrEmpty(lastTimeAccess)
+              || !runtimes.getInProgress(owner).isEmpty()) {
+            continue;
+          }
+          long lastTimeAccessSec = parseLong(lastTimeAccess);
+          Instant expectedShutdownAfter =
+              ofEpochSecond(lastTimeAccessSec).plusSeconds(shutdownTimeoutSec);
+          if (now().isAfter(expectedShutdownAfter)) {
+            removeAsyncStoragePodWithoutDeployment(namespace);
+            RollableScalableResource<Deployment, DoneableDeployment> doneableResource =
+                kubernetesClientFactory
+                    .create()
+                    .apps()
+                    .deployments()
+                    .inNamespace(namespace)
+                    .withName(ASYNC_STORAGE);
+            if (doneableResource.get() != null) {
+              doneableResource.delete();
+            }
+          }
+        } catch (InfrastructureException | ServerException e) {
+          LOG.error(e.getMessage(), e);
+        }
+      }
+    }
+  }
+

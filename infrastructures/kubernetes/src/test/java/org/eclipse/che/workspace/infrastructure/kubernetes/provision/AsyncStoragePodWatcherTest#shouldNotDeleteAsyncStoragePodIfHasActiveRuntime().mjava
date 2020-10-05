@@ -1,0 +1,30 @@
+  @Test
+  public void shouldNotDeleteAsyncStoragePodIfHasActiveRuntime() throws Exception {
+    AsyncStoragePodWatcher watcher =
+        new AsyncStoragePodWatcher(
+            kubernetesClientFactory,
+            userManager,
+            preferenceManager,
+            runtimes,
+            1,
+            COMMON_STRATEGY,
+            false,
+            "<username>",
+            1);
+
+    // has active runtime
+    InternalRuntime runtime = mock(InternalRuntime.class);
+    when(runtime.getOwner()).thenReturn(USER_ID);
+    when(runtimes.getInProgress(USER_ID)).thenReturn(singleton(WORKSPACE_ID));
+    when(runtimes.getInternalRuntime(WORKSPACE_ID)).thenReturn(runtime);
+
+    Page<UserImpl> userPage = new Page<>(Collections.singleton(user), 0, 1, 1);
+    when(userManager.getAll(anyInt(), anyLong())).thenReturn(userPage);
+
+    watcher.check();
+
+    verify(preferenceManager).find(USER_ID);
+    verifyNoMoreInteractions(kubernetesClientFactory);
+    verifyNoMoreInteractions(deploymentResource);
+  }
+

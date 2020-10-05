@@ -1,0 +1,27 @@
+  /**
+   * Creates given {@link ConfigMap}s in Che installation namespace labeled with `workspaceId` from
+   * given `identity`.
+   *
+   * <p>`workspaceId` from given `identity` must be valid workspace ID, that is in {@link
+   * WorkspaceStatus#STARTING} state. Otherwise, {@link InfrastructureException} is thrown.
+   *
+   * @param configMap to create
+   * @param identity to validate and label configmaps
+   * @return created {@link ConfigMap}s
+   * @throws InfrastructureException when something goes wrong
+   */
+  private ConfigMap createConfigMap(ConfigMap configMap, RuntimeIdentity identity)
+      throws InfrastructureException {
+    putLabel(configMap, CHE_WORKSPACE_ID_LABEL, identity.getWorkspaceId());
+    // check that ConfigMap is properly annotated to be created in Che installation namespace
+    if (!shouldCreateInCheNamespace(configMap)) {
+      throw new InfrastructureException(
+          String.format(
+              "ConfigMap '%s' to be created in Che installation namespace is not properly annotated with '%s=true'. This is a bug, please report.",
+              configMap.getMetadata().getName(), CREATE_IN_CHE_INSTALLATION_NAMESPACE));
+    }
+    // remove this annotation, so it's not exposed in actual k8s object
+    configMap.getMetadata().getAnnotations().remove(CREATE_IN_CHE_INSTALLATION_NAMESPACE);
+    return clientFactory.create().configMaps().inNamespace(cheNamespaceName).create(configMap);
+  }
+

@@ -1,0 +1,40 @@
+  public void intercept(KubernetesEnvironment k8sEnv, RuntimeIdentity identity)
+      throws InfrastructureException {
+    if (!COMMON_STRATEGY.equals(pvcStrategy) || isEphemeral(k8sEnv.getAttributes())) {
+      return;
+    }
+
+    removeAsyncStoragePodWithoutDeployment(identity);
+
+    String namespace = identity.getInfrastructureNamespace();
+    String workspaceId = identity.getWorkspaceId();
+
+    RollableScalableResource<Deployment, DoneableDeployment> asyncStorageDeploymentResource =
+        getAsyncStorageDeploymentResource(namespace, workspaceId);
+
+    if (asyncStorageDeploymentResource.get() == null) { // deployment doesn't exist
+      return;
+    }
+
+    try {
+      deleteAsyncStorageDeployment(asyncStorageDeploymentResource)
+          .get(DELETE_DEPLOYMENT_TIMEOUT_IN_MIN, TimeUnit.MINUTES);
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      throw new InfrastructureException(
+          format(
+              "Interrupted while waiting for deployment '%s' removal. " + ex.getMessage(),
+              ASYNC_STORAGE),
+          ex);
+    } catch (ExecutionException ex) {
+      throw new InfrastructureException(
+          format(
+              "Error occurred while waiting for deployment '%s' removal. " + ex.getMessage(),
+              ASYNC_STORAGE),
+          ex);
+    } catch (TimeoutException ex) {
+      throw new InfrastructureException(
+          format("Pod '%s' removal timeout reached " + ex.getMessage(), ASYNC_STORAGE), ex);
+    }
+  }
+

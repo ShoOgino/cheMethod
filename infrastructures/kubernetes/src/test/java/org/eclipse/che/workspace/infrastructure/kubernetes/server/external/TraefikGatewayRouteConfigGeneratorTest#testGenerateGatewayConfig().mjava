@@ -1,0 +1,45 @@
+  @Test
+  public void testGenerateGatewayConfig() throws InfrastructureException {
+    String expectedConfig =
+        "http:\n"
+            + "  routers:\n"
+            + "    external-server-1:\n"
+            + "      rule: \"PathPrefix(`/blabol-cesta`)\"\n"
+            + "      service: \"external-server-1\"\n"
+            + "      middlewares:\n"
+            + "      - \"external-server-1\"\n"
+            + "      priority: 100\n"
+            + "  services:\n"
+            + "    external-server-1:\n"
+            + "      loadBalancer:\n"
+            + "        servers:\n"
+            + "        - url: \"http://service-url.che-namespace.svc.cluster.local:1234\"\n"
+            + "  middlewares:\n"
+            + "    external-server-1:\n"
+            + "      stripPrefix:\n"
+            + "        prefixes:\n"
+            + "        - \"/blabol-cesta\"";
+
+    ServerConfigImpl serverConfig =
+        new ServerConfigImpl(
+            "123",
+            "https",
+            "/blabol-cesta",
+            ImmutableMap.of(SERVICE_NAME_ATTRIBUTE, "service-url", SERVICE_PORT_ATTRIBUTE, "1234"));
+    Map<String, String> annotations =
+        new Annotations.Serializer().server("s1", serverConfig).annotations();
+    ConfigMap routeConfig =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("route")
+            .withAnnotations(annotations)
+            .endMetadata()
+            .build();
+
+    gatewayConfigGenerator.addRouteConfig("external-server-1", routeConfig);
+    Map<String, String> generatedConfig = gatewayConfigGenerator.generate("che-namespace");
+
+    assertTrue(generatedConfig.containsKey("external-server-1.yml"));
+    assertEquals(generatedConfig.get("external-server-1.yml"), expectedConfig);
+  }
+

@@ -1,0 +1,39 @@
+  /** Create service for serving rsync connection */
+  private void createStorageServiceIfNotExist(
+      KubernetesClient k8sClient, String namespace, String userId) {
+    ServiceResource<Service, DoneableService> serviceResource =
+        k8sClient.services().inNamespace(namespace).withName(ASYNC_STORAGE);
+    if (serviceResource.get() != null) {
+      return; // service already exist
+    }
+
+    ObjectMeta meta = new ObjectMeta();
+    meta.setName(ASYNC_STORAGE);
+    meta.setNamespace(namespace);
+    meta.setLabels(of(CHE_USER_ID_LABEL, userId));
+
+    IntOrString targetPort =
+        new IntOrStringBuilder().withIntVal(SERVICE_PORT).withStrVal(valueOf(SERVICE_PORT)).build();
+
+    ServicePort port =
+        new ServicePortBuilder()
+            .withName("rsync-port")
+            .withProtocol("TCP")
+            .withPort(SERVICE_PORT)
+            .withTargetPort(targetPort)
+            .build();
+    ServiceSpec spec = new ServiceSpec();
+    spec.setPorts(singletonList(port));
+    spec.setSelector(of("app", ASYNC_STORAGE));
+
+    ServerServiceBuilder serviceBuilder = new ServerServiceBuilder();
+    Service service =
+        serviceBuilder
+            .withPorts(singletonList(port))
+            .withSelectorEntry("app", ASYNC_STORAGE)
+            .withName(ASYNC_STORAGE)
+            .build();
+
+    k8sClient.services().inNamespace(namespace).create(service);
+  }
+

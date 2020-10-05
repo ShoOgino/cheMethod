@@ -1,0 +1,32 @@
+  private ConfigMap createGatewayRouteConfigmap(
+      String name,
+      String machineName,
+      String serviceName,
+      ServicePort servicePort,
+      String serverName,
+      String scRef,
+      ServerConfig serverConfig) {
+
+    final String path = ensureEndsWithSlash(strategy.getExternalPath(serviceName, serverName));
+    serverConfig.getAttributes().put(SERVICE_NAME_ATTRIBUTE, serviceName);
+    serverConfig
+        .getAttributes()
+        .put(SERVICE_PORT_ATTRIBUTE, getTargetPort(servicePort.getTargetPort()));
+
+    final Map<String, String> annotations =
+        Annotations.newSerializer()
+            .server(scRef, new ServerConfigImpl(serverConfig).withPath(path))
+            .machineName(machineName)
+            .annotations();
+    annotations.put(CREATE_IN_CHE_INSTALLATION_NAMESPACE, TRUE.toString());
+
+    ConfigMapBuilder gatewayConfigMap =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName(name)
+            .withLabels(configmapLabels.getLabels())
+            .withAnnotations(annotations)
+            .endMetadata();
+    return gatewayConfigMap.build();
+  }
+

@@ -1,8 +1,9 @@
   @Override
   protected void configure() {
-    Multibinder.newSetBinder(binder(), WorkspaceAttributeValidator.class)
-        .addBinding()
-        .to(K8sInfraNamespaceWsAttributeValidator.class);
+    Multibinder<WorkspaceAttributeValidator> workspaceAttributeValidators =
+        Multibinder.newSetBinder(binder(), WorkspaceAttributeValidator.class);
+    workspaceAttributeValidators.addBinding().to(K8sInfraNamespaceWsAttributeValidator.class);
+    workspaceAttributeValidators.addBinding().to(AsyncStorageModeValidator.class);
 
     bind(KubernetesNamespaceService.class);
 
@@ -14,6 +15,16 @@
 
     bind(RuntimeInfrastructure.class).to(KubernetesInfrastructure.class);
     bind(InconsistentRuntimesDetector.class).asEagerSingleton();
+
+    MapBinder<WorkspaceExposureType, TlsProvisioner<KubernetesEnvironment>> tlsProvisioners =
+        MapBinder.newMapBinder(
+            binder(),
+            new TypeLiteral<WorkspaceExposureType>() {},
+            new TypeLiteral<TlsProvisioner<KubernetesEnvironment>>() {});
+    tlsProvisioners
+        .addBinding(WorkspaceExposureType.GATEWAY)
+        .to(new TypeLiteral<GatewayTlsProvisioner<KubernetesEnvironment>>() {});
+    tlsProvisioners.addBinding(WorkspaceExposureType.NATIVE).to(IngressTlsProvisioner.class);
 
     bind(new TypeLiteral<KubernetesEnvironmentProvisioner<KubernetesEnvironment>>() {})
         .to(KubernetesEnvironmentProvisioner.KubernetesEnvironmentProvisionerImpl.class);
@@ -53,8 +64,24 @@
     ingressStrategies
         .addBinding(DEFAULT_HOST_STRATEGY)
         .to(DefaultHostExternalServiceExposureStrategy.class);
-    bind(ExternalServiceExposureStrategy.class)
-        .toProvider(IngressServiceExposureStrategyProvider.class);
+    bind(ExternalServiceExposureStrategy.class).toProvider(ServiceExposureStrategyProvider.class);
+
+    MapBinder<WorkspaceExposureType, ExternalServerExposer<KubernetesEnvironment>>
+        exposureStrategies =
+            MapBinder.newMapBinder(binder(), new TypeLiteral<>() {}, new TypeLiteral<>() {});
+    exposureStrategies
+        .addBinding(WorkspaceExposureType.NATIVE)
+        .to(new TypeLiteral<IngressServerExposer<KubernetesEnvironment>>() {});
+    exposureStrategies
+        .addBinding(WorkspaceExposureType.GATEWAY)
+        .to(new TypeLiteral<GatewayServerExposer<KubernetesEnvironment>>() {});
+
+    bind(new TypeLiteral<ExternalServerExposer<KubernetesEnvironment>>() {})
+        .annotatedWith(com.google.inject.name.Names.named("multihost-exposer"))
+        .to(new TypeLiteral<MultihostIngressServerExposer<KubernetesEnvironment>>() {});
+
+    bind(new TypeLiteral<ExternalServerExposerProvider<KubernetesEnvironment>>() {})
+        .to(new TypeLiteral<KubernetesExternalServerExposerProvider<KubernetesEnvironment>>() {});
 
     bind(ServersConverter.class).to(new TypeLiteral<ServersConverter<KubernetesEnvironment>>() {});
     bind(PreviewUrlExposer.class)
@@ -145,5 +172,6 @@
         binder(), KubernetesEnvironment.TYPE);
 
     bind(NonTlsDistributedClusterModeNotifier.class);
+    bind(AsyncStorageProvisioner.class);
   }
 

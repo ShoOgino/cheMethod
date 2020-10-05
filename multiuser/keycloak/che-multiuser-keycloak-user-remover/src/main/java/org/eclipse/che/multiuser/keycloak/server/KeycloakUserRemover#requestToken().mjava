@@ -1,0 +1,50 @@
+  private String requestToken() throws ServerException {
+    String accessToken = "";
+    HttpURLConnection http = null;
+    try {
+      http = (HttpURLConnection) new URL(keycloakTokenEndpoint).openConnection();
+      http.setConnectTimeout(60000);
+      http.setReadTimeout(60000);
+      http.setRequestMethod(POST);
+      http.setAllowUserInteraction(false);
+      http.setRequestProperty(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED);
+      http.setInstanceFollowRedirects(true);
+      http.setDoOutput(true);
+      StringBuilder sb = new StringBuilder();
+      sb.append("grant_type=password")
+          .append("&username=")
+          .append(keycloakUser)
+          .append("&password=")
+          .append(keycloakPassword)
+          .append("&client_id=admin-cli");
+      try (OutputStream output = http.getOutputStream()) {
+        output.write(sb.toString().getBytes(UTF_8));
+      }
+      if (http.getResponseCode() != 200) {
+        throw new ServerException(
+            "Cannot get Keycloak access token. Server response: "
+                + keycloakTokenEndpoint
+                + " "
+                + http.getResponseCode()
+                + IoUtil.readStream(http.getErrorStream()));
+      }
+      final BufferedReader response =
+          new BufferedReader(new InputStreamReader(http.getInputStream(), UTF_8));
+
+      JsonParser jsonParser = new JsonParser();
+      JsonElement jsonElement = jsonParser.parse(response);
+      JsonObject asJsonObject = jsonElement.getAsJsonObject();
+      if (asJsonObject.has("access_token")) {
+        accessToken = asJsonObject.get("access_token").getAsString();
+      }
+    } catch (IOException | JsonSyntaxException ex) {
+      LOG.error(ex.getMessage(), ex);
+      throw new ServerException("Cannot get Keycloak access token.", ex);
+    } finally {
+      if (http != null) {
+        http.disconnect();
+      }
+    }
+    return accessToken;
+  }
+

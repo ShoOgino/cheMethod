@@ -1,0 +1,33 @@
+  protected BrokersConfigs getBrokersConfigs(
+      Collection<PluginFQN> pluginFQNs,
+      RuntimeIdentity runtimeID,
+      String brokerImage,
+      boolean mergePlugins)
+      throws InfrastructureException {
+
+    String configMapName = generateUniqueName(CONFIG_MAP_NAME_SUFFIX);
+    String configMapVolume = generateUniqueName(BROKER_VOLUME);
+    ConfigMap configMap = newConfigMap(configMapName, pluginFQNs);
+
+    Pod pod = newPod();
+    List<EnvVar> envVars =
+        Stream.of(
+                authEnableEnvVarProvider.get(runtimeID), machineTokenEnvVarProvider.get(runtimeID))
+            .map(this::asEnvVar)
+            .collect(Collectors.toList());
+    Container container =
+        newContainer(runtimeID, envVars, brokerImage, configMapVolume, mergePlugins);
+    pod.getSpec().getContainers().add(container);
+    pod.getSpec().getVolumes().add(newConfigMapVolume(configMapName, configMapVolume));
+
+    InternalMachineConfig machineConfig = new InternalMachineConfig();
+    String machineName = Names.machineName(pod.getMetadata(), container);
+
+    BrokersConfigs configs = new BrokersConfigs();
+    configs.configMaps = singletonMap(configMapName, configMap);
+    configs.machines = singletonMap(machineName, machineConfig);
+    configs.pods = singletonMap(pod.getMetadata().getName(), pod);
+
+    return configs;
+  }
+

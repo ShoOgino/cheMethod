@@ -1,0 +1,29 @@
+  @Test(dataProvider = "tlsProvisionData")
+  public void provisionTlsForGatewayRouteConfigmaps(
+      ServerConfigImpl server, boolean tlsEnabled, String expectedProtocol) throws Exception {
+    // given
+    Map<String, String> composedAnnotations = new HashMap<>(annotations);
+    composedAnnotations.putAll(
+        Annotations.newSerializer().server("server", server).machineName(machine).annotations());
+    ConfigMap routeConfigMap =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("route")
+            .withAnnotations(composedAnnotations)
+            .endMetadata()
+            .build();
+
+    GatewayTlsProvisioner<KubernetesEnvironment> gatewayTlsProvisioner =
+        new GatewayTlsProvisioner<>(tlsEnabled, gatewayConfigmapLabels);
+
+    when(k8sEnv.getConfigMaps()).thenReturn(singletonMap("route", routeConfigMap));
+
+    // when
+    gatewayTlsProvisioner.provision(k8sEnv, runtimeIdentity);
+
+    // then
+    Map<String, ServerConfigImpl> servers =
+        Annotations.newDeserializer(routeConfigMap.getMetadata().getAnnotations()).servers();
+    assertEquals(servers.get("server").getProtocol(), expectedProtocol);
+  }
+

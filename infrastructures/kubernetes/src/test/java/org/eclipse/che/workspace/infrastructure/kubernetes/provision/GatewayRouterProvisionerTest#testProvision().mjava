@@ -1,0 +1,43 @@
+  @Test
+  public void testProvision() throws InfrastructureException {
+    // given
+    Map<String, String> annotationsWith2Servers =
+        new Annotations.Serializer().server("s1", serverConfig).annotations();
+
+    ConfigMap gatewayRouteConfigMap =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("route")
+            .withAnnotations(annotationsWith2Servers)
+            .endMetadata()
+            .build();
+    when(env.getConfigMaps()).thenReturn(Collections.singletonMap("route", gatewayRouteConfigMap));
+    Map<String, String> expectedData =
+        Collections.singletonMap("data.yml", "this is for sure generated configuration");
+    when(gatewayRouteConfigGenerator.generate(NAMESPACE)).thenReturn(expectedData);
+
+    // when
+    gatewayRouterProvisioner.provision(env, identity);
+
+    // then
+    verify(configGeneratorFactory).create();
+    verify(gatewayRouteConfigGenerator).addRouteConfig("route", gatewayRouteConfigMap);
+    verify(gatewayRouteConfigGenerator).generate(NAMESPACE);
+
+    Map<String, ServerConfigImpl> serverConfigsAfterProvisioning =
+        new Annotations.Deserializer(gatewayRouteConfigMap.getMetadata().getAnnotations())
+            .servers();
+    assertEquals(serverConfigsAfterProvisioning.size(), 1);
+    ServerConfigImpl server =
+        serverConfigsAfterProvisioning.get(
+            serverConfigsAfterProvisioning.keySet().iterator().next());
+
+    // verify that provisioner removes the internal attributes
+    assertFalse(server.getAttributes().containsKey(SERVICE_NAME_ATTRIBUTE));
+    assertFalse(server.getAttributes().containsKey(SERVICE_PORT_ATTRIBUTE));
+
+    // verify that provisioner included the data info configmap
+    Map<String, String> actualData = gatewayRouteConfigMap.getData();
+    assertEquals(actualData, expectedData);
+  }
+

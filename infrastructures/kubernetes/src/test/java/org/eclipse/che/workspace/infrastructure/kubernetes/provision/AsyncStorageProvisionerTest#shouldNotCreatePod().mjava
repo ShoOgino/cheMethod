@@ -1,0 +1,52 @@
+  @Test
+  public void shouldNotCreatePod()
+      throws InfrastructureException, ServerException, ConflictException {
+    when(kubernetesEnvironment.getAttributes()).thenReturn(attributes);
+    when(clientFactory.create(anyString())).thenReturn(kubernetesClient);
+    when(identity.getWorkspaceId()).thenReturn(WORKSPACE_ID);
+    when(identity.getInfrastructureNamespace()).thenReturn(NAMESPACE);
+    when(identity.getOwnerId()).thenReturn(USER);
+    when(sshManager.getPairs(USER, "internal")).thenReturn(singletonList(sshPair));
+
+    when(kubernetesClient.persistentVolumeClaims()).thenReturn(mixedOperationPvc);
+    when(mixedOperationPvc.inNamespace(NAMESPACE)).thenReturn(namespacePvcOperation);
+    when(namespacePvcOperation.withName(VPC_NAME)).thenReturn(pvcResource);
+    when(pvcResource.get()).thenReturn(null);
+
+    when(kubernetesClient.configMaps()).thenReturn(mixedOperationConfigMap);
+    when(mixedOperationConfigMap.inNamespace(NAMESPACE)).thenReturn(namespaceConfigMapOperation);
+    when(namespaceConfigMapOperation.withName(CONFIGMAP_NAME)).thenReturn(mapResource);
+    when(mapResource.get()).thenReturn(null);
+
+    when(kubernetesClient.pods()).thenReturn(mixedOperationPod);
+    when(mixedOperationPod.inNamespace(NAMESPACE)).thenReturn(namespacePodOperation);
+    when(namespacePodOperation.withName(ASYNC_STORAGE)).thenReturn(podResource);
+
+    when(kubernetesClient.apps()).thenReturn(apps);
+    when(apps.deployments()).thenReturn(mixedOperationDeployment);
+    when(mixedOperationDeployment.inNamespace(NAMESPACE)).thenReturn(namespaceDeploymentOperation);
+    when(namespaceDeploymentOperation.withName(ASYNC_STORAGE)).thenReturn(deploymentResource);
+    ObjectMeta meta = new ObjectMeta();
+    meta.setName(ASYNC_STORAGE);
+    Deployment deployment = new Deployment();
+    deployment.setMetadata(meta);
+    when(deploymentResource.get()).thenReturn(deployment);
+
+    when(kubernetesClient.services()).thenReturn(mixedOperationService);
+    when(mixedOperationService.inNamespace(NAMESPACE)).thenReturn(namespaceServiceOperation);
+    when(namespaceServiceOperation.withName(ASYNC_STORAGE)).thenReturn(serviceResource);
+    when(serviceResource.get()).thenReturn(null);
+
+    asyncStorageProvisioner.provision(kubernetesEnvironment, identity);
+    verify(identity, times(1)).getInfrastructureNamespace();
+    verify(identity, times(1)).getOwnerId();
+    verify(sshManager, times(1)).getPairs(USER, "internal");
+    verify(sshManager, never()).generatePair(USER, "internal", SSH_KEY_NAME);
+    verify(kubernetesClient.services().inNamespace(NAMESPACE), times(1)).create(any(Service.class));
+    verify(kubernetesClient.configMaps().inNamespace(NAMESPACE), times(1))
+        .create(any(ConfigMap.class));
+    verify(kubernetesClient.pods().inNamespace(NAMESPACE), never()).create(any(Pod.class));
+    verify(kubernetesClient.persistentVolumeClaims().inNamespace(NAMESPACE), times(1))
+        .create(any(PersistentVolumeClaim.class));
+  }
+

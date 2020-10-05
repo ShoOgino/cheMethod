@@ -6,31 +6,8 @@
       startSynchronizer.setStartThread();
       startSynchronizer.start();
 
-      namespace.cleanUp();
-
-      // Tooling side car provisioner should be applied before other provisioners
-      // because new machines may be provisioned there
-      toolingProvisioner.provision(
-          context.getIdentity(), startSynchronizer, context.getEnvironment(), startOptions);
-
-      startSynchronizer.checkFailure();
-
-      // Workspace API provisioners should be reapplied here to bring needed
-      // changed into new machines that came during tooling provisioning
-      for (InternalEnvironmentProvisioner envProvisioner : internalEnvironmentProvisioners) {
-        envProvisioner.provision(context.getIdentity(), context.getEnvironment());
-      }
-
-      // commands might be updated during provisioning
-      runtimeStates.updateCommands(context.getIdentity(), context.getEnvironment().getCommands());
-
-      // Infrastructure specific provisioners should be applied last
-      // because it converts all Workspace API model objects that comes
-      // from previous provisioners into infrastructure specific objects
-      kubernetesEnvironmentProvisioner.provision(context.getEnvironment(), context.getIdentity());
-
-      secretAsContainerResourceProvisioner.provision(context.getEnvironment(), namespace);
-      LOG.debug("Provisioning of workspace '{}' completed.", workspaceId);
+      cleanUp(workspaceId);
+      provisionWorkspace(startOptions, context, workspaceId);
 
       volumesStrategy.prepare(
           context.getEnvironment(),
@@ -94,7 +71,7 @@
       // stop watching before namespace cleaning up
       namespace.deployments().stopWatch(true);
       try {
-        namespace.cleanUp();
+        cleanUp(workspaceId);
       } catch (InfrastructureException cleanUppingEx) {
         LOG.warn(
             "Failed to clean up namespace after workspace '{}' start failing. Cause: {}",

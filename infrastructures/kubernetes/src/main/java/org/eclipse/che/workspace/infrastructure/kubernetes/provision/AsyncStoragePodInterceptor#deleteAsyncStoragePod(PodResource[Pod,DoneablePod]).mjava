@@ -1,0 +1,32 @@
+  private CompletableFuture<Void> deleteAsyncStoragePod(PodResource<Pod, DoneablePod> podResource)
+      throws InfrastructureException {
+    Watch toCloseOnException = null;
+    try {
+      final CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
+      final Watch watch = podResource.watch(new DeleteWatcher<>(deleteFuture));
+      toCloseOnException = watch;
+
+      Boolean deleteSucceeded = podResource.withPropagationPolicy("Background").delete();
+      if (deleteSucceeded == null || !deleteSucceeded) {
+        deleteFuture.complete(null);
+      }
+      return deleteFuture.whenComplete(
+          (v, e) -> {
+            if (e != null) {
+              LOG.warn("Failed to remove pod {} cause {}", ASYNC_STORAGE, e.getMessage());
+            }
+            watch.close();
+          });
+    } catch (KubernetesClientException e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw new KubernetesInfrastructureException(e);
+    } catch (Exception e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw e;
+    }
+  }
+

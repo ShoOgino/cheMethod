@@ -1,8 +1,9 @@
   @Override
   protected void configure() {
-    Multibinder.newSetBinder(binder(), WorkspaceAttributeValidator.class)
-        .addBinding()
-        .to(K8sInfraNamespaceWsAttributeValidator.class);
+    Multibinder<WorkspaceAttributeValidator> workspaceAttributeValidators =
+        Multibinder.newSetBinder(binder(), WorkspaceAttributeValidator.class);
+    workspaceAttributeValidators.addBinding().to(K8sInfraNamespaceWsAttributeValidator.class);
+    workspaceAttributeValidators.addBinding().to(AsyncStorageModeValidator.class);
 
     bind(KubernetesNamespaceService.class);
 
@@ -17,6 +18,7 @@
     bind(RuntimeInfrastructure.class).to(OpenShiftInfrastructure.class);
 
     bind(KubernetesNamespaceFactory.class).to(OpenShiftProjectFactory.class);
+    bind(KubernetesClientFactory.class).to(OpenShiftClientFactory.class);
 
     install(new FactoryModuleBuilder().build(OpenShiftRuntimeContextFactory.class));
     install(new FactoryModuleBuilder().build(OpenShiftRuntimeFactory.class));
@@ -35,8 +37,21 @@
     volumesStrategies.addBinding(UNIQUE_STRATEGY).to(UniqueWorkspacePVCStrategy.class);
     bind(WorkspaceVolumesStrategy.class).toProvider(WorkspaceVolumeStrategyProvider.class);
 
+    MapBinder<WorkspaceExposureType, ExternalServerExposer<OpenShiftEnvironment>>
+        exposureStrategies =
+            MapBinder.newMapBinder(binder(), new TypeLiteral<>() {}, new TypeLiteral<>() {});
+    exposureStrategies.addBinding(WorkspaceExposureType.NATIVE).to(RouteServerExposer.class);
+    exposureStrategies
+        .addBinding(WorkspaceExposureType.GATEWAY)
+        .to(new TypeLiteral<GatewayServerExposer<OpenShiftEnvironment>>() {});
+
     bind(new TypeLiteral<ExternalServerExposer<OpenShiftEnvironment>>() {})
-        .to(OpenShiftExternalServerExposer.class);
+        .annotatedWith(com.google.inject.name.Names.named("multihost-exposer"))
+        .to(RouteServerExposer.class);
+
+    bind(new TypeLiteral<ExternalServerExposerProvider<OpenShiftEnvironment>>() {})
+        .to(OpenShiftExternalServerExposerProvider.class);
+
     bind(ServersConverter.class).to(new TypeLiteral<ServersConverter<OpenShiftEnvironment>>() {});
     bind(PreviewUrlExposer.class).to(new TypeLiteral<OpenShiftPreviewUrlExposer>() {});
     bind(PreviewUrlCommandProvisioner.class)
@@ -92,6 +107,16 @@
     bind(SidecarToolingProvisioner.class)
         .to(new TypeLiteral<SidecarToolingProvisioner<OpenShiftEnvironment>>() {});
 
+    MapBinder<WorkspaceExposureType, TlsProvisioner<OpenShiftEnvironment>> tlsProvisioners =
+        MapBinder.newMapBinder(
+            binder(),
+            new TypeLiteral<WorkspaceExposureType>() {},
+            new TypeLiteral<TlsProvisioner<OpenShiftEnvironment>>() {});
+    tlsProvisioners
+        .addBinding(WorkspaceExposureType.GATEWAY)
+        .to(new TypeLiteral<GatewayTlsProvisioner<OpenShiftEnvironment>>() {});
+    tlsProvisioners.addBinding(WorkspaceExposureType.NATIVE).to(RouteTlsProvisioner.class);
+
     bind(new TypeLiteral<KubernetesEnvironmentProvisioner<OpenShiftEnvironment>>() {})
         .to(OpenShiftEnvironmentProvisioner.class);
 
@@ -126,8 +151,17 @@
     KubernetesDevfileBindings.addAllowedEnvironmentTypeUpgradeBindings(
         binder(), OpenShiftEnvironment.TYPE, KubernetesEnvironment.TYPE);
 
-    bind(ExternalServiceExposureStrategy.class).to(OpenShiftServerExposureStrategy.class);
+    MapBinder<String, ExternalServiceExposureStrategy> ingressStrategies =
+        MapBinder.newMapBinder(binder(), String.class, ExternalServiceExposureStrategy.class);
+    ingressStrategies.addBinding(MULTI_HOST_STRATEGY).to(OpenShiftServerExposureStrategy.class);
+    ingressStrategies
+        .addBinding(SINGLE_HOST_STRATEGY)
+        .to(SingleHostExternalServiceExposureStrategy.class);
+    bind(ExternalServiceExposureStrategy.class).toProvider(ServiceExposureStrategyProvider.class);
     bind(CookiePathStrategy.class).to(OpenShiftCookiePathStrategy.class);
     bind(NonTlsDistributedClusterModeNotifier.class);
+    bind(AsyncStorageProvisioner.class);
+    bind(AsyncStoragePodInterceptor.class);
+    bind(AsyncStoragePodWatcher.class);
   }
 

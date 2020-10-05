@@ -1,0 +1,32 @@
+  private Map<String, ServerImpl> fillIngressServers(Ingress ingress) {
+    IngressRule ingressRule = ingress.getSpec().getRules().get(0);
+
+    // host either set by rule, or determined by LB ip
+    final String host =
+        ingressRule.getHost() != null
+            ? ingressRule.getHost()
+            : ingress.getStatus().getLoadBalancer().getIngress().get(0).getIp();
+
+    return Annotations.newDeserializer(ingress.getMetadata().getAnnotations())
+        .servers()
+        .entrySet()
+        .stream()
+        .collect(
+            Collectors.toMap(
+                Entry::getKey,
+                e -> {
+                  String path =
+                      buildPath(
+                          pathTransformInverter.undoPathTransformation(
+                              ingressRule.getHttp().getPaths().get(0).getPath()),
+                          e.getValue().getPath());
+                  return new RuntimeServerBuilder()
+                      .protocol(e.getValue().getProtocol())
+                      .host(host)
+                      .path(path)
+                      .attributes(e.getValue().getAttributes())
+                      .targetPort(e.getValue().getPort())
+                      .build();
+                }));
+  }
+

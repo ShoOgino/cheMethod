@@ -1,0 +1,37 @@
+  @Test
+  public void testGatewayRouteConfigsAreCreatedAsConfigmapsInCheNamespace()
+      throws InfrastructureException {
+    // given
+    ConfigMap cmRoute1 =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("route1")
+            .withAnnotations(ImmutableMap.of(CREATE_IN_CHE_INSTALLATION_NAMESPACE, "true"))
+            .endMetadata()
+            .build();
+    ConfigMap cmRoute2 =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("route2")
+            .withAnnotations(ImmutableMap.of(CREATE_IN_CHE_INSTALLATION_NAMESPACE, "true"))
+            .endMetadata()
+            .build();
+    ConfigMap cm3 =
+        new ConfigMapBuilder().withNewMetadata().withName("route2").endMetadata().build();
+
+    Map<String, ConfigMap> configMaps =
+        ImmutableMap.of("route1", cmRoute1, "route2", cmRoute2, "cm3", cm3);
+    when(k8sEnv.getConfigMaps()).thenReturn(configMaps);
+
+    List<ConfigMap> expectedCreatedCheNamespaceConfigmaps = Arrays.asList(cmRoute1, cmRoute2);
+
+    // when
+    internalRuntime.start(emptyMap());
+
+    // then
+    verify(cheNamespace)
+        .createConfigMaps(
+            expectedCreatedCheNamespaceConfigmaps, internalRuntime.getContext().getIdentity());
+    verify(cheNamespace).cleanUp(WORKSPACE_ID);
+  }
+

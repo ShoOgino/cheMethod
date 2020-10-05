@@ -1,0 +1,19 @@
+  @Test
+  public void stopsWorkspaceShouldNotUpdatePreferencesIfOtherWorkspaceRunning() throws Exception {
+    final WorkspaceImpl workspace = createAndMockWorkspace(createConfig(), NAMESPACE_1);
+    mockRuntime(workspace, RUNNING);
+    mockAnyWorkspaceStop();
+    when(runtimes.getActive(anyString()))
+        .thenReturn(ImmutableSet.of(NameGenerator.generate("ws", 5)));
+    long millis = System.currentTimeMillis();
+    workspaceManager.stopWorkspace(workspace.getId(), emptyMap());
+    verify(runtimes).stopAsync(workspace, emptyMap());
+    verify(workspaceDao).update(workspaceCaptor.capture());
+    Map<String, String> pref = new HashMap<>(2);
+    pref.put(LAST_ACTIVITY_TIME, Long.toString(millis));
+    pref.put(LAST_ACTIVE_INFRASTRUCTURE_NAMESPACE, INFRA_NAMESPACE);
+    verify(preferenceManager, never()).find("owner");
+    verify(preferenceManager, never())
+        .remove("owner", Arrays.asList(LAST_ACTIVITY_TIME, LAST_ACTIVE_INFRASTRUCTURE_NAMESPACE));
+  }
+

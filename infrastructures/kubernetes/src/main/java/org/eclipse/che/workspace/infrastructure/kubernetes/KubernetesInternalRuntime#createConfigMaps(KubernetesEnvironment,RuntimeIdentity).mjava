@@ -1,0 +1,23 @@
+  @Traced
+  protected List<ConfigMap> createConfigMaps(KubernetesEnvironment env, RuntimeIdentity identity)
+      throws InfrastructureException {
+    TracingTags.WORKSPACE_ID.set(identity.getWorkspaceId());
+
+    List<ConfigMap> createdConfigMaps = new ArrayList<>();
+
+    List<ConfigMap> cheNamespaceConfigMaps = new ArrayList<>();
+    for (ConfigMap configMap : env.getConfigMaps().values()) {
+      if (shouldCreateInCheNamespace(configMap)) {
+        // we collect the che namespace configmaps into separate list
+        cheNamespaceConfigMaps.add(configMap);
+      } else {
+        createdConfigMaps.add(namespace.configMaps().create(configMap));
+      }
+    }
+
+    // create che namespace configmaps in one batch, because we're doing some extra checks inside
+    createdConfigMaps.addAll(cheNamespace.createConfigMaps(cheNamespaceConfigMaps, identity));
+
+    return createdConfigMaps;
+  }
+

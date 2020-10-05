@@ -1,0 +1,47 @@
+  @VisibleForTesting
+  WorkspaceActivityManager(
+      WorkspaceManager workspaceManager,
+      WorkspaceActivityDao activityDao,
+      EventService eventService,
+      long timeout,
+      long runTimeout,
+      Clock clock) {
+    this.workspaceManager = workspaceManager;
+    this.eventService = eventService;
+    this.activityDao = activityDao;
+    this.defaultTimeout = timeout;
+    this.runTimeout = runTimeout;
+    this.clock = clock;
+    if (timeout > 0 && timeout < MINIMAL_TIMEOUT) {
+      LOG.warn(
+          "Value of property \"che.limits.workspace.idle.timeout\" is below recommended minimum ("
+              + TimeUnit.MILLISECONDS.toMinutes(MINIMAL_TIMEOUT)
+              + " minutes). This may cause problems with workspace components startup and/or premature workspace shutdown.");
+    }
+
+    //noinspection Convert2Lambda
+    this.setCreatedTimestampSubscriber =
+        new EventSubscriber<WorkspaceCreatedEvent>() {
+          @Override
+          public void onEvent(WorkspaceCreatedEvent event) {
+            try {
+              long createdTime =
+                  Long.parseLong(
+                      event.getWorkspace().getAttributes().get(Constants.CREATED_ATTRIBUTE_NAME));
+              activityDao.setCreatedTime(event.getWorkspace().getId(), createdTime);
+            } catch (ServerException | NumberFormatException x) {
+              LOG.warn("Failed to record workspace created time in workspace activity.", x);
+            }
+          }
+        };
+
+    this.workspaceActivityRemover =
+        new CascadeEventSubscriber<BeforeWorkspaceRemovedEvent>() {
+          @Override
+          public void onCascadeEvent(BeforeWorkspaceRemovedEvent event) throws Exception {
+            activityDao.removeActivity(event.getWorkspace().getId());
+          }
+        };
+    this.updateStatusChangedTimestampSubscriber = new UpdateStatusChangedTimestampSubscriber();
+  }
+

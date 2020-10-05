@@ -1,0 +1,39 @@
+  @Test
+  public void testCreateConfigMaps() throws InfrastructureException {
+    // given
+    when(internalRuntime.getOwner()).thenReturn(OWNER_ID);
+    when(internalRuntime.getStatus()).thenReturn(WorkspaceStatus.STARTING);
+    Map<String, String> cheNamespaceAnnotations =
+        ImmutableMap.of(CREATE_IN_CHE_INSTALLATION_NAMESPACE, "true");
+
+    ConfigMap cm1 =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("cm1")
+            .withAnnotations(cheNamespaceAnnotations)
+            .endMetadata()
+            .build();
+    ConfigMap cm2 =
+        new ConfigMapBuilder()
+            .withNewMetadata()
+            .withName("cm2")
+            .withAnnotations(cheNamespaceAnnotations)
+            .endMetadata()
+            .build();
+
+    when(clientFactory.create()).thenReturn(kubeClient);
+    when(kubeClient.configMaps()).thenReturn(kubeConfigMaps);
+    when(kubeConfigMaps.inNamespace(CHE_NAMESPACE)).thenReturn(kubeConfigMapsInNamespace);
+    when(kubeConfigMapsInNamespace.create(any(ConfigMap.class))).thenReturn(cm1).thenReturn(cm2);
+
+    List<ConfigMap> configMapsToCreate = Arrays.asList(cm1, cm2);
+
+    // when
+    List<ConfigMap> createdConfigMaps = cheNamespace.createConfigMaps(configMapsToCreate, identity);
+
+    // then
+    assertEquals(createdConfigMaps.size(), 2);
+    createdConfigMaps.forEach(
+        cm -> assertEquals(cm.getMetadata().getLabels().get(CHE_WORKSPACE_ID_LABEL), WORKSPACE_ID));
+  }
+

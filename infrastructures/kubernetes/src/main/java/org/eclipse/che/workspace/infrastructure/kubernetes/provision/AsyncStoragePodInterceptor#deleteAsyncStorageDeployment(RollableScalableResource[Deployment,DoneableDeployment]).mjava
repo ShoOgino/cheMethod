@@ -1,0 +1,33 @@
+  private CompletableFuture<Void> deleteAsyncStorageDeployment(
+      RollableScalableResource<Deployment, DoneableDeployment> resource)
+      throws InfrastructureException {
+    Watch toCloseOnException = null;
+    try {
+      final CompletableFuture<Void> deleteFuture = new CompletableFuture<>();
+      final Watch watch = resource.watch(new DeleteWatcher<>(deleteFuture));
+      toCloseOnException = watch;
+
+      Boolean deleteSucceeded = resource.withPropagationPolicy("Background").delete();
+      if (deleteSucceeded == null || !deleteSucceeded) {
+        deleteFuture.complete(null);
+      }
+      return deleteFuture.whenComplete(
+          (v, e) -> {
+            if (e != null) {
+              LOG.warn("Failed to remove deployment {} cause {}", ASYNC_STORAGE, e.getMessage());
+            }
+            watch.close();
+          });
+    } catch (KubernetesClientException e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw new KubernetesInfrastructureException(e);
+    } catch (Exception e) {
+      if (toCloseOnException != null) {
+        toCloseOnException.close();
+      }
+      throw e;
+    }
+  }
+

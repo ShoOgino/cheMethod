@@ -4,10 +4,18 @@
      * @return an updated command with chown applied on it
      */
     protected String wrapLinuxCommand(String command) throws IOException, InterruptedException {
-
-        String setGroup = "export GROUP_NAME=`(getent group " + getGid() + " || (groupadd -g " + getGid() + " user && echo user:x:" + getGid() +")) | cut -d: -f1`";
-        String setUser = "export USER_NAME=`(getent passwd " + getUid() + " || (useradd -u " + getUid() + " -g ${GROUP_NAME} user && echo user:x:" + getGid() +")) | cut -d: -f1`";
-        String chownCommand= "chown --silent -R ${USER_NAME}.${GROUP_NAME} /usr/src/app || true";
-        return setGroup + " && " + setUser + " && " + chownCommand + " && " + command + " && " + chownCommand;
+        if (hasPodman()) {
+            LOG.debug("using podman, don't need to wrap anything");
+            return command;
+        }
+        String setGroup =
+            "export GROUP_NAME=`(getent group " + getGid() + " || (groupadd -g " + getGid()
+                + " user && echo user:x:" + getGid() + ")) | cut -d: -f1`";
+        String setUser =
+            "export USER_NAME=`(getent passwd " + getUid() + " || (useradd -u " + getUid()
+                + " -g ${GROUP_NAME} user && echo user:x:" + getGid() + ")) | cut -d: -f1`";
+        String chownCommand = "chown --silent -R ${USER_NAME}.${GROUP_NAME} /usr/src/app || true";
+        return setGroup + " && " + setUser + " && " + chownCommand + " && " + command + " && "
+            + chownCommand;
     }
 
