@@ -1,0 +1,36 @@
+  /**
+   * Stores {@link Devfile} instance
+   *
+   * @param userDevfile instance of user devfile which would be stored
+   * @return new persisted devfile instance
+   * @throws ConflictException when any conflict occurs (e.g Devfile with such name already exists
+   *     for {@code owner})
+   * @throws NullPointerException when {@code devfile} is null
+   * @throws ServerException when any other error occurs
+   */
+  public UserDevfile createDevfile(UserDevfile userDevfile)
+      throws ServerException, NotFoundException, ConflictException {
+    requireNonNull(userDevfile, "Required non-null userdevfile");
+    requireNonNull(userDevfile.getDevfile(), "Required non-null devfile");
+    String name =
+        userDevfile.getName() != null
+            ? userDevfile.getName()
+            : NameGenerator.generate("devfile-", 5);
+    UserDevfile result =
+        userDevfileDao.create(
+            new UserDevfileImpl(
+                NameGenerator.generate("id-", 16),
+                accountManager.getByName(
+                    EnvironmentContext.getCurrent().getSubject().getUserName()),
+                name,
+                userDevfile.getDescription(),
+                userDevfile.getDevfile()));
+    LOG.debug(
+        "UserDevfile '{}' with id '{}' created by user '{}'",
+        result.getName(),
+        result.getId(),
+        EnvironmentContext.getCurrent().getSubject().getUserName());
+    eventService.publish(new DevfileCreatedEvent(result));
+    return result;
+  }
+

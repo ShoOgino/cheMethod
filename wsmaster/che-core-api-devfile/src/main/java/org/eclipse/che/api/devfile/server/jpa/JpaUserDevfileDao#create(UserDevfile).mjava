@@ -1,0 +1,26 @@
+  @Override
+  public UserDevfile create(UserDevfile userDevfile) throws ConflictException, ServerException {
+    requireNonNull(userDevfile);
+    try {
+      Account account = accountDao.getByName(userDevfile.getNamespace());
+      UserDevfileImpl userDevfileImpl = new UserDevfileImpl(userDevfile, account);
+      doCreate(userDevfileImpl);
+      return userDevfileImpl;
+    } catch (DuplicateKeyException ex) {
+      throw new ConflictException(
+          format(
+              "Devfile with name '%s' already exists in the specified account '%s'",
+              userDevfile.getName(), userDevfile.getNamespace()));
+    } catch (IntegrityConstraintViolationException ex) {
+      throw new ConflictException(
+          "Could not create devfile with creator that refers to a non-existent user");
+    } catch (RuntimeException ex) {
+      throw new ServerException(ex.getMessage(), ex);
+    } catch (NotFoundException e) {
+      throw new ConflictException(
+          format(
+              "Not able to create devfile in requested namespace %s bacause it is not found",
+              userDevfile.getNamespace()));
+    }
+  }
+

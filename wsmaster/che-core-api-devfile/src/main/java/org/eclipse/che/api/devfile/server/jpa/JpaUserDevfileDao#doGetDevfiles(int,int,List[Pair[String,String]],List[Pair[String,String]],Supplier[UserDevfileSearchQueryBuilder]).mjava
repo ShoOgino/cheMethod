@@ -1,0 +1,69 @@
+  @Transactional(rollbackOn = {ServerException.class})
+  protected Page<UserDevfile> doGetDevfiles(
+      int maxItems,
+      int skipCount,
+      List<Pair<String, String>> filter,
+      List<Pair<String, String>> order,
+      Supplier<UserDevfileSearchQueryBuilder> queryBuilderSupplier)
+      throws ServerException {
+    if (filter != null && !filter.isEmpty()) {
+      List<Pair<String, String>> invalidFilter =
+          filter
+              .stream()
+              .filter(p -> !VALID_SEARCH_FIELDS.contains(p.first.toLowerCase()))
+              .collect(toList());
+      if (!invalidFilter.isEmpty()) {
+        throw new IllegalArgumentException(
+            "Filtering allowed only by " + VALID_SEARCH_FIELDS + " but got: " + invalidFilter);
+      }
+    }
+    List<Pair<String, String>> effectiveOrder = DEFAULT_ORDER;
+    if (order != null && !order.isEmpty()) {
+      List<Pair<String, String>> invalidOrder =
+          order
+              .stream()
+              .filter(p -> !VALID_ORDER_FIELDS.contains(p.first.toLowerCase()))
+              .collect(toList());
+      if (!invalidOrder.isEmpty()) {
+        throw new IllegalArgumentException(
+            "Order allowed only by " + VALID_ORDER_FIELDS + "¬ but got: " + invalidOrder);
+      }
+
+      List<Pair<String, String>> invalidSortOrder =
+          order
+              .stream()
+              .filter(p -> !p.second.equalsIgnoreCase("asc") && !p.second.equalsIgnoreCase("desc"))
+              .collect(Collectors.toList());
+      if (!invalidSortOrder.isEmpty()) {
+        throw new IllegalArgumentException(
+            "Invalid sort order direction. Possible values are 'asc' or 'desc' but got: "
+                + invalidSortOrder);
+      }
+      effectiveOrder = order;
+    }
+    try {
+      final long count =
+          queryBuilderSupplier.get().withFilter(filter).buildCountQuery().getSingleResult();
+
+      if (count == 0) {
+        return new Page<>(emptyList(), skipCount, maxItems, count);
+      }
+      List<UserDevfileImpl> result =
+          queryBuilderSupplier
+              .get()
+              .withFilter(filter)
+              .withOrder(effectiveOrder)
+              .withMaxItems(maxItems)
+              .withSkipCount(skipCount)
+              .buildSelectItemsQuery()
+              .getResultList()
+              .stream()
+              .map(UserDevfileImpl::new)
+              .collect(toList());
+      return new Page<>(result, skipCount, maxItems, count);
+
+    } catch (RuntimeException x) {
+      throw new ServerException(x.getLocalizedMessage(), x);
+    }
+  }
+

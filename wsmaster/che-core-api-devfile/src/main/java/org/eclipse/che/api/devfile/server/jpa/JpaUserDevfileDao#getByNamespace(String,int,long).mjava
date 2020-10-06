@@ -1,0 +1,28 @@
+  @Transactional(rollbackOn = {ServerException.class, RuntimeException.class})
+  @Override
+  public Page<UserDevfile> getByNamespace(String namespace, int maxItems, long skipCount)
+      throws ServerException {
+    requireNonNull(namespace, "Required non-null namespace");
+    try {
+      final EntityManager manager = managerProvider.get();
+      final List<UserDevfileImpl> list =
+          manager
+              .createNamedQuery("UserDevfile.getByNamespace", UserDevfileImpl.class)
+              .setParameter("namespace", namespace)
+              .setMaxResults(maxItems)
+              .setFirstResult((int) skipCount)
+              .getResultList()
+              .stream()
+              .map(UserDevfileImpl::new)
+              .collect(Collectors.toList());
+      final long count =
+          manager
+              .createNamedQuery("UserDevfile.getByNamespaceCount", Long.class)
+              .setParameter("namespace", namespace)
+              .getSingleResult();
+      return new Page<>(list, skipCount, maxItems, count);
+    } catch (RuntimeException x) {
+      throw new ServerException(x.getLocalizedMessage(), x);
+    }
+  }
+

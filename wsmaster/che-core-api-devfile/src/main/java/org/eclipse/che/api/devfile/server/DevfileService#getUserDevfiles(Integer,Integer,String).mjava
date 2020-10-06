@@ -1,0 +1,71 @@
+  @GET
+  @Path("search")
+  @Produces(APPLICATION_JSON)
+  @ApiOperation(
+      value = "Get devfiles which user can read",
+      notes =
+          "This operation can be performed only by authorized user. "
+              + "It is possible to add additional constraints for the desired devfiles by specifying\n"
+              + "multiple query parameters that is representing fields of the devfile. All constrains\n"
+              + "would be combined with \"And\" condition. Also, it is possible to specify 'like:' prefix\n"
+              + "for the query parameters. In this case instead of an exact match would be used SQL pattern like search.\n"
+              + "Examples id=sdfsdf5&devfile.meta.name=like:%dfdf&",
+      response = UserDevfileDto.class,
+      responseContainer = "List")
+  @ApiResponses({
+    @ApiResponse(code = 200, message = "The devfiles successfully fetched"),
+    @ApiResponse(code = 500, message = "Internal server error occurred during devfiles fetching")
+  })
+  public Response getUserDevfiles(
+      @ApiParam("The number of the items to skip") @DefaultValue("0") @QueryParam("skipCount")
+          Integer skipCount,
+      @ApiParam("The limit of the items in the response, default is 30, maximum 60")
+          @DefaultValue("30")
+          @QueryParam("maxItems")
+          Integer maxItems,
+      @ApiParam(
+              "A list of fields and directions of sort. By default items would be sorted by id. Example id:asc,name:desc.")
+          @QueryParam("order")
+          String order)
+      throws ServerException, BadRequestException {
+    final Set<String> skip = ImmutableSet.of("token", "skipCount", "maxItems", "order");
+    Map<String, Set<String>> queryParams = URLEncodedUtils.parse(uriInfo.getRequestUri());
+    final List<Pair<String, String>> query =
+        queryParams
+            .entrySet()
+            .stream()
+            .filter(param -> !param.getValue().isEmpty())
+            .filter(param -> !skip.contains(param.getKey()))
+            .map(entry -> Pair.of(entry.getKey(), entry.getValue().iterator().next()))
+            .collect(toList());
+    List<Pair<String, String>> searchOrder = Collections.emptyList();
+    if (order != null && !order.isEmpty()) {
+      try {
+        searchOrder =
+            Splitter.on(",")
+                .trimResults()
+                .omitEmptyStrings()
+                .withKeyValueSeparator(":")
+                .split(order)
+                .entrySet()
+                .stream()
+                .map(e -> Pair.of(e.getKey(), e.getValue()))
+                .collect(toList());
+      } catch (IllegalArgumentException e) {
+        throw new BadRequestException("Invalid `order` query parameter format." + e.getMessage());
+      }
+    }
+    Page<? extends UserDevfile> userDevfilesPage =
+        userDevfileManager.getUserDevfiles(maxItems, skipCount, query, searchOrder);
+
+    List<UserDevfileDto> list =
+        userDevfilesPage
+            .getItems()
+            .stream()
+            .map(DtoConverter::asDto)
+            .map(dto -> linksInjector.injectLinks(asDto(dto), getServiceContext()))
+            .collect(toList());
+
+    return Response.ok().entity(list).header("Link", createLinkHeader(userDevfilesPage)).build();
+  }
+
