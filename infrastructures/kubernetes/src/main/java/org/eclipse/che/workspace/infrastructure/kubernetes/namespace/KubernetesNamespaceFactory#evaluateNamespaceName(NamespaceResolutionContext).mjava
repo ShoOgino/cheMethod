@@ -12,13 +12,41 @@
    */
   public String evaluateNamespaceName(NamespaceResolutionContext resolutionCtx)
       throws InfrastructureException {
-    String namespace = evalPlaceholders(defaultNamespaceName, resolutionCtx);
+    String namespace;
+    Optional<Pair<String, String>> storedNamespace = getPreferencesNamespaceName(resolutionCtx);
+    if (storedNamespace.isEmpty() || !isStoredTemplateValid(storedNamespace.get().second)) {
+      namespace = evalPlaceholders(defaultNamespaceName, resolutionCtx);
+    } else {
+      namespace = storedNamespace.get().first;
+    }
+
+    if (!NamespaceNameValidator.isValid(namespace)) {
+      Optional<KubernetesNamespaceMeta> namespaceMetaOptional;
+      String normalizedNamespace = normalizeNamespaceName(namespace);
+      if (normalizedNamespace.isEmpty()) {
+        throw new InfrastructureException(
+            format(
+                "Evaluated empty namespace name for workspace %s", resolutionCtx.getWorkspaceId()));
+      }
+      do {
+        normalizedNamespace =
+            normalizedNamespace
+                .substring(0, Math.min(55, normalizedNamespace.length()))
+                .concat(NameGenerator.generate("-", 6));
+        namespaceMetaOptional = fetchNamespace(normalizedNamespace);
+      } while (namespaceMetaOptional.isPresent());
+      namespace = normalizedNamespace;
+    }
 
     LOG.debug(
         "Evaluated the namespace for workspace {} using the namespace default to {}",
         resolutionCtx.getWorkspaceId(),
         namespace);
 
+    if (resolutionCtx.isPersistAfterCreate()
+        && !defaultNamespaceName.contains(WORKSPACEID_PLACEHOLDER)) {
+      recordEvaluatedNamespaceName(namespace, resolutionCtx);
+    }
     return namespace;
   }
 
